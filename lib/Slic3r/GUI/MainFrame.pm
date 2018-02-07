@@ -100,6 +100,9 @@ sub new {
 
     $self->update_ui_from_settings;
     
+    # TODO: updatecheck from here
+    Slic3r::Utils::preset_update_check();
+
     return $self;
 }
 

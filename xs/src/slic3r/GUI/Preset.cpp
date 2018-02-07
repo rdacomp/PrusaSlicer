@@ -4,6 +4,7 @@
 #include "Preset.hpp"
 
 #include <fstream>
+#include <stack>
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -12,6 +13,7 @@
 #include <boost/nowide/fstream.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/ini_parser.hpp>
 #include <boost/locale.hpp>
 
 #include <wx/image.h>
@@ -23,14 +25,16 @@
 #include "../../libslic3r/Utils.hpp"
 #include "../../libslic3r/PlaceholderParser.hpp"
 
+using boost::property_tree::ptree;
+
 namespace Slic3r {
 
-ConfigFileType guess_config_file_type(const boost::property_tree::ptree &tree)
+ConfigFileType guess_config_file_type(const ptree &tree)
 {
     size_t app_config   = 0;
     size_t bundle       = 0;
     size_t config       = 0;
-    for (const boost::property_tree::ptree::value_type &v : tree) {
+    for (const ptree::value_type &v : tree) {
         if (v.second.empty()) {
             if (v.first == "background_processing" ||
                 v.first == "last_output_path" ||
@@ -109,31 +113,64 @@ void Preset::normalize(DynamicPrintConfig &config)
     }
 }
 
-// Load a config file, return a C++ class Slic3r::DynamicPrintConfig with $keys initialized from the config file.
-// In case of a "default" config item, return the default values.
-DynamicPrintConfig& Preset::load(const std::vector<std::string> &keys)
+void Preset::load_defaults(const std::vector<std::string> &keys)
 {
     // Set the configuration from the defaults.
     Slic3r::FullPrintConfig defaults;
     this->config.apply_only(defaults, keys.empty() ? defaults.keys() : keys);
+}
+
+// TODO: update comment
+// Load a config file, return a C++ class Slic3r::DynamicPrintConfig with $keys initialized from the config file.
+// In case of a "default" config item, return the default values.
+void Preset::load(const ptree &tree)
+{
     if (! this->is_default) {
-        // Load the preset file, apply preset values on top of defaults.
+        // Load the preset file, apply preset values on top of existing ones.
         try {
-            this->config.load_from_ini(this->file);
+            this->config.load(tree);
             Preset::normalize(this->config);
-        } catch (const std::ifstream::failure &err) {
-            throw std::runtime_error(std::string("The selected preset cannot be loaded: ") + this->file + "\n\tReason: " + err.what());
         } catch (const std::runtime_error &err) {
             throw std::runtime_error(std::string("Failed loading the preset file: ") + this->file + "\n\tReason: " + err.what());
         }
     }
     this->loaded = true;
-    return this->config;
+}
+
+void Preset::load_with_parent(const Preset &parent, const ptree &tree)
+{
+    // Copy over parnte's config and load what's in the inheriter tree over the copied config.
+    this->config = parent.config;
+    load(tree);
 }
 
 void Preset::save()
 {
+    if (this->is_locked()) {
+        throw std::runtime_error(std::string("Cannot overwrite a locked preset: `") + this->name);
+    }
+
+    if (! this->parent_name().empty()) {
+        throw std::runtime_error(std::string("Cannot save an inherited preset without a parent: `") + this->name);
+    }
+
+    // XXX: if this has children, they should be reloaded ???
+
     this->config.save(this->file);
+}
+
+void Preset::save_with_parent(const Preset &parent)
+{
+    if (this->is_locked()) {
+        throw std::runtime_error(std::string("Cannot overwrite a locked preset: `") + this->name);
+    }
+
+    if (this->parent_name().empty()) {
+        throw std::runtime_error(std::string("Cannot save an non-inherited preset with a parent: `") + this->name);
+    }
+
+    const auto diff_keys = this->config.diff(parent.config);
+    this->config.save_only(this->file, diff_keys);
 }
 
 // Return a label of this preset, consisting of a name and a "(modified)" suffix, if this preset is dirty.
@@ -175,68 +212,85 @@ bool Preset::update_compatible_with_printer(const Preset &active_printer, const 
     return this->is_compatible = is_compatible_with_printer(active_printer, extra_config);
 }
 
-const std::vector<std::string>& Preset::print_options()
-{    
-    static std::vector<std::string> s_opts {
-        "layer_height", "first_layer_height", "perimeters", "spiral_vase", "top_solid_layers", "bottom_solid_layers", 
-        "extra_perimeters", "ensure_vertical_shell_thickness", "avoid_crossing_perimeters", "thin_walls", "overhangs", 
-        "seam_position", "external_perimeters_first", "fill_density", "fill_pattern", "external_fill_pattern", 
-        "infill_every_layers", "infill_only_where_needed", "solid_infill_every_layers", "fill_angle", "bridge_angle", 
-        "solid_infill_below_area", "only_retract_when_crossing_perimeters", "infill_first", "max_print_speed", 
-        "max_volumetric_speed", "max_volumetric_extrusion_rate_slope_positive", "max_volumetric_extrusion_rate_slope_negative", 
-        "perimeter_speed", "small_perimeter_speed", "external_perimeter_speed", "infill_speed", "solid_infill_speed", 
-        "top_solid_infill_speed", "support_material_speed", "support_material_xy_spacing", "support_material_interface_speed",
-        "bridge_speed", "gap_fill_speed", "travel_speed", "first_layer_speed", "perimeter_acceleration", "infill_acceleration", 
-        "bridge_acceleration", "first_layer_acceleration", "default_acceleration", "skirts", "skirt_distance", "skirt_height",
-        "min_skirt_length", "brim_width", "support_material", "support_material_threshold", "support_material_enforce_layers", 
-        "raft_layers", "support_material_pattern", "support_material_with_sheath", "support_material_spacing", 
-        "support_material_synchronize_layers", "support_material_angle", "support_material_interface_layers", 
-        "support_material_interface_spacing", "support_material_interface_contact_loops", "support_material_contact_distance", 
-        "support_material_buildplate_only", "dont_support_bridges", "notes", "complete_objects", "extruder_clearance_radius", 
-        "extruder_clearance_height", "gcode_comments", "output_filename_format", "post_process", "perimeter_extruder", 
-        "infill_extruder", "solid_infill_extruder", "support_material_extruder", "support_material_interface_extruder", 
-        "ooze_prevention", "standby_temperature_delta", "interface_shells", "extrusion_width", "first_layer_extrusion_width", 
-        "perimeter_extrusion_width", "external_perimeter_extrusion_width", "infill_extrusion_width", "solid_infill_extrusion_width", 
-        "top_infill_extrusion_width", "support_material_extrusion_width", "infill_overlap", "bridge_flow_ratio", "clip_multipart_objects", 
-        "elefant_foot_compensation", "xy_size_compensation", "threads", "resolution", "wipe_tower", "wipe_tower_x", "wipe_tower_y",
-        "wipe_tower_width", "wipe_tower_per_color_wipe",
-        "compatible_printers", "compatible_printers_condition"
+const std::vector<std::string>& Preset::common_options()
+{
+    static const std::vector<std::string> s_opts {
+        "_locked", "_version", "_url", "_parent"
     };
+    return s_opts;
+}
+
+const std::vector<std::string>& Preset::print_options()
+{
+    static const std::vector<std::string> s_opts { [](){
+        std::vector<std::string> v { Preset::common_options() };
+        v.insert(v.end(), {
+            "layer_height", "first_layer_height", "perimeters", "spiral_vase", "top_solid_layers", "bottom_solid_layers",
+            "extra_perimeters", "ensure_vertical_shell_thickness", "avoid_crossing_perimeters", "thin_walls", "overhangs",
+            "seam_position", "external_perimeters_first", "fill_density", "fill_pattern", "external_fill_pattern",
+            "infill_every_layers", "infill_only_where_needed", "solid_infill_every_layers", "fill_angle", "bridge_angle",
+            "solid_infill_below_area", "only_retract_when_crossing_perimeters", "infill_first", "max_print_speed",
+            "max_volumetric_speed", "max_volumetric_extrusion_rate_slope_positive", "max_volumetric_extrusion_rate_slope_negative",
+            "perimeter_speed", "small_perimeter_speed", "external_perimeter_speed", "infill_speed", "solid_infill_speed",
+            "top_solid_infill_speed", "support_material_speed", "support_material_xy_spacing", "support_material_interface_speed",
+            "bridge_speed", "gap_fill_speed", "travel_speed", "first_layer_speed", "perimeter_acceleration", "infill_acceleration",
+            "bridge_acceleration", "first_layer_acceleration", "default_acceleration", "skirts", "skirt_distance", "skirt_height",
+            "min_skirt_length", "brim_width", "support_material", "support_material_threshold", "support_material_enforce_layers",
+            "raft_layers", "support_material_pattern", "support_material_with_sheath", "support_material_spacing",
+            "support_material_synchronize_layers", "support_material_angle", "support_material_interface_layers",
+            "support_material_interface_spacing", "support_material_interface_contact_loops", "support_material_contact_distance",
+            "support_material_buildplate_only", "dont_support_bridges", "notes", "complete_objects", "extruder_clearance_radius",
+            "extruder_clearance_height", "gcode_comments", "output_filename_format", "post_process", "perimeter_extruder",
+            "infill_extruder", "solid_infill_extruder", "support_material_extruder", "support_material_interface_extruder",
+            "ooze_prevention", "standby_temperature_delta", "interface_shells", "extrusion_width", "first_layer_extrusion_width",
+            "perimeter_extrusion_width", "external_perimeter_extrusion_width", "infill_extrusion_width", "solid_infill_extrusion_width",
+            "top_infill_extrusion_width", "support_material_extrusion_width", "infill_overlap", "bridge_flow_ratio", "clip_multipart_objects",
+            "elefant_foot_compensation", "xy_size_compensation", "threads", "resolution", "wipe_tower", "wipe_tower_x", "wipe_tower_y",
+            "wipe_tower_width", "wipe_tower_per_color_wipe",
+            "compatible_printers", "compatible_printers_condition"
+        });
+        return v;
+    }() };
     return s_opts;
 }
 
 const std::vector<std::string>& Preset::filament_options()
-{    
-    static std::vector<std::string> s_opts {
-        "filament_colour", "filament_diameter", "filament_type", "filament_soluble", "filament_notes", "filament_max_volumetric_speed", 
-        "extrusion_multiplier", "filament_density", "filament_cost", "temperature", "first_layer_temperature", "bed_temperature", 
-        "first_layer_bed_temperature", "fan_always_on", "cooling", "min_fan_speed", "max_fan_speed", "bridge_fan_speed", 
-        "disable_fan_first_layers", "fan_below_layer_time", "slowdown_below_layer_time", "min_print_speed", "start_filament_gcode", 
-        "end_filament_gcode",
-        "compatible_printers", "compatible_printers_condition"
-    };
+{
+    static const std::vector<std::string> s_opts { [](){
+        std::vector<std::string> v { Preset::common_options() };
+        v.insert(v.end(), {
+            "filament_colour", "filament_diameter", "filament_type", "filament_soluble", "filament_notes", "filament_max_volumetric_speed",
+            "extrusion_multiplier", "filament_density", "filament_cost", "temperature", "first_layer_temperature", "bed_temperature",
+            "first_layer_bed_temperature", "fan_always_on", "cooling", "min_fan_speed", "max_fan_speed", "bridge_fan_speed",
+            "disable_fan_first_layers", "fan_below_layer_time", "slowdown_below_layer_time", "min_print_speed", "start_filament_gcode",
+            "end_filament_gcode",
+            "compatible_printers", "compatible_printers_condition"
+        });
+        return v;
+    }() };
     return s_opts;
 }
 
 const std::vector<std::string>& Preset::printer_options()
-{    
-    static std::vector<std::string> s_opts;
-    if (s_opts.empty()) {
-        s_opts = {
-            "bed_shape", "z_offset", "gcode_flavor", "use_relative_e_distances", "serial_port", "serial_speed", 
+{
+    static const std::vector<std::string> s_opts{ [](){
+        std::vector<std::string> v{ Preset::common_options() };
+        v.insert(v.end(), {
+            "bed_shape", "z_offset", "gcode_flavor", "use_relative_e_distances", "serial_port", "serial_speed",
             "octoprint_host", "octoprint_apikey", "octoprint_cafile", "use_firmware_retraction", "use_volumetric_e", "variable_layer_height",
             "single_extruder_multi_material", "start_gcode", "end_gcode", "before_layer_gcode", "layer_gcode", "toolchange_gcode",
             "between_objects_gcode", "printer_notes"
-        };
-        s_opts.insert(s_opts.end(), Preset::nozzle_options().begin(), Preset::nozzle_options().end());
-    }
+        });
+        v.insert(v.end(), Preset::nozzle_options().begin(), Preset::nozzle_options().end());
+        return std::move(v);
+    }() };
     return s_opts;
 }
 
 const std::vector<std::string>& Preset::nozzle_options()
 {
     // ConfigOptionFloats, ConfigOptionPercents, ConfigOptionBools, ConfigOptionStrings
-    static std::vector<std::string> s_opts {
+    static const std::vector<std::string> s_opts {
         "nozzle_diameter", "min_layer_height", "max_layer_height", "extruder_offset",
         "retract_length", "retract_lift", "retract_lift_above", "retract_lift_below", "retract_speed", "deretract_speed",
         "retract_before_wipe", "retract_restart_extra", "retract_before_travel", "wipe",
@@ -253,7 +307,7 @@ PresetCollection::PresetCollection(Preset::Type type, const std::vector<std::str
 {
     // Insert just the default preset.
     m_presets.emplace_back(Preset(type, "- default -", true));
-    m_presets.front().load(keys);
+    m_presets.front().load_defaults(keys);
     m_edited_preset.config.apply(m_presets.front().config);
 }
 
@@ -282,30 +336,66 @@ void PresetCollection::reset(bool delete_files)
 // Throws an exception on error.
 void PresetCollection::load_presets(const std::string &dir_path, const std::string &subdir)
 {
-	boost::filesystem::path dir = boost::filesystem::canonical(boost::filesystem::path(dir_path) / subdir).make_preferred();
-	m_dir_path = dir.string();
+    boost::filesystem::path dir = boost::filesystem::canonical(boost::filesystem::path(dir_path) / subdir).make_preferred();
+    m_dir_path = dir.string();
     m_presets.erase(m_presets.begin()+1, m_presets.end());
     t_config_option_keys keys = this->default_preset().config.keys();
     std::string errors_cummulative;
-	for (auto &dir_entry : boost::filesystem::directory_iterator(dir))
+    std::stack<std::pair<Preset, ptree>> inheriters;
+
+    for (auto &dir_entry : boost::filesystem::directory_iterator(dir)) {
         if (boost::filesystem::is_regular_file(dir_entry.status()) && boost::algorithm::iends_with(dir_entry.path().filename().string(), ".ini")) {
             std::string name = dir_entry.path().filename().string();
             // Remove the .ini suffix.
             name.erase(name.size() - 4);
             try {
+                const auto file = dir_entry.path().string();
+                auto tree = read_ini(file);
+
                 Preset preset(m_type, name, false);
-                preset.file = dir_entry.path().string();
-                preset.load(keys);
-                m_presets.emplace_back(preset);
+                preset.file = file;
+
+                const auto parent = tree.get<std::string>("_parent", std::string());
+                if (! parent.empty()) {
+                    // This presets inherits from another one.
+                    // Stash it onto a stack to process later when other Presets are loaded.
+                    preset.config.opt_string("_parent", true) = parent;
+                    inheriters.emplace(std::move(preset), std::move(tree));
+                } else {
+                    preset.load_defaults(keys);
+                    preset.load(tree);
+                    m_presets.push_back(std::move(preset));
+                }
+            } catch (const std::ifstream::failure &err) {
+                errors_cummulative += err.what();
+                errors_cummulative += "\n";
             } catch (const std::runtime_error &err) {
                 errors_cummulative += err.what();
                 errors_cummulative += "\n";
-			}
+            }
         }
+    }
+
+    // Load inheriting Presets
+    for (; !inheriters.empty(); inheriters.pop()) {
+        try {
+            Preset &preset = inheriters.top().first;
+            const ptree &tree = inheriters.top().second;
+            const auto &parent = find_parent_preset(preset);
+            preset.load_with_parent(parent, tree);
+            m_presets.push_back(std::move(preset));
+        } catch (const std::runtime_error &err) {
+            errors_cummulative += err.what();
+            errors_cummulative += "\n";
+        }
+    }
+
     std::sort(m_presets.begin() + 1, m_presets.end());
-    this->select_preset(first_visible_idx());
+
     if (! errors_cummulative.empty())
         throw std::runtime_error(errors_cummulative);
+
+    this->select_preset(first_visible_idx());
 }
 
 // Load a preset from an already parsed config file, insert it into the sorted sequence of presets
@@ -351,12 +441,18 @@ void PresetCollection::save_current_preset(const std::string &new_name)
         // Creating a new preset.
 		Preset &preset = *m_presets.insert(it, m_edited_preset);
         preset.name = new_name;
-		preset.file = this->path_from_name(new_name);
+        preset.file = this->path_from_name(new_name);
     }
-	// 2) Activate the saved preset.
-	this->select_preset_by_name(new_name, true);
-	// 2) Store the active preset to disk.
-	this->get_selected_preset().save();
+    // 2) Activate the saved preset.
+    this->select_preset_by_name(new_name, true);
+    // 3) Store the active preset to disk.
+    Preset& selected = this->get_selected_preset();
+    if (selected.parent_name().empty()) {
+        selected.save();
+    } else {
+        const auto &parent = find_parent_preset(selected);
+        selected.save_with_parent(parent);
+    }
 }
 
 void PresetCollection::delete_current_preset()
@@ -599,5 +695,26 @@ std::string PresetCollection::path_from_name(const std::string &new_name) const
 	std::string file_name = boost::iends_with(new_name, ".ini") ? new_name : (new_name + ".ini");
     return (boost::filesystem::path(m_dir_path) / file_name).make_preferred().string();
 }
+
+const Preset& PresetCollection::find_parent_preset(const Preset &preset) const {
+    const auto &parent = preset.parent_name();
+    const auto hit = std::find_if(m_presets.cbegin(), m_presets.cend(), [&](const Preset &p) {
+        return p.name == parent;
+    });
+
+    if (hit == m_presets.cend()) {
+        throw std::runtime_error(std::string("Parent preset `") + parent + "` required by `" + preset.name + "` could not have been found.");
+    }
+
+    return *hit;
+}
+
+ptree PresetCollection::read_ini(const std::string &file) {
+    boost::property_tree::ptree tree;
+    boost::nowide::ifstream ifs(file);
+    boost::property_tree::read_ini(ifs, tree);
+    return tree;
+}
+
 
 } // namespace Slic3r

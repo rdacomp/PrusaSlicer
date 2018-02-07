@@ -553,6 +553,10 @@ public:
     double                          min_object_distance() const;
     static double                   min_object_distance(const ConfigBase *config);
 
+    ConfigOptionBool                _locked;
+    ConfigOptionInt                 _version;
+    ConfigOptionString              _url;
+    ConfigOptionString              _parent;
     ConfigOptionBool                avoid_crossing_perimeters;
     ConfigOptionPoints              bed_shape;
     ConfigOptionInts                bed_temperature;
@@ -617,6 +621,10 @@ protected:
     void initialize(StaticCacheBase &cache, const char *base_ptr)
     {
         this->GCodeConfig::initialize(cache, base_ptr);
+        OPT_PTR(_locked);
+        OPT_PTR(_version);
+        OPT_PTR(_url);
+        OPT_PTR(_parent);
         OPT_PTR(avoid_crossing_perimeters);
         OPT_PTR(bed_shape);
         OPT_PTR(bed_temperature);

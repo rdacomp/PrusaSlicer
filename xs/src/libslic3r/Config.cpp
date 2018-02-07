@@ -436,12 +436,19 @@ void ConfigBase::load_from_gcode_string(const char* str)
 
 void ConfigBase::save(const std::string &file) const
 {
-    boost::nowide::ofstream c;
-    c.open(file, std::ios::out | std::ios::trunc);
-    c << "# " << Slic3r::header_slic3r_generated() << std::endl;
-    for (const std::string &opt_key : this->keys())
-        c << opt_key << " = " << this->serialize(opt_key) << std::endl;
-    c.close();
+    save_only(file, this->keys());
+}
+
+void ConfigBase::save_only(const std::string &file, const t_config_option_keys &keys) const
+{
+    boost::nowide::ofstream ostream{file, std::ios::out | std::ios::trunc};
+    ostream << "# " << Slic3r::header_slic3r_generated() << std::endl;
+    for (const std::string &opt_key : keys) {
+        const ConfigOption *opt  = this->option(opt_key);
+        if (opt != nullptr) {
+            ostream << opt_key << " = " << opt->serialize() << std::endl;
+        }
+    }
 }
 
 bool DynamicConfig::operator==(const DynamicConfig &rhs) const
@@ -522,7 +529,7 @@ void StaticConfig::set_defaults()
 t_config_option_keys StaticConfig::keys() const 
 {
     t_config_option_keys keys;
-	assert(this->def != nullptr);
+    assert(this->def() != nullptr);
     for (const auto &opt_def : this->def()->options)
         if (this->option(opt_def.first) != nullptr) 
             keys.push_back(opt_def.first);

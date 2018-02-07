@@ -65,11 +65,15 @@ public:
     // Configuration data, loaded from a file, or set from the defaults.
     DynamicPrintConfig  config;
 
+    void load_defaults(const std::vector<std::string> &keys);
+
     // Load this profile for the following keys only.
     // Throws std::runtime_error in case the file cannot be read.
-    DynamicPrintConfig& load(const std::vector<std::string> &keys);
+    void load(const boost::property_tree::ptree &tree);
+    void load_with_parent(const Preset &parent, const boost::property_tree::ptree &tree);
 
-    void                save();
+    void save();
+    void save_with_parent(const Preset &parent);
 
     // Return a label of this preset, consisting of a name and a "(modified)" suffix, if this preset is dirty.
     std::string         label() const;
@@ -88,6 +92,14 @@ public:
     // Resize the extruder specific fields, initialize them with the content of the 1st extruder.
     void                set_num_extruders(unsigned int n) { set_num_extruders(this->config, n); }
 
+    // Whether the preset is locked for modifications
+    bool                is_locked() const { return this->config.opt_bool("_locked"); }
+
+    // For inheriting preset files, this holds the name of the parent preset.
+    // Empty for regular presets.
+    // Inheriting is only permited for internal prseets (ie. is_external = false).
+    const std::string&  parent_name() const { return this->config.opt_string("_parent"); }
+
     // Sort lexicographically by a preset name. The preset name shall be unique across a single PresetCollection.
     bool                operator<(const Preset &other) const { return this->name < other.name; }
 
@@ -101,11 +113,13 @@ public:
 protected:
     friend class        PresetCollection;
     friend class        PresetBundle;
+
     static void         normalize(DynamicPrintConfig &config);
     // Resize the extruder specific vectors ()
     static void         set_num_extruders(DynamicPrintConfig &config, unsigned int n);
     static const std::string& suffix_modified();
     static std::string  remove_suffix_modified(const std::string &name);
+    static const std::vector<std::string>& common_options();
 };
 
 // Collections of presets of the same type (one of the Print, Filament or Printer type).
@@ -230,6 +244,10 @@ private:
     }
     std::deque<Preset>::const_iterator find_preset_internal(const std::string &name) const
         { return const_cast<PresetCollection*>(this)->find_preset_internal(name); }
+
+    const Preset& find_parent_preset(const Preset &preset) const;
+
+    static boost::property_tree::ptree read_ini(const std::string &file);
 
     // Type of this PresetCollection: TYPE_PRINT, TYPE_FILAMENT or TYPE_PRINTER.
     Preset::Type            m_type;

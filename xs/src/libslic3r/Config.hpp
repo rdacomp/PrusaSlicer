@@ -1,7 +1,12 @@
 #ifndef slic3r_Config_hpp_
 #define slic3r_Config_hpp_
 
-#include <assert.h>
+// FIXME: XXX
+#ifndef NDEBUG
+#define NDEBUG 1
+#endif
+
+#include <cassert>
 #include <map>
 #include <climits>
 #include <cstdio>
@@ -14,6 +19,7 @@
 #include "Point.hpp"
 
 #include <boost/property_tree/ptree.hpp>
+#include <boost/nowide/fstream.hpp>
 
 namespace Slic3r {
 
@@ -1060,6 +1066,7 @@ public:
     void load_from_gcode_string(const char* str);
     void load(const boost::property_tree::ptree &tree);
     void save(const std::string &file) const;
+    void save_only(const std::string &file, const t_config_option_keys &keys) const;
 
 private:
     // Set a configuration value from a string.
