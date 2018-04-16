@@ -1704,6 +1704,7 @@ void TabPrinter::build_extruder_pages(){
 		optgroup->append_single_option_line("cooling_tube_retraction");
 		optgroup->append_single_option_line("cooling_tube_length");
 		optgroup->append_single_option_line("parking_pos_retraction");
+        optgroup->append_single_option_line("extra_loading_move");
 		m_pages.insert(m_pages.end() - n_after_single_extruder_MM, page);
 		m_has_single_extruder_MM_page = true;
 	}
@@ -1757,7 +1758,6 @@ void TabPrinter::build_extruder_pages(){
 						m_pages.begin() + n_before_extruders + m_extruders_count_old);
 
 	m_extruders_count_old = m_extruders_count;
-
 	rebuild_page_tree();
 }
 
