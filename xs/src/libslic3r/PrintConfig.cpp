@@ -483,6 +483,31 @@ PrintConfigDef::PrintConfigDef()
     def->min = 0;
     def->default_value = new ConfigOptionFloats { 0. };
 
+    def = this->add("filament_cooling_moves", coInts);
+    def->label = L("Number of cooling moves");
+    def->tooltip = L("Filament is cooled by being moved back and forth in the "
+                   "cooling tubes. Specify desired number of these moves ");
+    def->cli = "filament-cooling-moves=i@";
+    def->max = 0;
+    def->max = 20;
+    def->default_value = new ConfigOptionInts { 6 };
+
+    def = this->add("filament_cooling_initial_speed", coFloats);
+    def->label = L("Speed of the first cooling move");
+    def->tooltip = L("Cooling moves are gradually accelerating beginning at this speed. ");
+    def->cli = "filament-cooling-initial-speed=i@";
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->default_value = new ConfigOptionFloats { 2.2f };
+
+    def = this->add("filament_cooling_final_speed", coFloats);
+    def->label = L("Speed of the last cooling move");
+    def->tooltip = L("Cooling moves are gradually accelerating towards this speed. ");
+    def->cli = "filament-cooling-final-speed=i@";
+    def->sidetext = L("mm/s");
+    def->min = 0;
+    def->default_value = new ConfigOptionFloats { 3.4f };
+
     def = this->add("filament_ramming_parameters", coStrings);
     def->label = L("Ramming parameters");
     def->tooltip = L("This string is edited by RammingDialog and contains ramming specific parameters ");
