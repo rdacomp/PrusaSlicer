@@ -364,7 +364,7 @@ void GCode::do_export(Print *print, const char *path, GCodePreviewData *preview_
     std::string path_raw = path;
     if (path_raw.size() > 6 && path_raw.substr(path_raw.size() - 6) == ".gcode")
         path_raw = path_raw.substr(0, path_raw.size() - 6);
-    m_time_estimator.open_raw_file(path_raw + ".raw.gcode");
+    m_time_estimator.open_raw_file(path_raw + "-raw.gcode");
 
     FILE *file = boost::nowide::fopen(path_tmp.c_str(), "wb");
     if (file == nullptr)

@@ -1,4 +1,4 @@
-use Test::More tests => 25;
+use Test::More tests => 24;
 use strict;
 use warnings;
 
@@ -129,7 +129,7 @@ use Slic3r::Test;
     is_deeply \@temps, [210, 200, 210, 200, 0], 'expected temperature changes';
 }
 
-{
+if (0) {
     my $config = Slic3r::Config::new_from_defaults;
     $config->set('retract_length', [1000000]);
     $config->set('use_relative_e_distances', 1);
