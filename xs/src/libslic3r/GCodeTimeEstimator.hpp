@@ -45,6 +45,7 @@ namespace Slic3r {
             float max_feedrate;     // mm/s
             float max_acceleration; // mm/s^2
             float max_jerk;         // mm/s
+            float step_size;        // mm
         };
 
         struct Feedrates
@@ -135,6 +136,9 @@ namespace Slic3r {
             FeedrateProfile feedrate;
             Trapezoid trapezoid;
 
+            std::string line_this;
+            std::string lines_after;
+
             // Returns the length of the move covered by this block, in mm
             float move_length() const;
 
@@ -198,8 +202,13 @@ namespace Slic3r {
         MovesStatsMap _moves_stats;
 #endif // ENABLE_MOVE_STATS
 
+        FILE    *m_raw_file = nullptr;
+
     public:
         GCodeTimeEstimator();
+
+        void open_raw_file(const std::string &path);
+        void close_raw_file();
 
         // Calculates the time estimate from the given gcode in string format
         void calculate_time_from_text(const std::string& gcode);
@@ -225,6 +234,7 @@ namespace Slic3r {
         void set_axis_max_feedrate(EAxis axis, float feedrate_mm_sec);
         void set_axis_max_acceleration(EAxis axis, float acceleration);
         void set_axis_max_jerk(EAxis axis, float jerk);
+        void set_axis_step_size(EAxis axis, float step_size);
 
         // Returns current position on the given axis
         float get_axis_position(EAxis axis) const;
@@ -284,6 +294,9 @@ namespace Slic3r {
 
         // Calculates the time estimate
         void _calculate_time();
+
+        // For the current set of _blocks with calculated trapezoidal profiles, export the raw G-code.
+        void _generate_raw_gcode();
 
         // Processes the given gcode line
         void _process_gcode_line(GCodeReader&, const GCodeReader::GCodeLine& line);

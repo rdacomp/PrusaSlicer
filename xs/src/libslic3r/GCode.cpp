@@ -361,6 +361,11 @@ void GCode::do_export(Print *print, const char *path, GCodePreviewData *preview_
     std::string path_tmp(path);
     path_tmp += ".tmp";
 
+    std::string path_raw = path;
+    if (path_raw.size() > 6 && path_raw.substr(path_raw.size() - 6) == ".gcode")
+        path_raw = path_raw.substr(0, path_raw.size() - 6);
+    m_time_estimator.open_raw_file(path_raw + ".raw.gcode");
+
     FILE *file = boost::nowide::fopen(path_tmp.c_str(), "wb");
     if (file == nullptr)
         throw std::runtime_error(std::string("G-code export to ") + path + " failed.\nCannot open the file for writing.\n");
@@ -368,6 +373,7 @@ void GCode::do_export(Print *print, const char *path, GCodePreviewData *preview_
     this->m_placeholder_parser_failed_templates.clear();
     this->_do_export(*print, file, preview_data);
     fflush(file);
+    m_time_estimator.close_raw_file();
     if (ferror(file)) {
         fclose(file);
         boost::nowide::remove(path_tmp.c_str());

@@ -1,6 +1,11 @@
 #include "GCodeTimeEstimator.hpp"
+#include "GCode/Raw.hpp"
 #include <boost/bind.hpp>
 #include <cmath>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/nowide/cstdio.hpp>
+#include <boost/nowide/cstdlib.hpp>
 
 #include <Shiny/Shiny.h>
 
@@ -13,6 +18,8 @@ static const float DEFAULT_RETRACT_ACCELERATION = 1500.0f; // Prusa Firmware 1_7
 static const float DEFAULT_AXIS_MAX_FEEDRATE[] = { 500.0f, 500.0f, 12.0f, 120.0f }; // Prusa Firmware 1_75mm_MK2
 static const float DEFAULT_AXIS_MAX_ACCELERATION[] = { 9000.0f, 9000.0f, 500.0f, 10000.0f }; // Prusa Firmware 1_75mm_MK2
 static const float DEFAULT_AXIS_MAX_JERK[] = { 10.0f, 10.0f, 0.2f, 2.5f }; // from Prusa Firmware (Configuration.h)
+// For the MK3 as MK2
+static const float DEFAULT_AXIS_STEP_SIZE[] = { 0.01f, 0.01f, 0.0025f, 0.007519f };
 static const float DEFAULT_MINIMUM_FEEDRATE = 0.0f; // from Prusa Firmware (Configuration_adv.h)
 static const float DEFAULT_MINIMUM_TRAVEL_FEEDRATE = 0.0f; // from Prusa Firmware (Configuration_adv.h)
 static const float DEFAULT_EXTRUDE_FACTOR_OVERRIDE_PERCENTAGE = 1.0f; // 100 percent
@@ -165,6 +172,21 @@ namespace Slic3r {
         set_default();
     }
 
+    void GCodeTimeEstimator::open_raw_file(const std::string &path)
+    {
+        if (m_raw_file != nullptr)
+            this->close_raw_file();
+        m_raw_file = boost::nowide::fopen(path.c_str(), "wb");
+    }
+
+    void GCodeTimeEstimator::close_raw_file()
+    {
+        if (m_raw_file != nullptr) {
+            ::fclose(m_raw_file);
+            m_raw_file = nullptr;
+        }
+    }
+
     void GCodeTimeEstimator::calculate_time_from_text(const std::string& gcode)
     {
         reset();
@@ -174,6 +196,7 @@ namespace Slic3r {
         { this->_process_gcode_line(reader, line); });
 
         _calculate_time();
+        _generate_raw_gcode();
 
 #if ENABLE_MOVE_STATS
         _log_moves_stats();
@@ -189,6 +212,7 @@ namespace Slic3r {
 
         _parser.parse_file(file, boost::bind(&GCodeTimeEstimator::_process_gcode_line, this, _1, _2));
         _calculate_time();
+        _generate_raw_gcode();
 
 #if ENABLE_MOVE_STATS
         _log_moves_stats();
@@ -207,6 +231,7 @@ namespace Slic3r {
         for (const std::string& line : gcode_lines)
             _parser.parse_line(line, action);
         _calculate_time();
+        _generate_raw_gcode();
 
 #if ENABLE_MOVE_STATS
         _log_moves_stats();
@@ -240,6 +265,7 @@ namespace Slic3r {
     {
         PROFILE_FUNC();
         _calculate_time();
+        _generate_raw_gcode();
 
 #if ENABLE_MOVE_STATS
         _log_moves_stats();
@@ -267,6 +293,11 @@ namespace Slic3r {
     void GCodeTimeEstimator::set_axis_max_jerk(EAxis axis, float jerk)
     {
         _state.axis[axis].max_jerk = jerk;
+    }
+
+    void GCodeTimeEstimator::set_axis_step_size(EAxis axis, float step_size)
+    {
+        _state.axis[axis].step_size = step_size;
     }
 
     float GCodeTimeEstimator::get_axis_position(EAxis axis) const
@@ -424,6 +455,7 @@ namespace Slic3r {
             set_axis_max_feedrate(axis, DEFAULT_AXIS_MAX_FEEDRATE[a]);
             set_axis_max_acceleration(axis, DEFAULT_AXIS_MAX_ACCELERATION[a]);
             set_axis_max_jerk(axis, DEFAULT_AXIS_MAX_JERK[a]);
+            set_axis_step_size(axis, DEFAULT_AXIS_STEP_SIZE[a]);
         }
     }
 
@@ -509,10 +541,59 @@ namespace Slic3r {
         }
     }
 
+    static inline std::string remove_comment(std::string line) {
+        size_t pos = line.find(';');
+        if (pos != -1)
+            line = line.substr(0, pos);
+        boost::trim(line);
+        return line;
+    }
+
+    void GCodeTimeEstimator::_generate_raw_gcode()
+    {
+        if (m_raw_file == nullptr)
+            return;
+
+        GCode::Raw::MachineLimits limits;
+        limits.step_resolution      = GCode::Raw::GCodeVec(0.01, 0.01, 0.0025, 0.007519);
+        limits.timer_frequency_Hz   = 2000000.;
+
+        std::vector<GCode::Raw::TrapezoidalProfile> moves;
+        GCode::Raw::TrapezoidalProfile tp;
+        tp.pos_entry = GCode::Raw::GCodeVec(0., 0., 0., 0.);
+        for (const Block& block : _blocks) {
+            tp.pos_exit        = GCode::Raw::GCodeVec(block.delta_pos);
+            tp.feedrate_entry  = block.feedrate.entry;
+            tp.feedrate_target = block.feedrate.cruise;
+            tp.feedrate_exit   = block.feedrate.exit;
+            tp.acceleration    = block.acceleration;
+//            tp.acceleration    = limits.s_curves ? limits.max_acceleration_xy * 2. : limits.max_acceleration_xy;
+//            tp.average_acceleration = limits.s_curves ? limits.max_acceleration_xy : 0.;
+            tp.initialize();
+#if 0            
+            printf("Gcode line: %s\n", block.line_this.c_str());
+			printf("Block: dist: (%f, %f, %f, %f), feedrate (%f, %f, %f), accel %f\n", 
+				block.delta_pos[0], block.delta_pos[1], block.delta_pos[2], block.delta_pos[3],
+				(float)tp.feedrate_entry, (float)tp.feedrate_cruise, (float)tp.feedrate_exit, (float)tp.acceleration);
+#endif
+            moves.emplace_back(tp);
+            if (! block.lines_after.empty()) {
+#if 0            
+                printf("Gcode after: %s", block.lines_after.c_str());
+#endif
+                fwrite_discretize_trapezoidal_profiles(m_raw_file, moves, limits);
+                moves.clear();
+                fwrite(block.lines_after.c_str(), block.lines_after.size(), 1, m_raw_file);
+            }
+        }
+        fwrite_discretize_trapezoidal_profiles(m_raw_file, moves, limits);
+    }
+
     void GCodeTimeEstimator::_process_gcode_line(GCodeReader&, const GCodeReader::GCodeLine& line)
     {
         PROFILE_FUNC();
         std::string cmd = line.cmd();
+        bool processed  = false;
         if (cmd.length() > 1)
         {
             switch (::toupper(cmd[0]))
@@ -524,6 +605,7 @@ namespace Slic3r {
                     case 1: // Move
                         {
                             _processG1(line);
+                            processed = true;
                             break;
                         }
                     case 4: // Dwell
@@ -559,6 +641,7 @@ namespace Slic3r {
                     case 92: // Set Position
                         {
                             _processG92(line);
+                            processed = true;
                             break;
                         }
                     }
@@ -577,11 +660,13 @@ namespace Slic3r {
                     case 82: // Set extruder to absolute mode
                         {
                             _processM82(line);
+                            processed = true;
                             break;
                         }
                     case 83: // Set extruder to relative mode
                         {
                             _processM83(line);
+                            processed = true;
                             break;
                         }
                     case 109: // Set Extruder Temperature and Wait
@@ -592,31 +677,37 @@ namespace Slic3r {
                     case 201: // Set max printing acceleration
                         {
                             _processM201(line);
+                            processed = true;
                             break;
                         }
                     case 203: // Set maximum feedrate
                         {
                             _processM203(line);
+                            processed = true;
                             break;
                         }
                     case 204: // Set default acceleration
                         {
                             _processM204(line);
+                            processed = true;
                             break;
                         }
-                    case 205: // Advanced settings
+                    case 205: // Advanced settings jerk
                         {
                             _processM205(line);
+                            processed = true;
                             break;
                         }
                     case 221: // Set extrude factor override percentage
                         {
                             _processM221(line);
+                            processed = true;
                             break;
                         }
                     case 566: // Set allowable instantaneous speed change
                         {
                             _processM566(line);
+                            processed = true;
                             break;
                         }
                     }
@@ -625,19 +716,36 @@ namespace Slic3r {
                 }
             }
         }
+
+        if (m_raw_file && ! processed) {
+            std::string raw = remove_comment(line.raw());
+            if (! raw.empty()) {
+                if (_blocks.empty()) {
+                    ::fwrite(line.raw().data(), line.raw().size(), 1, m_raw_file);
+                    char eol = '\n';
+                    ::fwrite(&eol, 1, 1, m_raw_file);
+                } else {
+                    _blocks.back().lines_after += line.raw() + '\n';
+                }
+            }
+        }
     }
 
     // Returns the new absolute position on the given axis in dependence of the given parameters
-    float axis_absolute_position_from_G1_line(GCodeTimeEstimator::EAxis axis, const GCodeReader::GCodeLine& lineG1, GCodeTimeEstimator::EUnits units, bool is_relative, float current_absolute_position)
+    float axis_absolute_position_from_G1_line(GCodeTimeEstimator::EAxis axis, const GCodeReader::GCodeLine& lineG1, GCodeTimeEstimator::EUnits units, bool is_relative, float current_absolute_position, float step_size)
     {
         float lengthsScaleFactor = (units == GCodeTimeEstimator::Inches) ? INCHES_TO_MM : 1.0f;
-        if (lineG1.has(Slic3r::Axis(axis)))
-        {
-            float ret = lineG1.value(Slic3r::Axis(axis)) * lengthsScaleFactor;
-            return is_relative ? current_absolute_position + ret : ret;
-        }
-        else
-            return current_absolute_position;
+        float ret = current_absolute_position;
+		if (lineG1.has(Slic3r::Axis(axis))) {
+			float ret = lineG1.value(Slic3r::Axis(axis)) * lengthsScaleFactor;
+			if (is_relative)
+				ret += current_absolute_position;
+			// Round the absolute coordinate into a grid of stepper motor step size intervals.
+			float out = floor(ret / step_size + 0.5) * step_size;
+			return out;
+		}
+		else
+			return current_absolute_position;
     }
 
     void GCodeTimeEstimator::_processG1(const GCodeReader::GCodeLine& line)
@@ -651,7 +759,7 @@ namespace Slic3r {
             if (a == E)
                 is_relative |= (get_e_local_positioning_type() == Relative);
 
-            new_pos[a] = axis_absolute_position_from_G1_line((EAxis)a, line, units, is_relative, get_axis_position((EAxis)a));
+            new_pos[a] = axis_absolute_position_from_G1_line((EAxis)a, line, units, is_relative, get_axis_position((EAxis)a), _state.axis[(EAxis)a].step_size);
         }
 
         // updates feedrate from line, if present
@@ -660,6 +768,7 @@ namespace Slic3r {
 
         // fills block data
         Block block;
+        block.line_this = line.raw();
 
         // calculates block movement deltas
         float max_abs_delta = 0.0f;
@@ -1043,6 +1152,7 @@ namespace Slic3r {
     void GCodeTimeEstimator::_simulate_st_synchronize()
     {
         _calculate_time();
+        _generate_raw_gcode();
         _reset_blocks();
     }
 
@@ -1128,6 +1238,7 @@ namespace Slic3r {
                     block.feedrate.exit = next->feedrate.entry;
                     block.calculate_trapezoid();
                     curr->trapezoid = block.trapezoid;
+                    curr->feedrate.exit = next->feedrate.entry;
                     curr->flags.recalculate = false; // Reset current only to ensure next trapezoid is computed
                 }
             }
@@ -1140,6 +1251,7 @@ namespace Slic3r {
             block.feedrate.exit = next->safe_feedrate;
             block.calculate_trapezoid();
             next->trapezoid = block.trapezoid;
+            next->feedrate.exit = next->safe_feedrate;
             next->flags.recalculate = false;
         }
     }
