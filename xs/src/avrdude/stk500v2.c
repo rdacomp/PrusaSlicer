@@ -101,6 +101,7 @@ enum hvmode
 
 #define PDATA(pgm) ((struct pdata *)(pgm->cookie))
 
+#define PAGE_SIZE_MAX (256 * 8)
 
 /*
  * Data structure for displaying STK600 routing and socket cards.
@@ -490,7 +491,7 @@ static int stk500v2_jtag3_send(PROGRAMMER * pgm, unsigned char * data, size_t le
 
 static int stk500v2_send(PROGRAMMER * pgm, unsigned char * data, size_t len)
 {
-  unsigned char buf[275 + 6];		// max MESSAGE_BODY of 275 bytes, 6 bytes overhead
+  unsigned char buf[PAGE_SIZE_MAX + 19 + 6];		// max MESSAGE_BODY of 275 bytes, 6 bytes overhead
   int i;
 
   if (PDATA(pgm)->pgmtype == PGMTYPE_AVRISP_MKII ||
@@ -1329,8 +1330,8 @@ static int stk500v2_initialize(PROGRAMMER * pgm, AVRPART * p)
     m = ldata(ln);
     if (strcmp(m->desc, "flash") == 0) {
       if (m->page_size > 0) {
-        if (m->page_size > 256)
-          PDATA(pgm)->flash_pagesize = 256;
+        if (m->page_size > PAGE_SIZE_MAX)
+          PDATA(pgm)->flash_pagesize = PAGE_SIZE_MAX;
         else
           PDATA(pgm)->flash_pagesize = m->page_size;
       }
@@ -1807,7 +1808,7 @@ static int stk500hv_read_byte(PROGRAMMER * pgm, AVRPART * p, AVRMEM * mem,
 			      enum hvmode mode)
 {
   int result, cmdlen = 2;
-  unsigned char buf[266];
+  unsigned char buf[PAGE_SIZE_MAX + 10];
   unsigned long paddr = 0UL, *paddr_ptr = NULL;
   unsigned int pagesize = 0, use_ext_addr = 0, addrshift = 0;
   unsigned char *cache_ptr = NULL;
@@ -2035,7 +2036,7 @@ static int stk500hv_write_byte(PROGRAMMER * pgm, AVRPART * p, AVRMEM * mem,
 			       enum hvmode mode)
 {
   int result, cmdlen, timeout = 0, pulsewidth = 0;
-  unsigned char buf[266];
+  unsigned char buf[PAGE_SIZE_MAX + 10];
   unsigned long paddr = 0UL, *paddr_ptr = NULL;
   unsigned int pagesize = 0, use_ext_addr = 0, addrshift = 0;
   unsigned char *cache_ptr = NULL;
@@ -2302,7 +2303,7 @@ static int page = 0;
   unsigned int block_size, last_addr, addrshift, use_ext_addr;
   unsigned int maxaddr = addr + n_bytes;
   unsigned char commandbuf[10];
-  unsigned char buf[266];
+  unsigned char buf[PAGE_SIZE_MAX + 10];
   unsigned char cmds[4];
   int result;
   OPCODE * rop, * wop;
@@ -2315,7 +2316,7 @@ static int page = 0;
   // Inside the 2nd round of a firmware block flashing?
   bool prusa3d_semicolon_workaround_round2 = false;
   // Buffer containing the other nibbles of semicolons to be flashed in the 2nd round.
-  unsigned char prusa3d_semicolon_workaround_round2_data[256];
+  unsigned char prusa3d_semicolon_workaround_round2_data[PAGE_SIZE_MAX];
 
   DEBUG("STK500V2: stk500v2_paged_write(..,%s,%u,%u,%u)\n",
         m->desc, page_size, addr, n_bytes);
@@ -2426,6 +2427,7 @@ static int page = 0;
     } else {
         for (size_t i = 0; i < block_size; ++ i) {
             unsigned char b = m->buf[addr+i];
+#if 1
             if (b == ';') {
               // printf("semicolon at %d %d\r\n", addr, i);
               prusa3d_semicolon_workaround_round2_data[i] = b | 0x0f0;
@@ -2433,6 +2435,7 @@ static int page = 0;
               prusa3d_semicolon_workaround_round2 = true;
             } else 
               prusa3d_semicolon_workaround_round2_data[i] = 0x0ff;
+#endif
             buf[i+10] = b;
         }
     }
@@ -2458,7 +2461,7 @@ static int stk500hv_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
 {
   unsigned int block_size, last_addr, addrshift, use_ext_addr;
   unsigned int maxaddr = addr + n_bytes;
-  unsigned char commandbuf[5], buf[266];
+  unsigned char commandbuf[5], buf[PAGE_SIZE_MAX + 10];
   int result;
 
   DEBUG("STK500V2: stk500hv_paged_write(..,%s,%u,%u)\n",
@@ -2570,7 +2573,7 @@ static int stk500v2_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
   unsigned int block_size, hiaddr, addrshift, use_ext_addr;
   unsigned int maxaddr = addr + n_bytes;
   unsigned char commandbuf[4];
-  unsigned char buf[275];	// max buffer size for stk500v2 at this point
+  unsigned char buf[PAGE_SIZE_MAX + 19];	// max buffer size for stk500v2 at this point
   unsigned char cmds[4];
   int result;
   OPCODE * rop;
@@ -2664,7 +2667,7 @@ static int stk500hv_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
 {
   unsigned int block_size, hiaddr, addrshift, use_ext_addr;
   unsigned int maxaddr = addr + n_bytes;
-  unsigned char commandbuf[3], buf[266];
+  unsigned char commandbuf[3], buf[PAGE_SIZE_MAX + 10];
   int result;
 
   DEBUG("STK500V2: stk500hv_paged_load(..,%s,%u,%u,%u)\n",

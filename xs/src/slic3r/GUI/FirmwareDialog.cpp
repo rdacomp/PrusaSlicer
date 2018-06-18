@@ -169,12 +169,13 @@ void FirmwareDialog::priv::perform_upload()
 		// Using the "Wiring" mode to program Rambo or Einsy, using the STK500v2 protocol (not the STK500).
 		// The Prusa's avrdude is patched to never send semicolons inside the data packets, as the USB to serial chip
 		// is flashed with a buggy firmware.
-//		"-c", "wiring",
+		"-c", "wiring",
 		// Using the "Arduino" mode to program Einsy's external flash with languages, using the STK500 protocol (not the STK500v2).
 		// The Prusa's avrdude is patched again to never send semicolons inside the data packets.
-		"-c", "arduino",
+//		"-c", "arduino",
 		"-P", port,
-		"-b", "115200",   // XXX: is this ok to hardcode?
+//		"-b", "115200",   // XXX: is this ok to hardcode?
+		"-b", "921600",   // XXX: is this ok to hardcode?
 		"-D",
 		"-u", // disable safe mode
 		"-U", (boost::format("flash:w:%1%:i") % filename.ToStdString()).str(),
@@ -195,7 +196,7 @@ void FirmwareDialog::priv::perform_upload()
 		.args(args)
 		.on_message(std::move([q](const char *msg, unsigned /* size */) {
 			// Debugging output to console, useful when avrdude is executed in a super verbose mode (with -v -v -v).
-			// printf("%s", msg);
+printf("%s", msg);
 			auto evt = new wxCommandEvent(EVT_AVRDUDE, q->GetId());
 			evt->SetExtraLong(AE_MESSAGE);
 			evt->SetString(msg);
