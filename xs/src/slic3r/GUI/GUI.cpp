@@ -423,8 +423,31 @@ bool check_unsaved_changes()
 	return dialog->ShowModal() == wxID_YES;
 }
 
+#ifdef __APPLE__
+// Workaround for missing tool tips on too early activated tab pages on OSX.
+// https://github.com/prusa3d/Slic3r/issues/974
+// https://forums.wxwidgets.org/viewtopic.php?t=36556
+// https://forums.wxwidgets.org/viewtopic.php?f=23&t=43815&hilit=tooltip
+void restore_tooltips_workaround(wxWindow *win)
+{
+    if (win) {
+	    wxString tooltip = win->GetToolTipText();
+	    win->UnsetToolTip();
+	    win->SetToolTip(tooltip);
+	    for (auto child : win->GetChildren())
+	   		restore_tooltips_workaround(child);
+	}
+}
+#endif /* __APPLE__ */
+
 bool config_wizard_startup(bool app_config_exists)
 {
+#ifdef __APPLE__
+	// Workaround for missing tool tips on too early activated tab pages on OSX.
+	// As the config wizard is call
+	restore_tooltips_workaround(g_wxTabPanel);
+#endif /* __APPLE__ */
+
 	if (! app_config_exists || g_PresetBundle->printers.size() <= 1) {
 		config_wizard(ConfigWizard::RR_DATA_EMPTY);
 		return true;
