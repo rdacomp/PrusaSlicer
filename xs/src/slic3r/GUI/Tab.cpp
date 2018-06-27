@@ -811,7 +811,9 @@ void TabPrint::build()
 	m_presets = &m_preset_bundle->prints;
 	load_initial_data();
 
-	auto page = add_options_page(_(L("Layers and perimeters")), "layers.png");
+	auto page = add_options_page(_(L("Experimental first empty page")), "layers.png");
+
+	/*auto*/ page = add_options_page(_(L("Layers and perimeters")), "layers.png");
 		auto optgroup = page->new_optgroup(_(L("Layer height")));
 		optgroup->append_single_option_line("layer_height");
 		optgroup->append_single_option_line("first_layer_height");
@@ -1255,7 +1257,9 @@ void TabFilament::build()
 	m_presets = &m_preset_bundle->filaments;
 	load_initial_data();
 
-	auto page = add_options_page(_(L("Filament")), "spool.png");
+	auto page = add_options_page("Remove me", "layers.png");
+
+	/*auto*/ page = add_options_page(_(L("Filament")), "spool.png");
 		auto optgroup = page->new_optgroup(_(L("Filament")));
 		optgroup->append_single_option_line("filament_colour");
 		optgroup->append_single_option_line("filament_diameter");
@@ -1933,6 +1937,10 @@ void Tab::rebuild_page_tree()
 	{
 		auto itemId = m_treectrl->AppendItem(rootItem, p->title(), p->iconID());
 		m_treectrl->SetItemTextColour(itemId, p->get_item_colour());
+		if (p->title() == "Remove me")			{
+			m_treectrl->Delete(itemId);
+			continue;
+		}
 		if (p->title() == selected) {
 			m_disable_tree_sel_changed_event = 1;
 			m_treectrl->SelectItem(itemId);
