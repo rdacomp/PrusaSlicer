@@ -119,13 +119,13 @@ void OptionsGroup::append_line(const Line& line, wxStaticText**	colored_Label/* 
 		option_set.front().opt.sidetext.size() == 0 && option_set.front().side_widget == nullptr && 
 		line.get_extra_widgets().size() == 0) {
 		wxSizer* tmp_sizer;
-#ifdef __WXGTK__
+//#ifdef __WXGTK__
 		tmp_sizer = new wxBoxSizer(wxVERTICAL);
         m_panel->SetSizer(tmp_sizer);
         m_panel->Layout();
-#else
-        tmp_sizer = sizer;
-#endif /* __WXGTK__ */
+// #else
+//         tmp_sizer = sizer;
+// #endif /* __WXGTK__ */
 
 		const auto& option = option_set.front();
 		const auto& field = build_field(option);
@@ -142,10 +142,10 @@ void OptionsGroup::append_line(const Line& line, wxStaticText**	colored_Label/* 
 	}
 
     auto grid_sizer = m_grid_sizer;
-#ifdef __WXGTK__
+//#ifdef __WXGTK__
         m_panel->SetSizer(m_grid_sizer);
         m_panel->Layout();
-#endif /* __WXGTK__ */
+//#endif /* __WXGTK__ */
 
     // Build a label if we have it
 	wxStaticText* label=nullptr;
