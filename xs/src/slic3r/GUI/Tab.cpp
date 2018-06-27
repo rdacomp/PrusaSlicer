@@ -1944,7 +1944,6 @@ void Tab::rebuild_page_tree()
 	if (!have_selection) {
 		// this is triggered on first load, so we don't disable the sel change event
 		m_treectrl->SelectItem(m_treectrl->GetFirstVisibleItem());//! (treectrl->GetFirstChild(rootItem));
-		m_pages[0]->Fit();
 	}
 	Thaw();
 }
@@ -2087,7 +2086,8 @@ void Tab::OnTreeSelChange(wxTreeEvent& event)
 #endif
 
 	page->Show();
-// 	page->Fit();
+	page->Fit();
+	wxMessageBox("Fit done");
 	m_hsizer->Layout();
 	Refresh();
 
