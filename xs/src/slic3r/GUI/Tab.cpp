@@ -290,6 +290,33 @@ PageShp Tab::add_options_page(const wxString& title, const std::string& icon, bo
 	return page;
 }
 
+void Tab::OnActivate()
+{
+#ifdef __linux__	
+	std::unique_ptr<wxWindowUpdateLocker> no_updates(new wxWindowUpdateLocker(this));
+#else
+	wxWindowUpdateLocker noUpdates(this);
+#endif
+
+	Page* page = nullptr;
+	auto selection = m_treectrl->GetItemText(m_treectrl->GetSelection());
+	for (auto p : m_pages)
+		if (p->title() == selection)
+		{
+			page = p.get();
+			break;
+		}
+	if (page == nullptr) return;
+
+#ifdef __linux__
+	no_updates.reset(nullptr);
+#endif
+
+	page->Fit();
+	m_hsizer->Layout();
+	Refresh();
+}
+
 void Tab::update_labels_colour()
 {
 	Freeze();
@@ -1246,6 +1273,7 @@ void TabPrint::update()
 
 void TabPrint::OnActivate()
 {
+	Tab::OnActivate();
 	m_recommended_thin_wall_thickness_description_line->SetText(
 		from_u8(PresetHints::recommended_thin_wall_thickness(*m_preset_bundle)));
 }
@@ -1404,6 +1432,7 @@ void TabFilament::update()
 
 void TabFilament::OnActivate()
 {
+	Tab::OnActivate();
 	m_volumetric_speed_description_line->SetText(from_u8(PresetHints::maximum_volumetric_flow_description(*m_preset_bundle)));
 }
 
@@ -2087,7 +2116,6 @@ void Tab::OnTreeSelChange(wxTreeEvent& event)
 
 	page->Show();
 	page->Fit();
-	wxMessageBox("Fit done");
 	m_hsizer->Layout();
 	Refresh();
 
