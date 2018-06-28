@@ -119,6 +119,8 @@ protected:
 	wxButton*			m_undo_to_sys_btn;
 	wxButton*			m_question_btn;
 
+	wxPanel*			m_btn_panel;
+
 	wxComboCtrl*		m_cc_presets_choice;
 	wxDataViewTreeCtrl*	m_presetctrl;
 	wxImageList*		m_preset_icons;
