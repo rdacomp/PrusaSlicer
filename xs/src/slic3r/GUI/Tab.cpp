@@ -292,29 +292,23 @@ PageShp Tab::add_options_page(const wxString& title, const std::string& icon, bo
 
 void Tab::OnActivate()
 {
-#ifdef __linux__	
-	std::unique_ptr<wxWindowUpdateLocker> no_updates(new wxWindowUpdateLocker(this));
-#else
+#ifdef __WXOSX__	
 	wxWindowUpdateLocker noUpdates(this);
+
+// 	Page* page = nullptr;
+// 	auto selection = m_treectrl->GetItemText(m_treectrl->GetSelection());
+// 	for (auto p : m_pages)
+// 		if (p->title() == selection)
+// 		{
+// 			page = p.get();
+// 			break;
+// 		}
+// 	if (page == nullptr) return;
+
+	Fit();
+// 	m_hsizer->Layout();
+// 	Refresh();
 #endif
-
-	Page* page = nullptr;
-	auto selection = m_treectrl->GetItemText(m_treectrl->GetSelection());
-	for (auto p : m_pages)
-		if (p->title() == selection)
-		{
-			page = p.get();
-			break;
-		}
-	if (page == nullptr) return;
-
-#ifdef __linux__
-	no_updates.reset(nullptr);
-#endif
-
-	page->Fit();
-	m_hsizer->Layout();
-	Refresh();
 }
 
 void Tab::update_labels_colour()
