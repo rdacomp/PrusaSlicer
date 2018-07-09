@@ -344,6 +344,7 @@ PrintConfigDef::PrintConfigDef()
     def->enum_labels.push_back("2");
     def->enum_labels.push_back("3");
     def->enum_labels.push_back("4");
+    def->enum_labels.push_back("5");
 
     def = this->add("extruder_clearance_height", coFloat);
     def->label = L("Height");
