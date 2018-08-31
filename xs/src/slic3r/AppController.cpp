@@ -308,21 +308,42 @@ void PrintController::slice_to_png()
     auto exd = query_png_export_data(conf);
     if(exd.zippath.empty()) return;
 
+    Print *print = print_;
+
     try {
-        print_->apply_config(conf);
-        print_->validate();
+        print->apply_config(conf);
+        print->validate();
     } catch(std::exception& e) {
         report_issue(IssueType::ERR, e.what(), "Error");
         return;
     }
 
+    double pheight_mm = 5;
+    double pwall_thickness_mm = 2;
+
+    // generate sla base pools
+
+    for(PrintObject *po : print->objects) {
+        TriangleMesh&& rm = po->model_object()->raw_mesh();
+        double tz = pheight_mm / 2 + 1;
+        po->model_object()->translate({0, 0, tz});
+        ExPolygons ground;
+        TriangleMesh poolmesh;
+        sla::ground_layer(rm, ground);
+        sla::create_base_pool(ground, poolmesh, pwall_thickness_mm, pheight_mm);
+        poolmesh.translate(0, 0, pheight_mm);
+        po->model_object()->add_volume(std::move(poolmesh));
+    }
+
+    print->reload_object(0);
+
     // TODO: copy the model and work with the copy only
     bool correction = false;
     if(exd.corr_x != 1.0 || exd.corr_y != 1.0 || exd.corr_z != 1.0) {
         correction = true;
-        print_->invalidate_all_steps();
+        print->invalidate_all_steps();
 
-        for(auto po : print_->objects) {
+        for(auto po : print->objects) {
             po->model_object()->scale(
                         Pointf3(exd.corr_x, exd.corr_y, exd.corr_z)
                         );
@@ -333,10 +354,10 @@ void PrintController::slice_to_png()
     }
 
     // Turn back the correction scaling on the model.
-    auto scale_back = [this, correction, exd]() {
+    auto scale_back = [this, print, correction, exd]() {
         if(correction) { // scale the model back
-            print_->invalidate_all_steps();
-            for(auto po : print_->objects) {
+            print->invalidate_all_steps();
+            for(auto po : print->objects) {
                 po->model_object()->scale(
                     Pointf3(1.0/exd.corr_x, 1.0/exd.corr_y, 1.0/exd.corr_z)
                 );
@@ -347,7 +368,18 @@ void PrintController::slice_to_png()
         }
     };
 
-    auto print_bb = print_->bounding_box();
+    auto rempools = [&print, pheight_mm]() {
+        for(PrintObject *po : print->objects) {
+            size_t vidx = po->model_object()->volumes.size() - 1;
+            po->model_object()->delete_volume(vidx);
+            double tz = pheight_mm / 2 + 1;
+            po->model_object()->translate({0, 0, -tz});
+        }
+        print->reload_object(0);
+        print->invalidate_all_steps();
+    };
+
+    auto print_bb = print->bounding_box();
     Vec2d punsc = unscale(print_bb.size());
 
     // If the print does not fit into the print area we should cry about it.
@@ -360,6 +392,7 @@ void PrintController::slice_to_png()
 
        if(!report_issue(IssueType::WARN_Q, ss.str(), _(L("Warning"))))  {
            scale_back();
+           rempools();
            return;
        }
     }
@@ -378,14 +411,15 @@ void PrintController::slice_to_png()
             pri->cancel();
             report_issue(IssueType::ERR, e.what(), _(L("Exception occured")));
             scale_back();
+            rempools();
             return;
         }
 
-        auto pbak = print_->progressindicator;
-        print_->progressindicator = pri;
+        auto pbak = print->progressindicator;
+        print->progressindicator = pri;
 
         try {
-            print_to<FilePrinterFormat::PNG>( *print_, exd.zippath,
+            print_to<FilePrinterFormat::PNG>( *print, exd.zippath,
                         exd.width_mm, exd.height_mm,
                         exd.width_px, exd.height_px,
                         exd.exp_time_s, exd.exp_time_first_s);
@@ -395,8 +429,9 @@ void PrintController::slice_to_png()
             report_issue(IssueType::ERR, e.what(), _(L("Exception occured")));
         }
 
-        print_->progressindicator = pbak;
+        print->progressindicator = pbak;
         scale_back();
+        rempools();
 
 //    });
 }

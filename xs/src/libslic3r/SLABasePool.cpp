@@ -452,9 +452,9 @@ void ground_layer(const TriangleMesh &mesh, ExPolygons &output, float h)
 }
 
 void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
-                      double min_wall_thickness_mm,
-                      double min_wall_height_mm,
-                      double max_merge_distance_mm)
+                        double min_wall_thickness_mm,
+                        double min_wall_height_mm,
+                        double max_merge_distance_mm)
 {
     auto concavehs = concave_hull(ground_layer, max_merge_distance_mm);
     for(ExPolygon& concaveh : concavehs) {
@@ -470,7 +470,7 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
         const coord_t WALL_THICKNESS = mm(min_wall_thickness_mm) +
                                        wall_thickness;
 
-        const coord_t WALL_DISTANCE = coord_t(0.3*WALL_THICKNESS);
+        const coord_t WALL_DISTANCE = coord_t(0.8*WALL_THICKNESS);
         const coord_t HEIGHT = mm(min_wall_height_mm);
 
         auto outer_base = concaveh;
