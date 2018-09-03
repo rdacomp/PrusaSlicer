@@ -452,11 +452,9 @@ void ground_layer(const TriangleMesh &mesh, ExPolygons &output, float h)
 }
 
 void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
-                        double min_wall_thickness_mm,
-                        double min_wall_height_mm,
-                        double max_merge_distance_mm)
+                      const PoolConfig& cfg)
 {
-    auto concavehs = concave_hull(ground_layer, max_merge_distance_mm);
+    auto concavehs = concave_hull(ground_layer, cfg.max_merge_distance_mm);
     for(ExPolygon& concaveh : concavehs) {
         if(concaveh.contour.points.empty()) return;
         concaveh.holes.clear();
@@ -467,11 +465,11 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
 
         auto wall_thickness = coord_t((w+h)*0.01);
 
-        const coord_t WALL_THICKNESS = mm(min_wall_thickness_mm) +
+        const coord_t WALL_THICKNESS = mm(cfg.min_wall_thickness_mm) +
                                        wall_thickness;
 
         const coord_t WALL_DISTANCE = coord_t(0.8*WALL_THICKNESS);
-        const coord_t HEIGHT = mm(min_wall_height_mm);
+        const coord_t HEIGHT = mm(cfg.min_wall_height_mm);
 
         auto outer_base = concaveh;
         offset(outer_base, WALL_THICKNESS+WALL_DISTANCE);
@@ -489,7 +487,7 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
 
         ExPolygon ob = outer_base; double wh = 0;
         auto curvedwalls = round_edges(ob,
-                                       1,    // radius 1 mm
+                                       cfg.edge_radius_mm,    // radius 1 mm
                                        170,  // 170 degrees
                                        0,    // z position of the input plane
                                        true,
@@ -499,7 +497,7 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
         ExPolygon ob_contr = ob;
         ob_contr.holes.clear();
 
-        auto pwalls = walls(ob_contr, inner_base, wh, -min_wall_height_mm);
+        auto pwalls = walls(ob_contr, inner_base, wh, -cfg.min_wall_height_mm);
         pool.merge(pwalls);
 
         Polygons top_triangles, bottom_triangles;
@@ -510,14 +508,14 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
 
         ob = inner_base; wh = 0;
         curvedwalls = round_edges(ob,
-                                  1,    // radius 1 mm
+                                  cfg.edge_radius_mm,    // radius 1 mm
                                   90,  // 170 degrees
                                   0,    // z position of the input plane
                                   false,
                                   ob, wh);
         pool.merge(curvedwalls);
 
-        auto innerbed = inner_bed(ob, min_wall_height_mm/2 + wh, wh);
+        auto innerbed = inner_bed(ob, cfg.min_wall_height_mm/2 + wh, wh);
 
         pool.merge(top_plate);
         pool.merge(bottom_plate);

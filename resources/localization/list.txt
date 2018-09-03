@@ -22,6 +22,9 @@ xs/src/slic3r/GUI/UpdateDialogs.cpp
 xs/src/slic3r/GUI/WipeTowerDialog.cpp
 xs/src/slic3r/Utils/OctoPrint.cpp
 xs/src/slic3r/Utils/PresetUpdater.cpp
+xs/src/slic3r/AppController.cpp
+xs/src/slic3r/AppController.hpp
+xs/src/slic3r/AppControllerWx.cpp
 xs/src/libslic3r/Print.cpp
 xs/src/libslic3r/PrintConfig.cpp
 xs/src/libslic3r/GCode/PreviewData.cpp

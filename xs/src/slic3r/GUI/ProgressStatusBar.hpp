@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <functional>
+#include "../Strings.hpp"
 
 class wxTimer;
 class wxGauge;
@@ -44,7 +45,7 @@ public:
     inline void remove_cancel_callback() { set_cancel_callback(); }
     void run(int rate);
     void embed(wxFrame *frame = nullptr);
-    void set_status_text(const std::string& txt);
+    void set_status_text(const string& txt);
 
     // Temporary methods to satisfy Perl side
     void show_cancel_button();

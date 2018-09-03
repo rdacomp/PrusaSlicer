@@ -318,20 +318,22 @@ void PrintController::slice_to_png()
         return;
     }
 
-    double pheight_mm = 5;
-    double pwall_thickness_mm = 2;
-
     // generate sla base pools
+    sla::PoolConfig pcfg;
+    pcfg.edge_radius_mm = 1;
+    pcfg.min_wall_thickness_mm = 2;
+    pcfg.min_wall_height_mm = 5;
+    double tz = pcfg.min_wall_height_mm / 2 + pcfg.edge_radius_mm;
 
     for(PrintObject *po : print->objects) {
         TriangleMesh&& rm = po->model_object()->raw_mesh();
-        double tz = pheight_mm / 2 + 1;
         po->model_object()->translate({0, 0, tz});
         ExPolygons ground;
         TriangleMesh poolmesh;
         sla::ground_layer(rm, ground);
-        sla::create_base_pool(ground, poolmesh, pwall_thickness_mm, pheight_mm);
-        poolmesh.translate(0, 0, pheight_mm);
+
+        sla::create_base_pool(ground, poolmesh, pcfg);
+        poolmesh.translate(0, 0, pcfg.min_wall_height_mm);
         po->model_object()->add_volume(std::move(poolmesh));
     }
 
@@ -368,11 +370,10 @@ void PrintController::slice_to_png()
         }
     };
 
-    auto rempools = [&print, pheight_mm]() {
+    auto rempools = [&print, tz]() {
         for(PrintObject *po : print->objects) {
             size_t vidx = po->model_object()->volumes.size() - 1;
             po->model_object()->delete_volume(vidx);
-            double tz = pheight_mm / 2 + 1;
             po->model_object()->translate({0, 0, -tz});
         }
         print->reload_object(0);

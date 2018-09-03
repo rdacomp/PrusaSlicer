@@ -214,7 +214,7 @@ namespace {
 class Wrapper: public ProgressIndicator, public wxEvtHandler {
     ProgressStatusBar *sbar_;
     using Base = ProgressIndicator;
-    std::string message_;
+    wxString message_;
     AppControllerBoilerplate& ctl_;
 
     void showProgress(bool show = true) {
