@@ -5,9 +5,89 @@
 #include "ExPolygon.hpp"
 #include "TriangleMesh.hpp"
 #include "ClipperUtils.hpp"
+
 #include "boost/log/trivial.hpp"
+// for concave hull merging decisions
+#include <boost/geometry/index/rtree.hpp>
 
 //#include "SVG.hpp"
+
+namespace {
+using Box = Slic3r::BoundingBox;
+
+/// Index of minimum corner of the box.
+int const min_corner = 0;
+
+/// Index of maximum corner of the box.
+int const max_corner = 1;
+}
+
+namespace boost {
+namespace geometry {
+namespace traits {
+
+/* ************************************************************************** */
+/* Point concept adaptation ************************************************* */
+/* ************************************************************************** */
+
+template<> struct tag<Slic3r::Point> {
+    using type = point_tag;
+};
+
+template<> struct coordinate_type<Slic3r::Point> {
+    using type = coord_t;
+};
+
+template<> struct coordinate_system<Slic3r::Point> {
+    using type = cs::cartesian;
+};
+
+template<> struct dimension<Slic3r::Point>: boost::mpl::int_<2> {};
+
+template<int d> struct access<Slic3r::Point, d > {
+    static inline coord_t get(Slic3r::Point const& a) {
+        return a(d);
+    }
+
+    static inline void set(Slic3r::Point& a, coord_t const& value) {
+        a(d) = value;
+    }
+};
+
+/* ************************************************************************** */
+/* Box concept adaptation *************************************************** */
+/* ************************************************************************** */
+
+template<> struct tag<Box> {
+    using type = box_tag;
+};
+
+template<> struct point_type<Box> {
+    using type = Slic3r::Point;
+};
+
+template<int d> struct indexed_access<Box, min_corner, d> {
+    static inline coord_t get(Box const& box) { return box.min(d); }
+    static inline void set(Box &box, coord_t const& coord) {
+        box.min(d) = coord;
+    }
+};
+
+template<int d> struct indexed_access<Box, max_corner, d> {
+    static inline coord_t get(Box const& box) { return box.max(d); }
+    static inline void set(Box &box, coord_t const& coord) {
+        box.max(d) = coord;
+    }
+};
+
+}
+}
+}
+
+namespace bgi = boost::geometry::index;
+using SpatElement = std::pair<Box, unsigned>;
+using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> >;
+
 
 namespace Slic3r { namespace sla {
 
@@ -401,22 +481,39 @@ inline ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
     std::transform(punion.begin(), punion.end(), std::back_inserter(centroids),
                    [](const ExPolygon& poly) { return centroid(poly); });
 
+
+    SpatIndex boxindex; unsigned idx = 0;
+    std::for_each(punion.begin(), punion.end(),
+                  [&boxindex, &idx](const ExPolygon& expo) {
+        Box bb(expo);
+        boxindex.insert(std::make_pair(bb, idx++));
+    });
+
+
     // Centroid of the centroids of islands. This is where the additional
     // connector sticks are routed.
     Point cc = centroid(centroids);
 
     punion.reserve(punion.size() + centroids.size());
 
+    idx = 0;
     std::transform(centroids.begin(), centroids.end(),
                    std::back_inserter(punion),
-                   [cc, max_dist_mm](const Point& c) {
+                   [&punion, &boxindex, cc, max_dist_mm, &idx](const Point& c)
+    {
 
         double dx = x(c) - x(cc), dy = y(c) - y(cc);
         double l = std::sqrt(dx * dx + dy * dy);
         double nx = dx / l, ny = dy / l;
         double max_dist = mm(max_dist_mm);
 
-        if(l > max_dist) return ExPolygon();
+        ExPolygon& expo = punion[idx++];
+        Box querybb(expo);
+
+        querybb.offset(max_dist);
+        std::vector<SpatElement> result;
+        boxindex.query(bgi::intersects(querybb), std::back_inserter(result));
+        if(result.size() <= 1) return ExPolygon();
 
         ExPolygon r;
         auto& ctour = r.contour.points;
@@ -454,21 +551,19 @@ void ground_layer(const TriangleMesh &mesh, ExPolygons &output, float h)
 void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
                       const PoolConfig& cfg)
 {
-    auto concavehs = concave_hull(ground_layer, cfg.max_merge_distance_mm);
+    double mdist = 2.5*(1.8*cfg.min_wall_thickness_mm + 4*cfg.edge_radius_mm) +
+                   cfg.max_merge_distance_mm;
+
+    auto concavehs = concave_hull(ground_layer, mdist);
     for(ExPolygon& concaveh : concavehs) {
         if(concaveh.contour.points.empty()) return;
         concaveh.holes.clear();
 
-        BoundingBox bb(concaveh);
-        coord_t w = x(bb.max) - x(bb.min);
-        coord_t h = y(bb.max) - y(bb.min);
+        const coord_t WALL_THICKNESS = mm(cfg.min_wall_thickness_mm);
 
-        auto wall_thickness = coord_t((w+h)*0.01);
+        const coord_t WALL_DISTANCE = mm(2*cfg.edge_radius_mm) +
+                                      coord_t(0.8*WALL_THICKNESS);
 
-        const coord_t WALL_THICKNESS = mm(cfg.min_wall_thickness_mm) +
-                                       wall_thickness;
-
-        const coord_t WALL_DISTANCE = coord_t(0.8*WALL_THICKNESS);
         const coord_t HEIGHT = mm(cfg.min_wall_height_mm);
 
         auto outer_base = concaveh;

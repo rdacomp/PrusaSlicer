@@ -388,6 +388,7 @@ const std::vector<std::string>& Preset::sla_material_options()
             "layer_height", "initial_layer_height",
             "exposure_time", "initial_exposure_time",
             "material_correction_printing", "material_correction_curing",
+            "pool_height", "pool_wall_thickness", "pool_max_merge_distance",
             "material_notes",
             "compatible_printers",
             "compatible_printers_condition", "inherits"

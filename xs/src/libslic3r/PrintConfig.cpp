@@ -2236,6 +2236,30 @@ void PrintConfigDef::init_sla_params()
     def->min = 0;
     def->default_value = new ConfigOptionFloat(15);
 
+    def = this->add("pool_height", coFloat);
+    def->label = L("Pool height");
+    def->tooltip = L("The height of the generated pool geometry in mm");
+    def->sidetext = L("mm");
+    def->cli = "sla-pool-height=f";
+    def->min = 1;
+    def->default_value = new ConfigOptionFloat(5);
+
+    def = this->add("pool_wall_thickness", coFloat);
+    def->label = L("Pool wall thickness");
+    def->tooltip = L("The thickness of the generated pool geometry walls in mm");
+    def->sidetext = L("mm");
+    def->cli = "sla-pool-wall-thickness=f";
+    def->min = 0;
+    def->default_value = new ConfigOptionFloat(2);
+
+    def = this->add("pool_max_merge_distance", coFloat);
+    def->label = L("Max pool merge distance");
+    def->tooltip = L("The maximum distance for which individual pools are merged.");
+    def->sidetext = L("mm");
+    def->cli = "sla-pool-max-merge-dist=f";
+    def->min = 0;
+    def->default_value = new ConfigOptionFloat(10);
+
     def = this->add("material_correction_printing", coFloats);
     def->full_label = L("Correction for expansion when printing");
     def->tooltip  = L("Correction for expansion when printing");

@@ -2988,6 +2988,11 @@ void TabSLAMaterial::build()
         optgroup->append_line(line);
     }
 
+    optgroup = page->new_optgroup(_(L("Pool shape")));
+    optgroup->append_single_option_line("pool_height");
+    optgroup->append_single_option_line("pool_wall_thickness");
+    optgroup->append_single_option_line("pool_max_merge_distance");
+
     page = add_options_page(_(L("Notes")), "note.png");
     optgroup = page->new_optgroup(_(L("Notes")), 0);
     optgroup->label_width = 0;

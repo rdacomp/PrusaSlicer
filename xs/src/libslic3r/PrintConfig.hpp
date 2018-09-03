@@ -895,6 +895,9 @@ public:
     ConfigOptionFloat                       initial_exposure_time;
     ConfigOptionFloats                      material_correction_printing;
     ConfigOptionFloats                      material_correction_curing;
+    ConfigOptionFloat                       pool_height;
+    ConfigOptionFloat                       pool_wall_thickness;
+    ConfigOptionFloat                       pool_max_merge_distance;
 protected:
     void initialize(StaticCacheBase &cache, const char *base_ptr)
     {
@@ -904,6 +907,9 @@ protected:
         OPT_PTR(initial_exposure_time);
         OPT_PTR(material_correction_printing);
         OPT_PTR(material_correction_curing);
+        OPT_PTR(pool_height);
+        OPT_PTR(pool_wall_thickness);
+        OPT_PTR(pool_max_merge_distance);
     }
 };
 

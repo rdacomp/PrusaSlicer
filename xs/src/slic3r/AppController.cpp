@@ -321,16 +321,17 @@ void PrintController::slice_to_png()
     // generate sla base pools
     sla::PoolConfig pcfg;
     pcfg.edge_radius_mm = 1;
-    pcfg.min_wall_thickness_mm = 2;
-    pcfg.min_wall_height_mm = 5;
-    double tz = pcfg.min_wall_height_mm / 2 + pcfg.edge_radius_mm;
+    pcfg.min_wall_thickness_mm = conf.opt_float("pool_wall_thickness");
+    pcfg.min_wall_height_mm = conf.opt_float("pool_height");
+    pcfg.max_merge_distance_mm = conf.opt_float("pool_max_merge_distance");
+    double tz = pcfg.min_wall_height_mm / 2 /*+ pcfg.edge_radius_mm*/;
 
     for(PrintObject *po : print->objects) {
         TriangleMesh&& rm = po->model_object()->raw_mesh();
         po->model_object()->translate({0, 0, tz});
         ExPolygons ground;
         TriangleMesh poolmesh;
-        sla::ground_layer(rm, ground);
+        sla::ground_layer(rm, ground, 0.01);
 
         sla::create_base_pool(ground, poolmesh, pcfg);
         poolmesh.translate(0, 0, pcfg.min_wall_height_mm);
@@ -338,6 +339,9 @@ void PrintController::slice_to_png()
     }
 
     print->reload_object(0);
+
+    // For debugging:
+    print->objects.front()->model_object()->get_model()->mesh().write_ascii("out.stl");
 
     // TODO: copy the model and work with the copy only
     bool correction = false;
