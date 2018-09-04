@@ -16,6 +16,7 @@ class Print;
 class PrintObject;
 class PrintConfig;
 class ProgressStatusBar;
+class DynamicPrintConfig;
 
 /**
  * @brief A boilerplate class for creating application logic. It should provide
@@ -46,7 +47,7 @@ public:
     AppControllerBoilerplate();
     ~AppControllerBoilerplate();
 
-    using Path = string;
+    using Path = std::string;
     using PathList = std::vector<Path>;
 
     /// Common runtime issue types
@@ -67,20 +68,20 @@ public:
      * @return Returns a list of paths choosed by the user.
      */
     PathList query_destination_paths(
-            const string& title,
+            const std::string& title,
             const std::string& extensions) const;
 
     /**
      * @brief Same as query_destination_paths but works for directories only.
      */
     PathList query_destination_dirs(
-            const string& title) const;
+            const std::string& title) const;
 
     /**
      * @brief Same as query_destination_paths but returns only one path.
      */
     Path query_destination_path(
-            const string& title,
+            const std::string& title,
             const std::string& extensions,
             const std::string& hint = "") const;
 
@@ -95,11 +96,11 @@ public:
      * title.
      */
     bool report_issue(IssueType issuetype,
-                      const string& description,
-                      const string& brief);
+                      const std::string& description,
+                      const std::string& brief);
 
     bool report_issue(IssueType issuetype,
-                      const string& description);
+                      const std::string& description);
 
     /**
      * @brief Return the global progress indicator for the current controller.
@@ -150,12 +151,12 @@ protected:
      */
     ProgresIndicatorPtr create_progress_indicator(
             unsigned statenum,
-            const string& title,
-            const string& firstmsg) const;
+            const std::string& title,
+            const std::string& firstmsg) const;
 
     ProgresIndicatorPtr create_progress_indicator(
             unsigned statenum,
-            const string& title) const;
+            const std::string& title) const;
 
     // This is a global progress indicator placeholder. In the Slic3r UI it can
     // contain the progress indicator on the statusbar.

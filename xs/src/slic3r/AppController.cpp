@@ -158,8 +158,8 @@ void PrintController::slice(PrintObject *pobj)
 
     if(pobj->layers.empty())
         report_issue(IssueType::ERR,
-                     _(L("No layers were detected. You might want to repair your "
-                     "STL file(s) or check their size or thickness and retry"))
+                     L("No layers were detected. You might want to repair your "
+                     "STL file(s) or check their size or thickness and retry")
                      );
 
     pobj->state.set_done(STEP_SLICE);
@@ -249,35 +249,35 @@ void PrintController::slice(AppControllerBoilerplate::ProgresIndicatorPtr pri)
 
     Slic3r::trace(3, "Starting the slicing process.");
 
-    pri->update(st+20, _(L("Generating perimeters")));
+    pri->update(st+20, L("Generating perimeters"));
     for(auto obj : print_->objects) make_perimeters(obj);
 
-    pri->update(st+60, _(L("Infilling layers")));
+    pri->update(st+60, L("Infilling layers"));
     for(auto obj : print_->objects) infill(obj);
 
-    pri->update(st+70, _(L("Generating support material")));
+    pri->update(st+70, L("Generating support material"));
     for(auto obj : print_->objects) gen_support_material(obj);
 
-    pri->message_fmt(_(L("Weight: %.1fg, Cost: %.1f")),
+    pri->message_fmt(L("Weight: %.1fg, Cost: %.1f"),
                      print_->total_weight, print_->total_cost);
     pri->state(st+85);
 
 
-    pri->update(st+88, _(L("Generating skirt")));
+    pri->update(st+88, L("Generating skirt"));
     make_skirt();
 
 
-    pri->update(st+90, _(L("Generating brim")));
+    pri->update(st+90, L("Generating brim"));
     make_brim();
 
-    pri->update(st+95, _(L("Generating wipe tower")));
+    pri->update(st+95, L("Generating wipe tower"));
     make_wipe_tower();
 
-    pri->update(st+100, _(L("Done")));
+    pri->update(st+100, L("Done"));
 
     // time to make some statistics..
 
-    Slic3r::trace(3, _(L("Slicing process finished.")));
+    Slic3r::trace(3, L("Slicing process finished."));
 }
 
 void PrintController::slice()
@@ -297,8 +297,8 @@ void PrintController::slice_to_png()
 
     auto pt = presetbundle->printers.get_selected_preset().printer_technology();
     if(pt != ptSLA) {
-        report_issue(IssueType::ERR, _("Printer technology is not SLA!"),
-                     _("Error"));
+        report_issue(IssueType::ERR, L("Printer technology is not SLA!"),
+                     L("Error"));
         return;
     }
 
@@ -331,7 +331,7 @@ void PrintController::slice_to_png()
         po->model_object()->translate({0, 0, tz});
         ExPolygons ground;
         TriangleMesh poolmesh;
-        sla::ground_layer(rm, ground, 0.01);
+        sla::base_plate(rm, ground, 1.0);
 
         sla::create_base_pool(ground, poolmesh, pcfg);
         poolmesh.translate(0, 0, pcfg.min_wall_height_mm);
@@ -341,7 +341,7 @@ void PrintController::slice_to_png()
     print->reload_object(0);
 
     // For debugging:
-    print->objects.front()->model_object()->get_model()->mesh().write_ascii("out.stl");
+//    print->objects.front()->model_object()->get_model()->mesh().write_ascii("out.stl");
 
     // TODO: copy the model and work with the copy only
     bool correction = false;
@@ -391,11 +391,11 @@ void PrintController::slice_to_png()
     if(px(punsc) > exd.width_mm || py(punsc) > exd.height_mm) {
         std::stringstream ss;
 
-        ss << _(L("Print will not fit and will be truncated!")) << "\n"
-           << _(L("Width needed: ")) << px(punsc) << " mm\n"
-           << _(L("Height needed: ")) << py(punsc) << " mm\n";
+        ss << L("Print will not fit and will be truncated!") << "\n"
+           << L("Width needed: ") << px(punsc) << " mm\n"
+           << L("Height needed: ") << py(punsc) << " mm\n";
 
-       if(!report_issue(IssueType::WARN_Q, ss.str(), _(L("Warning"))))  {
+       if(!report_issue(IssueType::WARN_Q, ss.str(), L("Warning")))  {
            scale_back();
            rempools();
            return;
@@ -407,14 +407,13 @@ void PrintController::slice_to_png()
 //    {
 
         auto pri = create_progress_indicator(
-                    200, _(L("Slicing to zipped png files...")));
+                    200, L("Slicing to zipped png files..."));
 
         try {
-            pri->update(0, _(L("Slicing...")));
+            pri->update(0, L("Slicing..."));
             slice(pri);
         } catch (std::exception& e) {
-            pri->cancel();
-            report_issue(IssueType::ERR, e.what(), _(L("Exception occured")));
+            report_issue(IssueType::ERR, e.what(), L("Exception occured"));
             scale_back();
             rempools();
             return;
@@ -430,8 +429,7 @@ void PrintController::slice_to_png()
                         exd.exp_time_s, exd.exp_time_first_s);
 
         } catch (std::exception& e) {
-            pri->cancel();
-            report_issue(IssueType::ERR, e.what(), _(L("Exception occured")));
+            report_issue(IssueType::ERR, e.what(), L("Exception occured"));
         }
 
         print->progressindicator = pbak;
@@ -442,7 +440,7 @@ void PrintController::slice_to_png()
 }
 
 void ProgressIndicator::message_fmt(
-        const string &fmtstr, ...) {
+        const std::string &fmtstr, ...) {
     std::stringstream ss;
     va_list args;
     va_start(args, fmtstr);
@@ -492,7 +490,7 @@ void AppController::arrange_model()
         pind->max(count);
 
         pind->on_cancel([](){
-            std::cout << "Cannot be cancelled!" << std::endl;
+            std::cout << "Cannot be canceled!" << std::endl;
         });
     }
 
@@ -506,7 +504,7 @@ void AppController::arrange_model()
     for(auto& v : bedpoints)
         bed.append(Point::new_scale(v(0), v(1)));
 
-    if(pind) pind->update(0, _(L("Arranging objects...")));
+    if(pind) pind->update(0, L("Arranging objects..."));
 
     try {
         arr::BedShapeHint hint;
@@ -520,20 +518,20 @@ void AppController::arrange_model()
                       false, // create many piles not just one pile
                       [pind, count](unsigned rem) {
             if(pind)
-                pind->update(count - rem, _(L("Arranging objects...")));
+                pind->update(count - rem, L("Arranging objects..."));
         });
     } catch(std::exception& e) {
         std::cerr << e.what() << std::endl;
         report_issue(IssueType::ERR,
-                        _(L("Could not arrange model objects! "
-                        "Some geometries may be invalid.")),
-                        _(L("Exception occurred")));
+                        L("Could not arrange model objects! "
+                        "Some geometries may be invalid."),
+                        L("Exception occurred"));
     }
 
     // Restore previous max value
     if(pind) {
         pind->max(pmax);
-        pind->update(0, _(L("Arranging done.")));
+        pind->update(0, L("Arranging done."));
         pind->on_cancel(/*remove cancel function*/);
     }
 }

@@ -12,10 +12,10 @@ namespace sla {
 
 using ExPolygons = std::vector<ExPolygon>;
 
-/// Calculate the polygon representing the slice of the lowest layer of mesh
-void ground_layer(const TriangleMesh& mesh,
-                  ExPolygons& output,
-                  float height = 0.1f);
+/// Calculate the polygon representing the silhouette from the specified height
+void base_plate(const TriangleMesh& mesh,
+                ExPolygons& output,
+                float height = 0.1f);
 
 struct PoolConfig {
     double min_wall_thickness_mm = 2;
@@ -25,7 +25,7 @@ struct PoolConfig {
 };
 
 /// Calculate the pool for the mesh for SLA printing
-void create_base_pool(const ExPolygons& ground_layer,
+void create_base_pool(const ExPolygons& base_plate,
                       TriangleMesh& output_mesh,
                       const PoolConfig& = PoolConfig()
                       );

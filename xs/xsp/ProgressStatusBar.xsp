@@ -3,6 +3,7 @@
 %{
 #include <xsinit.h>
 #include "slic3r/GUI/ProgressStatusBar.hpp"
+#include "slic3r/GUI/GUI.hpp"
 %}
 
 %name{Slic3r::GUI::ProgressStatusBar} class ProgressStatusBar {

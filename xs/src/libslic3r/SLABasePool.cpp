@@ -11,6 +11,7 @@
 #include <boost/geometry/index/rtree.hpp>
 
 //#include "SVG.hpp"
+//#include "benchmark.h"
 
 namespace {
 using Box = Slic3r::BoundingBox;
@@ -449,10 +450,12 @@ inline Point centroid(Points& pp) {
     case 1: c = pp.front(); break;
     case 2: c = (pp[0] + pp[1]) / 2; break;
     default: {
-        Polygon p;
-        p.points.swap(pp);
-        c = p.centroid();
-        pp.swap(p.points);
+        c = std::accumulate(pp.begin(), pp.end(), Point{0, 0});
+        x(c) /= coord_t(pp.size()); y(c) /= coord_t(pp.size());
+//        Polygon p;
+//        p.points.swap(pp);
+//        c = p.centroid();
+//        pp.swap(p.points);
         break;
     }
     }
@@ -536,22 +539,22 @@ inline ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
 
 }
 
-void ground_layer(const TriangleMesh &mesh, ExPolygons &output, float h)
+void base_plate(const TriangleMesh &mesh, ExPolygons &output, float h)
 {
     TriangleMesh m = mesh;
     TriangleMeshSlicer slicer(&m);
 
-    std::vector<ExPolygons> tmp;
+    TriangleMesh upper, lower;
+    slicer.cut(h, &upper, &lower);
+    output = lower.horizontal_projection();
 
-    slicer.slice({h}, &tmp);
-
-    output = tmp.front();
+    for(auto& o : output) o = o.simplify(0.1/SCALING_FACTOR).front();
 }
 
 void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
                       const PoolConfig& cfg)
 {
-    double mdist = 2.5*(1.8*cfg.min_wall_thickness_mm + 4*cfg.edge_radius_mm) +
+    double mdist = 2*(1.8*cfg.min_wall_thickness_mm + 4*cfg.edge_radius_mm) +
                    cfg.max_merge_distance_mm;
 
     auto concavehs = concave_hull(ground_layer, mdist);
@@ -587,6 +590,7 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
                                        0,    // z position of the input plane
                                        true,
                                        ob, wh);
+
         pool.merge(curvedwalls);
 
         ExPolygon ob_contr = ob;

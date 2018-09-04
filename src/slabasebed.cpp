@@ -34,7 +34,7 @@ int main(const int argc, const char *argv[]) {
     ExPolygons ground_slice;
     TriangleMesh basepool;
 
-    sla::ground_layer(model, ground_slice, 0.1f);
+    sla::base_plate(model, ground_slice, 0.1f);
 
     bench.start();
     sla::create_base_pool(ground_slice, basepool);

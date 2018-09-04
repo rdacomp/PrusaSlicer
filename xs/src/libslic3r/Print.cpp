@@ -16,7 +16,7 @@
 #include "slic3r/ProgressIndicator.hpp"
 #include "PrintExport.hpp"
 
-//! macro used to mark string used at localization, 
+//! macro used to mark string used at localization,
 //! return same string
 #define L(s) Slic3r::I18N::translate(s)
 
