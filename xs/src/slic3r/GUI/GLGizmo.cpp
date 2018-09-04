@@ -1031,8 +1031,6 @@ void GLGizmoFlatten::on_render(const BoundingBoxf3& box) const
 
     Vec3d dragged_offset = box.center() - *m_center;
 
-    bool blending_was_enabled = ::glIsEnabled(GL_BLEND);
-    bool depth_test_was_enabled = ::glIsEnabled(GL_DEPTH_TEST);
     ::glEnable(GL_BLEND);
     ::glEnable(GL_DEPTH_TEST);
 
@@ -1054,15 +1052,12 @@ void GLGizmoFlatten::on_render(const BoundingBoxf3& box) const
         }
     }
 
-    if (!blending_was_enabled)
-        ::glDisable(GL_BLEND);
-    if (!depth_test_was_enabled)
-        ::glDisable(GL_DEPTH_TEST);
+    ::glDisable(GL_BLEND);
 }
 
 void GLGizmoFlatten::on_render_for_picking(const BoundingBoxf3& box) const
 {
-    ::glDisable(GL_DEPTH_TEST);
+    ::glEnable(GL_DEPTH_TEST);
 
     for (unsigned int i = 0; i < m_planes.size(); ++i)
     {
@@ -1285,9 +1280,7 @@ bool GLGizmoFlatten::is_plane_update_necessary() const
 }
 
 Vec3d GLGizmoFlatten::get_flattening_normal() const {
-    Transform3d m = Transform3d::Identity();
-    m.rotate(Eigen::AngleAxisd(-m_model_object->instances.front()->rotation, Vec3d::UnitZ()));
-    Vec3d normal = m * m_normal;
+    Vec3d normal = m_model_object->instances.front()->world_matrix().matrix().block(0, 0, 3, 3) * m_normal;
     m_normal = Vec3d::Zero();
     return normal;
 }
