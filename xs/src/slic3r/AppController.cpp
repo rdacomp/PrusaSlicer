@@ -436,6 +436,18 @@ void PrintController::add_sla_pool()
     pcfg.max_merge_distance_mm = conf.opt_float("pool_max_merge_distance");
     double tz = pcfg.min_wall_height_mm / 2 /*+ pcfg.edge_radius_mm*/;
 
+    if(rempools_) rempools_();
+
+    rempools_ = [this, tz]() {
+        for(PrintObject *po : print_->objects) {
+            size_t vidx = po->model_object()->volumes.size() - 1;
+            po->model_object()->delete_volume(vidx);
+            po->model_object()->translate({0, 0, -tz});
+        }
+        print_->reload_object(0);
+        print_->invalidate_all_steps();
+    };
+
     for(PrintObject *po : print->objects) {
         TriangleMesh&& rm = po->model_object()->raw_mesh();
         po->model_object()->translate({0, 0, tz});

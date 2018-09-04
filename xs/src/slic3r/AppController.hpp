@@ -168,6 +168,7 @@ protected:
  */
 class PrintController: public AppControllerBoilerplate {
     Print *print_ = nullptr;
+    std::function<void()> rempools_;
 protected:
 
     void make_skirt();
