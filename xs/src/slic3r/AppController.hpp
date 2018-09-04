@@ -229,6 +229,8 @@ public:
      */
     void slice_to_png();
 
+    void add_sla_pool();
+
     const PrintConfig& config() const;
 };
 

@@ -2519,6 +2519,10 @@ sub object_menu {
     $frame->_append_menu_item($menu, L("Export object as STL…"), L('Export this single object as STL file'), sub {
         $self->export_object_stl;
     }, undef, 'brick_go.png');
+    $frame->_append_menu_item($menu, L("Generate SLA pool"), L(""), sub {
+        $self->{appController}->print_ctl()->add_sla_pool(); 
+        $self->update(0);
+    }, undef, undef);
     if (Slic3r::GUI::is_windows10) {
         $frame->_append_menu_item($menu, L("Fix STL through Netfabb"), L('Fix the model by sending it to a Netfabb cloud service through Windows 10 API'), sub {
             $self->fix_through_netfabb;

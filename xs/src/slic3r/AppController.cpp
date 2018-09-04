@@ -318,27 +318,6 @@ void PrintController::slice_to_png()
         return;
     }
 
-    // generate sla base pools
-    sla::PoolConfig pcfg;
-    pcfg.edge_radius_mm = 1;
-    pcfg.min_wall_thickness_mm = conf.opt_float("pool_wall_thickness");
-    pcfg.min_wall_height_mm = conf.opt_float("pool_height");
-    pcfg.max_merge_distance_mm = conf.opt_float("pool_max_merge_distance");
-    double tz = pcfg.min_wall_height_mm / 2 /*+ pcfg.edge_radius_mm*/;
-
-    for(PrintObject *po : print->objects) {
-        TriangleMesh&& rm = po->model_object()->raw_mesh();
-        po->model_object()->translate({0, 0, tz});
-        ExPolygons ground;
-        TriangleMesh poolmesh;
-        sla::base_plate(rm, ground, 1.0);
-
-        sla::create_base_pool(ground, poolmesh, pcfg);
-        poolmesh.translate(0, 0, pcfg.min_wall_height_mm);
-        po->model_object()->add_volume(std::move(poolmesh));
-    }
-
-    print->reload_object(0);
 
     // For debugging:
 //    print->objects.front()->model_object()->get_model()->mesh().write_ascii("out.stl");
@@ -374,15 +353,15 @@ void PrintController::slice_to_png()
         }
     };
 
-    auto rempools = [&print, tz]() {
-        for(PrintObject *po : print->objects) {
-            size_t vidx = po->model_object()->volumes.size() - 1;
-            po->model_object()->delete_volume(vidx);
-            po->model_object()->translate({0, 0, -tz});
-        }
-        print->reload_object(0);
-        print->invalidate_all_steps();
-    };
+//    auto rempools = [&print, tz]() {
+//        for(PrintObject *po : print->objects) {
+//            size_t vidx = po->model_object()->volumes.size() - 1;
+//            po->model_object()->delete_volume(vidx);
+//            po->model_object()->translate({0, 0, -tz});
+//        }
+//        print->reload_object(0);
+//        print->invalidate_all_steps();
+//    };
 
     auto print_bb = print->bounding_box();
     Vec2d punsc = unscale(print_bb.size());
@@ -397,7 +376,7 @@ void PrintController::slice_to_png()
 
        if(!report_issue(IssueType::WARN_Q, ss.str(), L("Warning")))  {
            scale_back();
-           rempools();
+//           rempools();
            return;
        }
     }
@@ -415,7 +394,7 @@ void PrintController::slice_to_png()
         } catch (std::exception& e) {
             report_issue(IssueType::ERR, e.what(), L("Exception occured"));
             scale_back();
-            rempools();
+//            rempools();
             return;
         }
 
@@ -434,9 +413,42 @@ void PrintController::slice_to_png()
 
         print->progressindicator = pbak;
         scale_back();
-        rempools();
+//        rempools();
 
-//    });
+        //    });
+}
+
+void PrintController::add_sla_pool()
+{
+    Print *print = print_;
+
+    auto presetbundle = GUI::get_preset_bundle();
+    assert(presetbundle);
+
+    auto conf = presetbundle->full_config();
+    conf.validate();
+
+    // generate sla base pools
+    sla::PoolConfig pcfg;
+    pcfg.edge_radius_mm = 1;
+    pcfg.min_wall_thickness_mm = conf.opt_float("pool_wall_thickness");
+    pcfg.min_wall_height_mm = conf.opt_float("pool_height");
+    pcfg.max_merge_distance_mm = conf.opt_float("pool_max_merge_distance");
+    double tz = pcfg.min_wall_height_mm / 2 /*+ pcfg.edge_radius_mm*/;
+
+    for(PrintObject *po : print->objects) {
+        TriangleMesh&& rm = po->model_object()->raw_mesh();
+        po->model_object()->translate({0, 0, tz});
+        ExPolygons ground;
+        TriangleMesh poolmesh;
+        sla::base_plate(rm, ground, 1.0);
+
+        sla::create_base_pool(ground, poolmesh, pcfg);
+        poolmesh.translate(0, 0, pcfg.min_wall_height_mm);
+        po->model_object()->add_volume(std::move(poolmesh));
+    }
+
+    print->reload_object(0);
 }
 
 void ProgressIndicator::message_fmt(

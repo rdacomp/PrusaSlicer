@@ -12,7 +12,8 @@
 
     PrintController(Print *print);
 
-    void slice_to_png(); 
+    void slice_to_png();
+    void add_sla_pool();
     void slice();
 };
 
