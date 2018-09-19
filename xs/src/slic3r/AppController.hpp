@@ -42,7 +42,7 @@ private:
     class PriData;   // Some structure to store progress indication data
 
     // Pimpl data for thread safe progress indication features
-    std::unique_ptr<PriData> pri_data_;
+    std::unique_ptr<PriData> m_pri_data;
 
 public:
 
@@ -67,7 +67,7 @@ public:
      * It should display a file chooser dialog in case of a UI application.
      * @param title Title of a possible query dialog.
      * @param extensions Recognized file extensions.
-     * @return Returns a list of paths choosed by the user.
+     * @return Returns a list of paths chosen by the user.
      */
     PathList query_destination_paths(
             const std::string& title,
@@ -162,19 +162,59 @@ protected:
 
     // This is a global progress indicator placeholder. In the Slic3r UI it can
     // contain the progress indicator on the statusbar.
-    ProgresIndicatorPtr global_progressind_;
+    ProgresIndicatorPtr m_global_progressind;
 };
 
-#if 0
+class Zipper {
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+public:
+
+    Zipper(const std::string& zipfilepath);
+    ~Zipper();
+
+    void next_entry(const std::string& fname);
+
+    std::string get_name() const;
+
+    std::ostream& stream();
+
+    void close();
+};
+
 /**
  * @brief Implementation of the printing logic.
  */
 class PrintController: public AppControllerBoilerplate {
-    Print *print_ = nullptr;
+    Print *m_print = nullptr;
+    std::function<void()> m_rempools;
+protected:
+
+    // Data structure with the png export input data
+    struct PngExportData {
+        std::string zippath;                        // output zip file
+        unsigned long width_px = 1440;              // resolution - rows
+        unsigned long height_px = 2560;             // resolution columns
+        double width_mm = 68.0, height_mm = 120.0;  // dimensions in mm
+        double exp_time_first_s = 35.0;             // first exposure time
+        double exp_time_s = 8.0;                    // global exposure time
+        double corr_x = 1.0;                        // offsetting in x
+        double corr_y = 1.0;                        // offsetting in y
+        double corr_z = 1.0;                        // offsetting in y
+    };
+
+    // Should display a dialog with the input fields for printing to png
+    PngExportData query_png_export_data(const DynamicPrintConfig&);
+
+    // The previous export data, to pre-populate the dialog
+    PngExportData m_prev_expdata;
+
+    void slice(ProgresIndicatorPtr pri);
+
 public:
 
     // Must be public for perl to use it
-    explicit inline PrintController(Print *print): print_(print) {}
+    explicit inline PrintController(Print *print): m_print(print) {}
 
     PrintController(const PrintController&) = delete;
     PrintController(PrintController&&) = delete;
@@ -185,32 +225,26 @@ public:
         return PrintController::Ptr( new PrintController(print) );
     }
 
-    void slice() {}
-    void slice_to_png() {}
+    /**
+     * @brief Slice the loaded print scene.
+     */
+    void slice();
+
+    /**
+     * @brief Slice the print into zipped png files.
+     */
+    void slice_to_png();
 
     const PrintConfig& config() const;
 };
-#else
-class PrintController: public AppControllerBoilerplate {
-public:
-    using Ptr = std::unique_ptr<PrintController>;
-    explicit inline PrintController(Print *print){}
-    inline static Ptr create(Print *print) {
-        return PrintController::Ptr( new PrintController(print) );
-    }
-    void slice() {}
-    void slice_to_png() {}
-    const PrintConfig& config() const { static PrintConfig cfg; return cfg; }
-};
-#endif
 
 /**
  * @brief Top level controller.
  */
 class AppController: public AppControllerBoilerplate {
-    Model *model_ = nullptr;
+    Model *m_model = nullptr;
     PrintController::Ptr printctl;
-    std::atomic<bool> arranging_;
+    std::atomic<bool> m_arranging;
 public:
 
     /**
@@ -227,7 +261,7 @@ public:
      * @param model A raw pointer to the model object. This can be used from
      * perl.
      */
-    void set_model(Model *model) { model_ = model; }
+    void set_model(Model *model) { m_model = model; }
 
     /**
      * @brief Set the print object from perl.

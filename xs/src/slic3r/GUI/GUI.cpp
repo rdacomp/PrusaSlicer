@@ -46,6 +46,8 @@
 
 #include "Tab.hpp"
 #include "TabIface.hpp"
+#include "GUI_Preview.hpp"
+#include "GUI_PreviewIface.hpp"
 #include "AboutDialog.hpp"
 #include "AppConfig.hpp"
 #include "ConfigSnapshotDialog.hpp"
@@ -147,6 +149,8 @@ std::vector<wxButton*> g_buttons;
 wxStaticBitmap	*g_manifold_warning_icon = nullptr;
 bool		g_show_print_info = false;
 bool		g_show_manifold_warning_icon = false;
+
+PreviewIface* g_preview = nullptr; 
 
 static void init_label_colours()
 {
@@ -665,6 +669,17 @@ TabIface* get_preset_tab_iface(char *name)
 	return new TabIface(nullptr);
 }
 
+PreviewIface* create_preview_iface(wxNotebook* parent, DynamicPrintConfig* config, Print* print, GCodePreviewData* gcode_preview_data)
+{
+    if (g_preview == nullptr)
+    {
+        Preview* panel = new Preview(parent, config, print, gcode_preview_data);
+        g_preview = new PreviewIface(panel);
+    }
+
+    return g_preview;
+}
+
 // opt_index = 0, by the reason of zero-index in ConfigOptionVector by default (in case only one element)
 void change_opt_value(DynamicPrintConfig& config, const t_config_option_key& opt_key, const boost::any& value, int opt_index /*= 0*/)
 {
@@ -974,6 +989,12 @@ wxString L_str(const std::string &str)
 wxString from_u8(const std::string &str)
 {
 	return wxString::FromUTF8(str.c_str());
+}
+
+std::string into_u8(const wxString &str)
+{
+	auto buffer_utf8 = str.utf8_str();
+	return std::string(buffer_utf8.data());
 }
 
 void set_model_events_from_perl(Model &model,
