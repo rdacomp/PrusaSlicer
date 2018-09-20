@@ -11,13 +11,11 @@
 #include <ModelArrange.hpp>
 #include <slic3r/GUI/PresetBundle.hpp>
 
-#include <PrintConfig.hpp>
-#include <Print.hpp>
-#include <PrintExport.hpp>
+//#include <PrintConfig.hpp>
+#include <SLAPrint.hpp>
 #include <Geometry.hpp>
 #include <Model.hpp>
 #include <Utils.hpp>
-
 
 namespace Slic3r {
 
@@ -71,52 +69,49 @@ void AppControllerGui::global_progress_indicator(ProgresIndicatorPtr gpri)
     m_pri_data->m.unlock();
 }
 
-PrintController::PngExportData
-PrintController::query_png_export_data(const DynamicPrintConfig& conf)
-{
-    PngExportData ret;
+//PrintController::PngExportData
+//PrintController::query_png_export_data(const DynamicPrintConfig& conf)
+//{
+//    PngExportData ret;
 
-    auto c = GUI::get_appctl();
-    auto zippath = c->query_destination_path("Output zip file", "*.zip",
-                                             "export-png",
-                                             "out");
+//    auto zippath = ctl()->query_destination_path("Output zip file", "*.zip",
+//                                                 "export-png",
+//                                                 "out");
 
-    ret.zippath = zippath;
+//    ret.zippath = zippath;
 
-    ret.width_mm = conf.opt_float("display_width");
-    ret.height_mm = conf.opt_float("display_height");
+//    ret.width_mm = conf.opt_float("display_width");
+//    ret.height_mm = conf.opt_float("display_height");
 
-    ret.width_px = conf.opt_int("display_pixels_x");
-    ret.height_px = conf.opt_int("display_pixels_y");
+//    ret.width_px = conf.opt_int("display_pixels_x");
+//    ret.height_px = conf.opt_int("display_pixels_y");
 
-    auto opt_corr = conf.opt<ConfigOptionFloats>("printer_correction");
+//    auto opt_corr = conf.opt<ConfigOptionFloats>("printer_correction");
 
-    if(opt_corr) {
-        ret.corr_x = opt_corr->values[0];
-        ret.corr_y = opt_corr->values[1];
-        ret.corr_z = opt_corr->values[2];
-    }
+//    if(opt_corr) {
+//        ret.corr_x = opt_corr->values[0];
+//        ret.corr_y = opt_corr->values[1];
+//        ret.corr_z = opt_corr->values[2];
+//    }
 
-    ret.exp_time_first_s = conf.opt_float("initial_exposure_time");
-    ret.exp_time_s = conf.opt_float("exposure_time");
+//    ret.exp_time_first_s = conf.opt_float("initial_exposure_time");
+//    ret.exp_time_s = conf.opt_float("exposure_time");
 
-    return ret;
-}
+//    return ret;
+//}
 
 void PrintController::slice(ProgresIndicatorPtr pri)
 {
-    m_print->set_status_callback([pri](int st, const std::string& msg){
-        pri->update(unsigned(st), msg);
-    });
+    m_print->set_progress_indicator(pri);
 
+    // TODO: should be done through BackgroundSlicingProcess
     m_print->process();
 }
 
 void PrintController::slice()
 {
-    auto ctl = GUI::get_appctl();
-    auto pri = ctl->global_progress_indicator();
-    if(!pri) pri = ctl->create_progress_indicator(100, L("Slicing"));
+    auto pri = ctl()->global_progress_indicator();
+    if(!pri) pri = ctl()->create_progress_indicator(100, L("Slicing"));
     slice(pri);
 }
 
@@ -141,39 +136,42 @@ void PrintController::slice_to_png()
 {
     using Pointf3 = Vec3d;
 
-    auto ctl = GUI::get_appctl();
-    auto presetbundle = GUI::get_preset_bundle();
+//    auto presetbundle = GUI::get_preset_bundle();
 
-    assert(presetbundle);
+//    if(!presetbundle) {
+//        ctl()->report_issue(IssueType::FATAL, L("No config bundle!"), L("Fatal Error"));
+//        return;
+//    }
 
-    // FIXME: this crashes in command line mode
-    auto pt = presetbundle->printers.get_selected_preset().printer_technology();
-    if(pt != ptSLA) {
-        ctl->report_issue(IssueType::ERR, L("Printer technology is not SLA!"),
+    if(m_print->technology() != ptSLA) {
+        ctl()->report_issue(IssueType::ERR, L("Printer technology is not SLA!"),
                      L("Error"));
         return;
     }
 
-    auto conf = presetbundle->full_config();
-    conf.validate();
+//    auto conf = presetbundle->full_config();
+//    conf.validate();
 
-    auto exd = query_png_export_data(conf);
-    if(exd.zippath.empty()) return;
+//    auto exd = query_png_export_data(conf);
+    auto zippath = ctl()->query_destination_path("Output zip file", "*.zip",
+                                                 "export-png",
+                                                 "out");
+    if(zippath.empty()) return;
 
-    Print *print = m_print;
+    auto *print = m_print;
 
-    try {
-        print->apply_config(conf);
-        print->validate();
-    } catch(std::exception& e) {
-        ctl->report_issue(IssueType::ERR, e.what(), "Error");
-        return;
-    }
+//    try {
+//        print->apply_config(conf);
+//        print->validate();
+//    } catch(std::exception& e) {
+//        ctl()->report_issue(IssueType::ERR, e.what(), "Error");
+//        return;
+//    }
 
     // TODO: copy the model and work with the copy only
-    bool correction = false;
-    if(exd.corr_x != 1.0 || exd.corr_y != 1.0 || exd.corr_z != 1.0) {
-        correction = true;
+//    bool correction = false;
+//    if(exd.corr_x != 1.0 || exd.corr_y != 1.0 || exd.corr_z != 1.0) {
+//        correction = true;
 //        print->invalidate_all_steps();
 
 //        for(auto po : print->objects) {
@@ -184,11 +182,11 @@ void PrintController::slice_to_png()
 //            po->reload_model_instances();
 //            po->invalidate_all_steps();
 //        }
-    }
+//    }
 
     // Turn back the correction scaling on the model.
-    auto scale_back = [this, print, correction, exd]() {
-        if(correction) { // scale the model back
+//    auto scale_back = [this, print, correction, exd]() {
+//        if(correction) { // scale the model back
 //            print->invalidate_all_steps();
 //            for(auto po : print->objects) {
 //                po->model_object()->scale(
@@ -198,65 +196,63 @@ void PrintController::slice_to_png()
 //                po->reload_model_instances();
 //                po->invalidate_all_steps();
 //            }
-        }
-    };
+//        }
+//    };
 
-    auto print_bb = print->bounding_box();
-    Vec2d punsc = unscale(print_bb.size());
+//    auto print_bb = print->bounding_box();
+//    Vec2d punsc = unscale(print_bb.size());
 
-    // If the print does not fit into the print area we should cry about it.
-    if(px(punsc) > exd.width_mm || py(punsc) > exd.height_mm) {
-        std::stringstream ss;
+//    // If the print does not fit into the print area we should cry about it.
+//    if(px(punsc) > exd.width_mm || py(punsc) > exd.height_mm) {
+//        std::stringstream ss;
 
-        ss << L("Print will not fit and will be truncated!") << "\n"
-           << L("Width needed: ") << px(punsc) << " mm\n"
-           << L("Height needed: ") << py(punsc) << " mm\n";
+//        ss << L("Print will not fit and will be truncated!") << "\n"
+//           << L("Width needed: ") << px(punsc) << " mm\n"
+//           << L("Height needed: ") << py(punsc) << " mm\n";
 
-       if(!ctl->report_issue(IssueType::WARN_Q, ss.str(), L("Warning")))  {
-            scale_back();
-            return;
-       }
-    }
+//       if(!ctl()->report_issue(IssueType::WARN_Q, ss.str(), L("Warning")))  {
+//            scale_back();
+//            return;
+//       }
+//    }
 
-    auto pri = ctl->create_progress_indicator(
+    auto pri = ctl()->create_progress_indicator(
                 200, L("Slicing to zipped png files..."));
 
-    pri->on_cancel([&print](){ print->cancel(); });
+    print->set_progress_indicator(pri);
+
+//    pri->on_cancel([&print](){ print->cancel(); });
 
     try {
         pri->update(0, L("Slicing..."));
         slice(pri);
     } catch (std::exception& e) {
-        ctl->report_issue(IssueType::ERR, e.what(), L("Exception occurred"));
-        scale_back();
+        ctl()->report_issue(IssueType::ERR, e.what(), L("Exception occurred"));
+//        scale_back();
         if(print->canceled()) print->restart();
         return;
     }
 
-    auto initstate = unsigned(pri->state());
-    print->set_status_callback([pri, initstate](int st, const std::string& msg)
-    {
-        pri->update(initstate + unsigned(st), msg);
-    });
+//    auto initstate = unsigned(pri->state());
+//    print->set_status_callback([pri, initstate](int st, const std::string& msg)
+//    {
+//        pri->update(initstate + unsigned(st), msg);
+//    });
 
     try {
-        print_to<FilePrinterFormat::PNG, Zipper>( *print, exd.zippath,
-                    exd.width_mm, exd.height_mm,
-                    exd.width_px, exd.height_px,
-                    exd.exp_time_s, exd.exp_time_first_s);
+        print->export_print_data(zippath);
+//        print_to<FilePrinterFormat::PNG, Zipper>( *print, exd.zippath,
+//                    exd.width_mm, exd.height_mm,
+//                    exd.width_px, exd.height_px,
+//                    exd.exp_time_s, exd.exp_time_first_s);
 
     } catch (std::exception& e) {
-        ctl->report_issue(IssueType::ERR, e.what(), L("Exception occurred"));
+        ctl()->report_issue(IssueType::ERR, e.what(), L("Exception occurred"));
     }
 
-    scale_back();
+//    scale_back();
     if(print->canceled()) print->restart();
-    print->set_status_default();
-}
-
-const PrintConfig &PrintController::config() const
-{
-    return m_print->config();
+//    print->set_status_default();
 }
 
 void ProgressIndicator::message_fmt(
@@ -290,8 +286,6 @@ void AppController::arrange_model()
 {
     using Coord = libnest2d::TCoord<libnest2d::PointImpl>;
 
-    auto ctl = GUI::get_appctl();
-
     if(m_arranging.load()) return;
 
     // to prevent UI reentrancies
@@ -300,7 +294,7 @@ void AppController::arrange_model()
     unsigned count = 0;
     for(auto obj : m_model->objects) count += obj->instances.size();
 
-    auto pind = ctl->global_progress_indicator();
+    auto pind = ctl()->global_progress_indicator();
 
     float pmax = 1.0;
 
@@ -315,15 +309,12 @@ void AppController::arrange_model()
         });
     }
 
-    auto dist = print_ctl()->config().min_object_distance();
+    auto dist = print_ctl()->printobj()->min_object_distance();
 
     // Create the arranger config
     auto min_obj_distance = static_cast<Coord>(dist/SCALING_FACTOR);
 
-    auto& bedpoints = print_ctl()->config().bed_shape.values;
-    Polyline bed; bed.points.reserve(bedpoints.size());
-    for(auto& v : bedpoints)
-        bed.append(Point::new_scale(v(0), v(1)));
+    auto bed = print_ctl()->printobj()->bed_shape();
 
     if(pind) pind->update(0, L("Arranging objects..."));
 
@@ -337,15 +328,15 @@ void AppController::arrange_model()
                       bed,
                       hint,
                       false, // create many piles not just one pile
-                      [this, pind, &ctl, count](unsigned rem) {
+                      [this, pind, count](unsigned rem) {
             if(pind)
                 pind->update(count - rem, L("Arranging objects..."));
 
-            ctl->process_events();
+            ctl()->process_events();
         }, [this] () { return !m_arranging.load(); });
     } catch(std::exception& e) {
         std::cerr << e.what() << std::endl;
-        ctl->report_issue(IssueType::ERR,
+        ctl()->report_issue(IssueType::ERR,
                         L("Could not arrange model objects! "
                         "Some geometries may be invalid."),
                         L("Exception occurred"));
@@ -361,6 +352,11 @@ void AppController::arrange_model()
     }
 
     m_arranging.store(false);
+}
+
+AppControllerBase::Ptr AppControllerBase::get()
+{
+    return GUI::get_appctl();
 }
 
 }

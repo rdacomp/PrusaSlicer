@@ -10,19 +10,20 @@ namespace Slic3r {
 
 class DynamicPrintConfig;
 class GCodePreviewData;
+class PrintBase;
 class Print;
 
 // Support for the GUI background processing (Slicing and G-code generation).
 // As of now this class is not declared in Slic3r::GUI due to the Perl bindings limits.
-class BackgroundSlicingProcess
+class SlicingProcess // TODO: rename back to BackgroundSlicingProcess
 {
 public:
-	BackgroundSlicingProcess();
-	// Stop the background processing and finalize the bacgkround processing thread, remove temp files.
-	~BackgroundSlicingProcess();
+    SlicingProcess();
 
-	void set_print(Print *print) { m_print = print; }
-	void set_gcode_preview_data(GCodePreviewData *gpd) { m_gcode_preview_data = gpd; }
+    // Stop the background processing and finalize the background processing thread, remove temp files.
+    ~SlicingProcess();
+
+    void set_print(PrintBase *print) { m_print = print; }
 	// The following wxCommandEvent will be sent to the UI thread / Platter window, when the slicing is finished
 	// and the background processing will transition into G-code export.
 	// The wxCommandEvent is sent to the UI thread asynchronously without waiting for the event to be processed.
@@ -67,9 +68,7 @@ private:
 	void 	thread_proc();
 	void 	join_background_thread();
 
-	Print 					   *m_print 			 = nullptr;
-	// Data structure, to which the G-code export writes its annotations.
-	GCodePreviewData 		   *m_gcode_preview_data = nullptr;
+    PrintBase 				   *m_print 			 = nullptr;
 	std::string 				m_temp_output_path;
 	std::string 				m_output_path;
 	// Thread, on which the background processing is executed. The thread will always be present
@@ -86,6 +85,12 @@ private:
 	int 						m_event_finished_id  = 0;
 };
 
-}; // namespace Slic3r
+// TODO: rename to FDMBackgroundSlicingProcess
+class BackgroundSlicingProcess: public SlicingProcess {
+public:
+    virtual void set_print(Print *print, GCodePreviewData *prdata);
+};
+
+} // namespace Slic3r
 
 #endif /* slic3r_GUI_BackgroundSlicingProcess_hpp_ */

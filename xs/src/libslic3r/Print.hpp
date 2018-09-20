@@ -17,6 +17,7 @@
 #include "Slicing.hpp"
 #include "GCode/ToolOrdering.hpp"
 #include "GCode/WipeTower.hpp"
+#include "ProgressIndicator.hpp"
 
 #include "tbb/atomic.h"
 // tbb/mutex.h includes Windows, which in turn defines min/max macros. Convince Windows.h to not define these min/max macros.
@@ -364,12 +365,53 @@ struct PrintStatistics
 typedef std::vector<PrintObject*> PrintObjectPtrs;
 typedef std::vector<PrintRegion*> PrintRegionPtrs;
 
+/**
+ * @brief Printing involves slicing and export of device dependent instructions.
+ *
+ * Every technology has a potentially different set of requirements for
+ * slicing, support structures and output print instructions. The pipeline
+ * however remains roughly the same:
+ *      slice -> convert to instructions -> send to printer
+ *
+ * The PrintBase class will abstract this flow for different technologies.
+ *
+ */
+class PrintBase {
+protected:
+    ProgresIndicatorPtr m_pri;
+public:
+
+    inline virtual ~PrintBase() {}
+
+    virtual PrinterTechnology technology() const /*noexcept*/ = 0;
+    virtual void process() = 0;
+    virtual bool canceled() const = 0;
+    virtual void cancel() = 0;
+    virtual void restart() = 0;
+    virtual bool apply_config(DynamicPrintConfig cfg) = 0;
+    virtual void export_print_data(const std::string& path) = 0;
+    virtual void set_progress_indicator(ProgresIndicatorPtr pri) {
+        if(!pri) return; m_pri = pri; m_pri->on_cancel([this](){ cancel(); });
+    }
+
+    virtual Polyline bed_shape() const = 0;
+    virtual double min_object_distance() const = 0;
+
+    // I think this is a concept break:
+//    virtual void set_status(int st, const std::string& msg) {
+//        if(m_pri) m_pri->update(float(st), msg);
+//    }
+
+};
+
 // The complete print tray with possibly multiple objects.
-class Print
+class Print: public PrintBase
 {
 public:
     Print() { restart(); }
     ~Print() { clear_objects(); }
+
+    PrinterTechnology technology() const override /*noexcept*/ { return ptFFF; }
 
     // Methods, which change the state of Print / PrintObject / PrintRegion.
     // The following methods are synchronized with process() and export_gcode(),
@@ -381,9 +423,15 @@ public:
     void                reload_object(size_t idx);
     bool                reload_model_instances();
     void                add_model_object(ModelObject* model_object, int idx = -1);
-    bool                apply_config(DynamicPrintConfig config);
-    void                process();
-    void                export_gcode(const std::string &path_template, GCodePreviewData *preview_data);
+    bool                apply_config(DynamicPrintConfig config) override;
+    void                process() override;
+    void                export_gcode(const std::string &path_template, GCodePreviewData *preview_data = nullptr);
+    void                set_gcode_preview_data(GCodePreviewData *gpd) { m_gcode_preview_data = gpd; }
+
+    void                export_print_data(const std::string& path) override {
+        export_gcode(path, m_gcode_preview_data);
+    }
+
     // SLA export, temporary.
     void                export_png(const std::string &dirpath);
 
@@ -443,8 +491,10 @@ public:
     // Register a custom status callback.
     void                set_status_callback(status_callback_type cb) { m_status_callback = cb; }
     // Calls a registered callback to update the status, or print out the default message.
-    void                set_status(int percent, const std::string &message) { 
-        if (m_status_callback) m_status_callback(percent, message);
+    void                set_status(int percent, const std::string &message)
+    {
+        if(m_pri) m_pri->update(float(percent), message);
+        else if (m_status_callback) m_status_callback(percent, message);
         else printf("%d => %s\n", percent, message.c_str());
     }
 
@@ -454,14 +504,26 @@ public:
     // the state of the finished or running calculations.
     void                set_cancel_callback(cancel_callback_type cancel_callback) { m_cancel_callback = cancel_callback; }
     // Has the calculation been canceled?
-    bool                canceled() const { return m_canceled; }
+    bool                canceled() const override { return m_canceled; }
     // Cancel the running computation. Stop execution of all the background threads.
-    void                cancel() { m_canceled = true; }
+    void                cancel() override { m_canceled = true; }
     // Cancel the running computation. Stop execution of all the background threads.
-    void                restart() { m_canceled = false; }
+    void                restart() override { m_canceled = false; }
 
     // Accessed by SupportMaterial
     const PrintRegion*  get_region(size_t idx) const  { return m_regions[idx]; }
+
+    Polyline bed_shape() const override {
+        auto& bedpoints = config().bed_shape.values;
+        Polyline bed; bed.points.reserve(bedpoints.size());
+        for(auto& v : bedpoints)
+            bed.append(Point::new_scale(v(0), v(1)));
+        return bed;
+    }
+
+    double min_object_distance() const override {
+        return config().min_object_distance();
+    }
 
 protected:
 	void                set_started(PrintStep step) { m_state.set_started(step, m_mutex); throw_if_canceled(); }
@@ -517,6 +579,8 @@ private:
 
     // Estimated print time, filament consumed.
     PrintStatistics                         m_print_statistics;
+
+    GCodePreviewData                        *m_gcode_preview_data = nullptr;
 
     // To allow GCode to set the Print's GCodeExport step status.
     friend class GCode;

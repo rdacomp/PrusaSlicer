@@ -163,8 +163,9 @@ add_library(libslic3r STATIC
     ${LIBDIR}/libslic3r/PolylineCollection.cpp
     ${LIBDIR}/libslic3r/PolylineCollection.hpp
     ${LIBDIR}/libslic3r/Print.cpp
+    ${LIBDIR}/libslic3r/SLAPrint.hpp
+    ${LIBDIR}/libslic3r/SLAPrint.cpp
     ${LIBDIR}/libslic3r/Print.hpp
-    ${LIBDIR}/libslic3r/PrintExport.hpp
     ${LIBDIR}/libslic3r/PrintConfig.cpp
     ${LIBDIR}/libslic3r/PrintConfig.hpp
     ${LIBDIR}/libslic3r/PrintObject.cpp
@@ -188,7 +189,7 @@ add_library(libslic3r STATIC
     ${LIBDIR}/libslic3r/SLABasePool.cpp
 #    ${LIBDIR}/libslic3r/utils.cpp
     ${LIBDIR}/libslic3r/Utils.hpp
-
+    ${LIBDIR}/libslic3r/ProgressIndicator.hpp
 )
 
 add_library(libslic3r_gui STATIC
@@ -272,7 +273,6 @@ add_library(libslic3r_gui STATIC
     ${LIBDIR}/slic3r/GUI/UpdateDialogs.hpp
     ${LIBDIR}/slic3r/GUI/FirmwareDialog.cpp
     ${LIBDIR}/slic3r/GUI/FirmwareDialog.hpp
-    ${LIBDIR}/slic3r/GUI/ProgressIndicator.hpp
     ${LIBDIR}/slic3r/GUI/ProgressStatusBar.hpp
     ${LIBDIR}/slic3r/GUI/ProgressStatusBar.cpp
     ${LIBDIR}/slic3r/Utils/Http.cpp

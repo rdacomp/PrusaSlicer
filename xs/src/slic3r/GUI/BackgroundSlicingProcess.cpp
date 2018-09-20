@@ -23,20 +23,20 @@ namespace GUI {
 	extern wxPanel *g_wxPlater;
 };
 
-BackgroundSlicingProcess::BackgroundSlicingProcess()
+SlicingProcess::SlicingProcess()
 {
 	m_temp_output_path = wxStandardPaths::Get().GetTempDir().utf8_str().data();
 	m_temp_output_path += (boost::format(".%1%.gcode") % get_current_pid()).str();
 }
 
-BackgroundSlicingProcess::~BackgroundSlicingProcess() 
+SlicingProcess::~SlicingProcess()
 { 
 	this->stop();
 	this->join_background_thread();
 	boost::nowide::remove(m_temp_output_path.c_str());
 }
 
-void BackgroundSlicingProcess::thread_proc()
+void SlicingProcess::thread_proc()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	// Let the caller know we are ready to run the background processing task.
@@ -60,12 +60,13 @@ void BackgroundSlicingProcess::thread_proc()
 		    m_print->process();
 		    if (! m_print->canceled()) {
 				wxQueueEvent(GUI::g_wxPlater, new wxCommandEvent(m_event_sliced_id));
-			    m_print->export_gcode(m_temp_output_path, m_gcode_preview_data);
+//			    m_print->export_gcode(m_temp_output_path, m_gcode_preview_data);
+                m_print->export_print_data(m_temp_output_path);
 			    if (! m_print->canceled() && ! m_output_path.empty()) {
 			    	if (copy_file(m_temp_output_path, m_output_path) != 0)
 		    			throw std::runtime_error("Copying of the temporary G-code to the output G-code failed");
-		    		m_print->set_status(95, "Running post-processing scripts");
-		    		run_post_process_scripts(m_output_path, m_print->config());
+//		    		m_print->set_status(95, "Running post-processing scripts");
+//		    		run_post_process_scripts(m_output_path, m_print->config());
 		    	}
 		    }
 		} catch (CanceledException &ex) {
@@ -93,7 +94,7 @@ void BackgroundSlicingProcess::thread_proc()
 	// End of the background processing thread. The UI thread should join m_thread now.
 }
 
-void BackgroundSlicingProcess::join_background_thread()
+void SlicingProcess::join_background_thread()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
@@ -111,7 +112,7 @@ void BackgroundSlicingProcess::join_background_thread()
 	}
 }
 
-bool BackgroundSlicingProcess::start()
+bool SlicingProcess::start()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
@@ -133,7 +134,7 @@ bool BackgroundSlicingProcess::start()
 	return true;
 }
 
-bool BackgroundSlicingProcess::stop()
+bool SlicingProcess::stop()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
@@ -157,11 +158,19 @@ bool BackgroundSlicingProcess::stop()
 
 // Apply config over the print. Returns false, if the new config values caused any of the already
 // processed steps to be invalidated, therefore the task will need to be restarted.
-bool BackgroundSlicingProcess::apply_config(const DynamicPrintConfig &config)
+bool SlicingProcess::apply_config(const DynamicPrintConfig &config)
 {
 	this->stop();
 	bool invalidated = m_print->apply_config(config);
 	return invalidated;
 }
+
+void BackgroundSlicingProcess::set_print(Print *print,
+                                         GCodePreviewData *prdata)
+{
+    print->set_gcode_preview_data(prdata);
+    SlicingProcess::set_print(print);
+}
+
 
 }; // namespace Slic3r

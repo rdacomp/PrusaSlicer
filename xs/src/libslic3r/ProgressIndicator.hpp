@@ -3,6 +3,7 @@
 
 #include <string>
 #include <functional>
+#include <memory>
 
 namespace Slic3r {
 
@@ -64,6 +65,9 @@ public:
         message(msg); state(st);
     }
 };
+
+/// A Progress indicator object smart pointer
+using ProgresIndicatorPtr = std::shared_ptr<ProgressIndicator>;
 
 }
 

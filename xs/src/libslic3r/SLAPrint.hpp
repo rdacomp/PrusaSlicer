@@ -256,139 +256,154 @@ inline coord_t  py(const Point& p) { return p(1); }
 inline coordf_t px(const Vec2d& p) { return p(0); }
 inline coordf_t py(const Vec2d& p) { return p(1); }
 
-template<FilePrinterFormat format, class LayerFormat, class...Args>
-void print_to(Print& print,
-              std::string dirpath,
-              double width_mm,
-              double height_mm,
-              Args&&...args)
-{
+class SLAPrint: public PrintBase {
+public:
 
-    std::string& dir = dirpath;
+    PrinterTechnology technology() const /*noexcept*/ override { return ptSLA; }
+    void process() override;
+    bool canceled() const override;
+    void cancel() override;
+    void restart() override;
+    bool apply_config(DynamicPrintConfig cfg) override;
+    void export_print_data(const std::string& path) override;
 
-    // This map will hold the layers sorted by z coordinate. Layers on the
-    // same height (from different objects) will be mapped to the same key and
-    // rasterized to the same image.
-    std::map<long long, LayerPtrs> layers;
+    Polyline bed_shape() const override;
+    double min_object_distance() const override {return 0; }
+};
 
-    auto& objects = print.objects();
+//template<FilePrinterFormat format, class LayerFormat, class...Args>
+//void print_to(Print& print,
+//              std::string dirpath,
+//              double width_mm,
+//              double height_mm,
+//              Args&&...args)
+//{
 
-    // Merge the sliced layers with the support layers
-    std::for_each(objects.cbegin(), objects.cend(),
-                  [&layers](const PrintObject *o)
-    {
-        for(const auto l : o->layers()) {
-            auto& lyrs = layers[static_cast<long long>(scale_(l->print_z))];
-            lyrs.push_back(l);
-        }
+//    std::string& dir = dirpath;
 
-        for(const auto l : o->support_layers()) {
-            auto& lyrs = layers[static_cast<long long>(scale_(l->print_z))];
-            lyrs.push_back(l);
-        }
-    });
+//    // This map will hold the layers sorted by z coordinate. Layers on the
+//    // same height (from different objects) will be mapped to the same key and
+//    // rasterized to the same image.
+//    std::map<long long, LayerPtrs> layers;
 
-    auto print_bb = print.bounding_box();
-    Vec2d punsc = unscale(print_bb.size());
+//    auto& objects = print.objects();
 
-    // If the print does not fit into the print area we should cry about it.
-    if(px(punsc) > width_mm || py(punsc) > height_mm) {
-        BOOST_LOG_TRIVIAL(warning) << "Warning: Print will not fit!" << "\n"
-            << "Width needed: " << px(punsc) << "\n"
-            << "Height needed: " << py(punsc) << "\n";
-    }
+//    // Merge the sliced layers with the support layers
+//    std::for_each(objects.cbegin(), objects.cend(),
+//                  [&layers](const PrintObject *o)
+//    {
+//        for(const auto l : o->layers()) {
+//            auto& lyrs = layers[static_cast<long long>(scale_(l->print_z))];
+//            lyrs.push_back(l);
+//        }
 
-    // Offset for centering the print onto the print area
-    auto cx = scale_(width_mm)/2 - (px(print_bb.center()) - px(print_bb.min));
-    auto cy = scale_(height_mm)/2 - (py(print_bb.center()) - py(print_bb.min));
+//        for(const auto l : o->support_layers()) {
+//            auto& lyrs = layers[static_cast<long long>(scale_(l->print_z))];
+//            lyrs.push_back(l);
+//        }
+//    });
 
-    // Create the actual printer, forward any additional arguments to it.
-    FilePrinter<format, LayerFormat> printer(width_mm, height_mm,
-                                             std::forward<Args>(args)...);
+//    auto print_bb = print.bounding_box();
+//    Vec2d punsc = unscale(print_bb.size());
 
-    printer.print_config(print);
+//    // If the print does not fit into the print area we should cry about it.
+//    if(px(punsc) > width_mm || py(punsc) > height_mm) {
+//        BOOST_LOG_TRIVIAL(warning) << "Warning: Print will not fit!" << "\n"
+//            << "Width needed: " << px(punsc) << "\n"
+//            << "Height needed: " << py(punsc) << "\n";
+//    }
 
-    printer.layers(layers.size());  // Allocate space for all the layers
+//    // Offset for centering the print onto the print area
+//    auto cx = scale_(width_mm)/2 - (px(print_bb.center()) - px(print_bb.min));
+//    auto cy = scale_(height_mm)/2 - (py(print_bb.center()) - py(print_bb.min));
 
-    int st_prev = 0;
-    const std::string jobdesc = "Rasterizing and compressing sliced layers";
-    tbb::spin_mutex m;
+//    // Create the actual printer, forward any additional arguments to it.
+//    FilePrinter<format, LayerFormat> printer(width_mm, height_mm,
+//                                             std::forward<Args>(args)...);
 
-    std::vector<long long> keys;
-    keys.reserve(layers.size());
-    for(auto& e : layers) keys.push_back(e.first);
+//    printer.print_config(print);
 
-    print.set_status(0, jobdesc);
+//    printer.layers(layers.size());  // Allocate space for all the layers
 
-    // Method that prints one layer
-    auto process_layer = [&layers, &keys, &printer, &st_prev, &m,
-            &jobdesc, print_bb, dir, cx, cy, &print]
-            (unsigned layer_id)
-    {
-        LayerPtrs lrange = layers[keys[layer_id]];
+//    int st_prev = 0;
+//    const std::string jobdesc = "Rasterizing and compressing sliced layers";
+//    tbb::spin_mutex m;
 
-        printer.begin_layer(layer_id);   // Switch to the appropriate layer
+//    std::vector<long long> keys;
+//    keys.reserve(layers.size());
+//    for(auto& e : layers) keys.push_back(e.first);
 
-        for(Layer *lp : lrange) {
-            Layer& l = *lp;
+//    print.set_status(0, jobdesc);
 
-            ExPolygonCollection slices = l.slices;  // Copy the layer slices
+//    // Method that prints one layer
+//    auto process_layer = [&layers, &keys, &printer, &st_prev, &m,
+//            &jobdesc, print_bb, dir, cx, cy, &print]
+//            (unsigned layer_id)
+//    {
+//        LayerPtrs lrange = layers[keys[layer_id]];
 
-            // Sort the polygons in the layer
-            std::stable_sort(slices.expolygons.begin(), slices.expolygons.end(),
-                             [](const ExPolygon& a, const ExPolygon& b) {
-                return a.contour.contains(b.contour.first_point()) ? false :
-                                                                     true;
-            });
+//        printer.begin_layer(layer_id);   // Switch to the appropriate layer
 
-            // Draw all the polygons in the slice to the actual layer.
-            for (const Point &d : l.object()->copies())
-                for (ExPolygon slice : slices.expolygons) {
-                    slice.translate(px(d), py(d));
-                    slice.translate(-px(print_bb.min) + cx,
-                                    -py(print_bb.min) + cy);
+//        for(Layer *lp : lrange) {
+//            Layer& l = *lp;
 
-                    printer.draw_polygon(slice, layer_id);
-                }
+//            ExPolygonCollection slices = l.slices;  // Copy the layer slices
 
-            /*if(print.has_support_material() && layer_id > 0) {
-                BOOST_LOG_TRIVIAL(warning) << "support material for layer "
-                                           << layer_id
-                                           << " defined but export is "
-                                              "not yet implemented.";
+//            // Sort the polygons in the layer
+//            std::stable_sort(slices.expolygons.begin(), slices.expolygons.end(),
+//                             [](const ExPolygon& a, const ExPolygon& b) {
+//                return a.contour.contains(b.contour.first_point()) ? false :
+//                                                                     true;
+//            });
 
-            }*/
+//            // Draw all the polygons in the slice to the actual layer.
+//            for (const Point &d : l.object()->copies())
+//                for (ExPolygon slice : slices.expolygons) {
+//                    slice.translate(px(d), py(d));
+//                    slice.translate(-px(print_bb.min) + cx,
+//                                    -py(print_bb.min) + cy);
 
-        }
+//                    printer.draw_polygon(slice, layer_id);
+//                }
 
-        printer.finish_layer(layer_id);  // Finish the layer for later saving it.
+//            /*if(print.has_support_material() && layer_id > 0) {
+//                BOOST_LOG_TRIVIAL(warning) << "support material for layer "
+//                                           << layer_id
+//                                           << " defined but export is "
+//                                              "not yet implemented.";
 
-        auto st = static_cast<int>(layer_id*80.0/layers.size());
-        m.lock();
-        if( st - st_prev > 10) {
-            print.set_status(st, jobdesc);
-            st_prev = st;
-        }
-        m.unlock();
+//            }*/
 
-        // printer.saveLayer(layer_id, dir); We could save the layer immediately
-    };
+//        }
 
-    // Print all the layers in parallel
-    tbb::parallel_for<size_t, decltype(process_layer)>(0,
-                                                       layers.size(),
-                                                       process_layer);
+//        printer.finish_layer(layer_id);  // Finish the layer for later saving it.
 
-    // Sequential version (for testing)
-    // for(unsigned l = 0; l < layers.size(); ++l) process_layer(l);
+//        auto st = static_cast<int>(layer_id*80.0/layers.size());
+//        m.lock();
+//        if( st - st_prev > 10) {
+//            print.set_status(st, jobdesc);
+//            st_prev = st;
+//        }
+//        m.unlock();
 
-//    print.set_status(100, jobdesc);
+//        // printer.saveLayer(layer_id, dir); We could save the layer immediately
+//    };
 
-    // Save the print into the file system.
-    print.set_status(90, "Writing layers to disk");
-    printer.save(dir);
-    print.set_status(100, "Writing layers completed");
-}
+//    // Print all the layers in parallel
+//    tbb::parallel_for<size_t, decltype(process_layer)>(0,
+//                                                       layers.size(),
+//                                                       process_layer);
+
+//    // Sequential version (for testing)
+//    // for(unsigned l = 0; l < layers.size(); ++l) process_layer(l);
+
+////    print.set_status(100, jobdesc);
+
+//    // Save the print into the file system.
+//    print.set_status(90, "Writing layers to disk");
+//    printer.save(dir);
+//    print.set_status(100, "Writing layers completed");
+//}
 
 }
 

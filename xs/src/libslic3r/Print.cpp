@@ -14,8 +14,6 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/log/trivial.hpp>
 
-#include "PrintExport.hpp"
-
 //! macro used to mark string used at localization, 
 //! return same string
 #define L(s) Slic3r::I18N::translate(s)
@@ -955,6 +953,8 @@ void Print::process()
 // It is up to the caller to show an error message.
 void Print::export_gcode(const std::string &path_template, GCodePreviewData *preview_data)
 {
+    if(!preview_data) preview_data = m_gcode_preview_data;
+
     // prerequisites
     this->process();
     

@@ -66,8 +66,7 @@ sub new {
     $self->{objects} = [];
     $self->{gcode_preview_data} = Slic3r::GCode::PreviewData->new;
     $self->{background_slicing_process} = Slic3r::GUI::BackgroundSlicingProcess->new;
-    $self->{background_slicing_process}->set_print($self->{print});
-    $self->{background_slicing_process}->set_gcode_preview_data($self->{gcode_preview_data});
+    $self->{background_slicing_process}->set_print($self->{print}, $self->{gcode_preview_data});
     $self->{background_slicing_process}->set_sliced_event($SLICING_COMPLETED_EVENT);
     $self->{background_slicing_process}->set_finished_event($PROCESS_COMPLETED_EVENT);
 

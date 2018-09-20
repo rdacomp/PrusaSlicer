@@ -7,21 +7,16 @@
 #include <atomic>
 #include <iostream>
 
-#include "GUI/ProgressIndicator.hpp"
+#include "ProgressIndicator.hpp"
 
 #include <PrintConfig.hpp>
 
 namespace Slic3r {
 
 class Model;
-class Print;
-class PrintObject;
-class PrintConfig;
+class PrintBase;
 class ProgressStatusBar;
-class DynamicPrintConfig;
-
-/// A Progress indicator object smart pointer
-using ProgresIndicatorPtr = std::shared_ptr<ProgressIndicator>;
+//class DynamicPrintConfig;
 
 using FilePath = std::string;
 using FilePathList = std::vector<FilePath>;
@@ -148,6 +143,8 @@ public:
             unsigned statenum,
             const std::string& title,
             const std::string& firstmsg = "") const = 0;
+
+    static AppControllerBase::Ptr get();
 };
 
 /**
@@ -303,42 +300,25 @@ public:
  * @brief Implementation of the printing logic.
  */
 class PrintController {
-    Print *m_print = nullptr;
+    PrintBase *m_print = nullptr;
     std::function<void()> m_rempools;
 protected:
 
-    // Data structure with the png export input data
-    struct PngExportData {
-        std::string zippath;                        // output zip file
-        unsigned long width_px = 1440;              // resolution - rows
-        unsigned long height_px = 2560;             // resolution columns
-        double width_mm = 68.0, height_mm = 120.0;  // dimensions in mm
-        double exp_time_first_s = 35.0;             // first exposure time
-        double exp_time_s = 8.0;                    // global exposure time
-        double corr_x = 1.0;                        // offsetting in x
-        double corr_y = 1.0;                        // offsetting in y
-        double corr_z = 1.0;                        // offsetting in y
-    };
-
-    // Should display a dialog with the input fields for printing to png
-    PngExportData query_png_export_data(const DynamicPrintConfig&);
-
-    // The previous export data, to pre-populate the dialog
-    PngExportData m_prev_expdata;
+    inline AppControllerBase::Ptr ctl() { return AppControllerBase::get(); }
 
     void slice(ProgresIndicatorPtr pri);
 
 public:
 
     // Must be public for perl to use it
-    explicit inline PrintController(Print *print): m_print(print) {}
+    explicit inline PrintController(PrintBase *print): m_print(print) {}
 
     PrintController(const PrintController&) = delete;
     PrintController(PrintController&&) = delete;
 
     using Ptr = std::unique_ptr<PrintController>;
 
-    inline static Ptr create(Print *print) {
+    inline static Ptr create(PrintBase *print) {
         return PrintController::Ptr( new PrintController(print) );
     }
 
@@ -352,7 +332,7 @@ public:
      */
     void slice_to_png();
 
-    const PrintConfig& config() const;
+    const PrintBase * printobj() { return m_print; }
 };
 
 /**
@@ -362,6 +342,8 @@ class AppController {
     Model *m_model = nullptr;
     PrintController::Ptr printctl;
     std::atomic<bool> m_arranging;
+
+    inline AppControllerBase::Ptr ctl() { return AppControllerBase::get(); }
 public:
 
     /**
@@ -387,7 +369,7 @@ public:
      * perl.
      * @param print A print object which can be a perl-ish extension as well.
      */
-    void set_print(Print *print) {
+    void set_print(PrintBase *print) {
         printctl = PrintController::create(print);
     }
 
