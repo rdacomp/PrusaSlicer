@@ -257,6 +257,10 @@ inline coordf_t px(const Vec2d& p) { return p(0); }
 inline coordf_t py(const Vec2d& p) { return p(1); }
 
 class SLAPrint: public PrintBase {
+    Model *m_model = nullptr;
+    SlicingProcess *m_proc = nullptr;
+    SLAFullPrintConfig m_config;
+    std::atomic<bool> m_canceled;
 public:
 
     PrinterTechnology technology() const /*noexcept*/ override { return ptSLA; }
@@ -269,7 +273,28 @@ public:
 
     Polyline bed_shape() const override;
     double min_object_distance() const override {return 0; }
+
+    void set_background_process(SlicingProcess& proc) override {
+        m_proc = &proc;
+    }
+
+    void set_model(Model& model) override {
+        m_model = &model;
+        PrintBase::set_model(model);
+    }
+
+    // concept example:
+    void on_model_cleared() override {
+        // clear layers and cache
+        if(m_proc) m_proc->stop();
+    }
+
+    // may not be necessary
+    const SLAFullPrintConfig& config() { return m_config; }
+
 };
+
+// The following will be implemented in SLAPrint::export_print_data:
 
 //template<FilePrinterFormat format, class LayerFormat, class...Args>
 //void print_to(Print& print,

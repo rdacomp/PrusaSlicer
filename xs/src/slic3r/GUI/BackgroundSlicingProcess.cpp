@@ -23,22 +23,22 @@ namespace GUI {
 	extern wxPanel *g_wxPlater;
 };
 
-SlicingProcess::SlicingProcess()
+BackgroundSlicingProcess::BackgroundSlicingProcess()
 {
 	m_temp_output_path = wxStandardPaths::Get().GetTempDir().utf8_str().data();
 	m_temp_output_path += (boost::format(".%1%.gcode") % get_current_pid()).str();
 }
 
-SlicingProcess::~SlicingProcess()
+BackgroundSlicingProcess::~BackgroundSlicingProcess()
 { 
 	this->stop();
 	this->join_background_thread();
 	boost::nowide::remove(m_temp_output_path.c_str());
 }
 
-void SlicingProcess::thread_proc()
+void BackgroundSlicingProcess::thread_proc()
 {
-	std::unique_lock<std::mutex> lck(m_mutex);
+    std::unique_lock<std::mutex> lck(m_mutex);
 	// Let the caller know we are ready to run the background processing task.
 	m_state = STATE_IDLE;
 	lck.unlock();
@@ -94,7 +94,7 @@ void SlicingProcess::thread_proc()
 	// End of the background processing thread. The UI thread should join m_thread now.
 }
 
-void SlicingProcess::join_background_thread()
+void BackgroundSlicingProcess::join_background_thread()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
@@ -112,7 +112,7 @@ void SlicingProcess::join_background_thread()
 	}
 }
 
-bool SlicingProcess::start()
+bool BackgroundSlicingProcess::start()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
@@ -134,7 +134,7 @@ bool SlicingProcess::start()
 	return true;
 }
 
-bool SlicingProcess::stop()
+bool BackgroundSlicingProcess::stop()
 {
 	std::unique_lock<std::mutex> lck(m_mutex);
 	if (m_state == STATE_INITIAL) {
@@ -158,19 +158,11 @@ bool SlicingProcess::stop()
 
 // Apply config over the print. Returns false, if the new config values caused any of the already
 // processed steps to be invalidated, therefore the task will need to be restarted.
-bool SlicingProcess::apply_config(const DynamicPrintConfig &config)
+bool BackgroundSlicingProcess::apply_config(const DynamicPrintConfig &config)
 {
 	this->stop();
 	bool invalidated = m_print->apply_config(config);
-	return invalidated;
+    return invalidated;
 }
-
-void BackgroundSlicingProcess::set_print(Print *print,
-                                         GCodePreviewData *prdata)
-{
-    print->set_gcode_preview_data(prdata);
-    SlicingProcess::set_print(print);
-}
-
 
 }; // namespace Slic3r

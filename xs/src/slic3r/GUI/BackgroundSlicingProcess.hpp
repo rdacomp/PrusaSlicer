@@ -6,6 +6,10 @@
 #include <mutex>
 #include <thread>
 
+// If this is not good, we can place SlicingProcess into a separate file
+// and include just that
+#include "Print.hpp"
+
 namespace Slic3r {
 
 class DynamicPrintConfig;
@@ -15,15 +19,19 @@ class Print;
 
 // Support for the GUI background processing (Slicing and G-code generation).
 // As of now this class is not declared in Slic3r::GUI due to the Perl bindings limits.
-class SlicingProcess // TODO: rename back to BackgroundSlicingProcess
+class BackgroundSlicingProcess: public SlicingProcess
 {
 public:
-    SlicingProcess();
+    BackgroundSlicingProcess();
 
     // Stop the background processing and finalize the background processing thread, remove temp files.
-    ~SlicingProcess();
+    ~BackgroundSlicingProcess();
 
-    void set_print(PrintBase *print) { m_print = print; }
+    void set_print(PrintBase *print) {
+        m_print = print;
+        print->set_background_process(*this);
+    }
+
 	// The following wxCommandEvent will be sent to the UI thread / Platter window, when the slicing is finished
 	// and the background processing will transition into G-code export.
 	// The wxCommandEvent is sent to the UI thread asynchronously without waiting for the event to be processed.
@@ -35,10 +43,13 @@ public:
 	// Set the output path of the G-code.
 	void set_output_path(const std::string &path) { m_output_path = path; }
 	// Start the background processing. Returns false if the background processing was already running.
-	bool start();
+    bool start() override;
 	// Cancel the background processing. Returns false if the background processing was not running.
 	// A stopped background processing may be restarted with start().
-	bool stop();
+    bool stop() override;
+
+    // we may not need this
+    bool pause() override { return false; }
 
 	// Apply config over the print. Returns false, if the new config values caused any of the already
 	// processed steps to be invalidated, therefore the task will need to be restarted.
@@ -83,12 +94,6 @@ private:
 	int 						m_event_sliced_id 	 = 0;
 	// wxWidgets command ID to be sent to the platter to inform that the task finished.
 	int 						m_event_finished_id  = 0;
-};
-
-// TODO: rename to FDMBackgroundSlicingProcess
-class BackgroundSlicingProcess: public SlicingProcess {
-public:
-    virtual void set_print(Print *print, GCodePreviewData *prdata);
 };
 
 } // namespace Slic3r

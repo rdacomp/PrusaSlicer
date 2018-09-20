@@ -299,6 +299,25 @@ private:
 #endif // ENABLE_MODELINSTANCE_3D_OFFSET
 };
 
+/**
+ * @brief The ModelListener will listen to model changes.
+ *
+ * The PrintBase type objects are the main target for this concept.
+ */
+class ModelListener: public std::enable_shared_from_this<ModelListener> {
+public:
+
+    using Ptr = std::weak_ptr<ModelListener>;
+
+    inline virtual ~ModelListener() {}
+
+    virtual void on_object_added() = 0;
+    virtual void on_object_removed(size_t idx) = 0;
+    virtual void on_object_changed(size_t idx) = 0;
+    virtual void on_model_cleared() = 0;
+
+    // ... possibly other notifiers
+};
 
 // The print bed content.
 // Description of a triangular model with multiple materials, multiple instances with various affine transformations
@@ -308,6 +327,14 @@ private:
 class Model
 {
     static unsigned int s_auto_extruder_id;
+    std::vector<ModelListener::Ptr> m_listeners;
+
+    template<class MbrFun, class...Args>
+    void notify(MbrFun fn, Args&&...args)
+    {
+        for(auto& l : m_listeners)
+            if(auto p = l.lock()) (*p.*fn)(std::forward<Args>(args)...);
+    }
 
 public:
     // Materials are owned by a model and referenced by objects through t_model_material_id.
@@ -321,6 +348,8 @@ public:
     Model& operator= (Model other);
     void swap(Model &other);
     ~Model() { this->clear_objects(); this->clear_materials(); }
+
+    void add_listener(ModelListener::Ptr l) { m_listeners.emplace_back(l); }
 
     static Model read_from_file(const std::string &input_file, bool add_default_instances = true);
     static Model read_from_archive(const std::string &input_file, PresetBundle* bundle, bool add_default_instances = true);

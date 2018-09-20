@@ -365,6 +365,22 @@ struct PrintStatistics
 typedef std::vector<PrintObject*> PrintObjectPtrs;
 typedef std::vector<PrintRegion*> PrintRegionPtrs;
 
+// Ok: this is now complicated but a Print object will be notified about
+// any change on the model and it should have a reference to its asynch
+// background process to be able to stop processing if a fatal event occurred.
+// e.g.: Slicing is running, the user deletes the whole model:
+// model_cleared gets called which should call stop() on the background process
+//
+// An implementation could be a simple thread safe command queue ;)
+class SlicingProcess {
+public:
+    inline virtual ~SlicingProcess() {}
+    virtual bool start() = 0;
+    virtual bool pause() = 0;
+    virtual bool stop() = 0;
+};
+
+
 /**
  * @brief Printing involves slicing and export of device dependent instructions.
  *
@@ -376,7 +392,7 @@ typedef std::vector<PrintRegion*> PrintRegionPtrs;
  * The PrintBase class will abstract this flow for different technologies.
  *
  */
-class PrintBase {
+class PrintBase: public ModelListener {
 protected:
     ProgresIndicatorPtr m_pri;
 public:
@@ -390,17 +406,27 @@ public:
     virtual void restart() = 0;
     virtual bool apply_config(DynamicPrintConfig cfg) = 0;
     virtual void export_print_data(const std::string& path) = 0;
+
+    // Common configuration values
+    virtual Polyline bed_shape() const = 0;
+    virtual double min_object_distance() const = 0;
+    // ...
+
+    virtual void set_model(Model& model) {
+        model.add_listener(shared_from_this());
+    }
+
     virtual void set_progress_indicator(ProgresIndicatorPtr pri) {
         if(!pri) return; m_pri = pri; m_pri->on_cancel([this](){ cancel(); });
     }
 
-    virtual Polyline bed_shape() const = 0;
-    virtual double min_object_distance() const = 0;
+    virtual void set_background_process(SlicingProcess& /*proc*/) {}
 
-    // I think this is a concept break:
-//    virtual void set_status(int st, const std::string& msg) {
-//        if(m_pri) m_pri->update(float(st), msg);
-//    }
+    // from ModelListener:
+    void on_object_added() override {}
+    void on_object_removed(size_t /*idx*/) override {}
+    void on_object_changed(size_t /*idx*/) override {}
+    void on_model_cleared() override {}
 
 };
 

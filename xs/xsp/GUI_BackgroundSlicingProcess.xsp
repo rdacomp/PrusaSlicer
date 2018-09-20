@@ -10,7 +10,7 @@
     BackgroundSlicingProcess();
     ~BackgroundSlicingProcess();
 
-    void set_print(Print *print, GCodePreviewData *gpd);
+    void set_print(Print *print);
     void set_sliced_event(int event_id);
     void set_finished_event(int event_id);
 

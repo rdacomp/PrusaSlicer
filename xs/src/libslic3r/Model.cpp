@@ -176,6 +176,11 @@ void Model::delete_object(ModelObject* object)
 
 void Model::clear_objects()
 {
+    // Safely notify others that the model is no longer available. This call
+    // should block until every background process is canceled and nobody is
+    // using the model.
+    notify(&ModelListener::on_model_cleared);
+
     for (ModelObject *o : this->objects)
         delete o;
     this->objects.clear();

@@ -208,4 +208,8 @@ _constant()
                 croak(e.what());
             }
         %};
+
+    void set_gcode_preview_data(GCodePreviewData *pd)  %code%{
+            THIS->set_gcode_preview_data(pd);
+        %};
 };
