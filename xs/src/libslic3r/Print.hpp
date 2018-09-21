@@ -417,7 +417,8 @@ public:
     }
 
     virtual void set_progress_indicator(ProgresIndicatorPtr pri) {
-        if(!pri) return; m_pri = pri; m_pri->on_cancel([this](){ cancel(); });
+        m_pri = pri;
+        if(m_pri) { m_pri->on_cancel([this](){ cancel(); }); }
     }
 
     virtual void set_background_process(SlicingProcess& /*proc*/) {}

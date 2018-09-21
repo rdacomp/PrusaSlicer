@@ -10,8 +10,7 @@
 #include <boost/log/trivial.hpp>
 
 #include "Rasterizer/Rasterizer.hpp"
-#include <tbb/parallel_for.h>
-#include <tbb/spin_mutex.h>//#include "tbb/mutex.h"
+
 
 namespace Slic3r {
 
@@ -28,7 +27,7 @@ enum class FilePrinterFormat {
  * different implementations of this class template for each supported format.
  *
  */
-template<FilePrinterFormat format, class LayerFormat = void>
+template<FilePrinterFormat format>
 class FilePrinter {
 public:
 
@@ -69,35 +68,36 @@ public:
     void save_layer(unsigned lyr, const std::string& path);
 };
 
-template<class T = void> struct VeryFalse { static const bool value = false; };
-
 // This has to be explicitly implemented in the gui layer or a default zlib
 // based implementation is needed.
-template<class Backend> class LayerWriter {
+class LayerWriter {
 public:
 
-    LayerWriter(const std::string& /*zipfile_path*/) {
-        static_assert(VeryFalse<Backend>::value,
-                      "No layer writer implementation provided!");
-    }
+    using Ptr = std::shared_ptr<LayerWriter>;
 
-    void next_entry(const std::string& /*fname*/) {}
+    virtual ~LayerWriter() {}
 
-    std::string get_name() { return ""; }
+    virtual void set_cfg(const SLAFullPrintConfig& /*cfg*/) {}
 
-    bool is_ok() { return false; }
+    virtual void open(const std::string& /*zipfile_path*/) {}
 
-    template<class T> LayerWriter& operator<<(const T& /*arg*/) {
+    virtual void next_entry(const std::string& /*fname*/) {}
+
+    virtual std::string get_name() { return ""; }
+
+    virtual bool is_ok() { return false; }
+
+    virtual LayerWriter& operator<<(std::streambuf *buf) {
         return *this;
     }
 
-    void close() {}
+    virtual void close() {}
 };
 
 // Implementation for PNG raster output
 // Be aware that if a large number of layers are allocated, it can very well
 // exhaust the available memory especially on 32 bit platform.
-template<class LyrFormat> class FilePrinter<FilePrinterFormat::PNG, LyrFormat> {
+template<> class FilePrinter<FilePrinterFormat::PNG> {
 
     struct Layer {
         Raster first;
@@ -115,38 +115,34 @@ template<class LyrFormat> class FilePrinter<FilePrinterFormat::PNG, LyrFormat> {
     std::vector<Layer> m_layers_rst;
     Raster::Resolution m_res;
     Raster::PixelDim m_pxdim;
-    const Print *m_print = nullptr;
-    double m_exp_time_s = .0, m_exp_time_first_s = .0;
+    LayerWriter::Ptr m_writer;
 
-    std::string createIniContent(const std::string& projectname) {
-        double layer_height = m_print?
-                    m_print->default_object_config().layer_height.getFloat() :
-                    0.05;
+//    std::string createIniContent(const std::string& projectname) {
 
-        using std::string;
-        using std::to_string;
+//        using std::string;
+//        using std::to_string;
 
-        auto expt_str = to_string(m_exp_time_s);
-        auto expt_first_str = to_string(m_exp_time_first_s);
-        auto stepnum_str = to_string(static_cast<unsigned>(800*layer_height));
-        auto layerh_str = to_string(layer_height);
+//        auto expt_str = to_string(m_exp_time_s);
+//        auto expt_first_str = to_string(m_exp_time_first_s);
+//        auto stepnum_str = to_string(static_cast<unsigned>(800*m_layer_height));
+//        auto layerh_str = to_string(m_layer_height);
 
-        return string(
-        "action = print\n"
-        "jobDir = ") + projectname + "\n" +
-        "expTime = " + expt_str + "\n"
-        "expTimeFirst = " + expt_first_str + "\n"
-        "stepNum = " + stepnum_str + "\n"
-        "wifiOn = 1\n"
-        "tiltSlow = 60\n"
-        "tiltFast = 15\n"
-        "numFade = 10\n"
-        "startdelay = 0\n"
-        "layerHeight = " + layerh_str + "\n"
-        "noteInfo = "
-        "expTime="+expt_str+"+resinType=generic+layerHeight="
-                  +layerh_str+"+printer=DWARF3\n";
-    }
+//        return string(
+//        "action = print\n"
+//        "jobDir = ") + projectname + "\n" +
+//        "expTime = " + expt_str + "\n"
+//        "expTimeFirst = " + expt_first_str + "\n"
+//        "stepNum = " + stepnum_str + "\n"
+//        "wifiOn = 1\n"
+//        "tiltSlow = 60\n"
+//        "tiltFast = 15\n"
+//        "numFade = 10\n"
+//        "startdelay = 0\n"
+//        "layerHeight = " + layerh_str + "\n"
+//        "noteInfo = "
+//        "expTime="+expt_str+"+resinType=generic+layerHeight="
+//                  +layerh_str+"+printer=DWARF3\n";
+//    }
 
     // Change this to TOP_LEFT if you want correct PNG orientation
     static const Raster::Origin ORIGIN = Raster::Origin::BOTTOM_LEFT;
@@ -154,11 +150,10 @@ template<class LyrFormat> class FilePrinter<FilePrinterFormat::PNG, LyrFormat> {
 public:
     inline FilePrinter(double width_mm, double height_mm,
                        unsigned width_px, unsigned height_px,
-                       double exp_time, double exp_time_first):
+                       LayerWriter::Ptr writer):
         m_res(width_px, height_px),
         m_pxdim(width_mm/width_px, height_mm/height_px),
-        m_exp_time_s(exp_time),
-        m_exp_time_first_s(exp_time_first)
+        m_writer(writer)
     {
     }
 
@@ -170,8 +165,6 @@ public:
 
     inline void layers(unsigned cnt) { if(cnt > 0) m_layers_rst.resize(cnt); }
     inline unsigned layers() const { return unsigned(m_layers_rst.size()); }
-
-    void print_config(const Print& printconf) { m_print = &printconf; }
 
     inline void draw_polygon(const ExPolygon& p, unsigned lyr) {
         assert(lyr < m_layers_rst.size());
@@ -205,12 +198,12 @@ public:
 
     inline void save(const std::string& path) {
         try {
-            LayerWriter<LyrFormat> writer(path);
-
+            LayerWriter& writer = *m_writer;
+            writer.open(path);
             std::string project = writer.get_name();
 
-            writer.next_entry("config.ini");
-            writer << createIniContent(project);
+//            writer.next_entry("config.ini");
+//            writer << createIniContent(project);
 
             for(unsigned i = 0; i < m_layers_rst.size(); i++) {
                 if(m_layers_rst[i].second.rdbuf()->in_avail() > 0) {
@@ -257,11 +250,30 @@ inline coordf_t px(const Vec2d& p) { return p(0); }
 inline coordf_t py(const Vec2d& p) { return p(1); }
 
 class SLAPrint: public PrintBase {
+    using Layer = ExPolygons ;
+    using Layers = std::vector<Layer>;
+
     Model *m_model = nullptr;
     SlicingProcess *m_proc = nullptr;
     SLAFullPrintConfig m_config;
     std::atomic<bool> m_canceled;
+    Layers m_layers;
+    LayerWriter::Ptr m_writer;
 public:
+
+    SLAPrint(LayerWriter::Ptr writer = nullptr) {
+        if(writer) set_writer(writer);
+        else {
+            m_writer = std::make_shared<LayerWriter>();
+        }
+    }
+
+    void set_writer(LayerWriter::Ptr writer) {
+        if(writer) {
+            m_writer = writer;
+            m_writer->set_cfg(m_config);
+        }
+    }
 
     PrinterTechnology technology() const /*noexcept*/ override { return ptSLA; }
     void process() override;
@@ -285,8 +297,8 @@ public:
 
     // concept example:
     void on_model_cleared() override {
-        // clear layers and cache
         if(m_proc) m_proc->stop();
+        m_layers.clear();
     }
 
     // may not be necessary

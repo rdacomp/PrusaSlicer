@@ -19,6 +19,65 @@
 
 namespace Slic3r {
 
+class ZippedLayerWriter: public LayerWriter {
+    std::unique_ptr<Zipper> m_zip;
+    const SLAFullPrintConfig * m_cfg = nullptr;
+public:
+
+    void set_cfg(const SLAFullPrintConfig& cfg) override { m_cfg = &cfg; }
+
+    void open(const std::string &path) override {
+        m_zip.reset(new Zipper(path));
+
+        if(!m_cfg) return;
+
+        m_zip->next_entry("config.ini");
+
+        auto& cfg = *m_cfg;
+        using std::string;
+        using std::to_string;
+
+        auto expt_str = to_string(cfg.exposure_time.getFloat());
+        auto expt_first_str = to_string(cfg.initial_exposure_time.getFloat());
+        double layer_height = cfg.layer_height.getFloat();
+        auto stepnum_str = to_string(static_cast<unsigned>(800*layer_height));
+        auto layerh_str = to_string(layer_height);
+
+        std::string initext = string(
+        "action = print\n"
+        "jobDir = ") + get_name() + "\n" +
+        "expTime = " + expt_str + "\n"
+        "expTimeFirst = " + expt_first_str + "\n"
+        "stepNum = " + stepnum_str + "\n"
+        "wifiOn = 1\n"
+        "tiltSlow = 60\n"
+        "tiltFast = 15\n"
+        "numFade = 10\n"
+        "startdelay = 0\n"
+        "layerHeight = " + layerh_str + "\n"
+        "noteInfo = "
+        "expTime="+expt_str+"+resinType=generic+layerHeight="
+                  +layerh_str+"+printer=DWARF3\n";
+        m_zip->stream() << initext;
+    }
+
+    void next_entry(const std::string& fname) override {
+        if(m_zip) m_zip->next_entry(fname);
+    }
+
+    inline std::string get_name() const {
+        return m_zip? m_zip->get_name() : "";
+    }
+
+    LayerWriter& operator<<(std::streambuf *arg) override {
+        if(m_zip) m_zip->stream() << arg; return *this;
+    }
+
+    bool is_ok() override { return m_zip? false : m_zip->stream().good(); }
+
+    inline void close() { if(m_zip) m_zip->close(); }
+};
+
 class AppControllerGui::PriData {
 public:
     std::mutex m;
@@ -115,23 +174,6 @@ void PrintController::slice()
     slice(pri);
 }
 
-template<> class LayerWriter<Zipper> {
-    Zipper m_zip;
-public:
-
-    inline LayerWriter(const std::string& zipfile_path): m_zip(zipfile_path) {}
-
-    inline void next_entry(const std::string& fname) { m_zip.next_entry(fname); }
-
-    inline std::string get_name() const { return m_zip.get_name(); }
-
-    template<class T> inline LayerWriter& operator<<(const T& arg) {
-        m_zip.stream() << arg; return *this;
-    }
-
-    inline void close() { m_zip.close(); }
-};
-
 void PrintController::slice_to_png()
 {
     using Pointf3 = Vec3d;
@@ -219,8 +261,6 @@ void PrintController::slice_to_png()
     auto pri = ctl()->create_progress_indicator(
                 200, L("Slicing to zipped png files..."));
 
-    print->set_progress_indicator(pri);
-
 //    pri->on_cancel([&print](){ print->cancel(); });
 
     try {
@@ -230,6 +270,8 @@ void PrintController::slice_to_png()
         ctl()->report_issue(IssueType::ERR, e.what(), L("Exception occurred"));
 //        scale_back();
         if(print->canceled()) print->restart();
+        pri->update(200, "Error");
+        print->set_progress_indicator(nullptr);
         return;
     }
 
@@ -248,10 +290,13 @@ void PrintController::slice_to_png()
 
     } catch (std::exception& e) {
         ctl()->report_issue(IssueType::ERR, e.what(), L("Exception occurred"));
+        pri->update(200, "Error");
+        print->set_progress_indicator(nullptr);
     }
 
 //    scale_back();
     if(print->canceled()) print->restart();
+    print->set_progress_indicator(nullptr);
 //    print->set_status_default();
 }
 
@@ -280,6 +325,25 @@ void ProgressIndicator::message_fmt(
 
     va_end(args);
     message(ss.str());
+}
+
+void AppController::set_print(PrintBase */*print*/) {
+    // temporary solution: we create the SLAPrint object here
+
+    LayerWriter::Ptr writer = std::make_shared<ZippedLayerWriter>();
+    m_sla_print = std::make_shared<SLAPrint>(writer);
+
+    auto bundle = GUI::get_preset_bundle();
+    if(bundle) {
+        auto pt = bundle->printers.get_selected_preset().printer_technology();
+        auto cfg = bundle->full_config();
+        if(pt == ptSLA) m_sla_print->apply_config(cfg);
+    }
+
+    m_sla_print->set_model(*m_model);
+
+
+    printctl = PrintController::create(m_sla_print.get());
 }
 
 void AppController::arrange_model()

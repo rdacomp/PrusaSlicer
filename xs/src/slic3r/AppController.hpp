@@ -15,6 +15,7 @@ namespace Slic3r {
 
 class Model;
 class PrintBase;
+class SLAPrint;
 class ProgressStatusBar;
 //class DynamicPrintConfig;
 
@@ -300,7 +301,7 @@ public:
  * @brief Implementation of the printing logic.
  */
 class PrintController {
-    PrintBase *m_print = nullptr;
+    PrintBase* m_print = nullptr;
     std::function<void()> m_rempools;
 protected:
 
@@ -340,6 +341,8 @@ public:
  */
 class AppController {
     Model *m_model = nullptr;
+    std::shared_ptr<SLAPrint> m_sla_print;
+
     PrintController::Ptr printctl;
     std::atomic<bool> m_arranging;
 
@@ -369,9 +372,7 @@ public:
      * perl.
      * @param print A print object which can be a perl-ish extension as well.
      */
-    void set_print(PrintBase *print) {
-        printctl = PrintController::create(print);
-    }
+    void set_print(PrintBase *print);
 
     /**
      * @brief Set up a global progress indicator.
