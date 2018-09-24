@@ -1,73 +1,13 @@
-#include <functional>
-#include <numeric>
-
 #include "SLABasePool.hpp"
-#include "ExPolygon.hpp"
-#include "TriangleMesh.hpp"
-#include "ClipperUtils.hpp"
-#include "boost/log/trivial.hpp"
+#include "SLABoilerPlate.hpp"
 
 //#include "SVG.hpp"
+//#include "benchmark.h"
 
 namespace Slic3r { namespace sla {
 
-namespace {
-
-using coord_t = Point::coord_type;
-
-/// get the scaled clipper units for a millimeter value
-inline coord_t mm(double v) { return coord_t(v/SCALING_FACTOR); }
-
-/// Get x and y coordinates (because we are eigenizing...)
-inline coord_t x(const Point& p) { return p(0); }
-inline coord_t y(const Point& p) { return p(1); }
-inline coord_t& x(Point& p) { return p(0); }
-inline coord_t& y(Point& p) { return p(1); }
-
-inline coordf_t x(const Vec3d& p) { return p(0); }
-inline coordf_t y(const Vec3d& p) { return p(1); }
-inline coordf_t z(const Vec3d& p) { return p(2); }
-inline coordf_t& x(Vec3d& p) { return p(0); }
-inline coordf_t& y(Vec3d& p) { return p(1); }
-inline coordf_t& z(Vec3d& p) { return p(2); }
-
-inline coord_t& x(Vec3crd& p) { return p(0); }
-inline coord_t& y(Vec3crd& p) { return p(1); }
-inline coord_t& z(Vec3crd& p) { return p(2); }
-inline coord_t x(const Vec3crd& p) { return p(0); }
-inline coord_t y(const Vec3crd& p) { return p(1); }
-inline coord_t z(const Vec3crd& p) { return p(2); }
-
-inline void triangulate(const ExPolygon& expoly, Polygons& triangles) {
-    expoly.triangulate_p2t(&triangles);
-}
-
-inline Polygons triangulate(const ExPolygon& expoly) {
-    Polygons tri; triangulate(expoly, tri); return tri;
-}
-
-using Indices = std::vector<Vec3crd>;
-
-/// Intermediate struct for a 3D mesh
-struct Contour3D {
-    Pointf3s points;
-    Indices indices;
-
-    void merge(const Contour3D& ctr) {
-        auto s3 = coord_t(points.size());
-        auto s = coord_t(indices.size());
-
-        points.insert(points.end(), ctr.points.begin(), ctr.points.end());
-        indices.insert(indices.end(), ctr.indices.begin(), ctr.indices.end());
-
-        for(auto n = s; n < indices.size(); n++) {
-            auto& idx = indices[n]; x(idx) += s3; y(idx) += s3; z(idx) += s3;
-        }
-    }
-};
-
 /// Convert the triangulation output to an intermediate mesh.
-inline Contour3D convert(const Polygons& triangles, coord_t z, bool dir) {
+Contour3D convert(const Polygons& triangles, coord_t z, bool dir) {
 
     Pointf3s points;
     points.reserve(3*triangles.size());
@@ -86,18 +26,7 @@ inline Contour3D convert(const Polygons& triangles, coord_t z, bool dir) {
     return {points, indices};
 }
 
-/// Only a debug function to generate top and bottom plates from a 2D shape.
-/// It is not used in the algorithm directly.
-inline Contour3D roofs(const ExPolygon& poly, coord_t z_distance) {
-    Polygons triangles = triangulate(poly);
-
-    auto lower = convert(triangles, 0, false);
-    auto upper = convert(triangles, z_distance, true);
-    lower.merge(upper);
-    return lower;
-}
-
-inline Contour3D walls(const ExPolygon& floor_plate, const ExPolygon& ceiling,
+Contour3D walls(const ExPolygon& floor_plate, const ExPolygon& ceiling,
                        double floor_z_mm, double ceiling_z_mm) {
     using std::transform; using std::back_inserter;
 
@@ -123,7 +52,7 @@ inline Contour3D walls(const ExPolygon& floor_plate, const ExPolygon& ceiling,
     auto is_upper = [&hlines](const Point& p) {
         return std::any_of(hlines.begin(), hlines.end(),
                                [&p](const Line& l) {
-            return l.distance_to(p) < mm(0.01);
+            return l.distance_to(p) < mm(1e-6);
         });
     };
 
@@ -143,18 +72,8 @@ inline Contour3D walls(const ExPolygon& floor_plate, const ExPolygon& ceiling,
     return ret;
 }
 
-/// Mesh from an existing contour.
-inline TriangleMesh mesh(const Contour3D& ctour) {
-    return {ctour.points, ctour.indices};
-}
-
-/// Mesh from an evaporating 3D contour
-inline TriangleMesh mesh(Contour3D&& ctour) {
-    return {std::move(ctour.points), std::move(ctour.indices)};
-}
-
 /// Offsetting with clipper and smoothing the edges into a curvature.
-inline void offset(ExPolygon& sh, coord_t distance) {
+void offset(ExPolygon& sh, coord_t distance) {
     using ClipperLib::ClipperOffset;
     using ClipperLib::jtRound;
     using ClipperLib::etClosedPolygon;
@@ -207,93 +126,8 @@ inline void offset(ExPolygon& sh, coord_t distance) {
     }
 }
 
-template<class ExP, class D>
-inline Contour3D round_edges(const ExPolygon& base_plate,
-                            double radius_mm,
-                            double degrees,
-                            double ceilheight_mm,
-                            bool dir,
-                            ExP&& last_offset = ExP(), D&& last_height = D())
-{
-    auto ob = base_plate;
-    auto ob_prev = ob;
-    double wh = ceilheight_mm, wh_prev = wh;
-    Contour3D curvedwalls;
-
-    const size_t steps = 6;     // steps for 180 degrees
-    degrees = std::fmod(degrees, 180);
-    const int portion = int(steps*degrees / 90);
-    const double ystep_mm = radius_mm/steps;
-    coord_t s = dir? 1 : -1;
-    double xxprev = 0;
-    for(int i = 0; i < portion; i++) {
-        ob = base_plate;
-
-        // The offset is given by the equation: x = sqrt(r^2 - y^2)
-        // which can be derived from the circle equation. y is the current
-        // height for which the offset is calculated and x is the offset itself
-        // r is the radius of the circle that is used to smooth the edges
-
-        double r2 = radius_mm * radius_mm;
-        double y2 = steps*ystep_mm - i*ystep_mm;
-        y2 *= y2;
-
-        double xx = sqrt(r2 - y2);
-
-        offset(ob, s*mm(xx));
-        wh = ceilheight_mm - i*ystep_mm;
-
-        Contour3D pwalls;
-        if(xxprev < xx) pwalls = walls(ob, ob_prev, wh, wh_prev);
-        else pwalls = walls(ob_prev, ob, wh_prev, wh);
-
-        curvedwalls.merge(pwalls);
-        ob_prev = ob;
-        wh_prev = wh;
-        xxprev = xx;
-    }
-
-    last_offset = std::move(ob);
-    last_height = wh;
-
-    return curvedwalls;
-}
-
-/// Generating the concave part of the 3D pool with the bottom plate and the
-/// side walls.
-inline Contour3D inner_bed(const ExPolygon& poly, double depth_mm,
-                           double begin_h_mm = 0) {
-
-    Polygons triangles = triangulate(poly);
-
-    coord_t depth = mm(depth_mm);
-    coord_t begin_h = mm(begin_h_mm);
-
-    auto bottom = convert(triangles, -depth + begin_h, false);
-    auto lines = poly.lines();
-
-    // Generate outer walls
-    auto fp = [](const Point& p, Point::coord_type z) {
-        return unscale(x(p), y(p), z);
-    };
-
-    for(auto& l : lines) {
-        auto s = coord_t(bottom.points.size());
-
-        bottom.points.emplace_back(fp(l.a, -depth + begin_h));
-        bottom.points.emplace_back(fp(l.b, -depth + begin_h));
-        bottom.points.emplace_back(fp(l.a, begin_h));
-        bottom.points.emplace_back(fp(l.b, begin_h));
-
-        bottom.indices.emplace_back(s + 3, s + 1, s);
-        bottom.indices.emplace_back(s + 2, s + 3, s);
-    }
-
-    return bottom;
-}
-
 /// Unification of polygons (with clipper) preserving holes as well.
-inline ExPolygons unify(const ExPolygons& shapes) {
+ExPolygons unify(const ExPolygons& shapes) {
     using ClipperLib::ptSubject;
 
     ExPolygons retv;
@@ -362,6 +196,117 @@ inline ExPolygons unify(const ExPolygons& shapes) {
     return retv;
 }
 
+/// Only a debug function to generate top and bottom plates from a 2D shape.
+/// It is not used in the algorithm directly.
+inline Contour3D roofs(const ExPolygon& poly, coord_t z_distance) {
+    Polygons triangles = triangulate(poly);
+
+    auto lower = convert(triangles, 0, false);
+    auto upper = convert(triangles, z_distance, true);
+    lower.merge(upper);
+    return lower;
+}
+
+template<class ExP, class D>
+Contour3D round_edges(const ExPolygon& base_plate,
+                            double radius_mm,
+                            double degrees,
+                            double ceilheight_mm,
+                            bool dir,
+                            ExP&& last_offset = ExP(), D&& last_height = D())
+{
+    auto ob = base_plate;
+    auto ob_prev = ob;
+    double wh = ceilheight_mm, wh_prev = wh;
+    Contour3D curvedwalls;
+
+    int steps = 15; // int(std::ceil(10*std::pow(radius_mm, 1.0/3)));
+    double stepx = radius_mm / steps;
+    std::cout << "step x: " << stepx << std::endl;
+    coord_t s = dir? 1 : -1;
+    degrees = std::fmod(degrees, 180);
+
+    if(degrees >= 90) {
+        for(int i = 1; i <= steps; ++i) {
+            ob = base_plate;
+
+            double r2 = radius_mm * radius_mm;
+            double xx = i*stepx;
+            double x2 = xx*xx;
+            double stepy = std::sqrt(r2 - x2);
+
+            offset(ob, s*mm(xx));
+            wh = ceilheight_mm - radius_mm + stepy;
+
+            Contour3D pwalls;
+            pwalls = walls(ob, ob_prev, wh, wh_prev);
+
+            curvedwalls.merge(pwalls);
+            ob_prev = ob;
+            wh_prev = wh;
+        }
+    }
+
+    double tox = radius_mm - radius_mm*std::sin(degrees * PI / 180);
+    int tos = int(tox / stepx);
+
+    for(int i = 1; i <= tos; ++i) {
+        ob = base_plate;
+
+        double r2 = radius_mm * radius_mm;
+        double xx = radius_mm - i*stepx;
+        double x2 = xx*xx;
+        double stepy = std::sqrt(r2 - x2);
+        offset(ob, s*mm(xx));
+        wh = ceilheight_mm - radius_mm - stepy;
+
+        Contour3D pwalls;
+        pwalls = walls(ob_prev, ob, wh_prev, wh);
+
+        curvedwalls.merge(pwalls);
+        ob_prev = ob;
+        wh_prev = wh;
+    }
+
+    last_offset = std::move(ob);
+    last_height = wh;
+
+    return curvedwalls;
+}
+
+/// Generating the concave part of the 3D pool with the bottom plate and the
+/// side walls.
+Contour3D inner_bed(const ExPolygon& poly, double depth_mm,
+                           double begin_h_mm = 0) {
+
+    Polygons triangles = triangulate(poly);
+
+    coord_t depth = mm(depth_mm);
+    coord_t begin_h = mm(begin_h_mm);
+
+    auto bottom = convert(triangles, -depth + begin_h, false);
+    auto lines = poly.lines();
+
+    // Generate outer walls
+    auto fp = [](const Point& p, Point::coord_type z) {
+        return unscale(x(p), y(p), z);
+    };
+
+    for(auto& l : lines) {
+        auto s = coord_t(bottom.points.size());
+
+        bottom.points.emplace_back(fp(l.a, -depth + begin_h));
+        bottom.points.emplace_back(fp(l.b, -depth + begin_h));
+        bottom.points.emplace_back(fp(l.a, begin_h));
+        bottom.points.emplace_back(fp(l.b, begin_h));
+
+        bottom.indices.emplace_back(s + 3, s + 1, s);
+        bottom.indices.emplace_back(s + 2, s + 3, s);
+    }
+
+    return bottom;
+}
+
 inline Point centroid(Points& pp) {
     Point c;
     switch(pp.size()) {
@@ -369,10 +314,8 @@ inline Point centroid(Points& pp) {
     case 1: c = pp.front(); break;
     case 2: c = (pp[0] + pp[1]) / 2; break;
     default: {
-        Polygon p;
-        p.points.swap(pp);
-        c = p.centroid();
-        pp.swap(p.points);
+        c = std::accumulate(pp.begin(), pp.end(), Point{0, 0});
+        x(c) /= coord_t(pp.size()); y(c) /= coord_t(pp.size());
         break;
     }
     }
@@ -388,7 +331,7 @@ inline Point centroid(const ExPolygon& poly) {
 /// with explicit bridges. Bridges are generated from each shape's centroid
 /// to the center of the "scene" which is the centroid calculated from the shape
 /// centroids (a star is created...)
-inline ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
+ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
 {
     if(polys.empty()) return ExPolygons();
 
@@ -401,22 +344,39 @@ inline ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
     std::transform(punion.begin(), punion.end(), std::back_inserter(centroids),
                    [](const ExPolygon& poly) { return centroid(poly); });
 
+
+    SpatIndex boxindex; unsigned idx = 0;
+    std::for_each(punion.begin(), punion.end(),
+                  [&boxindex, &idx](const ExPolygon& expo) {
+        BoundingBox bb(expo);
+        boxindex.insert(std::make_pair(bb, idx++));
+    });
+
+
     // Centroid of the centroids of islands. This is where the additional
     // connector sticks are routed.
     Point cc = centroid(centroids);
 
     punion.reserve(punion.size() + centroids.size());
 
+    idx = 0;
     std::transform(centroids.begin(), centroids.end(),
                    std::back_inserter(punion),
-                   [cc, max_dist_mm](const Point& c) {
+                   [&punion, &boxindex, cc, max_dist_mm, &idx](const Point& c)
+    {
 
         double dx = x(c) - x(cc), dy = y(c) - y(cc);
         double l = std::sqrt(dx * dx + dy * dy);
         double nx = dx / l, ny = dy / l;
         double max_dist = mm(max_dist_mm);
 
-        if(l > max_dist) return ExPolygon();
+        ExPolygon& expo = punion[idx++];
+        BoundingBox querybb(expo);
+
+        querybb.offset(max_dist);
+        std::vector<SpatElement> result;
+        boxindex.query(bgi::intersects(querybb), std::back_inserter(result));
+        if(result.size() <= 1) return ExPolygon();
 
         ExPolygon r;
         auto& ctour = r.contour.points;
@@ -437,41 +397,35 @@ inline ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
     return punion;
 }
 
-}
-
-void ground_layer(const TriangleMesh &mesh, ExPolygons &output, float h)
+void base_plate(const TriangleMesh &mesh, ExPolygons &output, float h)
 {
     TriangleMesh m = mesh;
     TriangleMeshSlicer slicer(&m);
 
-    std::vector<ExPolygons> tmp;
+    TriangleMesh upper, lower;
+    slicer.cut(h, &upper, &lower);
+    output = lower.horizontal_projection();
 
-    slicer.slice({h}, &tmp, [](){});
-
-    output = tmp.front();
+    for(auto& o : output) o = o.simplify(0.1/SCALING_FACTOR).front();
 }
 
 void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
-                      double min_wall_thickness_mm,
-                      double min_wall_height_mm,
-                      double max_merge_distance_mm)
+                      const PoolConfig& cfg)
 {
-    auto concavehs = concave_hull(ground_layer, max_merge_distance_mm);
+    double mdist = 2*(1.8*cfg.min_wall_thickness_mm + 4*cfg.edge_radius_mm) +
+                   cfg.max_merge_distance_mm;
+
+    auto concavehs = concave_hull(ground_layer, mdist);
     for(ExPolygon& concaveh : concavehs) {
         if(concaveh.contour.points.empty()) return;
         concaveh.holes.clear();
 
-        BoundingBox bb(concaveh);
-        coord_t w = x(bb.max) - x(bb.min);
-        coord_t h = y(bb.max) - y(bb.min);
+        const coord_t WALL_THICKNESS = mm(cfg.min_wall_thickness_mm);
 
-        auto wall_thickness = coord_t((w+h)*0.01);
+        const coord_t WALL_DISTANCE = mm(2*cfg.edge_radius_mm) +
+                                      coord_t(0.8*WALL_THICKNESS);
 
-        const coord_t WALL_THICKNESS = mm(min_wall_thickness_mm) +
-                                       wall_thickness;
-
-        const coord_t WALL_DISTANCE = coord_t(0.3*WALL_THICKNESS);
-        const coord_t HEIGHT = mm(min_wall_height_mm);
+        const coord_t HEIGHT = mm(cfg.min_wall_height_mm);
 
         auto outer_base = concaveh;
         offset(outer_base, WALL_THICKNESS+WALL_DISTANCE);
@@ -488,18 +442,45 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
         Contour3D pool;
 
         ExPolygon ob = outer_base; double wh = 0;
+
+        // now we will calculate the angle or portion of the circle from
+        // pi/2 that will connect perfectly with the bottom plate.
+        // this is a tangent point calculation problem and the equation can
+        // be found for example here:
+        // http://www.ambrsoft.com/TrigoCalc/Circles2/CirclePoint/CirclePointDistance.htm
+        // the y coordinate would be:
+        // y = cy + (r^2*py - r*px*sqrt(px^2 + py^2 - r^2) / (px^2 + py^2)
+        // where px and py are the coordinates of the point outside the circle
+        // cx and cy are the circle center, r is the radius
+        // to get the angle we use arcsin function and subtract 90 degrees then
+        // flip the sign to get the right input to the round_edge function.
+        double r = cfg.edge_radius_mm;
+        double cy = 0;
+        double cx = 0;
+        double px = cfg.min_wall_thickness_mm;
+        double py = r - cfg.min_wall_height_mm;
+
+        double pxcx = px - cx;
+        double pycy = py - cy;
+        double b_2 = pxcx*pxcx + pycy*pycy;
+        double r_2 = r*r;
+        double D = std::sqrt(b_2 - r_2);
+        double vy = (r_2*pycy - r*pxcx*D) / b_2;
+        double phi = -(std::asin(vy/r) * 180 / PI - 90);
+
         auto curvedwalls = round_edges(ob,
-                                       1,    // radius 1 mm
-                                       170,  // 170 degrees
+                                       r,
+                                       phi,  // 170 degrees
                                        0,    // z position of the input plane
                                        true,
                                        ob, wh);
+
         pool.merge(curvedwalls);
 
         ExPolygon ob_contr = ob;
         ob_contr.holes.clear();
 
-        auto pwalls = walls(ob_contr, inner_base, wh, -min_wall_height_mm);
+        auto pwalls = walls(ob_contr, inner_base, wh, -cfg.min_wall_height_mm);
         pool.merge(pwalls);
 
         Polygons top_triangles, bottom_triangles;
@@ -509,15 +490,16 @@ void create_base_pool(const ExPolygons &ground_layer, TriangleMesh& out,
         auto bottom_plate = convert(bottom_triangles, -HEIGHT, true);
 
         ob = inner_base; wh = 0;
+        // rounded edge generation for the inner bed
         curvedwalls = round_edges(ob,
-                                  1,    // radius 1 mm
-                                  90,  // 170 degrees
+                                  cfg.edge_radius_mm,
+                                  90,   // 90 degrees
                                   0,    // z position of the input plane
                                   false,
                                   ob, wh);
         pool.merge(curvedwalls);
 
-        auto innerbed = inner_bed(ob, min_wall_height_mm/2 + wh, wh);
+        auto innerbed = inner_bed(ob, cfg.min_wall_height_mm/2 + wh, wh);
 
         pool.merge(top_plate);
         pool.merge(bottom_plate);
