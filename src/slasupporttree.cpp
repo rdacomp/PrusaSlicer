@@ -3,6 +3,8 @@
 
 #include <libslic3r.h>
 #include "TriangleMesh.hpp"
+#include "Model.hpp"
+#include "callback.hpp"
 #include "SLASupportTree.hpp"
 #include "benchmark.h"
 
@@ -16,6 +18,11 @@ void confess_at(const char * /*file*/,
                 const char * /*pat*/,
                 ...) {}
 
+namespace Slic3r {
+
+void PerlCallback::deregister_callback() {}
+}
+
 int main(const int argc, const char *argv[]) {
     using namespace Slic3r;
     using std::cout; using std::endl;
@@ -25,16 +32,17 @@ int main(const int argc, const char *argv[]) {
         return EXIT_SUCCESS;
     }
 
-    TriangleMesh model;
+    TriangleMesh tmesh;
     Benchmark bench;
 
-    model.ReadSTLFile(argv[1]);
-    model.align_to_origin();
+    tmesh.ReadSTLFile(argv[1]);
+    tmesh.align_to_origin();
 
     TriangleMesh result;
+    Model model;
 
     bench.start();
-    sla::create_support_tree({}, result, {});
+    sla::create_support_tree(model, result, {});
     bench.stop();
 
     cout << "Support tree creation time: " << std::setprecision(10)

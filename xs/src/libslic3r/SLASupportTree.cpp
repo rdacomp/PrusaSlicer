@@ -241,11 +241,9 @@ Pointf3s ground_points(const Model& model) {
             for(Vec3f& msource : o->sla_support_points) {
                 auto source = model_coord(*inst, msource);
                 igl::Hit hit;
-                igl::ray_mesh_intersect(
-                            source, Vec3d(0, 0, -1), m.V, m.F, hit);
-
-                // TODO: this is wrong
-                ret.emplace_back(hit.t, hit.u, hit.v);
+                Vec3d dir(0, 0, -1);
+                igl::ray_mesh_intersect(source, dir, m.V, m.F, hit);
+                ret.emplace_back(source + hit.t*dir);
             }
         }
 
@@ -256,6 +254,9 @@ void create_support_tree(const Model &model,
                          TriangleMesh &output,
                          const SupportConfig& cfg)
 {
+    auto gpoints = ground_points(model);
+
+    std::cout << "ground points: " << gpoints.size() << std::endl;
     output = mesh(create_head(cfg.head_back_radius_mm,
                               cfg.head_front_radius_mm,
                               cfg.head_width_mm));
