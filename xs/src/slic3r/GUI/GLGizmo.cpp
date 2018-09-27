@@ -1246,9 +1246,9 @@ void GLGizmoFlatten::on_render(const BoundingBoxf3& box) const
     // the dragged_offset is a vector measuring where was the object moved
     // with the gizmo being on. This is reset in set_flattening_data and
     // does not work correctly when there are multiple copies.
-    Vec3d dragged_offset(Vec3d::Zero());
-    if (m_dragging)
-        dragged_offset = box.center() - m_starting_center;
+    if (m_starting_center == Vec3d::Zero())
+        m_starting_center = box.center();
+    Vec3d dragged_offset(box.center() - m_starting_center);
 
     ::glEnable(GL_BLEND);
     ::glEnable(GL_DEPTH_TEST);
@@ -1309,6 +1309,7 @@ void GLGizmoFlatten::on_render_for_picking(const BoundingBoxf3& box) const
 
 void GLGizmoFlatten::set_flattening_data(const ModelObject* model_object)
 {
+    m_starting_center = Vec3d::Zero();
     m_model_object = model_object;
 
     // ...and save the updated positions of the object instances:
@@ -1565,7 +1566,7 @@ Vec3d GLGizmoFlatten::get_flattening_normal() const {
 
 
 GLGizmoSlaSupports::GLGizmoSlaSupports(GLCanvas3D& parent)
-    : GLGizmoBase(parent)
+    : GLGizmoBase(parent), m_starting_center(Vec3d::Zero())
 {
 }
 
@@ -1588,10 +1589,25 @@ bool GLGizmoSlaSupports::on_init()
     return true;
 }
 
+void GLGizmoSlaSupports::set_model_object_ptr(ModelObject* model_object)
+{
+    m_starting_center = Vec3d::Zero();
+    m_model_object = model_object;
+    if (is_mesh_update_necessary())
+        update_mesh();
+}
+
 void GLGizmoSlaSupports::on_render(const BoundingBoxf3& box) const
 {
     ::glEnable(GL_BLEND);
     ::glEnable(GL_DEPTH_TEST);
+
+    // the dragged_offset is a vector measuring where was the object moved
+    // with the gizmo being on. This is reset in set_flattening_data and
+    // does not work correctly when there are multiple copies.
+    if (m_starting_center == Vec3d::Zero())
+        m_starting_center = box.center();
+    Vec3d dragged_offset(box.center() - m_starting_center);
 
     for (auto& g : m_grabbers) {
         g.color[0] = 1.f;
@@ -1599,9 +1615,12 @@ void GLGizmoSlaSupports::on_render(const BoundingBoxf3& box) const
         g.color[2] = 0.f;
     }
 
+    ::glPushMatrix();
+    ::glTranslatef((GLfloat)dragged_offset(0), (GLfloat)dragged_offset(1), (GLfloat)dragged_offset(2));
     render_grabbers();
-    render_tooltip_texture();
+    ::glPopMatrix();
 
+    render_tooltip_texture();
     ::glDisable(GL_BLEND);
 }
 
@@ -1640,7 +1659,7 @@ void GLGizmoSlaSupports::render_grabbers(bool picking) const
         GLUquadricObj *quadric;
         quadric = ::gluNewQuadric();
         ::gluQuadricDrawStyle(quadric, GLU_FILL );
-        ::gluSphere( quadric , 0.5f, 36 , 18 );
+        ::gluSphere( quadric , 0.75f, 36 , 18 );
         ::gluDeleteQuadric(quadric);
         ::glPopMatrix();
         if (!picking)
@@ -1653,7 +1672,7 @@ bool GLGizmoSlaSupports::is_mesh_update_necessary() const
     if (m_state != On || !m_model_object || m_model_object->instances.empty())
         return false;
 
-#if ENABLE_MODELINSTANCE_3D_ROTATION
+#if ENABLE_MODELINSTANCE_3D_FULL_TRANSFORM
     if (m_model_object->volumes.size() != m_source_data.bounding_boxes.size()
      || (m_model_object->instances.front()->world_matrix() * m_source_data.matrix.inverse() * Vec3d(1., 1., 1.) - Vec3d(1., 1., 1.)).norm() > 0.001 )
 #else
@@ -1706,12 +1725,12 @@ void GLGizmoSlaSupports::update_mesh()
     m_source_data.bounding_boxes.clear();
     for (const auto& vol : m_model_object->volumes)
         m_source_data.bounding_boxes.push_back(vol->get_convex_hull().bounding_box());
-#if !ENABLE_MODELINSTANCE_3D_ROTATION
+#if !ENABLE_MODELINSTANCE_3D_FULL_TRANSFORM
     m_source_data.scaling_factor = m_model_object->instances.front()->scaling_factor;
     m_source_data.rotation = m_model_object->instances.front()->rotation;
 #else
     m_source_data.matrix = m_model_object->instances.front()->world_matrix();
-#endif // !ENABLE_MODELINSTANCE_3D_ROTATION
+#endif
     const float* first_vertex = m_model_object->volumes.front()->get_convex_hull().first_vertex();
     m_source_data.mesh_first_point = Vec3d((double)first_vertex[0], (double)first_vertex[1], (double)first_vertex[2]);
 
