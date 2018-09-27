@@ -3,6 +3,7 @@
 
 #include "Model.hpp"
 #include <igl/ray_mesh_intersect.h>
+#include <igl/point_mesh_squared_distance.h>
 
 namespace Slic3r {
 namespace sla {
@@ -12,6 +13,14 @@ using Portion = std::tuple<double, double>;
 inline Portion make_portion(double a, double b) {
     return std::make_tuple(a, b);
 }
+
+struct EigenMesh3D {
+//    Eigen::Matrix<double, Eigen::Dynamic, 3> V;
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+};
+
+using PointSet = Eigen::MatrixXd;
 
 Contour3D sphere(double rho, Portion portion = make_portion(0.0, 2.0*PI),
                  double fa=(2*PI/360)) {
@@ -186,10 +195,7 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     return ret;
 }
 
-struct EigenMesh3D {
-    Eigen::MatrixXf V;
-    Eigen::MatrixXi F;
-};
+
 
 EigenMesh3D to_eigenmesh(const Model& model) {
     TriangleMesh combined_mesh;
@@ -250,16 +256,50 @@ Pointf3s ground_points(const Model& model) {
     return ret;
 }
 
+
+Pointf3s normals(const PointSet& points, const EigenMesh3D& mesh) {
+    Eigen::VectorXd dists;
+    Eigen::VectorXi I;
+    PointSet C;
+    igl::point_mesh_squared_distance( points, mesh.V, mesh.F, dists, I, C);
+
+    Pointf3s ret;
+    for(int i= 0; i < I.rows(); i++) {
+        auto idx = I(i);
+        auto trindex = mesh.F.row(idx);
+
+        // TODO: do it in one line
+        auto& p1 = mesh.V.row(trindex(0));
+        auto& p2 = mesh.V.row(trindex(1));
+        auto& p3 = mesh.V.row(trindex(2));
+
+        Eigen::Vector3d U = p2 - p1;
+        Eigen::Vector3d V = p3 - p1;
+        ret.emplace_back(U.cross(V));
+    }
+
+    return ret;
+}
+
 void create_support_tree(const Model &model,
                          TriangleMesh &output,
                          const SupportConfig& cfg)
 {
-    auto gpoints = ground_points(model);
+    ModelObject *o = model.objects.front();
 
-    std::cout << "ground points: " << gpoints.size() << std::endl;
-    output = mesh(create_head(cfg.head_back_radius_mm,
-                              cfg.head_front_radius_mm,
-                              cfg.head_width_mm));
+    auto mesh = sla::to_eigenmesh(model);
+    sla::PointSet points(o->sla_support_points.size(), 3);
+    for(int i = 0; i < o->sla_support_points.size(); i++) {
+        points.row(i) = model_coord(*o->instances.front(), o->sla_support_points[i]);
+    }
+
+    sla::normals(points, mesh);
+//    auto gpoints = ground_points(model);
+
+//    std::cout << "ground points: " << gpoints.size() << std::endl;
+//    output = mesh(create_head(cfg.head_back_radius_mm,
+//                              cfg.head_front_radius_mm,
+//                              cfg.head_width_mm));
 }
 
 }
