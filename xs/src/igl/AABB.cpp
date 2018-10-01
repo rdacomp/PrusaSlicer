@@ -885,7 +885,7 @@ igl::AABB<DerivedV,DIM>::intersect_ray(
   const RowVectorDIMS & dir,
   igl::Hit & hit) const
 {
-#if false
+#if 0
   // BFS
   std::queue<const AABB *> Q;
   // Or DFS

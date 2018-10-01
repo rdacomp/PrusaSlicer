@@ -145,7 +145,13 @@ void PrintController::slice_to_png()
                 nullptr;
 
     TriangleMesh dummy;
-    if(model) sla::create_support_tree(*model, dummy);
+    if(model) {
+        sla::create_support_tree(*model, dummy);
+
+        ModelObject* o = model->add_object();
+        o->add_volume(dummy);
+        o->add_instance();
+    }
 
 //    using Pointf3 = Vec3d;
 

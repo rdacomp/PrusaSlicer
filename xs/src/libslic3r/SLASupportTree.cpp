@@ -192,10 +192,13 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     ret.indices.emplace_back(i2s2, i2s1, i1s1);
     ret.indices.emplace_back(i1s2, i2s2, i1s1);
 
+    auto it = std::max_element(ret.points.begin(), ret.points.end(), [](const Vec3d& p1, const Vec3d& p2){
+        return z(p1) < z(p2);
+    });
+
+    for(auto& p : ret.points) { z(p) -= z(*it); }
     return ret;
 }
-
-
 
 EigenMesh3D to_eigenmesh(const Model& model) {
     TriangleMesh combined_mesh;
@@ -275,7 +278,7 @@ Pointf3s normals(const PointSet& points, const EigenMesh3D& mesh) {
 
         Eigen::Vector3d U = p2 - p1;
         Eigen::Vector3d V = p3 - p1;
-        ret.emplace_back(U.cross(V));
+        ret.emplace_back(U.cross(V).normalized());
     }
 
     return ret;
@@ -293,7 +296,43 @@ void create_support_tree(const Model &model,
         points.row(i) = model_coord(*o->instances.front(), o->sla_support_points[i]);
     }
 
-    sla::normals(points, mesh);
+    auto nmls = sla::normals(points, mesh);
+
+    int i = 0;
+    for(auto& n : nmls) {
+        double z = n(2);
+        double r = 1.0;     // for normalized vector
+        double polar = std::acos(z / r);
+        double azimuth = std::atan(n(1) / n(0));
+
+        if(polar > PI / 2) {
+            double tilt = PI - std::max(polar, 3*PI / 4);
+
+            auto mv = points.row(i);
+
+            auto head = create_head(2, 1, 3);
+
+            auto tr = Transform3d::Identity();
+            auto tr2 = Transform3d::Identity();
+
+            if(std::isinf(azimuth) || std::isnan(azimuth)) azimuth = 0;
+
+            std::cout << "azimuth " << azimuth << std::endl;
+
+            tr.rotate(
+                        Eigen::AngleAxisd(0, n)
+                    );
+
+//            head.points = transform(head.points, tr);
+            for(auto& p : head.points) { p = tr * tr2 * p; }
+
+            output.merge(sla::mesh(head));
+        }
+
+        ++i;
+    }
+
+
 //    auto gpoints = ground_points(model);
 
 //    std::cout << "ground points: " << gpoints.size() << std::endl;
