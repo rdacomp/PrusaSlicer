@@ -163,7 +163,6 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     const double h = r1_mm + r2_mm + width_mm;
 
     double phi = PI/2 - std::acos( (r1_mm - r2_mm)/(r1_mm + r2_mm + width_mm));
-    std::cout << "phi is: " << phi*180/PI << std::endl;
 
     auto&& s1 = sphere(r1_mm, make_portion(0, PI/2 + phi), detail);
     auto&& s2 = sphere(r2_mm, make_portion(PI/2 + phi, PI), detail);
@@ -192,7 +191,8 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     ret.indices.emplace_back(i2s2, i2s1, i1s1);
     ret.indices.emplace_back(i1s2, i2s2, i1s1);
 
-    auto it = std::max_element(ret.points.begin(), ret.points.end(), [](const Vec3d& p1, const Vec3d& p2){
+    auto it = std::max_element(ret.points.begin(), ret.points.end(),
+                               [](const Vec3d& p1, const Vec3d& p2){
         return z(p1) < z(p2);
     });
 
@@ -293,52 +293,48 @@ void create_support_tree(const Model &model,
     auto mesh = sla::to_eigenmesh(model);
     sla::PointSet points(o->sla_support_points.size(), 3);
     for(int i = 0; i < o->sla_support_points.size(); i++) {
-        points.row(i) = model_coord(*o->instances.front(), o->sla_support_points[i]);
+        points.row(i) = model_coord(*o->instances.front(),
+                                    o->sla_support_points[i]);
     }
 
     auto nmls = sla::normals(points, mesh);
 
     int i = 0;
     for(auto& n : nmls) {
+        // for all normals we generate the spherical coordinates and saturate
+        // the polar angle to 45 degrees then convert back to standard
+        // coordinates to get the new normal. Then we just create a quaternion
+        // from the two normals (Quaternion::FromTwoVectors) and apply the
+        // rotation to the arrow head.
+
         double z = n(2);
         double r = 1.0;     // for normalized vector
         double polar = std::acos(z / r);
-        double azimuth = std::atan(n(1) / n(0));
+        double azimuth = std::atan2(n(1), n(0));
 
-        if(polar > PI / 2) {
-            double tilt = PI - std::max(polar, 3*PI / 4);
+        if(polar >= PI / 2) { // skip if the tilt is not sane
 
-            auto mv = points.row(i);
+            // We saturate the polar angle to pi/4 measured from the bottom
+            polar = std::max(polar, 3*PI / 4);
+
+            // This will implicitly be normalized
+            Vec3d nn(std::cos(azimuth) * std::sin(polar),
+                     std::sin(azimuth) * std::sin(polar),
+                     std::cos(polar));
+
+            Vec3d mv = points.row(i);
 
             auto head = create_head(2, 1, 3);
 
-            auto tr = Transform3d::Identity();
-            auto tr2 = Transform3d::Identity();
-
-            if(std::isinf(azimuth) || std::isnan(azimuth)) azimuth = 0;
-
-            std::cout << "azimuth " << azimuth << std::endl;
-
-            tr.rotate(
-                        Eigen::AngleAxisd(0, n)
-                    );
-
-//            head.points = transform(head.points, tr);
-            for(auto& p : head.points) { p = tr * tr2 * p; }
+            Vec3d headn{0, 0, -1};
+            auto quatern = Eigen::Quaternion<double>::FromTwoVectors(headn, nn);
+            for(auto& p : head.points) { p = quatern * p + mv; }
 
             output.merge(sla::mesh(head));
         }
 
         ++i;
     }
-
-
-//    auto gpoints = ground_points(model);
-
-//    std::cout << "ground points: " << gpoints.size() << std::endl;
-//    output = mesh(create_head(cfg.head_back_radius_mm,
-//                              cfg.head_front_radius_mm,
-//                              cfg.head_width_mm));
 }
 
 }
