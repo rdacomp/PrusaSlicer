@@ -57,6 +57,32 @@ template<int d> struct access<Slic3r::Point, d > {
     }
 };
 
+// For Vec2d ///////////////////////////////////////////////////////////////////
+
+template<> struct tag<Slic3r::Vec2d> {
+    using type = point_tag;
+};
+
+template<> struct coordinate_type<Slic3r::Vec2d> {
+    using type = double;
+};
+
+template<> struct coordinate_system<Slic3r::Vec2d> {
+    using type = cs::cartesian;
+};
+
+template<> struct dimension<Slic3r::Vec2d>: boost::mpl::int_<2> {};
+
+template<int d> struct access<Slic3r::Vec2d, d > {
+    static inline double get(Slic3r::Vec2d const& a) {
+        return a(d);
+    }
+
+    static inline void set(Slic3r::Vec2d& a, double const& value) {
+        a(d) = value;
+    }
+};
+
 /* ************************************************************************** */
 /* Box concept adaptation *************************************************** */
 /* ************************************************************************** */
@@ -95,10 +121,6 @@ struct indexed_access<Slic3r::BoundingBox, max_corner, d> {
 
 namespace Slic3r {
 namespace sla {
-
-namespace bgi = boost::geometry::index;
-using SpatElement = std::pair<BoundingBox, unsigned>;
-using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> >;
 
 using coord_t = Point::coord_type;
 

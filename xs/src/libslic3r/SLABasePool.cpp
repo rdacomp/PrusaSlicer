@@ -333,6 +333,10 @@ inline Point centroid(const ExPolygon& poly) {
 /// centroids (a star is created...)
 ExPolygons concave_hull(const ExPolygons& polys, double max_dist_mm = 50)
 {
+    namespace bgi = boost::geometry::index;
+    using SpatElement = std::pair<BoundingBox, unsigned>;
+    using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> >;
+
     if(polys.empty()) return ExPolygons();
 
     ExPolygons punion = unify(polys);   // could be redundant

@@ -2,6 +2,8 @@
 #include "SLABoilerPlate.hpp"
 
 #include "Model.hpp"
+
+#include "boost/geometry/index/rtree.hpp"
 #include <igl/ray_mesh_intersect.h>
 #include <igl/point_mesh_squared_distance.h>
 
@@ -271,7 +273,6 @@ Pointf3s normals(const PointSet& points, const EigenMesh3D& mesh) {
         auto idx = I(i);
         auto trindex = mesh.F.row(idx);
 
-        // TODO: do it in one line
         auto& p1 = mesh.V.row(trindex(0));
         auto& p2 = mesh.V.row(trindex(1));
         auto& p3 = mesh.V.row(trindex(2));
@@ -282,6 +283,133 @@ Pointf3s normals(const PointSet& points, const EigenMesh3D& mesh) {
     }
 
     return ret;
+}
+
+using ClusteredPoints = std::array<Pointf3s, 4>;
+
+template<class Vec> double distance(const Vec& p) {
+    return std::sqrt(p.transpose() * p);
+}
+
+//double distance(const Vec3d& p1, const Vec3d& p2) {
+//    auto p = p2 - p1;
+//    return distance(p);
+//}
+
+Vec2d to_vec2(const Vec3d& v3) {
+    return {v3(0), v3(1)};
+}
+
+double distance(const Vec2d& pp1, const Vec2d& pp2) {
+    auto p = pp2 - pp1;
+    return distance(p);
+}
+
+namespace bgi = boost::geometry::index;
+using SpatElement = std::pair<Vec2d, unsigned>;
+using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
+
+bool operator==(const SpatElement& e1, const SpatElement& e2) {
+    std::cout << "comparing" << std::endl;
+    return e1.second == e2.second;
+}
+
+ClusteredPoints cluster(const sla::PointSet& points) {
+    const double D1 = 1e-6;
+    const double D2 = 1;
+    const double D3 = 3;
+    const double D4 = 5;
+
+    SpatIndex sindex;
+
+//    sindex.insert(points.begin(), points.end());
+    for(unsigned idx = 0; idx < points.rows(); idx++)
+        sindex.insert( std::make_pair(to_vec2(points.row(idx)), idx));
+
+    ClusteredPoints result;
+
+    using Elems = std::vector<SpatElement>;
+
+    std::function<void(double, Elems&, Elems&)> group =
+    [&sindex, &group](double d_max,
+              Elems& pts,
+              Elems& cluster)
+    {
+        for(auto& p : pts) {
+            std::vector<SpatElement> tmp;
+
+            sindex.query(
+                bgi::satisfies([p, d_max](const SpatElement& v){
+                                    double d = distance(p.first, v.first);
+                                    std::cout << "distance " << d << std::endl;
+                                    return d < d_max;
+                               }), std::back_inserter(tmp)
+                        );
+
+            auto cmp = [](const SpatElement& e1, const SpatElement& e2){
+                return e1.second < e2.second;
+            };
+
+            std::sort(tmp.begin(), tmp.end(), cmp);
+
+            Elems newpts;
+            std::set_difference(tmp.begin(), tmp.end(),
+                                cluster.begin(), cluster.end(),
+                                std::back_inserter(newpts), cmp);
+
+            cluster.insert(cluster.end(), newpts.begin(), newpts.end());
+            std::sort(cluster.begin(), cluster.end(), cmp);
+
+            if(!newpts.empty()) group(d_max, newpts, cluster);
+        }
+    };
+
+    std::vector<Elems> clusters;
+    for(auto it = sindex.begin(); it != sindex.end();) {
+        Elems cluster = {};
+        Elems pts = {*it};
+        group(D3, pts, cluster);
+
+        for(auto& c : cluster) sindex.remove(c);
+        it = sindex.begin();
+
+        clusters.emplace_back(cluster);
+    }
+
+    int i = 0;
+    for(auto& cluster : clusters) {
+
+        std::cout << "cluster no. " << i++ << std::endl;
+
+        for(auto c : cluster)
+            std::cout << c.first << " " << c.second << std::endl;
+
+        std::cout << std::endl;
+    }
+
+//    for(auto& p : points) {
+//        std::vector<Vec2d> tmp;
+//        sindex.query(bgi::nearest(p, 1), std::back_inserter(tmp));
+//        if(tmp.empty()) continue;
+//        auto v = tmp.front();
+//        double d = distance2(p, tmp.front());
+//        if(d < D1) {
+//            // SP: same point, different Z coord
+//        }
+//        else if(d < D2) {
+//            result[0].emplace_back(v);
+//        }
+//        else if(d < D3) {
+//            result[1].emplace_back(v);
+//        }
+//        else if(d < D4) {
+//            result[2].emplace_back(v);
+//        } else {
+//            result[3].emplace_back(v);
+//        }
+//    }
+
+    return result;
 }
 
 void create_support_tree(const Model &model,
@@ -301,11 +429,12 @@ void create_support_tree(const Model &model,
 
     int i = 0;
     for(auto& n : nmls) {
+
         // for all normals we generate the spherical coordinates and saturate
-        // the polar angle to 45 degrees then convert back to standard
-        // coordinates to get the new normal. Then we just create a quaternion
-        // from the two normals (Quaternion::FromTwoVectors) and apply the
-        // rotation to the arrow head.
+        // the polar angle to 45 degrees from the bottom then convert back to
+        // standard coordinates to get the new normal. Then we just create a
+        // quaternion from the two normals (Quaternion::FromTwoVectors) and
+        // apply the rotation to the arrow head.
 
         double z = n(2);
         double r = 1.0;     // for normalized vector
@@ -335,6 +464,8 @@ void create_support_tree(const Model &model,
 
         ++i;
     }
+
+    cluster(points);
 }
 
 }
