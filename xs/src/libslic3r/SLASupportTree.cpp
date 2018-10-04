@@ -157,10 +157,20 @@ Contour3D cylinder(double r, double h, double fa=(2*PI/360)) {
 
 Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
 
+    // We create two spheres which will be connected with a robe that fits
+    // both circles perfectly.
+
     Contour3D ret;
 
+    // Set up the model detail level
     const size_t steps = 45;
     const double detail = 2*PI/steps;
+
+    // We don't generate whole circles. Instead, we generate only the portions
+    // which are visible (not covered by the robe)
+    // To know the exact portion of the bottom and top circles we need to use
+    // some rules of tangent circles from which we can derive (using simple
+    // triangles the following relations:
 
     const double h = r1_mm + r2_mm + width_mm;
 
@@ -243,6 +253,39 @@ Vec3d model_coord(const ModelInstance& object, const Vec3f& mesh_coord) {
     return object.transform_vector(mesh_coord.cast<double>());
 }
 
+PointSet support_points(const Model& model) {
+    int sum = 0;
+    for(auto *o : model.objects)
+        sum += o->instances.size() * o->sla_support_points.size();
+
+    PointSet ret(sum, 3);
+
+    for(ModelObject *o : model.objects)
+        for(ModelInstance *inst : o->instances) {
+            int i = 0;
+            for(Vec3f& msource : o->sla_support_points) {
+                ret.row(i++) = model_coord(*inst, msource);
+            }
+        }
+
+    return ret;
+}
+
+PointSet ground_points(const PointSet& supportps, const EigenMesh3D& mesh) {
+    PointSet ret(supportps.rows(), 3);
+
+    for(int i = 0; i < supportps.rows(); i++) {
+        Vec3d sp = supportps.row(i);
+        igl::Hit hit;
+        Vec3d dir(0, 0, -1);
+        igl::ray_mesh_intersect(sp, dir, mesh.V, mesh.F, hit);
+        ret.row(i) = sp + hit.t*dir;
+        if(ret.row(i)(2) < 0 ) ret.row(i)(2) = 0;   // may not need this when the sla pool will be used
+    }
+
+    return ret;
+}
+
 Pointf3s ground_points(const Model& model) {
     EigenMesh3D m = to_eigenmesh(model);
     Pointf3s ret;
@@ -262,14 +305,14 @@ Pointf3s ground_points(const Model& model) {
 }
 
 
-Pointf3s normals(const PointSet& points, const EigenMesh3D& mesh) {
+PointSet normals(const PointSet& points, const EigenMesh3D& mesh) {
     Eigen::VectorXd dists;
     Eigen::VectorXi I;
     PointSet C;
     igl::point_mesh_squared_distance( points, mesh.V, mesh.F, dists, I, C);
 
-    Pointf3s ret;
-    for(int i= 0; i < I.rows(); i++) {
+    PointSet ret(I.rows(), 3);
+    for(int i = 0; i < I.rows(); i++) {
         auto idx = I(i);
         auto trindex = mesh.F.row(idx);
 
@@ -279,7 +322,7 @@ Pointf3s normals(const PointSet& points, const EigenMesh3D& mesh) {
 
         Eigen::Vector3d U = p2 - p1;
         Eigen::Vector3d V = p3 - p1;
-        ret.emplace_back(U.cross(V).normalized());
+        ret.row(i) = U.cross(V).normalized();
     }
 
     return ret;
@@ -290,11 +333,6 @@ using ClusteredPoints = std::array<Pointf3s, 4>;
 template<class Vec> double distance(const Vec& p) {
     return std::sqrt(p.transpose() * p);
 }
-
-//double distance(const Vec3d& p1, const Vec3d& p2) {
-//    auto p = p2 - p1;
-//    return distance(p);
-//}
 
 Vec2d to_vec2(const Vec3d& v3) {
     return {v3(0), v3(1)};
@@ -310,19 +348,13 @@ using SpatElement = std::pair<Vec2d, unsigned>;
 using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
 
 bool operator==(const SpatElement& e1, const SpatElement& e2) {
-    std::cout << "comparing" << std::endl;
     return e1.second == e2.second;
 }
 
-ClusteredPoints cluster(const sla::PointSet& points) {
-    const double D1 = 1e-6;
-    const double D2 = 1;
-    const double D3 = 3;
-    const double D4 = 5;
+ClusteredPoints cluster(const sla::PointSet& points, double max_distance) {
 
     SpatIndex sindex;
 
-//    sindex.insert(points.begin(), points.end());
     for(unsigned idx = 0; idx < points.rows(); idx++)
         sindex.insert( std::make_pair(to_vec2(points.row(idx)), idx));
 
@@ -339,12 +371,11 @@ ClusteredPoints cluster(const sla::PointSet& points) {
             std::vector<SpatElement> tmp;
 
             sindex.query(
-                bgi::satisfies([p, d_max](const SpatElement& v){
-                                    double d = distance(p.first, v.first);
-                                    std::cout << "distance " << d << std::endl;
-                                    return d < d_max;
-                               }), std::back_inserter(tmp)
-                        );
+                bgi::satisfies( [p, d_max](const SpatElement& v){
+                    return distance(p.first, v.first) < d_max;
+                }),
+                std::back_inserter(tmp)
+            );
 
             auto cmp = [](const SpatElement& e1, const SpatElement& e2){
                 return e1.second < e2.second;
@@ -368,7 +399,7 @@ ClusteredPoints cluster(const sla::PointSet& points) {
     for(auto it = sindex.begin(); it != sindex.end();) {
         Elems cluster = {};
         Elems pts = {*it};
-        group(D3, pts, cluster);
+        group(max_distance, pts, cluster);
 
         for(auto& c : cluster) sindex.remove(c);
         it = sindex.begin();
@@ -378,7 +409,6 @@ ClusteredPoints cluster(const sla::PointSet& points) {
 
     int i = 0;
     for(auto& cluster : clusters) {
-
         std::cout << "cluster no. " << i++ << std::endl;
 
         for(auto c : cluster)
@@ -387,28 +417,6 @@ ClusteredPoints cluster(const sla::PointSet& points) {
         std::cout << std::endl;
     }
 
-//    for(auto& p : points) {
-//        std::vector<Vec2d> tmp;
-//        sindex.query(bgi::nearest(p, 1), std::back_inserter(tmp));
-//        if(tmp.empty()) continue;
-//        auto v = tmp.front();
-//        double d = distance2(p, tmp.front());
-//        if(d < D1) {
-//            // SP: same point, different Z coord
-//        }
-//        else if(d < D2) {
-//            result[0].emplace_back(v);
-//        }
-//        else if(d < D3) {
-//            result[1].emplace_back(v);
-//        }
-//        else if(d < D4) {
-//            result[2].emplace_back(v);
-//        } else {
-//            result[3].emplace_back(v);
-//        }
-//    }
-
     return result;
 }
 
@@ -416,20 +424,27 @@ void create_support_tree(const Model &model,
                          TriangleMesh &output,
                          const SupportConfig& cfg)
 {
-    ModelObject *o = model.objects.front();
+//    ModelObject *o = model.objects.front();
+
+//    sla::PointSet points(o->sla_support_points.size(), 3);
+//    for(int i = 0; i < o->sla_support_points.size(); i++) {
+//        points.row(i) = model_coord(*o->instances.front(),
+//                                    o->sla_support_points[i]);
+//    }
+
+    auto points = support_points(model);
+
+    std::cout << "support points " << points << std::endl;
 
     auto mesh = sla::to_eigenmesh(model);
-    sla::PointSet points(o->sla_support_points.size(), 3);
-    for(int i = 0; i < o->sla_support_points.size(); i++) {
-        points.row(i) = model_coord(*o->instances.front(),
-                                    o->sla_support_points[i]);
-    }
-
     auto nmls = sla::normals(points, mesh);
 
-    int i = 0;
-    for(auto& n : nmls) {
+    std::cout << "normals " << nmls << std::endl;
 
+    PointSet headconns(nmls.rows(), 3);
+
+    for(int i = 0; i < nmls.rows(); i++) {
+        auto n = nmls.row(i);
         // for all normals we generate the spherical coordinates and saturate
         // the polar angle to 45 degrees from the bottom then convert back to
         // standard coordinates to get the new normal. Then we just create a
@@ -446,14 +461,22 @@ void create_support_tree(const Model &model,
             // We saturate the polar angle to pi/4 measured from the bottom
             polar = std::max(polar, 3*PI / 4);
 
-            // This will implicitly be normalized
+            // Reassemble the now corrected normal
             Vec3d nn(std::cos(azimuth) * std::sin(polar),
                      std::sin(azimuth) * std::sin(polar),
                      std::cos(polar));
 
+            // Place to move to
             Vec3d mv = points.row(i);
+            double w = cfg.head_width_mm +
+                       cfg.head_back_radius_mm +
+                       cfg.head_front_radius_mm;
 
-            auto head = create_head(2, 1, 3);
+            headconns.row(i) = (mv + w*nn).transpose();
+
+            auto head = create_head(cfg.head_back_radius_mm,
+                                    cfg.head_front_radius_mm,
+                                    cfg.head_width_mm);
 
             Vec3d headn{0, 0, -1};
             auto quatern = Eigen::Quaternion<double>::FromTwoVectors(headn, nn);
@@ -461,11 +484,25 @@ void create_support_tree(const Model &model,
 
             output.merge(sla::mesh(head));
         }
-
-        ++i;
     }
 
-    cluster(points);
+    cluster(points, 4 /*mm*/);
+
+    std::cout << "headconns " << headconns << std::endl;
+    auto gps = ground_points(headconns, mesh);
+
+    std::cout << "gps " << gps << std::endl;
+    auto ds = (headconns - gps);
+
+    for(int i = 0; i < ds.rows(); i++) {
+        auto h = ds.row(i) * ds.row(i).transpose();
+        std::cout << "h = " << h << std::endl;
+        auto cyl = cylinder(0.85*cfg.head_back_radius_mm, std::sqrt(h(0)));
+        for(auto& p : cyl.points) p += gps.row(i);
+        output.merge(sla::mesh(cyl));
+
+    }
+
 }
 
 }
