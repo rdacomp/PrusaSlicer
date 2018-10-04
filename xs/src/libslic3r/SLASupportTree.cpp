@@ -212,6 +212,11 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     return ret;
 }
 
+void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
+{
+    out = mesh(create_head(r1_mm, r2_mm, width_mm));
+}
+
 EigenMesh3D to_eigenmesh(const Model& model) {
     TriangleMesh combined_mesh;
 
@@ -254,7 +259,7 @@ Vec3d model_coord(const ModelInstance& object, const Vec3f& mesh_coord) {
 }
 
 PointSet support_points(const Model& model) {
-    int sum = 0;
+    size_t sum = 0;
     for(auto *o : model.objects)
         sum += o->instances.size() * o->sla_support_points.size();
 
@@ -280,7 +285,9 @@ PointSet ground_points(const PointSet& supportps, const EigenMesh3D& mesh) {
         Vec3d dir(0, 0, -1);
         igl::ray_mesh_intersect(sp, dir, mesh.V, mesh.F, hit);
         ret.row(i) = sp + hit.t*dir;
-        if(ret.row(i)(2) < 0 ) ret.row(i)(2) = 0;   // may not need this when the sla pool will be used
+
+        // may not need this when the sla pool will be used
+        if(ret.row(i)(2) < 0 ) ret.row(i)(2) = 0;
     }
 
     return ret;

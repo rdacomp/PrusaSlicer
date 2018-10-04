@@ -32,17 +32,11 @@ int main(const int argc, const char *argv[]) {
         return EXIT_SUCCESS;
     }
 
-    TriangleMesh tmesh;
     Benchmark bench;
-
-    tmesh.ReadSTLFile(argv[1]);
-    tmesh.align_to_origin();
-
     TriangleMesh result;
-    Model model;
 
     bench.start();
-    sla::create_support_tree(model, result, {});
+    sla::create_head(result, 3, 1, 4);
     bench.stop();
 
     cout << "Support tree creation time: " << std::setprecision(10)

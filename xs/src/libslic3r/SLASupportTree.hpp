@@ -47,6 +47,8 @@ void create_support_tree(const Model& model,
                          TriangleMesh& output,
                          const SupportConfig& cfg = {});
 
+void create_head(TriangleMesh&, double r1_mm, double r2_mm, double width_mm);
+
 }
 }
 
