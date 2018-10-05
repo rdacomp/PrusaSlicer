@@ -155,15 +155,33 @@ Contour3D cylinder(double r, double h, double fa=(2*PI/360)) {
     return ret;
 }
 
-Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
+struct Head {
+    Contour3D mesh;
+
+    size_t steps = 45;
+    Vec3d dir = {0, 0, -1};
+    Vec3d tr = {0, 0, 0};
+
+    double r_back_mm = 1;
+    double r_pin_mm = 0.5;
+    double width_mm = 2;
+};
+
+Head create_head(double r_big_mm,
+                 double r_small_mm,
+                 double width_mm,
+                 Vec3d dir = {0, 0, -1},    // direction (normal to the "ass" )
+                 Vec3d tr = {0, 0, 0},      // displacement
+                 const size_t steps = 45) {
+
+    using Quaternion = Eigen::Quaternion<double>;
 
     // We create two spheres which will be connected with a robe that fits
     // both circles perfectly.
 
-    Contour3D ret;
+    Head ret;
 
     // Set up the model detail level
-    const size_t steps = 45;
     const double detail = 2*PI/steps;
 
     // We don't generate whole circles. Instead, we generate only the portions
@@ -172,17 +190,22 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     // some rules of tangent circles from which we can derive (using simple
     // triangles the following relations:
 
-    const double h = r1_mm + r2_mm + width_mm;
+    // The height of the whole mesh
+    const double h = r_big_mm + r_small_mm + width_mm;
+    double phi = PI/2 - std::acos( (r_big_mm - r_small_mm) / h );
 
-    double phi = PI/2 - std::acos( (r1_mm - r2_mm)/(r1_mm + r2_mm + width_mm));
+    // To generate a whole circle we would pass a portion of (0, Pi)
+    // To generate only a half horizontal circle we can pass (0, Pi/2)
+    // The calculated phi is an offset to the half circles needed to smooth
+    // the transition from the circle to the robe geometry
 
-    auto&& s1 = sphere(r1_mm, make_portion(0, PI/2 + phi), detail);
-    auto&& s2 = sphere(r2_mm, make_portion(PI/2 + phi, PI), detail);
+    auto&& s1 = sphere(r_big_mm, make_portion(PI/8, PI/2 + phi), detail);
+    auto&& s2 = sphere(r_small_mm, make_portion(PI/2 + phi, PI), detail);
 
     for(auto& p : s2.points) z(p) += h;
 
-    ret.merge(s1);
-    ret.merge(s2);
+    ret.mesh.merge(s1);
+    ret.mesh.merge(s2);
 
     for(size_t idx1 = s1.points.size() - steps, idx2 = s1.points.size();
         idx1 < s1.points.size() - 1;
@@ -191,8 +214,8 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
         coord_t i1s1 = coord_t(idx1), i1s2 = coord_t(idx2);
         coord_t i2s1 = i1s1 + 1, i2s2 = i1s2 + 1;
 
-        ret.indices.emplace_back(i1s1, i2s1, i2s2);
-        ret.indices.emplace_back(i1s1, i2s2, i1s2);
+        ret.mesh.indices.emplace_back(i1s1, i2s1, i2s2);
+        ret.mesh.indices.emplace_back(i1s1, i2s2, i1s2);
     }
 
     auto i1s1 = coord_t(s1.points.size()) - steps;
@@ -200,21 +223,39 @@ Contour3D create_head(double r1_mm, double r2_mm, double width_mm) {
     auto i1s2 = coord_t(s1.points.size());
     auto i2s2 = coord_t(s1.points.size()) + steps - 1;
 
-    ret.indices.emplace_back(i2s2, i2s1, i1s1);
-    ret.indices.emplace_back(i1s2, i2s2, i1s1);
+    ret.mesh.indices.emplace_back(i2s2, i2s1, i1s1);
+    ret.mesh.indices.emplace_back(i1s2, i2s2, i1s1);
 
-    auto it = std::max_element(ret.points.begin(), ret.points.end(),
-                               [](const Vec3d& p1, const Vec3d& p2){
-        return z(p1) < z(p2);
-    });
+    // To simplify further processing, we translate the mesh so that the
+    // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
 
-    for(auto& p : ret.points) { z(p) -= z(*it); }
+    auto quatern = Quaternion::FromTwoVectors(Vec3d{0, 0, -1}, dir);
+    tr(2) -= h + r_small_mm;
+
+    // Then slide everything so that the max z will be (0,0,0) and rotate
+    // the whole head into the desired direction
+    for(auto& p : ret.mesh.points) {
+        p = quatern * p + tr;
+    }
+
+    ret.steps = steps;
+
+    // The head's pointing side is facing upwards so this means that it would
+    // hold a support point with a normal pointing straight down. This is the
+    // reason of the -1 z coordinate
+    ret.dir = dir;
+    ret.tr = tr;
+
+    ret.r_back_mm = r_big_mm;
+    ret.r_pin_mm = r_small_mm;
+    ret.width_mm = width_mm;
+
     return ret;
 }
 
 void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
 {
-    out = mesh(create_head(r1_mm, r2_mm, width_mm));
+    out = mesh(create_head(r1_mm, r2_mm, width_mm).mesh);
 }
 
 EigenMesh3D to_eigenmesh(const Model& model) {
@@ -477,19 +518,18 @@ void create_support_tree(const Model &model,
             Vec3d mv = points.row(i);
             double w = cfg.head_width_mm +
                        cfg.head_back_radius_mm +
-                       cfg.head_front_radius_mm;
+                       2*cfg.head_front_radius_mm;
 
-            headconns.row(i) = (mv + w*nn).transpose();
+            headconns.row(i) = mv + w*nn;
 
             auto head = create_head(cfg.head_back_radius_mm,
                                     cfg.head_front_radius_mm,
-                                    cfg.head_width_mm);
+                                    cfg.head_width_mm,
+                                    nn,     // dir
+                                    mv      // displacement
+                                    );
 
-            Vec3d headn{0, 0, -1};
-            auto quatern = Eigen::Quaternion<double>::FromTwoVectors(headn, nn);
-            for(auto& p : head.points) { p = quatern * p + mv; }
-
-            output.merge(sla::mesh(head));
+            output.merge(sla::mesh(head.mesh));
         }
     }
 
