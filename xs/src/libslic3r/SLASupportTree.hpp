@@ -42,6 +42,16 @@ struct SupportConfig {
     double base_height_mm = 0.5;
 };
 
+/// A Control structure for the support calculation. The algorithm can query a
+/// a start (restart), pause or stop (cancel) command through the nextcmd
+/// function. It can also report its state through the statuscb function.
+struct Controller {
+    enum class Cmd { START, PAUSE, STOP };
+    std::function<void(unsigned, const std::string&)> statuscb =
+            [](unsigned, const std::string&){};
+    std::function<Cmd(bool)> nextcmd = [](bool){ return Cmd::START; };
+};
+
 /// Generate the 3D support rods for a model intended for SLA print.
 void create_support_tree(const Model& model,
                          TriangleMesh& output,
