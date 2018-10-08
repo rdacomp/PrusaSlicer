@@ -50,6 +50,7 @@ struct Controller {
     std::function<void(unsigned, const std::string&)> statuscb =
             [](unsigned, const std::string&){};
     std::function<Cmd(bool)> nextcmd = [](bool){ return Cmd::START; };
+    std::function<bool(void)> has_model_changed = []() { return false; };
 };
 
 /// Generate the 3D support rods for a model intended for SLA print.

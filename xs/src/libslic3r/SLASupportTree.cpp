@@ -199,7 +199,7 @@ Head create_head(double r_big_mm,
     // The calculated phi is an offset to the half circles needed to smooth
     // the transition from the circle to the robe geometry
 
-    auto&& s1 = sphere(r_big_mm, make_portion(PI/8, PI/2 + phi), detail);
+    auto&& s1 = sphere(r_big_mm, make_portion(/*PI/8*/ 0, PI/2 + phi), detail);
     auto&& s2 = sphere(r_small_mm, make_portion(PI/2 + phi, PI), detail);
 
     for(auto& p : s2.points) z(p) += h;
@@ -228,21 +228,19 @@ Head create_head(double r_big_mm,
 
     // To simplify further processing, we translate the mesh so that the
     // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
+    for(auto& p : ret.mesh.points) { z(p) -= (h + r_small_mm); }
 
+    // We rotate the head to the specified direction
+    // The head's pointing side is facing upwards so this means that it would
+    // hold a support point with a normal pointing straight down. This is the
+    // reason of the -1 z coordinate
     auto quatern = Quaternion::FromTwoVectors(Vec3d{0, 0, -1}, dir);
-    tr(2) -= h + r_small_mm;
-
-    // Then slide everything so that the max z will be (0,0,0) and rotate
-    // the whole head into the desired direction
     for(auto& p : ret.mesh.points) {
         p = quatern * p + tr;
     }
 
     ret.steps = steps;
 
-    // The head's pointing side is facing upwards so this means that it would
-    // hold a support point with a normal pointing straight down. This is the
-    // reason of the -1 z coordinate
     ret.dir = dir;
     ret.tr = tr;
 
@@ -257,6 +255,22 @@ void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
 {
     out = mesh(create_head(r1_mm, r2_mm, width_mm).mesh);
 }
+
+void add_tail(Head& head, double length) {
+
+}
+
+void add_column(Head& head) {
+
+}
+
+//enum class ClusterType: double {
+static const double /*constexpr*/ D_SP   = 1e-3;
+static const double /*constexpr*/ D_SSDH = 1.0;  // Same stick different heads
+static const double /*constexpr*/ D_DHCS = 3.0;  // different heads, connected sticks
+static const double /*constexpr*/ D_DH3S = 5.0;  // different heads, additional 3rd stick
+static const double /*constexpr*/ D_DHDS = 8.0;  // different heads, different stick
+//};
 
 EigenMesh3D to_eigenmesh(const Model& model) {
     TriangleMesh combined_mesh;
@@ -399,7 +413,9 @@ bool operator==(const SpatElement& e1, const SpatElement& e2) {
     return e1.second == e2.second;
 }
 
-ClusteredPoints cluster(const sla::PointSet& points, double max_distance) {
+ClusteredPoints cluster(const sla::PointSet& points,
+                        double max_distance,
+                        unsigned max_points = 0) {
 
     SpatIndex sindex;
 
@@ -533,7 +549,7 @@ void create_support_tree(const Model &model,
         }
     }
 
-    cluster(points, 4 /*mm*/);
+//    cluster(points, 4 /*mm*/);
 
     std::cout << "headconns " << headconns << std::endl;
     auto gps = ground_points(headconns, mesh);

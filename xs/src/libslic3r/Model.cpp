@@ -498,6 +498,7 @@ ModelObject::ModelObject(Model *model, const ModelObject &other, bool copy_volum
     instances(),
     volumes(),
     config(other.config),
+    sla_support_points(other.sla_support_points),
     layer_height_ranges(other.layer_height_ranges),
     layer_height_profile(other.layer_height_profile),
     layer_height_profile_valid(other.layer_height_profile_valid),
@@ -984,6 +985,11 @@ void ModelVolume::calculate_convex_hull()
 }
 
 const TriangleMesh& ModelVolume::get_convex_hull() const
+{
+    return m_convex_hull;
+}
+
+TriangleMesh& ModelVolume::get_convex_hull()
 {
     return m_convex_hull;
 }
