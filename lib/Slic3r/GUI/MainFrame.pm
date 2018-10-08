@@ -455,6 +455,7 @@ sub slice_to_png {
     $self->{plater}->stop_background_process;
     $self->{plater}->async_apply_config;
     $appController->print_ctl()->slice_to_png();
+    $self->{plater}->update(0);
 }
 
 sub reslice_now {

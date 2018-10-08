@@ -153,6 +153,15 @@ void PrintController::slice_to_png()
         o->add_instance();
     }
 
+    for(PrintObject *po : m_print->objects()) {
+        po->model_object()->invalidate_bounding_box();
+        po->reload_model_instances();
+        po->invalidate_all_steps();
+    }
+
+    m_print->reload_object(0);
+    m_print->reload_model_instances();
+
 //    using Pointf3 = Vec3d;
 
 //    auto ctl = GUI::get_appctl();

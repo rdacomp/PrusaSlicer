@@ -167,6 +167,8 @@ struct Head {
     double width_mm = 2;
 };
 
+void add_column(Head& head);
+
 Head create_head(double r_big_mm,
                  double r_small_mm,
                  double width_mm,
@@ -199,7 +201,7 @@ Head create_head(double r_big_mm,
     // The calculated phi is an offset to the half circles needed to smooth
     // the transition from the circle to the robe geometry
 
-    auto&& s1 = sphere(r_big_mm, make_portion(/*PI/8*/ 0, PI/2 + phi), detail);
+    auto&& s1 = sphere(r_big_mm, make_portion(PI/8, PI/2 + phi), detail);
     auto&& s2 = sphere(r_small_mm, make_portion(PI/2 + phi, PI), detail);
 
     for(auto& p : s2.points) z(p) += h;
@@ -226,9 +228,20 @@ Head create_head(double r_big_mm,
     ret.mesh.indices.emplace_back(i2s2, i2s1, i1s1);
     ret.mesh.indices.emplace_back(i1s2, i2s2, i1s1);
 
+    ret.steps = steps;
+
+    ret.dir = dir;
+    ret.tr = tr;
+
+    ret.r_back_mm = r_big_mm;
+    ret.r_pin_mm = r_small_mm;
+    ret.width_mm = width_mm;
+
     // To simplify further processing, we translate the mesh so that the
     // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
     for(auto& p : ret.mesh.points) { z(p) -= (h + r_small_mm); }
+
+    add_column(ret);
 
     // We rotate the head to the specified direction
     // The head's pointing side is facing upwards so this means that it would
@@ -238,15 +251,6 @@ Head create_head(double r_big_mm,
     for(auto& p : ret.mesh.points) {
         p = quatern * p + tr;
     }
-
-    ret.steps = steps;
-
-    ret.dir = dir;
-    ret.tr = tr;
-
-    ret.r_back_mm = r_big_mm;
-    ret.r_pin_mm = r_small_mm;
-    ret.width_mm = width_mm;
 
     return ret;
 }
@@ -261,7 +265,24 @@ void add_tail(Head& head, double length) {
 }
 
 void add_column(Head& head) {
+    auto steps = head.steps;
+    Pointf3s pp; pp.reserve(steps);
 
+    std::cout << head.mesh.points.back() << std::endl;
+
+    auto s = head.mesh.points.size();
+    for(int i = 0; i < head.steps; ++i) {
+        auto p = head.mesh.points[i];
+        p(2) -= 3;
+        pp.emplace_back(p);
+    }
+
+    head.mesh.points.insert(head.mesh.points.end(), pp.begin(), pp.end());
+
+    for(int i = 0; i < head.steps - 1; ++i) {
+        head.mesh.indices.emplace_back(i, i + s, s + i + 1);
+        head.mesh.indices.emplace_back(i, s + i + 1, i + 1);
+    }
 }
 
 //enum class ClusterType: double {
@@ -399,13 +420,13 @@ Vec2d to_vec2(const Vec3d& v3) {
     return {v3(0), v3(1)};
 }
 
-double distance(const Vec2d& pp1, const Vec2d& pp2) {
+template<class Vec> double distance(const Vec& pp1, const Vec& pp2) {
     auto p = pp2 - pp1;
     return distance(p);
 }
 
 namespace bgi = boost::geometry::index;
-using SpatElement = std::pair<Vec2d, unsigned>;
+using SpatElement = std::pair<Vec3d, unsigned>;
 using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
 
 using ClusteredPoints = std::vector<std::vector<unsigned>>;
@@ -421,7 +442,7 @@ ClusteredPoints cluster(const sla::PointSet& points,
     SpatIndex sindex;
 
     for(unsigned idx = 0; idx < points.rows(); idx++)
-        sindex.insert( std::make_pair(to_vec2(points.row(idx)), idx));
+        sindex.insert( std::make_pair(points.row(idx), idx));
 
     using Elems = std::vector<SpatElement>;
 
@@ -512,6 +533,7 @@ void create_support_tree(const Model &model,
         std::cout << "idx = " << a.front() << std::endl;
         ptmp.row(count++) = points.row(a.front());
     }
+    ptmp.conservativeResize(count, Eigen::NoChange);
 
     auto nmls = sla::normals(ptmp, mesh);
 
