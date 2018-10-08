@@ -83,6 +83,32 @@ template<int d> struct access<Slic3r::Vec2d, d > {
     }
 };
 
+// For Vec3d ///////////////////////////////////////////////////////////////////
+
+template<> struct tag<Slic3r::Vec3d> {
+    using type = point_tag;
+};
+
+template<> struct coordinate_type<Slic3r::Vec3d> {
+    using type = double;
+};
+
+template<> struct coordinate_system<Slic3r::Vec3d> {
+    using type = cs::cartesian;
+};
+
+template<> struct dimension<Slic3r::Vec3d>: boost::mpl::int_<3> {};
+
+template<int d> struct access<Slic3r::Vec3d, d > {
+    static inline double get(Slic3r::Vec3d const& a) {
+        return a(d);
+    }
+
+    static inline void set(Slic3r::Vec3d& a, double const& value) {
+        a(d) = value;
+    }
+};
+
 /* ************************************************************************** */
 /* Box concept adaptation *************************************************** */
 /* ************************************************************************** */

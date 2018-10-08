@@ -265,11 +265,12 @@ void add_column(Head& head) {
 }
 
 //enum class ClusterType: double {
-static const double /*constexpr*/ D_SP   = 1e-3;
-static const double /*constexpr*/ D_SSDH = 1.0;  // Same stick different heads
-static const double /*constexpr*/ D_DHCS = 3.0;  // different heads, connected sticks
-static const double /*constexpr*/ D_DH3S = 5.0;  // different heads, additional 3rd stick
-static const double /*constexpr*/ D_DHDS = 8.0;  // different heads, different stick
+static const double /*constexpr*/ D_SP   = 3;
+static const double /*constexpr*/ D_BRIDGED_TRIO  = 3;
+//static const double /*constexpr*/ D_SSDH = 1.0;  // Same stick different heads
+//static const double /*constexpr*/ D_DHCS = 3.0;  // different heads, connected sticks
+//static const double /*constexpr*/ D_DH3S = 5.0;  // different heads, additional 3rd stick
+//static const double /*constexpr*/ D_DHDS = 8.0;  // different heads, different stick
 //};
 
 EigenMesh3D to_eigenmesh(const Model& model) {
@@ -390,8 +391,6 @@ PointSet normals(const PointSet& points, const EigenMesh3D& mesh) {
     return ret;
 }
 
-using ClusteredPoints = std::array<Pointf3s, 4>;
-
 template<class Vec> double distance(const Vec& p) {
     return std::sqrt(p.transpose() * p);
 }
@@ -409,6 +408,8 @@ namespace bgi = boost::geometry::index;
 using SpatElement = std::pair<Vec2d, unsigned>;
 using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
 
+using ClusteredPoints = std::vector<std::vector<unsigned>>;
+
 bool operator==(const SpatElement& e1, const SpatElement& e2) {
     return e1.second == e2.second;
 }
@@ -422,14 +423,12 @@ ClusteredPoints cluster(const sla::PointSet& points,
     for(unsigned idx = 0; idx < points.rows(); idx++)
         sindex.insert( std::make_pair(to_vec2(points.row(idx)), idx));
 
-    ClusteredPoints result;
-
     using Elems = std::vector<SpatElement>;
 
-    std::function<void(double, Elems&, Elems&)> group =
-    [&sindex, &group](double d_max,
-              Elems& pts,
-              Elems& cluster)
+    double d_max = max_distance;
+
+    std::function<void(Elems&, Elems&)> group =
+    [&sindex, &group, d_max, max_points](Elems& pts, Elems& cluster)
     {
         for(auto& p : pts) {
             std::vector<SpatElement> tmp;
@@ -452,10 +451,14 @@ ClusteredPoints cluster(const sla::PointSet& points,
                                 cluster.begin(), cluster.end(),
                                 std::back_inserter(newpts), cmp);
 
-            cluster.insert(cluster.end(), newpts.begin(), newpts.end());
+            int c = max_points && newpts.size() + cluster.size() > max_points?
+                        int(max_points - cluster.size()) : int(newpts.size());
+
+            cluster.insert(cluster.end(), newpts.begin(), newpts.begin() + c);
             std::sort(cluster.begin(), cluster.end(), cmp);
 
-            if(!newpts.empty()) group(d_max, newpts, cluster);
+            if(!newpts.empty() && (!max_points || cluster.size() < max_points))
+                group(newpts, cluster);
         }
     };
 
@@ -463,7 +466,7 @@ ClusteredPoints cluster(const sla::PointSet& points,
     for(auto it = sindex.begin(); it != sindex.end();) {
         Elems cluster = {};
         Elems pts = {*it};
-        group(max_distance, pts, cluster);
+        group(pts, cluster);
 
         for(auto& c : cluster) sindex.remove(c);
         it = sindex.begin();
@@ -471,12 +474,17 @@ ClusteredPoints cluster(const sla::PointSet& points,
         clusters.emplace_back(cluster);
     }
 
+    ClusteredPoints result;
     int i = 0;
     for(auto& cluster : clusters) {
+        result.emplace_back();
+
         std::cout << "cluster no. " << i++ << std::endl;
 
-        for(auto c : cluster)
+        for(auto c : cluster) {
             std::cout << c.first << " " << c.second << std::endl;
+            result.back().emplace_back(c.second);
+        }
 
         std::cout << std::endl;
     }
@@ -488,26 +496,34 @@ void create_support_tree(const Model &model,
                          TriangleMesh &output,
                          const SupportConfig& cfg)
 {
-//    ModelObject *o = model.objects.front();
-
-//    sla::PointSet points(o->sla_support_points.size(), 3);
-//    for(int i = 0; i < o->sla_support_points.size(); i++) {
-//        points.row(i) = model_coord(*o->instances.front(),
-//                                    o->sla_support_points[i]);
-//    }
-
     auto points = support_points(model);
-
-    std::cout << "support points " << points << std::endl;
-
     auto mesh = sla::to_eigenmesh(model);
-    auto nmls = sla::normals(points, mesh);
 
-    std::cout << "normals " << nmls << std::endl;
+    /* ************************************************************************/
+    /* Filtering                                                              */
+    /* ************************************************************************/
 
-    PointSet headconns(nmls.rows(), 3);
+    // find small clusters of very close points which can be treated as the same
+    auto aliases = cluster(points, D_SP, 2);
+    PointSet ptmp(points.rows(), 3);
+    int count = 0;
+    for(auto& a : aliases) {
+        std::cout << "a size = " << a.size() << std::endl;
+        std::cout << "idx = " << a.front() << std::endl;
+        ptmp.row(count++) = points.row(a.front());
+    }
 
-    for(int i = 0; i < nmls.rows(); i++) {
+    auto nmls = sla::normals(ptmp, mesh);
+
+    PointSet head_positions(count, 3);
+    PointSet correct_normals(count, 3);
+    PointSet headconns(count, 3);
+
+    // Not all of the support points have to be a valid position for support
+    // creation. The angle may be inappropriate or there may not be enough space
+    // for the pinhead. Filtering is applied for these reasons.
+    int pcount = 0;
+    for(int i = 0; i < count; i++) {
         auto n = nmls.row(i);
         // for all normals we generate the spherical coordinates and saturate
         // the polar angle to 45 degrees from the bottom then convert back to
@@ -530,41 +546,64 @@ void create_support_tree(const Model &model,
                      std::sin(azimuth) * std::sin(polar),
                      std::cos(polar));
 
-            // Place to move to
-            Vec3d mv = points.row(i);
+            // save the verified and corrected normal
+            correct_normals.row(pcount) = nn;
+
+            // save the head (pinpoint) position
+            head_positions.row(pcount) = ptmp.row(i);
+
+            // the full width of the head
             double w = cfg.head_width_mm +
                        cfg.head_back_radius_mm +
                        2*cfg.head_front_radius_mm;
 
-            headconns.row(i) = mv + w*nn;
-
-            auto head = create_head(cfg.head_back_radius_mm,
-                                    cfg.head_front_radius_mm,
-                                    cfg.head_width_mm,
-                                    nn,     // dir
-                                    mv      // displacement
-                                    );
-
-            output.merge(sla::mesh(head.mesh));
+            // position to start the column sticks (TODO may not need them)
+            headconns.row(pcount) = Vec3d(ptmp.row(i)) + w*nn;
+            ++pcount;
         }
     }
 
-//    cluster(points, 4 /*mm*/);
+    /* ********************************************************************** */
+    /* Generate the heads                                                     */
+    /* ********************************************************************** */
 
-    std::cout << "headconns " << headconns << std::endl;
-    auto gps = ground_points(headconns, mesh);
+    for (int i = 0; i < pcount; ++i) {
 
-    std::cout << "gps " << gps << std::endl;
-    auto ds = (headconns - gps);
+        auto head = create_head(cfg.head_back_radius_mm,
+                                cfg.head_front_radius_mm,
+                                cfg.head_width_mm,
+                                correct_normals.row(i),     // dir
+                                head_positions.row(i)      // displacement
+                                );
 
-    for(int i = 0; i < ds.rows(); i++) {
-        auto h = ds.row(i) * ds.row(i).transpose();
-        std::cout << "h = " << h << std::endl;
-        auto cyl = cylinder(0.85*cfg.head_back_radius_mm, std::sqrt(h(0)));
-        for(auto& p : cyl.points) p += gps.row(i);
-        output.merge(sla::mesh(cyl));
-
+        output.merge(sla::mesh(head.mesh));
     }
+
+    /* ********************************************************************** */
+    /* Classification                                                         */
+    /* ********************************************************************** */
+
+    // We search for clusters where the points are in a certain distance class
+    // (interval). Each of the classes will be treated differently when the
+    // support columns and their connections are going to be generated.
+
+    cluster(ptmp, D_BRIDGED_TRIO /*mm*/);
+
+
+
+//    std::cout << "headconns " << headconns << std::endl;
+//    auto gps = ground_points(headconns, mesh);
+
+//    std::cout << "gps " << gps << std::endl;
+//    auto ds = (headconns - gps);
+
+//    for(int i = 0; i < ds.rows(); i++) {
+//        auto h = ds.row(i) * ds.row(i).transpose();
+//        std::cout << "h = " << h << std::endl;
+//        auto cyl = cylinder(0.85*cfg.head_back_radius_mm, std::sqrt(h(0)));
+//        for(auto& p : cyl.points) p += gps.row(i);
+//        output.merge(sla::mesh(cyl));
+//    }
 
 }
 
