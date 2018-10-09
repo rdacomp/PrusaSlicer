@@ -144,13 +144,12 @@ void PrintController::slice_to_png()
                 m_print->objects().front()->model_object()->get_model() :
                 nullptr;
 
-    TriangleMesh dummy;
     if(model) {
-        sla::create_support_tree(*model, dummy);
 
-        ModelObject* o = model->add_object();
-        o->add_volume(dummy);
-        o->add_instance();
+        sla::add_sla_supports(*model);
+//        ModelObject* o = model->add_object();
+//        o->add_volume(dummy);
+//        o->add_instance();
     }
 
     for(PrintObject *po : m_print->objects()) {

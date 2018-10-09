@@ -165,125 +165,186 @@ struct Head {
     double r_back_mm = 1;
     double r_pin_mm = 0.5;
     double width_mm = 2;
+
+    struct Tail {
+        Contour3D mesh;
+        size_t steps = 45;
+        double length = 3;
+    } tail;
+
+    Head(double r_big_mm,
+         double r_small_mm,
+         double length_mm,
+         Vec3d direction = {0, 0, -1},    // direction (normal to the "ass" )
+         Vec3d offset = {0, 0, 0},      // displacement
+         const size_t circlesteps = 45):
+            r_back_mm(r_big_mm), r_pin_mm(r_small_mm), width_mm(length_mm),
+            dir(direction), tr(offset), steps(circlesteps)
+    {
+        using Quaternion = Eigen::Quaternion<double>;
+
+        // We create two spheres which will be connected with a robe that fits
+        // both circles perfectly.
+
+        // Set up the model detail level
+        const double detail = 2*PI/steps;
+
+        // We don't generate whole circles. Instead, we generate only the portions
+        // which are visible (not covered by the robe)
+        // To know the exact portion of the bottom and top circles we need to use
+        // some rules of tangent circles from which we can derive (using simple
+        // triangles the following relations:
+
+        // The height of the whole mesh
+        const double h = r_big_mm + r_small_mm + width_mm;
+        double phi = PI/2 - std::acos( (r_big_mm - r_small_mm) / h );
+
+        // To generate a whole circle we would pass a portion of (0, Pi)
+        // To generate only a half horizontal circle we can pass (0, Pi/2)
+        // The calculated phi is an offset to the half circles needed to smooth
+        // the transition from the circle to the robe geometry
+
+        auto&& s1 = sphere(r_big_mm, make_portion(0, PI/2 + phi), detail);
+        auto&& s2 = sphere(r_small_mm, make_portion(PI/2 + phi, PI), detail);
+
+        for(auto& p : s2.points) z(p) += h;
+
+        mesh.merge(s1);
+        mesh.merge(s2);
+
+        for(size_t idx1 = s1.points.size() - steps, idx2 = s1.points.size();
+            idx1 < s1.points.size() - 1;
+            idx1++, idx2++)
+        {
+            coord_t i1s1 = coord_t(idx1), i1s2 = coord_t(idx2);
+            coord_t i2s1 = i1s1 + 1, i2s2 = i1s2 + 1;
+
+            mesh.indices.emplace_back(i1s1, i2s1, i2s2);
+            mesh.indices.emplace_back(i1s1, i2s2, i1s2);
+        }
+
+        auto i1s1 = coord_t(s1.points.size()) - steps;
+        auto i2s1 = coord_t(s1.points.size()) - 1;
+        auto i1s2 = coord_t(s1.points.size());
+        auto i2s2 = coord_t(s1.points.size()) + steps - 1;
+
+        mesh.indices.emplace_back(i2s2, i2s1, i1s1);
+        mesh.indices.emplace_back(i1s2, i2s2, i1s1);
+
+        // To simplify further processing, we translate the mesh so that the
+        // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
+        for(auto& p : mesh.points) { z(p) -= (h + r_small_mm); }
+
+//        add_tail(3);
+
+        // We rotate the head to the specified direction
+        // The head's pointing side is facing upwards so this means that it would
+        // hold a support point with a normal pointing straight down. This is the
+        // reason of the -1 z coordinate
+        auto quatern = Quaternion::FromTwoVectors(Vec3d{0, 0, -1}, dir);
+        for(auto& p : mesh.points) {
+            p = quatern * p + tr;
+        }
+    }
+
+
+    void add_tail(double length, Vec3d dir = {0,0,-1}) {
+        auto& cntr = tail.mesh;
+        Head& head = *this;
+
+        cntr.points.reserve(2*steps);
+
+        auto h = head.r_back_mm + 2*head.r_pin_mm + head.width_mm;
+        Vec3d c = head.tr + head.dir * h;
+
+        double r = head.r_back_mm * 0.9;
+        double r_low = head.r_back_mm * 0.65;
+
+        double a = 2*PI/steps;
+        double z = c(2);
+        for(int i = 0; i < steps; ++i) {
+            double phi = i*a;
+            double x = c(0) + r*std::cos(phi);
+            double y = c(1) + r*std::sin(phi);
+            std::cout << "x " << x << " y " << y << " z " << z << std::endl;
+            cntr.points.emplace_back(x, y, z);
+        }
+
+        for(int i = 0; i < steps; ++i) {
+            double phi = i*a;
+            double lx = c(0) + r_low*std::cos(phi);
+            double ly = c(1) + r_low*std::sin(phi);
+            std::cout << "lx " << lx << " y " << ly << " z " << z - length << std::endl;
+            cntr.points.emplace_back(lx, ly, z - length);
+        }
+
+        cntr.indices.reserve(2*steps);
+        auto offs = steps;
+        for(int i = 0; i < steps - 1; ++i) {
+            cntr.indices.emplace_back(i, i + offs, offs + i + 1);
+            cntr.indices.emplace_back(i, offs + i + 1, i + 1);
+        }
+
+        auto last = steps - 1;
+        cntr.indices.emplace_back(0, last, offs);
+        cntr.indices.emplace_back(last, offs + last, offs);
+    }
 };
 
-void add_column(Head& head);
+EigenMesh3D to_eigenmesh(const Contour3D& cntr) {
+    EigenMesh3D emesh;
 
-Head create_head(double r_big_mm,
-                 double r_small_mm,
-                 double width_mm,
-                 Vec3d dir = {0, 0, -1},    // direction (normal to the "ass" )
-                 Vec3d tr = {0, 0, 0},      // displacement
-                 const size_t steps = 45) {
+    auto& V = emesh.V;
+    auto& F = emesh.F;
 
-    using Quaternion = Eigen::Quaternion<double>;
+    V.resize(cntr.points.size(), 3);
+    F.resize(cntr.indices.size(), 3);
 
-    // We create two spheres which will be connected with a robe that fits
-    // both circles perfectly.
-
-    Head ret;
-
-    // Set up the model detail level
-    const double detail = 2*PI/steps;
-
-    // We don't generate whole circles. Instead, we generate only the portions
-    // which are visible (not covered by the robe)
-    // To know the exact portion of the bottom and top circles we need to use
-    // some rules of tangent circles from which we can derive (using simple
-    // triangles the following relations:
-
-    // The height of the whole mesh
-    const double h = r_big_mm + r_small_mm + width_mm;
-    double phi = PI/2 - std::acos( (r_big_mm - r_small_mm) / h );
-
-    // To generate a whole circle we would pass a portion of (0, Pi)
-    // To generate only a half horizontal circle we can pass (0, Pi/2)
-    // The calculated phi is an offset to the half circles needed to smooth
-    // the transition from the circle to the robe geometry
-
-    auto&& s1 = sphere(r_big_mm, make_portion(PI/8, PI/2 + phi), detail);
-    auto&& s2 = sphere(r_small_mm, make_portion(PI/2 + phi, PI), detail);
-
-    for(auto& p : s2.points) z(p) += h;
-
-    ret.mesh.merge(s1);
-    ret.mesh.merge(s2);
-
-    for(size_t idx1 = s1.points.size() - steps, idx2 = s1.points.size();
-        idx1 < s1.points.size() - 1;
-        idx1++, idx2++)
-    {
-        coord_t i1s1 = coord_t(idx1), i1s2 = coord_t(idx2);
-        coord_t i2s1 = i1s1 + 1, i2s2 = i1s2 + 1;
-
-        ret.mesh.indices.emplace_back(i1s1, i2s1, i2s2);
-        ret.mesh.indices.emplace_back(i1s1, i2s2, i1s2);
+    for (int i = 0; i < V.rows(); ++i) {
+        V.row(i) = cntr.points[i];
+        F.row(i) = cntr.indices[i];
     }
 
-    auto i1s1 = coord_t(s1.points.size()) - steps;
-    auto i2s1 = coord_t(s1.points.size()) - 1;
-    auto i1s2 = coord_t(s1.points.size());
-    auto i2s2 = coord_t(s1.points.size()) + steps - 1;
-
-    ret.mesh.indices.emplace_back(i2s2, i2s1, i1s1);
-    ret.mesh.indices.emplace_back(i1s2, i2s2, i1s1);
-
-    ret.steps = steps;
-
-    ret.dir = dir;
-    ret.tr = tr;
-
-    ret.r_back_mm = r_big_mm;
-    ret.r_pin_mm = r_small_mm;
-    ret.width_mm = width_mm;
-
-    // To simplify further processing, we translate the mesh so that the
-    // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
-    for(auto& p : ret.mesh.points) { z(p) -= (h + r_small_mm); }
-
-    add_column(ret);
-
-    // We rotate the head to the specified direction
-    // The head's pointing side is facing upwards so this means that it would
-    // hold a support point with a normal pointing straight down. This is the
-    // reason of the -1 z coordinate
-    auto quatern = Quaternion::FromTwoVectors(Vec3d{0, 0, -1}, dir);
-    for(auto& p : ret.mesh.points) {
-        p = quatern * p + tr;
-    }
-
-    return ret;
+    return emesh;
 }
 
 void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
 {
-    out = mesh(create_head(r1_mm, r2_mm, width_mm).mesh);
+    Head head(r1_mm, r2_mm, width_mm, {0, std::sqrt(0.5), -std::sqrt(0.5)});
+    out.merge(mesh(head.mesh));
+    out.merge(mesh(head.tail.mesh));
 }
 
-void add_tail(Head& head, double length) {
 
-}
+struct ColumnStick {
+    Contour3D mesh;
+    Contour3D base;
+    double r = 1;
 
-void add_column(Head& head) {
-    auto steps = head.steps;
-    Pointf3s pp; pp.reserve(steps);
+    ColumnStick(const Head& head, double r_mm): r(r_mm) {
 
-    std::cout << head.mesh.points.back() << std::endl;
-
-    auto s = head.mesh.points.size();
-    for(int i = 0; i < head.steps; ++i) {
-        auto p = head.mesh.points[i];
-        p(2) -= 3;
-        pp.emplace_back(p);
     }
+};
 
-    head.mesh.points.insert(head.mesh.points.end(), pp.begin(), pp.end());
+struct Junction {
+    Contour3D mesh;
+    double r = 1;
 
-    for(int i = 0; i < head.steps - 1; ++i) {
-        head.mesh.indices.emplace_back(i, i + s, s + i + 1);
-        head.mesh.indices.emplace_back(i, s + i + 1, i + 1);
-    }
-}
+    Junction(const Vec3d& pos, double r_mm): r(r_mm) {}
+};
+
+struct BridgeStick {
+    Contour3D mesh;
+    double r = 0.8;
+
+    BridgeStick(const Junction& j1, const Junction& j2) {}
+
+    BridgeStick(const Head& h, const Junction& j2) {}
+
+    BridgeStick(const Junction& j, const ColumnStick& cl) {}
+
+};
+
 
 //enum class ClusterType: double {
 static const double /*constexpr*/ D_SP   = 3;
@@ -513,16 +574,47 @@ ClusteredPoints cluster(const sla::PointSet& points,
     return result;
 }
 
-void create_support_tree(const Model &model,
-                         TriangleMesh &output,
-                         const SupportConfig& cfg)
-{
+class SLASupportTree::Impl {
+public:
+    std::vector<Head> heads;
+    std::vector<ColumnStick> column_sticks;
+    std::vector<Junction> junctions;
+    std::vector<BridgeStick> bridge_sticks;
+};
+
+bool SLASupportTree::generate(const Model& model,
+                              const SupportConfig& cfg,
+                              const Controller& ctl) {
     auto points = support_points(model);
     auto mesh = sla::to_eigenmesh(model);
+
+    auto progress = [&ctl, &model] (unsigned s, const std::string& msg) {
+        bool block = false;
+        bool nonblock = true;
+        bool ready = false;
+
+        auto cmd = ctl.nextcmd(nonblock);
+
+        while(!ready) switch(cmd) {
+        case Controller::Cmd::START_RESUME:
+            ctl.statuscb(s, msg); ready = true; break;
+        case Controller::Cmd::PAUSE:
+            cmd = ctl.nextcmd(block); ready = false; break;
+        case Controller::Cmd::STOP:
+            ctl.statuscb(s, "Abort"); ready = true; break;
+        case Controller::Cmd::SYNCH:
+            ;
+            // TODO
+        }
+
+        return cmd != Controller::Cmd::STOP;
+    };
 
     /* ************************************************************************/
     /* Filtering                                                              */
     /* ************************************************************************/
+
+    if(!progress(10, "Filtering")) return false;
 
     // find small clusters of very close points which can be treated as the same
     auto aliases = cluster(points, D_SP, 2);
@@ -588,30 +680,29 @@ void create_support_tree(const Model &model,
     /* ********************************************************************** */
     /* Generate the heads                                                     */
     /* ********************************************************************** */
+    if(!progress(20, "Generating heads")) return false;
 
     for (int i = 0; i < pcount; ++i) {
 
-        auto head = create_head(cfg.head_back_radius_mm,
-                                cfg.head_front_radius_mm,
-                                cfg.head_width_mm,
-                                correct_normals.row(i),     // dir
-                                head_positions.row(i)      // displacement
-                                );
-
-        output.merge(sla::mesh(head.mesh));
+        m_impl->heads.emplace_back(cfg.head_back_radius_mm,
+                                   cfg.head_front_radius_mm,
+                                   cfg.head_width_mm,
+                                   correct_normals.row(i),     // dir
+                                   head_positions.row(i)      // displacement
+                                  );
     }
 
     /* ********************************************************************** */
     /* Classification                                                         */
     /* ********************************************************************** */
 
+    if(!progress(10, "Classify support points")) return false;
+
     // We search for clusters where the points are in a certain distance class
     // (interval). Each of the classes will be treated differently when the
     // support columns and their connections are going to be generated.
 
-    cluster(ptmp, D_BRIDGED_TRIO /*mm*/);
-
-
+    cluster(ptmp, D_BRIDGED_TRIO /*mm*/, 3);
 
 //    std::cout << "headconns " << headconns << std::endl;
 //    auto gps = ground_points(headconns, mesh);
@@ -626,6 +717,37 @@ void create_support_tree(const Model &model,
 //        for(auto& p : cyl.points) p += gps.row(i);
 //        output.merge(sla::mesh(cyl));
 //    }
+
+    return progress(100, "Done");
+}
+
+SLASupportTree::SLASupportTree(): m_impl(new Impl()) {}
+
+SLASupportTree::SLASupportTree(const SLASupportTree &c):
+    m_impl( new Impl(*c.m_impl)) {}
+
+SLASupportTree &SLASupportTree::operator=(const SLASupportTree &c)
+{
+    m_impl = make_unique<Impl>(*c.m_impl);
+    return *this;
+}
+
+SLASupportTree::~SLASupportTree() {}
+
+void add_sla_supports(Model &model,
+                      const SupportConfig &cfg,
+                      const Controller &ctl)
+{
+    SLASupportTree _stree;
+    _stree.generate(model, cfg, ctl);
+
+    SLASupportTree::Impl& stree = _stree.get();
+
+    for(auto& head : stree.heads) {
+        ModelObject* o = model.add_object();
+        o->add_volume(mesh(head.mesh));
+        o->add_instance();
+    }
 
 }
 
