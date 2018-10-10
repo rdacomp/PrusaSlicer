@@ -144,9 +144,22 @@ void PrintController::slice_to_png()
                 m_print->objects().front()->model_object()->get_model() :
                 nullptr;
 
-    if(model) {
+    sla::Controller supportctl;
 
-        sla::add_sla_supports(*model);
+    auto ctl = GUI::get_appctl();
+    auto pri = ctl->create_progress_indicator(100, L("Generate SLA supports"));
+    bool abortflg = false;
+    pri->on_cancel([&abortflg]() { abortflg = true; });
+    supportctl.nextcmd = [abortflg] (bool) {
+        return abortflg? sla::Controller::Cmd::STOP :
+                      sla::Controller::Cmd::START_RESUME;
+    };
+    supportctl.statuscb = [pri] (unsigned st, const std::string& msg) {
+        pri->update(float(st), msg);
+    };
+
+    if(model) {
+        sla::add_sla_supports(*model, {}, supportctl);
 //        ModelObject* o = model->add_object();
 //        o->add_volume(dummy);
 //        o->add_instance();
