@@ -201,6 +201,12 @@ struct Contour3D {
     }
 };
 
+struct EigenMesh3D {
+//    Eigen::Matrix<double, Eigen::Dynamic, 3> V;
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
+};
+
 /// Convert the triangulation output to an intermediate mesh.
 Contour3D convert(const Polygons& triangles, coord_t z, bool dir);
 

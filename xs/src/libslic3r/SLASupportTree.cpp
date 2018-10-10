@@ -16,12 +16,6 @@ inline Portion make_portion(double a, double b) {
     return std::make_tuple(a, b);
 }
 
-struct EigenMesh3D {
-//    Eigen::Matrix<double, Eigen::Dynamic, 3> V;
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
-};
-
 using PointSet = Eigen::MatrixXd;
 
 Contour3D sphere(double rho, Portion portion = make_portion(0.0, 2.0*PI),
@@ -235,7 +229,7 @@ struct Head {
         // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
         for(auto& p : mesh.points) { z(p) -= (h + r_small_mm); }
 
-//        add_tail(3);
+        add_tail(3);
 
         // We rotate the head to the specified direction
         // The head's pointing side is facing upwards so this means that it would
@@ -266,7 +260,6 @@ struct Head {
             double phi = i*a;
             double x = c(0) + r*std::cos(phi);
             double y = c(1) + r*std::sin(phi);
-            std::cout << "x " << x << " y " << y << " z " << z << std::endl;
             cntr.points.emplace_back(x, y, z);
         }
 
@@ -274,7 +267,6 @@ struct Head {
             double phi = i*a;
             double lx = c(0) + r_low*std::cos(phi);
             double ly = c(1) + r_low*std::sin(phi);
-            std::cout << "lx " << lx << " y " << ly << " z " << z - length << std::endl;
             cntr.points.emplace_back(lx, ly, z - length);
         }
 
@@ -289,6 +281,75 @@ struct Head {
         cntr.indices.emplace_back(0, last, offs);
         cntr.indices.emplace_back(last, offs + last, offs);
     }
+};
+
+struct ColumnStick {
+    Contour3D mesh;
+    Contour3D base;
+    double r = 1;
+
+    ColumnStick(const Head& head, double r_mm, const EigenMesh3D& emesh):
+        r(r_mm)
+    {
+        double headsize = (2*head.r_pin_mm + head.width_mm + head.r_back_mm);
+        Vec3d startpoint = head.tr + head.dir*headsize;
+        size_t steps = head.steps;
+        startpoint(2) -= head.tail.length;
+
+        auto& points = mesh.points; points.reserve(head.tail.steps*2);
+        points.insert(points.end(),
+                      head.tail.mesh.points.begin() + steps,
+                      head.tail.mesh.points.end()
+                      );
+
+
+        igl::Hit hit;
+        Vec3d dir(0, 0, -1);
+        igl::ray_mesh_intersect(startpoint, dir, emesh.V, emesh.F, hit);
+        Vec3d gp = startpoint + hit.t*dir;
+        double gh = gp(2);
+        if(gh < 0 ) gh = 0;
+
+        std::cout << "Stick ground point: " << gh << std::endl;
+
+        for(auto it = head.tail.mesh.points.begin() + steps;
+            it != head.tail.mesh.points.end();
+            ++it)
+        {
+            auto& s = *it;
+            points.emplace_back(s(0), s(1), s(2) - gh);
+        }
+
+        auto& indices = mesh.indices;
+        auto offs = steps;
+        for(int i = 0; i < steps - 1; ++i) {
+            indices.emplace_back(i, i + offs, offs + i + 1);
+            indices.emplace_back(i, offs + i + 1, i + 1);
+        }
+
+        auto last = steps - 1;
+        indices.emplace_back(0, last, offs);
+        indices.emplace_back(last, offs + last, offs);
+    }
+};
+
+struct Junction {
+    Contour3D mesh;
+    double r = 1;
+
+    Junction(const Vec3d& pos, double r_mm): r(r_mm) {}
+};
+
+struct BridgeStick {
+    Contour3D mesh;
+    double r = 0.8;
+
+    BridgeStick(const Junction& j1, const Junction& j2) {}
+
+    BridgeStick(const Head& h, const Junction& j2) {}
+
+    BridgeStick(const Junction& j, const ColumnStick& cl) {}
+
 };
 
 EigenMesh3D to_eigenmesh(const Contour3D& cntr) {
@@ -314,37 +375,6 @@ void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
     out.merge(mesh(head.mesh));
     out.merge(mesh(head.tail.mesh));
 }
-
-
-struct ColumnStick {
-    Contour3D mesh;
-    Contour3D base;
-    double r = 1;
-
-    ColumnStick(const Head& head, double r_mm): r(r_mm) {
-
-    }
-};
-
-struct Junction {
-    Contour3D mesh;
-    double r = 1;
-
-    Junction(const Vec3d& pos, double r_mm): r(r_mm) {}
-};
-
-struct BridgeStick {
-    Contour3D mesh;
-    double r = 0.8;
-
-    BridgeStick(const Junction& j1, const Junction& j2) {}
-
-    BridgeStick(const Head& h, const Junction& j2) {}
-
-    BridgeStick(const Junction& j, const ColumnStick& cl) {}
-
-};
-
 
 //enum class ClusterType: double {
 static const double /*constexpr*/ D_SP   = 3;
@@ -605,97 +635,122 @@ bool SLASupportTree::generate(const Model& model,
         //...
     };
 
+    auto filterfn =
+    [&points, &filtered_pts, &pt_normals, &head_positions, &mesh, cfg] () {
+
+        /* ******************************************************** */
+        /* Filtering step                                           */
+        /* ******************************************************** */
+
+        auto aliases = cluster(points, D_SP, 2);
+        filtered_pts.resize(aliases.size(), 3);
+        int count = 0;
+        for(auto& a : aliases) {
+            filtered_pts.row(count++) = points.row(a.front());
+        }
+
+        auto nmls = sla::normals(filtered_pts, mesh);
+
+        pt_normals.resize(count, 3);
+        head_positions.resize(count, 3);
+
+        PointSet headconns(count, 3);
+
+        // Not all of the support points have to be a valid position for
+        // support creation. The angle may be inappropriate or there may
+        // not be enough space for the pinhead. Filtering is applied for
+        // these reasons.
+
+        int pcount = 0;
+        for(int i = 0; i < count; i++) {
+            auto n = nmls.row(i);
+
+            // for all normals we generate the spherical coordinates and
+            // saturate the polar angle to 45 degrees from the bottom then
+            // convert back to standard coordinates to get the new normal.
+            // Then we just create a quaternion from the two normals
+            // (Quaternion::FromTwoVectors) and apply the rotation to the
+            // arrow head.
+
+            double z = n(2);
+            double r = 1.0;     // for normalized vector
+            double polar = std::acos(z / r);
+            double azimuth = std::atan2(n(1), n(0));
+
+            if(polar >= PI / 2) { // skip if the tilt is not sane
+
+                // We saturate the polar angle to 3pi/4
+                polar = std::max(polar, 3*PI / 4);
+
+                // Reassemble the now corrected normal
+                Vec3d nn(std::cos(azimuth) * std::sin(polar),
+                         std::sin(azimuth) * std::sin(polar),
+                         std::cos(polar));
+
+                // save the verified and corrected normal
+                pt_normals.row(pcount) = nn;
+
+                // save the head (pinpoint) position
+                head_positions.row(pcount) = filtered_pts.row(i);
+
+                // the full width of the head
+                double w = cfg.head_width_mm +
+                           cfg.head_back_radius_mm +
+                           2*cfg.head_front_radius_mm;
+
+                // position to start the column sticks (TODO may not need them)
+                headconns.row(pcount) = Vec3d(filtered_pts.row(i)) + w*nn;
+                ++pcount;
+            }
+        }
+    };
+
+    auto pinheadfn = [&pt_normals, &head_positions, &result, cfg] () {
+
+        /* ******************************************************** */
+        /* Generating Pinheads                                      */
+        /* ******************************************************** */
+
+        std::cout << "normals count " << pt_normals.rows() << std::endl;
+        for (int i = 0; i < pt_normals.rows(); ++i) {
+            result.heads.emplace_back(
+                        cfg.head_back_radius_mm,
+                        cfg.head_front_radius_mm,
+                        cfg.head_width_mm,
+                        pt_normals.row(i),         // dir
+                        head_positions.row(i)      // displacement
+                        );
+        }
+    };
+
+    auto classifyfn = [&filtered_pts, &result, &mesh] () {
+
+        /* ******************************************************** */
+        /* Classification                                           */
+        /* ******************************************************** */
+
+        // search for suitable trios
+        auto trios = cluster(filtered_pts, D_BRIDGED_TRIO /*mm*/, 3);
+
+        for(auto& trio: trios) {
+
+        }
+
+        // TODO: only some heads will receive a column stick
+        for(auto& head : result.heads) {
+            auto r = 0.8*head.r_back_mm; // TODO: do we need this?
+            result.column_sticks.emplace_back(ColumnStick(head, r, mesh));
+        }
+    };
+
     std::array<std::function<void()>, NUM_STEPS> program = {
         [] () {
             // Begin
             // clear up the shared data
         },
-        [&points, &filtered_pts, &pt_normals, &head_positions, &mesh, cfg] () {
-
-            /* ******************************************************** */
-            /* Filtering step                                           */
-            /* ******************************************************** */
-
-            auto aliases = cluster(points, D_SP, 2);
-            filtered_pts.resize(aliases.size(), 3);
-            int count = 0;
-            for(auto& a : aliases) {
-                filtered_pts.row(count++) = points.row(a.front());
-            }
-
-            auto nmls = sla::normals(filtered_pts, mesh);
-
-            pt_normals.resize(count, 3);
-            head_positions.resize(count, 3);
-
-            PointSet headconns(count, 3);
-
-            // Not all of the support points have to be a valid position for
-            // support creation. The angle may be inappropriate or there may
-            // not be enough space for the pinhead. Filtering is applied for
-            // these reasons.
-
-            int pcount = 0;
-            for(int i = 0; i < count; i++) {
-                auto n = nmls.row(i);
-
-                // for all normals we generate the spherical coordinates and
-                // saturate the polar angle to 45 degrees from the bottom then
-                // convert back to standard coordinates to get the new normal.
-                // Then we just create a quaternion from the two normals
-                // (Quaternion::FromTwoVectors) and apply the rotation to the
-                // arrow head.
-
-                double z = n(2);
-                double r = 1.0;     // for normalized vector
-                double polar = std::acos(z / r);
-                double azimuth = std::atan2(n(1), n(0));
-
-                if(polar >= PI / 2) { // skip if the tilt is not sane
-
-                    // We saturate the polar angle to 3pi/4
-                    polar = std::max(polar, 3*PI / 4);
-
-                    // Reassemble the now corrected normal
-                    Vec3d nn(std::cos(azimuth) * std::sin(polar),
-                             std::sin(azimuth) * std::sin(polar),
-                             std::cos(polar));
-
-                    // save the verified and corrected normal
-                    pt_normals.row(pcount) = nn;
-
-                    // save the head (pinpoint) position
-                    head_positions.row(pcount) = filtered_pts.row(i);
-
-                    // the full width of the head
-                    double w = cfg.head_width_mm +
-                               cfg.head_back_radius_mm +
-                               2*cfg.head_front_radius_mm;
-
-                    // position to start the column sticks (TODO may not need them)
-                    headconns.row(pcount) = Vec3d(filtered_pts.row(i)) + w*nn;
-                    ++pcount;
-                }
-            }
-        },
-        [&pt_normals, &head_positions, &result, cfg] () {
-            /* ******************************************************** */
-            /* Generating Pinheads                                      */
-            /* ******************************************************** */
-
-            for (int i = 0; i < pt_normals.rows(); ++i) {
-                result.heads.emplace_back(
-                            cfg.head_back_radius_mm,
-                            cfg.head_front_radius_mm,
-                            cfg.head_width_mm,
-                            pt_normals.row(i),         // dir
-                            head_positions.row(i)      // displacement
-                            );
-            }
-        },
-        [] () {
-            // Classification
-        },
+        filterfn,
+        pinheadfn,
+        classifyfn,
         [] () {
             // Done
         },
@@ -893,11 +948,16 @@ void add_sla_supports(Model &model,
     _stree.generate(model, cfg, ctl);
 
     SLASupportTree::Impl& stree = _stree.get();
+    ModelObject* o = model.add_object();
+    o->add_instance();
 
     for(auto& head : stree.heads) {
-        ModelObject* o = model.add_object();
         o->add_volume(mesh(head.mesh));
-        o->add_instance();
+        o->add_volume(mesh(head.tail.mesh));
+    }
+
+    for(auto& stick : stree.column_sticks) {
+        o->add_volume(mesh(stick.mesh));
     }
 
 }

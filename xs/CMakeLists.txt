@@ -189,6 +189,8 @@ add_library(libslic3r STATIC
     ${LIBDIR}/libslic3r/SLABasePool.cpp
     ${LIBDIR}/libslic3r/SLASupportTree.hpp
     ${LIBDIR}/libslic3r/SLASupportTree.cpp
+    ${LIBDIR}/libslic3r/SLARotfinder.hpp
+    ${LIBDIR}/libslic3r/SLARotfinder.cpp
 #    ${LIBDIR}/libslic3r/utils.cpp
     ${LIBDIR}/libslic3r/Utils.hpp
 
