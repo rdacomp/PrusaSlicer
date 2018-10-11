@@ -19,6 +19,7 @@
 #include <Utils.hpp>
 
 #include "SLASupportTree.hpp"
+#include "SLARotfinder.hpp"
 
 namespace Slic3r {
 
@@ -144,35 +145,50 @@ void PrintController::slice_to_png()
                 m_print->objects().front()->model_object()->get_model() :
                 nullptr;
 
+
+
     sla::Controller supportctl;
 
     auto ctl = GUI::get_appctl();
     auto pri = ctl->create_progress_indicator(100, L("Generate SLA supports"));
+
     bool abortflg = false;
     pri->on_cancel([&abortflg]() { abortflg = true; });
-    supportctl.nextcmd = [abortflg] (bool) {
-        return abortflg? sla::Controller::Cmd::STOP :
-                      sla::Controller::Cmd::START_RESUME;
-    };
-    supportctl.statuscb = [pri] (unsigned st, const std::string& msg) {
-        pri->update(float(st), msg);
-    };
 
-    if(model) {
-        sla::add_sla_supports(*model, {}, supportctl);
-//        ModelObject* o = model->add_object();
-//        o->add_volume(dummy);
-//        o->add_instance();
-    }
+    auto rot = sla::find_best_rotation(*(model->objects.front()),
+                                       0.1f,
+                                       [pri](unsigned iter)  { pri->update(iter, "searching..."); },
+                                       [&abortflg] () { return abortflg; });
+    model->objects.front()->instances.front()->set_rotation({rot[0], rot[1], rot[2]});
 
-    for(PrintObject *po : m_print->objects()) {
-        po->model_object()->invalidate_bounding_box();
-        po->reload_model_instances();
-        po->invalidate_all_steps();
-    }
+//    supportctl.nextcmd = [abortflg] (bool) {
+//        return abortflg? sla::Controller::Cmd::STOP :
+//                      sla::Controller::Cmd::START_RESUME;
+//    };
+//    supportctl.statuscb = [pri] (unsigned st, const std::string& msg) {
+//        pri->update(float(st), msg);
+//    };
 
-    m_print->reload_object(0);
-    m_print->reload_model_instances();
+//    if(model) {
+//        sla::add_sla_supports(*model, {}, supportctl);
+////        ModelObject* o = model->add_object();
+////        o->add_volume(dummy);
+////        o->add_instance();
+//    }
+
+//    for(PrintObject *po : m_print->objects()) {
+//        po->model_object()->invalidate_bounding_box();
+//        po->reload_model_instances();
+//        po->invalidate_all_steps();
+//    }
+
+//    m_print->reload_object(0);
+//    m_print->reload_model_instances();
+
+
+
+
+
 
 //    using Pointf3 = Vec3d;
 

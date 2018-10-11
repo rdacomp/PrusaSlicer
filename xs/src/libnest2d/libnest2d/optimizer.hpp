@@ -105,6 +105,8 @@ struct StopCriteria {
     /// Stop if this value or better is found.
     double stop_score = std::nan("");
 
+    std::function<bool()> stop_condition = [] { return false; };
+
     unsigned max_iterations = 0;
 };
 

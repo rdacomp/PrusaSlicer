@@ -21,8 +21,10 @@ namespace sla {
   */
 std::array<double, 3> find_best_rotation(
         const ModelObject& modelobj,
-        std::function<bool()> stopcond = [] () { return false; },
-        unsigned max_tries = 1000);
+        float accuracy = .0f,
+        std::function<void(unsigned)> statuscb = [] (unsigned) {},
+        std::function<bool()> stopcond = [] () { return false; }
+        );
 
 }
 }
