@@ -18,8 +18,8 @@
 #include <Model.hpp>
 #include <Utils.hpp>
 
-#include "SLASupportTree.hpp"
-#include "SLARotfinder.hpp"
+#include "SLA/SLASupportTree.hpp"
+#include "SLA/SLARotfinder.hpp"
 
 namespace Slic3r {
 

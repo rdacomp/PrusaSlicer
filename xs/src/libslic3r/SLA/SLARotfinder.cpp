@@ -1,9 +1,9 @@
 #include <limits>
 #include <exception>
 
-#include <SLARotfinder.hpp>
 #include <libnest2d/optimizers/genetic.hpp>
 #include "SLABoilerPlate.hpp"
+#include "SLARotfinder.hpp"
 #include "Model.hpp"
 
 namespace Slic3r {
