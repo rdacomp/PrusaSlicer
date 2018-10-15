@@ -35,7 +35,7 @@ struct SupportConfig {
     double head_back_radius_mm = 1.0;
 
     // Width in mm from the back sphere center to the front sphere center.
-    double head_width_mm = 2.0;
+    double head_width_mm = 1.5;
 
     // Radius in mm of the support pillars.
     double pillar_radius_mm = 1.0;
@@ -44,7 +44,7 @@ struct SupportConfig {
     double base_radius_mm = 3.0;
 
     // The height of the pillar base cone in mm.
-    double base_height_mm = 0.5;
+    double base_height_mm = 1.0;
 };
 
 /// A Control structure for the support calculation. The algorithm can query a

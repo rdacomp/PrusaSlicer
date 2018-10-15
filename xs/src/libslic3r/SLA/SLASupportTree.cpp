@@ -170,12 +170,11 @@ struct Head {
          double r_small_mm,
          double length_mm,
          Vec3d direction = {0, 0, -1},    // direction (normal to the "ass" )
-         Vec3d offset = {0, 0, 0},      // displacement
+         Vec3d offset = {0, 0, 0},        // displacement
          const size_t circlesteps = 45):
-            r_back_mm(r_big_mm), r_pin_mm(r_small_mm), width_mm(length_mm),
-            dir(direction), tr(offset), steps(circlesteps)
+            steps(circlesteps), dir(direction), tr(offset),
+            r_back_mm(r_big_mm), r_pin_mm(r_small_mm), width_mm(length_mm)
     {
-        using Quaternion = Eigen::Quaternion<double>;
 
         // We create two spheres which will be connected with a robe that fits
         // both circles perfectly.
@@ -229,22 +228,26 @@ struct Head {
         // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
         for(auto& p : mesh.points) { z(p) -= (h + r_small_mm); }
 
-        add_tail(3);
+    }
 
-        // We rotate the head to the specified direction
-        // The head's pointing side is facing upwards so this means that it would
-        // hold a support point with a normal pointing straight down. This is the
-        // reason of the -1 z coordinate
+    void transform()
+    {
+        using Quaternion = Eigen::Quaternion<double>;
+
+        // We rotate the head to the specified direction The head's pointing
+        // side is facing upwards so this means that it would hold a support
+        // point with a normal pointing straight down. This is the reason of
+        // the -1 z coordinate
         auto quatern = Quaternion::FromTwoVectors(Vec3d{0, 0, -1}, dir);
         for(auto& p : mesh.points) {
             p = quatern * p + tr;
         }
     }
 
-
-    void add_tail(double length, Vec3d dir = {0,0,-1}) {
+    void add_tail(double length, double radius = -1) {
         auto& cntr = tail.mesh;
         Head& head = *this;
+        tail.length = length;
 
         cntr.points.reserve(2*steps);
 
@@ -252,7 +255,8 @@ struct Head {
         Vec3d c = head.tr + head.dir * h;
 
         double r = head.r_back_mm * 0.9;
-        double r_low = head.r_back_mm * 0.65;
+        double r_low = radius < 0 || radius > head.r_back_mm * 0.65 ?
+                       head.r_back_mm * 0.65 : radius;
 
         double a = 2*PI/steps;
         double z = c(2);
@@ -287,14 +291,15 @@ struct ColumnStick {
     Contour3D mesh;
     Contour3D base;
     double r = 1;
+    size_t steps = 0;
+    Vec3d endpoint;
 
-    ColumnStick(const Head& head, double r_mm, const EigenMesh3D& emesh):
-        r(r_mm)
+    ColumnStick(const Head& head, const Vec3d& endp, double radius = 1) :
+        endpoint(endp)
     {
-        double headsize = (2*head.r_pin_mm + head.width_mm + head.r_back_mm);
-        Vec3d startpoint = head.tr + head.dir*headsize;
-        size_t steps = head.steps;
-        startpoint(2) -= head.tail.length;
+        steps = head.steps;
+
+        r = radius < head.r_back_mm ? radius : head.r_back_mm * 0.65;
 
         auto& points = mesh.points; points.reserve(head.tail.steps*2);
         points.insert(points.end(),
@@ -302,22 +307,12 @@ struct ColumnStick {
                       head.tail.mesh.points.end()
                       );
 
-
-        igl::Hit hit;
-        Vec3d dir(0, 0, -1);
-        igl::ray_mesh_intersect(startpoint, dir, emesh.V, emesh.F, hit);
-        Vec3d gp = startpoint + hit.t*dir;
-        double gh = gp(2);
-        if(gh < 0 ) gh = 0;
-
-        std::cout << "Stick ground point: " << gh << std::endl;
-
         for(auto it = head.tail.mesh.points.begin() + steps;
             it != head.tail.mesh.points.end();
             ++it)
         {
             auto& s = *it;
-            points.emplace_back(s(0), s(1), s(2) - gh);
+            points.emplace_back(s(0), s(1), endp(2));
         }
 
         auto& indices = mesh.indices;
@@ -330,6 +325,50 @@ struct ColumnStick {
         auto last = steps - 1;
         indices.emplace_back(0, last, offs);
         indices.emplace_back(last, offs + last, offs);
+    }
+
+    void add_base(double height = 3, double radius = 2) {
+        if(height <= 0) return;
+
+        if(radius < r ) radius = r;
+
+        double a = 2*PI/steps;
+        double z = endpoint(2) + height;
+        for(int i = 0; i < steps; ++i) {
+            double phi = i*a;
+            double x = endpoint(0) + 0.5*(radius + r)*std::cos(phi);
+            double y = endpoint(1) + 0.5*(radius + r)*std::sin(phi);
+            base.points.emplace_back(x, y, z);
+        }
+
+        for(int i = 0; i < steps; ++i) {
+            double phi = i*a;
+            double x = endpoint(0) + radius*std::cos(phi);
+            double y = endpoint(1) + radius*std::sin(phi);
+            base.points.emplace_back(x, y, z - height);
+        }
+
+        auto ep = endpoint; ep(2) += height;
+        base.points.emplace_back(endpoint);
+        base.points.emplace_back(ep);
+
+        auto& indices = base.indices;
+        auto hcenter = base.points.size() - 1;
+        auto lcenter = base.points.size() - 2;
+        auto offs = steps;
+        for(int i = 0; i < steps - 1; ++i) {
+            indices.emplace_back(i, i + offs, offs + i + 1);
+            indices.emplace_back(i, offs + i + 1, i + 1);
+            indices.emplace_back(i, i + 1, hcenter);
+            indices.emplace_back(lcenter, offs + i + 1, offs + i);
+        }
+
+        auto last = steps - 1;
+        indices.emplace_back(0, last, offs);
+        indices.emplace_back(last, offs + last, offs);
+        indices.emplace_back(hcenter, last, 0);
+        indices.emplace_back(offs, offs + last, lcenter);
+
     }
 };
 
@@ -371,9 +410,16 @@ EigenMesh3D to_eigenmesh(const Contour3D& cntr) {
 
 void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
 {
-    Head head(r1_mm, r2_mm, width_mm, {0, std::sqrt(0.5), -std::sqrt(0.5)});
+    Head head(r1_mm, r2_mm, width_mm, {0, std::sqrt(0.5), -std::sqrt(0.5)},
+              {0, 0, 30});
     out.merge(mesh(head.mesh));
     out.merge(mesh(head.tail.mesh));
+
+    ColumnStick cst(head, {0, 0, 0});
+    cst.add_base();
+
+    out.merge(mesh(cst.mesh));
+    out.merge(mesh(cst.base));
 }
 
 //enum class ClusterType: double {
@@ -526,9 +572,10 @@ bool operator==(const SpatElement& e1, const SpatElement& e2) {
     return e1.second == e2.second;
 }
 
-ClusteredPoints cluster(const sla::PointSet& points,
-                        double max_distance,
-                        unsigned max_points = 0) {
+ClusteredPoints cluster(
+        const sla::PointSet& points,
+        std::function<bool(const SpatElement&, const SpatElement&)> pred,
+        unsigned max_points = 0) {
 
     SpatIndex sindex;
 
@@ -537,18 +584,14 @@ ClusteredPoints cluster(const sla::PointSet& points,
 
     using Elems = std::vector<SpatElement>;
 
-    double d_max = max_distance;
-
     std::function<void(Elems&, Elems&)> group =
-    [&sindex, &group, d_max, max_points](Elems& pts, Elems& cluster)
+    [&sindex, &group, pred, max_points](Elems& pts, Elems& cluster)
     {
         for(auto& p : pts) {
             std::vector<SpatElement> tmp;
 
             sindex.query(
-                bgi::satisfies( [p, d_max](const SpatElement& v){
-                    return distance(p.first, v.first) < d_max;
-                }),
+                bgi::satisfies([p, pred](const SpatElement& se) { return pred(p, se); }),
                 std::back_inserter(tmp)
             );
 
@@ -587,18 +630,9 @@ ClusteredPoints cluster(const sla::PointSet& points,
     }
 
     ClusteredPoints result;
-    int i = 0;
     for(auto& cluster : clusters) {
         result.emplace_back();
-
-        std::cout << "cluster no. " << i++ << std::endl;
-
-        for(auto c : cluster) {
-            std::cout << c.first << " " << c.second << std::endl;
-            result.back().emplace_back(c.second);
-        }
-
-        std::cout << std::endl;
+        for(auto c : cluster) result.back().emplace_back(c.second);
     }
 
     return result;
@@ -642,7 +676,14 @@ bool SLASupportTree::generate(const Model& model,
         /* Filtering step                                           */
         /* ******************************************************** */
 
-        auto aliases = cluster(points, D_SP, 2);
+        auto aliases = cluster(points,
+                               [cfg](const SpatElement& p,
+                               const SpatElement& se){
+            return distance(Vec2d(p.first(0), p.first(1)),
+                            Vec2d(se.first(0), se.first(1))) <
+                    2*cfg.base_radius_mm;
+        }, 2);
+
         filtered_pts.resize(aliases.size(), 3);
         int count = 0;
         for(auto& a : aliases) {
@@ -711,7 +752,6 @@ bool SLASupportTree::generate(const Model& model,
         /* Generating Pinheads                                      */
         /* ******************************************************** */
 
-        std::cout << "normals count " << pt_normals.rows() << std::endl;
         for (int i = 0; i < pt_normals.rows(); ++i) {
             result.heads.emplace_back(
                         cfg.head_back_radius_mm,
@@ -723,14 +763,17 @@ bool SLASupportTree::generate(const Model& model,
         }
     };
 
-    auto classifyfn = [&filtered_pts, &result, &mesh] () {
+    auto classifyfn = [&filtered_pts, &result, &mesh, cfg] () {
 
         /* ******************************************************** */
         /* Classification                                           */
         /* ******************************************************** */
 
         // search for suitable trios
-        auto trios = cluster(filtered_pts, D_BRIDGED_TRIO /*mm*/, 3);
+        auto trios = cluster(filtered_pts, [](const SpatElement& p,
+                             const SpatElement& se) {
+            return distance(p.first, se.first) < D_BRIDGED_TRIO;
+        }, 3);
 
         for(auto& trio: trios) {
 
@@ -738,8 +781,46 @@ bool SLASupportTree::generate(const Model& model,
 
         // TODO: only some heads will receive a column stick
         for(auto& head : result.heads) {
-            auto r = 0.8*head.r_back_mm; // TODO: do we need this?
-            result.column_sticks.emplace_back(ColumnStick(head, r, mesh));
+            head.add_tail(2, cfg.pillar_radius_mm);
+            head.transform();
+
+            double headsize = 2*head.r_pin_mm + head.width_mm +
+                              head.r_back_mm;
+            Vec3d startpoint = head.tr + head.dir*headsize;
+
+            igl::Hit hit;
+            hit.t = std::numeric_limits<float>::infinity();
+
+            Vec3d dir(0, 0, -1);
+            igl::ray_mesh_intersect(startpoint, dir, mesh.V, mesh.F, hit);
+
+            Vec3d gp = startpoint + hit.t*dir;
+            bool ground = false;
+
+            if(std::isinf(hit.t) || std::isnan(hit.t)) {
+                gp = startpoint; gp(2) = 0;
+                ground = true;
+            } else {
+                gp(2) += (headsize - head.r_pin_mm) ;
+            }
+
+            auto endpoint = gp;
+
+            ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
+
+            if(ground)
+                cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
+            else {
+                Head base_head(cfg.head_back_radius_mm,
+                     cfg.head_front_radius_mm,
+                     cfg.head_width_mm,
+                     {0.0, 0.0, 1.0},
+                     {gp(0), gp(1), gp(2) - headsize});
+                base_head.transform();
+                cs.base = base_head.mesh;
+            }
+
+            result.column_sticks.emplace_back(cs);
         }
     };
 
@@ -958,6 +1039,7 @@ void add_sla_supports(Model &model,
 
     for(auto& stick : stree.column_sticks) {
         o->add_volume(mesh(stick.mesh));
+        o->add_volume(mesh(stick.base));
     }
 
 }

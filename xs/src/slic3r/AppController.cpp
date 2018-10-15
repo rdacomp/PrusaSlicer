@@ -155,35 +155,35 @@ void PrintController::slice_to_png()
     bool abortflg = false;
     pri->on_cancel([&abortflg]() { abortflg = true; });
 
-    auto rot = sla::find_best_rotation(*(model->objects.front()),
-                                       0.1f,
-                                       [pri](unsigned iter)  { pri->update(iter, "searching..."); },
-                                       [&abortflg] () { return abortflg; });
-    model->objects.front()->instances.front()->set_rotation({rot[0], rot[1], rot[2]});
+//    auto rot = sla::find_best_rotation(*(model->objects.front()),
+//                                       0.1f,
+//                                       [pri](unsigned iter)  { pri->update(iter, "searching..."); },
+//                                       [&abortflg] () { return abortflg; });
+//    model->objects.front()->instances.front()->set_rotation({rot[0], rot[1], rot[2]});
 
-//    supportctl.nextcmd = [abortflg] (bool) {
-//        return abortflg? sla::Controller::Cmd::STOP :
-//                      sla::Controller::Cmd::START_RESUME;
-//    };
-//    supportctl.statuscb = [pri] (unsigned st, const std::string& msg) {
-//        pri->update(float(st), msg);
-//    };
+    supportctl.nextcmd = [abortflg] (bool) {
+        return abortflg? sla::Controller::Cmd::STOP :
+                      sla::Controller::Cmd::START_RESUME;
+    };
+    supportctl.statuscb = [pri] (unsigned st, const std::string& msg) {
+        pri->update(float(st), msg);
+    };
 
-//    if(model) {
-//        sla::add_sla_supports(*model, {}, supportctl);
-////        ModelObject* o = model->add_object();
-////        o->add_volume(dummy);
-////        o->add_instance();
-//    }
+    if(model) {
+        sla::add_sla_supports(*model, {}, supportctl);
+//        ModelObject* o = model->add_object();
+//        o->add_volume(dummy);
+//        o->add_instance();
+    }
 
-//    for(PrintObject *po : m_print->objects()) {
-//        po->model_object()->invalidate_bounding_box();
-//        po->reload_model_instances();
-//        po->invalidate_all_steps();
-//    }
+    for(PrintObject *po : m_print->objects()) {
+        po->model_object()->invalidate_bounding_box();
+        po->reload_model_instances();
+        po->invalidate_all_steps();
+    }
 
-//    m_print->reload_object(0);
-//    m_print->reload_model_instances();
+    m_print->reload_object(0);
+    m_print->reload_model_instances();
 
 
 

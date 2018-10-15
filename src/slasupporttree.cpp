@@ -5,7 +5,7 @@
 #include "TriangleMesh.hpp"
 #include "Model.hpp"
 #include "callback.hpp"
-#include "SLASupportTree.hpp"
+#include "SLA/SLASupportTree.hpp"
 #include "benchmark.h"
 
 const std::string USAGE_STR = {
