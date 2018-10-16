@@ -9,7 +9,7 @@
 namespace Slic3r {
 namespace sla {
 
-EigenMesh3D to_eigenmesh(TriangleMesh& tmesh) {
+EigenMesh3D to_eigenmesh(const TriangleMesh& tmesh) {
 
     const stl_file& stl = tmesh.stl;
 

@@ -566,7 +566,8 @@ namespace bgi = boost::geometry::index;
 using SpatElement = std::pair<Vec3d, unsigned>;
 using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
 
-using ClusteredPoints = std::vector<std::vector<unsigned>>;
+using ClusterEl = std::vector<unsigned>;
+using ClusteredPoints = std::vector<ClusterEl>;
 
 bool operator==(const SpatElement& e1, const SpatElement& e2) {
     return e1.second == e2.second;
@@ -591,7 +592,9 @@ ClusteredPoints cluster(
             std::vector<SpatElement> tmp;
 
             sindex.query(
-                bgi::satisfies([p, pred](const SpatElement& se) { return pred(p, se); }),
+                bgi::satisfies([p, pred](const SpatElement& se) {
+                    return pred(p, se);
+                }),
                 std::back_inserter(tmp)
             );
 
@@ -646,6 +649,33 @@ public:
     std::vector<BridgeStick> bridge_sticks;
 };
 
+template<class DistFn>
+long cluster_centroid(const ClusterEl& clust, const PointSet& points, DistFn df)
+{
+    if(clust.empty()) return -1;
+    if(clust.size() == 1) return 0;
+
+    std::vector<bool> sel(clust.size(), false);
+    std::fill(sel.end() - 2, sel.end(), true);
+    std::vector<double> avgs(clust.size(), 0.0);
+
+    do {
+        std::array<size_t, 2> idx;
+        for(size_t i = 0, j = 0; i < clust.size(); i++) if(sel[i]) idx[j++] = i;
+
+        double d = df(Vec3d(points.row(clust[idx[0]])),
+                      Vec3d(points.row(clust[idx[1]])));
+
+        for(auto i : idx) avgs[i] += d;
+    } while(std::next_permutation(sel.begin(), sel.end()));
+
+    for(auto& a : avgs) a /= clust.size();
+
+    auto minit = std::min_element(avgs.begin(), avgs.end());
+
+    return long(minit - avgs.begin());
+}
+
 bool SLASupportTree::generate(const Model& model,
                               const SupportConfig& cfg,
                               const Controller& ctl) {
@@ -655,6 +685,8 @@ bool SLASupportTree::generate(const Model& model,
     PointSet filtered_pts;
     PointSet pt_normals;
     PointSet head_positions;
+    PointSet headless_positions;
+
     auto& result = *m_impl;
 
     enum Steps {
@@ -670,39 +702,42 @@ bool SLASupportTree::generate(const Model& model,
     };
 
     auto filterfn =
-    [&points, &filtered_pts, &pt_normals, &head_positions, &mesh, cfg] () {
+    [&points, &filtered_pts, &pt_normals, &head_positions, &headless_positions,
+     &mesh, cfg] ()
+    {
 
         /* ******************************************************** */
         /* Filtering step                                           */
         /* ******************************************************** */
 
+        // Get the points that are too close to each other and keep only the
+        // first one
         auto aliases = cluster(points,
                                [cfg](const SpatElement& p,
                                const SpatElement& se){
-            return distance(Vec2d(p.first(0), p.first(1)),
-                            Vec2d(se.first(0), se.first(1))) <
-                    2*cfg.base_radius_mm;
+            return distance(p.first, se.first) < D_SP;
         }, 2);
 
         filtered_pts.resize(aliases.size(), 3);
         int count = 0;
         for(auto& a : aliases) {
+            // Here we keep only the front point of the cluster. TODO: centroid
             filtered_pts.row(count++) = points.row(a.front());
         }
 
+        // calculate the normals to the triangles belonging to filtered points
         auto nmls = sla::normals(filtered_pts, mesh);
 
         pt_normals.resize(count, 3);
         head_positions.resize(count, 3);
-
-        PointSet headconns(count, 3);
+        headless_positions.resize(count, 3);
 
         // Not all of the support points have to be a valid position for
         // support creation. The angle may be inappropriate or there may
         // not be enough space for the pinhead. Filtering is applied for
         // these reasons.
 
-        int pcount = 0;
+        int pcount = 0, hlcount = 0;
         for(int i = 0; i < count; i++) {
             auto n = nmls.row(i);
 
@@ -728,22 +763,41 @@ bool SLASupportTree::generate(const Model& model,
                          std::sin(azimuth) * std::sin(polar),
                          std::cos(polar));
 
-                // save the verified and corrected normal
-                pt_normals.row(pcount) = nn;
-
                 // save the head (pinpoint) position
-                head_positions.row(pcount) = filtered_pts.row(i);
+                Vec3d hp = filtered_pts.row(i);
 
                 // the full width of the head
                 double w = cfg.head_width_mm +
                            cfg.head_back_radius_mm +
                            2*cfg.head_front_radius_mm;
 
-                // position to start the column sticks (TODO may not need them)
-                headconns.row(pcount) = Vec3d(filtered_pts.row(i)) + w*nn;
-                ++pcount;
+                // We should shoot a ray in the direction of the pinhead and
+                // see if there is enough space for it
+                igl::Hit hit;
+                hit.t = std::numeric_limits<float>::infinity();
+                igl::ray_mesh_intersect(hp + 1e3*nn, nn, mesh.V, mesh.F, hit);
+                if(hit.t > 2*w || std::isinf(hit.t)) {
+                    // 2*w because of lower and upper pinhead
+
+                    head_positions.row(pcount) = hp;
+
+                    // save the verified and corrected normal
+                    pt_normals.row(pcount) = nn;
+
+                    ++pcount;
+                } else {
+                    headless_positions.row(hlcount++) = hp;
+                }
             }
         }
+
+        head_positions.conservativeResize(pcount, Eigen::NoChange);
+        pt_normals.conservativeResize(pcount, Eigen::NoChange);
+        headless_positions.conservativeResize(hlcount, Eigen::NoChange);
+
+        std::cout << "heads: " << head_positions.rows() << std::endl;
+        std::cout << "headless: " << headless_positions.rows() << std::endl;
+
     };
 
     auto pinheadfn = [&pt_normals, &head_positions, &result, cfg] () {
@@ -763,25 +817,32 @@ bool SLASupportTree::generate(const Model& model,
         }
     };
 
-    auto classifyfn = [&filtered_pts, &result, &mesh, cfg] () {
+    auto classifyfn = [&filtered_pts, &head_positions, &result, &mesh, cfg] () {
 
         /* ******************************************************** */
         /* Classification                                           */
         /* ******************************************************** */
 
-        // search for suitable trios
-        auto trios = cluster(filtered_pts,
-                             [](const SpatElement& p, const SpatElement& se) {
-            return distance(p.first, se.first) < D_BRIDGED_TRIO;
-        }, 3);
+        // We want to search for clusters of points that are far enough from
+        // each other in the XY plane to generate the column stick base
+        auto d_base = 2*cfg.base_radius_mm;
+        auto stickers = cluster(head_positions,
+            [d_base](const SpatElement& p, const SpatElement& s){
+            return distance(Vec2d(p.first(0), p.first(1)),
+                            Vec2d(s.first(0), s.first(1))) < d_base;
+        }, 3); // max 3 heads to connect to one centroid
 
-        for(auto& trio: trios) {
+        for(auto cl : stickers) {
 
-        }
+            size_t cidx = cluster_centroid(cl, head_positions,
+                                           [](const Vec3d& p1, const Vec3d& p2)
+            {
+                return distance(Vec2d(p1(0), p1(1)), Vec2d(p2(0), p2(1)));
+            });
 
-        // TODO: only some heads will receive a column stick
-        for(auto& head : result.heads) {
-            head.add_tail(2, cfg.pillar_radius_mm);
+            auto& head = result.heads[cl[cidx]];
+
+            head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
             head.transform();
 
             double headsize = 2*head.r_pin_mm + head.width_mm +
@@ -821,6 +882,11 @@ bool SLASupportTree::generate(const Model& model,
             }
 
             result.column_sticks.emplace_back(cs);
+
+            cl.erase(cl.begin() + cidx);
+            for(auto c : cl) {
+                // TODO connect this head to the center
+            }
         }
     };
 
@@ -876,6 +942,7 @@ bool SLASupportTree::generate(const Model& model,
             case PINHEADS: pc = CLASSIFY; break;
             case CLASSIFY: pc = DONE; break;
             case HALT: pc = pc_prev; break;
+            case DONE:
             case ABORT: break; // we should never get here
             }
             ctl.statuscb(stepstate[pc], stepstr[pc]);
