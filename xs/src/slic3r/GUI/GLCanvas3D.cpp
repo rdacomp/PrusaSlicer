@@ -3455,6 +3455,8 @@ void GLCanvas3D::_camera_tranform() const
 
 void GLCanvas3D::_picking_pass() const
 {
+    return;
+
     const Pointf& pos = m_mouse.position;
 
     if (m_picking_enabled && !m_mouse.dragging && (pos != Pointf(DBL_MAX, DBL_MAX)))
