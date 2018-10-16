@@ -770,8 +770,8 @@ bool SLASupportTree::generate(const Model& model,
         /* ******************************************************** */
 
         // search for suitable trios
-        auto trios = cluster(filtered_pts, [](const SpatElement& p,
-                             const SpatElement& se) {
+        auto trios = cluster(filtered_pts,
+                             [](const SpatElement& p, const SpatElement& se) {
             return distance(p.first, se.first) < D_BRIDGED_TRIO;
         }, 3);
 
@@ -899,113 +899,6 @@ bool SLASupportTree::generate(const Model& model,
     }
 
     return pc == ABORT;
-
-//    if(!progress(10, "Filtering")) return false;
-
-//    // find small clusters of very close points which can be treated as the same
-//    auto aliases = cluster(points, D_SP, 2);
-//    PointSet filtered_pts(points.rows(), 3);
-//    int count = 0;
-//    for(auto& a : aliases) {
-//        std::cout << "a size = " << a.size() << std::endl;
-//        std::cout << "idx = " << a.front() << std::endl;
-//        filtered_pts.row(count++) = points.row(a.front());
-//    }
-//    filtered_pts.conservativeResize(count, Eigen::NoChange);
-
-//    auto nmls = sla::normals(filtered_pts, mesh);
-
-//    PointSet head_positions(count, 3);
-//    PointSet correct_normals(count, 3);
-//    PointSet headconns(count, 3);
-
-//    // Not all of the support points have to be a valid position for support
-//    // creation. The angle may be inappropriate or there may not be enough space
-//    // for the pinhead. Filtering is applied for these reasons.
-//    int pcount = 0;
-//    for(int i = 0; i < count; i++) {
-//        auto n = nmls.row(i);
-//        // for all normals we generate the spherical coordinates and saturate
-//        // the polar angle to 45 degrees from the bottom then convert back to
-//        // standard coordinates to get the new normal. Then we just create a
-//        // quaternion from the two normals (Quaternion::FromTwoVectors) and
-//        // apply the rotation to the arrow head.
-
-//        double z = n(2);
-//        double r = 1.0;     // for normalized vector
-//        double polar = std::acos(z / r);
-//        double azimuth = std::atan2(n(1), n(0));
-
-//        if(polar >= PI / 2) { // skip if the tilt is not sane
-
-//            // We saturate the polar angle to pi/4 measured from the bottom
-//            polar = std::max(polar, 3*PI / 4);
-
-//            // Reassemble the now corrected normal
-//            Vec3d nn(std::cos(azimuth) * std::sin(polar),
-//                     std::sin(azimuth) * std::sin(polar),
-//                     std::cos(polar));
-
-//            // save the verified and corrected normal
-//            correct_normals.row(pcount) = nn;
-
-//            // save the head (pinpoint) position
-//            head_positions.row(pcount) = filtered_pts.row(i);
-
-//            // the full width of the head
-//            double w = cfg.head_width_mm +
-//                       cfg.head_back_radius_mm +
-//                       2*cfg.head_front_radius_mm;
-
-//            // position to start the column sticks (TODO may not need them)
-//            headconns.row(pcount) = Vec3d(filtered_pts.row(i)) + w*nn;
-//            ++pcount;
-//        }
-//    }
-
-//    /* ********************************************************************** */
-//    /* Generate the heads                                                     */
-//    /* ********************************************************************** */
-//    if(!progress(20, "Generating heads")) return false;
-
-//    for (int i = 0; i < pcount; ++i) {
-
-//        m_impl->heads.emplace_back(cfg.head_back_radius_mm,
-//                                   cfg.head_front_radius_mm,
-//                                   cfg.head_width_mm,
-//                                   correct_normals.row(i),     // dir
-//                                   head_positions.row(i)      // displacement
-//                                  );
-//    }
-
-//    /* ********************************************************************** */
-//    /* Classification                                                         */
-//    /* ********************************************************************** */
-
-//    if(!progress(10, "Classify support points")) return false;
-
-//    // We search for clusters where the points are in a certain distance class
-//    // (interval). Each of the classes will be treated differently when the
-//    // support columns and their connections are going to be generated.
-
-//    cluster(filtered_pts, D_BRIDGED_TRIO /*mm*/, 3);
-
-////    std::cout << "headconns " << headconns << std::endl;
-////    auto gps = ground_points(headconns, mesh);
-
-////    std::cout << "gps " << gps << std::endl;
-////    auto ds = (headconns - gps);
-
-////    for(int i = 0; i < ds.rows(); i++) {
-////        auto h = ds.row(i) * ds.row(i).transpose();
-////        std::cout << "h = " << h << std::endl;
-////        auto cyl = cylinder(0.85*cfg.head_back_radius_mm, std::sqrt(h(0)));
-////        for(auto& p : cyl.points) p += gps.row(i);
-////        output.merge(sla::mesh(cyl));
-////    }
-
-//    return pc == ABORT;
-//    return progress(100, "Done");
 }
 
 SLASupportTree::SLASupportTree(): m_impl(new Impl()) {}
