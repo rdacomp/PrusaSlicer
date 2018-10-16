@@ -244,6 +244,14 @@ struct Head {
         }
     }
 
+    double fullwidth() const {
+        return 2*r_pin_mm + width_mm + 2*r_back_mm;
+    }
+
+    Vec3d junction_point() const {
+        return tr + (2*r_pin_mm + width_mm + r_back_mm)*dir;
+    }
+
     void add_tail(double length, double radius = -1) {
         auto& cntr = tail.mesh;
         Head& head = *this;
@@ -375,17 +383,25 @@ struct ColumnStick {
 struct Junction {
     Contour3D mesh;
     double r = 1;
+    Vec3d pos;
 
-    Junction(const Vec3d& pos, double r_mm): r(r_mm) {}
+    Junction(const Vec3d& p, double r_mm): r(r_mm), pos(p) {}
 };
 
 struct BridgeStick {
     Contour3D mesh;
     double r = 0.8;
 
-    BridgeStick(const Junction& j1, const Junction& j2) {}
+    BridgeStick(const Junction& j1, const Junction& j2) {
 
-    BridgeStick(const Head& h, const Junction& j2) {}
+    }
+
+    BridgeStick(const Head& h, const Junction& j2, double r = 0.8) {
+        double headsize = 2*h.r_pin_mm + h.width_mm + h.r_back_mm;
+        Vec3d hp = h.tr + h.dir * headsize;
+        Vec3d dir = (j2.pos - hp).normalized();
+
+    }
 
     BridgeStick(const Junction& j, const ColumnStick& cl) {}
 
@@ -573,18 +589,23 @@ bool operator==(const SpatElement& e1, const SpatElement& e2) {
     return e1.second == e2.second;
 }
 
+// Clustering a set of points by the given criteria
 ClusteredPoints cluster(
         const sla::PointSet& points,
         std::function<bool(const SpatElement&, const SpatElement&)> pred,
         unsigned max_points = 0) {
 
+    // A spatial index for querying the nearest points
     SpatIndex sindex;
 
+    // Build the index
     for(unsigned idx = 0; idx < points.rows(); idx++)
         sindex.insert( std::make_pair(points.row(idx), idx));
 
     using Elems = std::vector<SpatElement>;
 
+    // Recursive function for visiting all the points in a given distance to
+    // each other
     std::function<void(Elems&, Elems&)> group =
     [&sindex, &group, pred, max_points](Elems& pts, Elems& cluster)
     {
@@ -655,9 +676,17 @@ long cluster_centroid(const ClusterEl& clust, const PointSet& points, DistFn df)
     if(clust.empty()) return -1;
     if(clust.size() == 1) return 0;
 
-    std::vector<bool> sel(clust.size(), false);
-    std::fill(sel.end() - 2, sel.end(), true);
-    std::vector<double> avgs(clust.size(), 0.0);
+    // The function works by calculating for each point the average distance
+    // from all the other points in the cluster. We create a selector bitmask of
+    // the same size as the cluster. The bitmask will have two true bits and
+    // false bits for the rest of items and we will loop through all the
+    // permutations of the bitmask (combinations of two points). Get the
+    // distance for the two points and add the distance to the averages.
+    // The point with the smallest average than wins.
+
+    std::vector<bool> sel(clust.size(), false);   // create full zero bitmask
+    std::fill(sel.end() - 2, sel.end(), true);    // insert the two ones
+    std::vector<double> avgs(clust.size(), 0.0);  // store the average distances
 
     do {
         std::array<size_t, 2> idx;
@@ -666,13 +695,17 @@ long cluster_centroid(const ClusterEl& clust, const PointSet& points, DistFn df)
         double d = df(Vec3d(points.row(clust[idx[0]])),
                       Vec3d(points.row(clust[idx[1]])));
 
+        // add the distance to the sums for both associated points
         for(auto i : idx) avgs[i] += d;
+
+        // now continue with the next permutation of the bitmask with two 1s
     } while(std::next_permutation(sel.begin(), sel.end()));
 
+    // Divide by point size in the cluster to get the average (may be redundant)
     for(auto& a : avgs) a /= clust.size();
 
+    // get the lowest average distance and return the index
     auto minit = std::min_element(avgs.begin(), avgs.end());
-
     return long(minit - avgs.begin());
 }
 
@@ -823,63 +856,60 @@ bool SLASupportTree::generate(const Model& model,
         /* Classification                                           */
         /* ******************************************************** */
 
-        // We want to search for clusters of points that are far enough from
-        // each other in the XY plane to generate the column stick base
-        auto d_base = 2*cfg.base_radius_mm;
-        auto stickers = cluster(head_positions,
-            [d_base](const SpatElement& p, const SpatElement& s){
-            return distance(Vec2d(p.first(0), p.first(1)),
-                            Vec2d(s.first(0), s.first(1))) < d_base;
-        }, 3); // max 3 heads to connect to one centroid
+        // We should first get the heads that reach the ground directly
+        std::vector<double> gndheight;  gndheight.reserve(head_positions.rows());
+        std::vector<unsigned> gndidx; gndidx.reserve(head_positions.rows());
+        std::vector<unsigned> nogndidx; nogndidx.reserve(head_positions.rows());
 
-        for(auto cl : stickers) {
-
-            size_t cidx = cluster_centroid(cl, head_positions,
-                                           [](const Vec3d& p1, const Vec3d& p2)
-            {
-                return distance(Vec2d(p1(0), p1(1)), Vec2d(p2(0), p2(1)));
-            });
-
-            auto& head = result.heads[cl[cidx]];
-
-            head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
-            head.transform();
-
-            double headsize = 2*head.r_pin_mm + head.width_mm +
-                              head.r_back_mm;
-            Vec3d startpoint = head.tr + head.dir*headsize;
+        for(unsigned i = 0; i < head_positions.rows(); i++) {
+            auto& head = result.heads[i];
 
             igl::Hit hit;
             hit.t = std::numeric_limits<float>::infinity();
 
             Vec3d dir(0, 0, -1);
+            Vec3d startpoint = head.junction_point();
             igl::ray_mesh_intersect(startpoint, dir, mesh.V, mesh.F, hit);
 
-            Vec3d gp = startpoint + hit.t*dir;
-            bool ground = false;
+            gndheight.emplace_back(hit.t);
 
-            if(std::isinf(hit.t) || std::isnan(hit.t)) {
-                gp = startpoint; gp(2) = 0;
-                ground = true;
-            } else {
-                gp(2) += (headsize - head.r_pin_mm) ;
-            }
+            if(std::isinf(hit.t)) gndidx.emplace_back(i);
+            else nogndidx.emplace_back(i);
+        }
 
-            auto endpoint = gp;
+        PointSet gnd(gndidx.size(), 3);
+
+        for(size_t i = 0; i < gndidx.size(); i++)
+            gnd.row(i) = head_positions.row(gndidx[i]);
+
+        // We want to search for clusters of points that are far enough from
+        // each other in the XY plane to generate the column stick base
+        auto d_base = 2*cfg.base_radius_mm;
+        auto ground_connectors = cluster(gnd,
+            [d_base](const SpatElement& p, const SpatElement& s){
+            return distance(Vec2d(p.first(0), p.first(1)),
+                            Vec2d(s.first(0), s.first(1))) < d_base;
+        }, 3); // max 3 heads to connect to one centroid
+
+        for(auto cl : ground_connectors) {
+
+            size_t cidx = cluster_centroid(cl, gnd,
+                                           [](const Vec3d& p1, const Vec3d& p2)
+            {
+                return distance(Vec2d(p1(0), p1(1)), Vec2d(p2(0), p2(1)));
+            });
+
+            size_t index_to_heads = gndidx[cl[cidx]];
+            auto& head = result.heads[ index_to_heads ];
+
+            head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
+            head.transform();
+
+            Vec3d startpoint = head.junction_point();
+            auto endpoint = startpoint; endpoint(2) = 0;
 
             ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
-
-            if(ground)
-                cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
-            else {
-                Head base_head(cfg.head_back_radius_mm,
-                     cfg.head_front_radius_mm,
-                     cfg.head_width_mm,
-                     {0.0, 0.0, 1.0},
-                     {gp(0), gp(1), gp(2) - headsize});
-                base_head.transform();
-                cs.base = base_head.mesh;
-            }
+            cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
 
             result.column_sticks.emplace_back(cs);
 
@@ -887,6 +917,30 @@ bool SLASupportTree::generate(const Model& model,
             for(auto c : cl) {
                 // TODO connect this head to the center
             }
+        }
+
+        for(auto idx : nogndidx) {
+            auto& head = result.heads[idx];
+            head.transform();
+
+            double gh = gndheight[idx];
+            std::cout << "gh: " << gh << std::endl;
+            Vec3d endpoint = head.junction_point();
+            endpoint(2) -= (gh + head.fullwidth());
+
+            Head base_head(cfg.head_back_radius_mm,
+                 cfg.head_front_radius_mm,
+                 cfg.head_width_mm,
+                 {0.0, 0.0, 1.0},
+                 endpoint);
+
+            // TODO: Fails
+            base_head.transform();
+
+            ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
+            cs.base = base_head.mesh;
+            result.column_sticks.emplace_back(cs);
+
         }
     };
 
