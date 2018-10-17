@@ -163,7 +163,7 @@ struct Head {
     struct Tail {
         Contour3D mesh;
         size_t steps = 45;
-        double length = 3;
+        double length = 1.6;
     } tail;
 
     Head(double r_big_mm,
@@ -228,6 +228,7 @@ struct Head {
         // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
         for(auto& p : mesh.points) { z(p) -= (h + r_small_mm); }
 
+        tail.length = 0.8*width_mm;
     }
 
     void transform()
@@ -239,9 +240,8 @@ struct Head {
         // point with a normal pointing straight down. This is the reason of
         // the -1 z coordinate
         auto quatern = Quaternion::FromTwoVectors(Vec3d{0, 0, -1}, dir);
-        for(auto& p : mesh.points) {
-            p = quatern * p + tr;
-        }
+
+        for(auto& p : mesh.points) p = quatern * p + tr;
     }
 
     double fullwidth() const {
@@ -922,22 +922,25 @@ bool SLASupportTree::generate(const Model& model,
         for(auto idx : nogndidx) {
             auto& head = result.heads[idx];
             head.transform();
+            head.add_tail(0.8*head.width_mm);
 
             double gh = gndheight[idx];
-            std::cout << "gh: " << gh << std::endl;
-            Vec3d endpoint = head.junction_point();
-            endpoint(2) -= (gh + head.fullwidth());
+            Vec3d headend = head.junction_point();
 
             Head base_head(cfg.head_back_radius_mm,
                  cfg.head_front_radius_mm,
                  cfg.head_width_mm,
                  {0.0, 0.0, 1.0},
-                 endpoint);
+                 {headend(0), headend(1), headend(2) - gh - head.r_pin_mm});
 
-            // TODO: Fails
             base_head.transform();
 
-            ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
+            double hl = head.fullwidth() - head.r_back_mm;
+
+            ColumnStick cs(head,
+                           Vec3d{headend(0), headend(1), headend(2) - gh + hl},
+                           cfg.pillar_radius_mm);
+
             cs.base = base_head.mesh;
             result.column_sticks.emplace_back(cs);
 
