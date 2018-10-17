@@ -3,10 +3,6 @@
 
 #include "Model.hpp"
 
-#include "boost/geometry/index/rtree.hpp"
-#include <igl/ray_mesh_intersect.h>
-#include <igl/point_mesh_squared_distance.h>
-
 namespace Slic3r {
 namespace sla {
 
@@ -15,8 +11,6 @@ using Portion = std::tuple<double, double>;
 inline Portion make_portion(double a, double b) {
     return std::make_tuple(a, b);
 }
-
-using PointSet = Eigen::MatrixXd;
 
 Contour3D sphere(double rho, Portion portion = make_portion(0.0, 2.0*PI),
                  double fa=(2*PI/360)) {
@@ -165,6 +159,8 @@ struct Head {
         size_t steps = 45;
         double length = 1.6;
     } tail;
+
+
 
     Head(double r_big_mm,
          double r_small_mm,
@@ -506,64 +502,11 @@ PointSet support_points(const Model& model) {
     return ret;
 }
 
-PointSet ground_points(const PointSet& supportps, const EigenMesh3D& mesh) {
-    PointSet ret(supportps.rows(), 3);
+double ray_mesh_intersect(const Vec3d& s,
+                          const Vec3d& dir,
+                          const EigenMesh3D& m);
 
-    for(int i = 0; i < supportps.rows(); i++) {
-        Vec3d sp = supportps.row(i);
-        igl::Hit hit;
-        Vec3d dir(0, 0, -1);
-        igl::ray_mesh_intersect(sp, dir, mesh.V, mesh.F, hit);
-        ret.row(i) = sp + hit.t*dir;
-
-        // may not need this when the sla pool will be used
-        if(ret.row(i)(2) < 0 ) ret.row(i)(2) = 0;
-    }
-
-    return ret;
-}
-
-Pointf3s ground_points(const Model& model) {
-    EigenMesh3D m = to_eigenmesh(model);
-    Pointf3s ret;
-
-    for(ModelObject *o : model.objects)
-        for(ModelInstance *inst : o->instances) {
-            for(Vec3f& msource : o->sla_support_points) {
-                auto source = model_coord(*inst, msource);
-                igl::Hit hit;
-                Vec3d dir(0, 0, -1);
-                igl::ray_mesh_intersect(source, dir, m.V, m.F, hit);
-                ret.emplace_back(source + hit.t*dir);
-            }
-        }
-
-    return ret;
-}
-
-
-PointSet normals(const PointSet& points, const EigenMesh3D& mesh) {
-    Eigen::VectorXd dists;
-    Eigen::VectorXi I;
-    PointSet C;
-    igl::point_mesh_squared_distance( points, mesh.V, mesh.F, dists, I, C);
-
-    PointSet ret(I.rows(), 3);
-    for(int i = 0; i < I.rows(); i++) {
-        auto idx = I(i);
-        auto trindex = mesh.F.row(idx);
-
-        auto& p1 = mesh.V.row(trindex(0));
-        auto& p2 = mesh.V.row(trindex(1));
-        auto& p3 = mesh.V.row(trindex(2));
-
-        Eigen::Vector3d U = p2 - p1;
-        Eigen::Vector3d V = p3 - p1;
-        ret.row(i) = U.cross(V).normalized();
-    }
-
-    return ret;
-}
+PointSet normals(const PointSet& points, const EigenMesh3D& mesh);
 
 template<class Vec> double distance(const Vec& p) {
     return std::sqrt(p.transpose() * p);
@@ -578,89 +521,15 @@ template<class Vec> double distance(const Vec& pp1, const Vec& pp2) {
     return distance(p);
 }
 
-namespace bgi = boost::geometry::index;
-using SpatElement = std::pair<Vec3d, unsigned>;
-using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
-
-using ClusterEl = std::vector<unsigned>;
-using ClusteredPoints = std::vector<ClusterEl>;
-
 bool operator==(const SpatElement& e1, const SpatElement& e2) {
     return e1.second == e2.second;
 }
 
 // Clustering a set of points by the given criteria
 ClusteredPoints cluster(
-        const sla::PointSet& points,
+        const PointSet& points,
         std::function<bool(const SpatElement&, const SpatElement&)> pred,
-        unsigned max_points = 0) {
-
-    // A spatial index for querying the nearest points
-    SpatIndex sindex;
-
-    // Build the index
-    for(unsigned idx = 0; idx < points.rows(); idx++)
-        sindex.insert( std::make_pair(points.row(idx), idx));
-
-    using Elems = std::vector<SpatElement>;
-
-    // Recursive function for visiting all the points in a given distance to
-    // each other
-    std::function<void(Elems&, Elems&)> group =
-    [&sindex, &group, pred, max_points](Elems& pts, Elems& cluster)
-    {
-        for(auto& p : pts) {
-            std::vector<SpatElement> tmp;
-
-            sindex.query(
-                bgi::satisfies([p, pred](const SpatElement& se) {
-                    return pred(p, se);
-                }),
-                std::back_inserter(tmp)
-            );
-
-            auto cmp = [](const SpatElement& e1, const SpatElement& e2){
-                return e1.second < e2.second;
-            };
-
-            std::sort(tmp.begin(), tmp.end(), cmp);
-
-            Elems newpts;
-            std::set_difference(tmp.begin(), tmp.end(),
-                                cluster.begin(), cluster.end(),
-                                std::back_inserter(newpts), cmp);
-
-            int c = max_points && newpts.size() + cluster.size() > max_points?
-                        int(max_points - cluster.size()) : int(newpts.size());
-
-            cluster.insert(cluster.end(), newpts.begin(), newpts.begin() + c);
-            std::sort(cluster.begin(), cluster.end(), cmp);
-
-            if(!newpts.empty() && (!max_points || cluster.size() < max_points))
-                group(newpts, cluster);
-        }
-    };
-
-    std::vector<Elems> clusters;
-    for(auto it = sindex.begin(); it != sindex.end();) {
-        Elems cluster = {};
-        Elems pts = {*it};
-        group(pts, cluster);
-
-        for(auto& c : cluster) sindex.remove(c);
-        it = sindex.begin();
-
-        clusters.emplace_back(cluster);
-    }
-
-    ClusteredPoints result;
-    for(auto& cluster : clusters) {
-        result.emplace_back();
-        for(auto c : cluster) result.back().emplace_back(c.second);
-    }
-
-    return result;
-}
+        unsigned max_points = 0);
 
 class SLASupportTree::Impl {
 public:
@@ -806,10 +675,8 @@ bool SLASupportTree::generate(const Model& model,
 
                 // We should shoot a ray in the direction of the pinhead and
                 // see if there is enough space for it
-                igl::Hit hit;
-                hit.t = std::numeric_limits<float>::infinity();
-                igl::ray_mesh_intersect(hp + 1e3*nn, nn, mesh.V, mesh.F, hit);
-                if(hit.t > 2*w || std::isinf(hit.t)) {
+                double t = ray_mesh_intersect(hp + 1e3*nn, nn, mesh);
+                if(t > 2*w || std::isinf(t)) {
                     // 2*w because of lower and upper pinhead
 
                     head_positions.row(pcount) = hp;
@@ -864,16 +731,14 @@ bool SLASupportTree::generate(const Model& model,
         for(unsigned i = 0; i < head_positions.rows(); i++) {
             auto& head = result.heads[i];
 
-            igl::Hit hit;
-            hit.t = std::numeric_limits<float>::infinity();
-
             Vec3d dir(0, 0, -1);
             Vec3d startpoint = head.junction_point();
-            igl::ray_mesh_intersect(startpoint, dir, mesh.V, mesh.F, hit);
 
-            gndheight.emplace_back(hit.t);
+            double t = ray_mesh_intersect(startpoint, dir, mesh);
 
-            if(std::isinf(hit.t)) gndidx.emplace_back(i);
+            gndheight.emplace_back(t);
+
+            if(std::isinf(t)) gndidx.emplace_back(i);
             else nogndidx.emplace_back(i);
         }
 

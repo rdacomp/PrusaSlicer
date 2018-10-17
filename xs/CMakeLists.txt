@@ -184,17 +184,22 @@ add_library(libslic3r STATIC
     ${LIBDIR}/libslic3r/Technologies.hpp
     ${LIBDIR}/libslic3r/TriangleMesh.cpp
     ${LIBDIR}/libslic3r/TriangleMesh.hpp
+#    ${LIBDIR}/libslic3r/utils.cpp
+    ${LIBDIR}/libslic3r/Utils.hpp
+
+)
+
+add_library(sla_extensions STATIC
     ${LIBDIR}/libslic3r/SLA/SLABoilerPlate.hpp
     ${LIBDIR}/libslic3r/SLA/SLABasePool.hpp
     ${LIBDIR}/libslic3r/SLA/SLABasePool.cpp
     ${LIBDIR}/libslic3r/SLA/SLASupportTree.hpp
     ${LIBDIR}/libslic3r/SLA/SLASupportTree.cpp
+    ${LIBDIR}/libslic3r/SLA/SLASupportTreeIGL.cpp
     ${LIBDIR}/libslic3r/SLA/SLARotfinder.hpp
     ${LIBDIR}/libslic3r/SLA/SLARotfinder.cpp
-#    ${LIBDIR}/libslic3r/utils.cpp
-    ${LIBDIR}/libslic3r/Utils.hpp
-
-)
+    ${LIBDIR}/libslic3r/SLA/SLABoostAdapter.hpp
+    )
 
 add_library(libslic3r_gui STATIC
     ${LIBDIR}/slic3r/GUI/AboutDialog.cpp
@@ -796,9 +801,16 @@ add_executable(slabasebed EXCLUDE_FROM_ALL ${PROJECT_SOURCE_DIR}/src/slabasebed.
 target_include_directories(slabasebed PRIVATE src src/libslic3r)
 target_link_libraries(slabasebed libslic3r libslic3r_gui qhull admesh miniz ${Boost_LIBRARIES} clipper ${EXPAT_LIBRARIES} ${GLEW_LIBRARIES} polypartition poly2tri ${TBB_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
 
-add_executable(slasupporttree EXCLUDE_FROM_ALL ${PROJECT_SOURCE_DIR}/src/slasupporttree.cpp ${LIBDIR}/libslic3r/utils.cpp)
+target_link_libraries(libslic3r qhull admesh miniz ${Boost_LIBRARIES} clipper
+    polypartition poly2tri semver nowide ${TBB_LIBRARIES} ${EXPAT_LIBRARIES})
+add_executable(slasupporttree EXCLUDE_FROM_ALL
+    ${PROJECT_SOURCE_DIR}/src/slasupporttree.cpp
+    ${LIBDIR}/libslic3r/utils.cpp
+    )
+target_link_libraries(XS sla_extensions)
 target_include_directories(slasupporttree PRIVATE src src/libslic3r)
-target_link_libraries(slasupporttree libslic3r libslic3r_gui qhull admesh miniz ${Boost_LIBRARIES} clipper ${EXPAT_LIBRARIES} ${GLEW_LIBRARIES} polypartition poly2tri semver nowide ${TBB_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(slasupporttree libslic3r sla_extensions libslic3r_gui
+    ${GLEW_LIBRARIES} ${wxWidgets_LIBRARIES} ${CMAKE_DL_LIBS})
 
 if(SLIC3R_PROFILE)
     target_link_libraries(Shiny)
@@ -839,9 +851,11 @@ add_subdirectory(${LIBDIR}/libnest2d)
 target_compile_definitions(libslic3r PUBLIC -DUSE_TBB)
 target_include_directories(libslic3r PUBLIC BEFORE ${LIBNEST2D_INCLUDES})
 target_include_directories(libslic3r_gui PUBLIC BEFORE ${LIBNEST2D_INCLUDES})
+target_include_directories(sla_extensions PUBLIC BEFORE ${LIBNEST2D_INCLUDES})
 
 message(STATUS "Libnest2D Libraries: ${LIBNEST2D_LIBRARIES}")
 target_link_libraries(libslic3r ${LIBNEST2D_LIBRARIES})
+target_link_libraries(sla_extensions ${LIBNEST2D_LIBRARIES})
 # ##############################################################################
 
 # Installation

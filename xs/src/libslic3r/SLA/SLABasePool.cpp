@@ -1,6 +1,10 @@
 #include "SLABasePool.hpp"
 #include "SLABoilerPlate.hpp"
 
+#include "boost/log/trivial.hpp"
+#include "SLABoostAdapter.hpp"
+#include "ClipperUtils.hpp"
+
 //#include "SVG.hpp"
 //#include "benchmark.h"
 
