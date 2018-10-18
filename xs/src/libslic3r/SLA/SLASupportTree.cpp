@@ -12,6 +12,15 @@ inline Portion make_portion(double a, double b) {
     return std::make_tuple(a, b);
 }
 
+template<class Vec> double distance(const Vec& pp1, const Vec& pp2) {
+    auto p = pp2 - pp1;
+    return distance(p);
+}
+
+template<class Vec> double distance(const Vec& p) {
+    return std::sqrt(p.transpose() * p);
+}
+
 Contour3D sphere(double rho, Portion portion = make_portion(0.0, 2.0*PI),
                  double fa=(2*PI/360)) {
 
@@ -159,8 +168,6 @@ struct Head {
         size_t steps = 45;
         double length = 1.6;
     } tail;
-
-
 
     Head(double r_big_mm,
          double r_small_mm,
@@ -379,20 +386,37 @@ struct ColumnStick {
 struct Junction {
     Contour3D mesh;
     double r = 1;
+    size_t steps = 45;
     Vec3d pos;
 
-    Junction(const Vec3d& p, double r_mm): r(r_mm), pos(p) {}
+    Junction(const Vec3d& tr, double r_mm, size_t stepnum = 45):
+        r(r_mm), steps(stepnum), pos(tr)
+    {
+        mesh = sphere(r_mm, make_portion(0, 2*PI), 2*PI/steps);
+        for(auto& p : mesh.points) p += tr;
+    }
 };
 
 struct BridgeStick {
     Contour3D mesh;
     double r = 0.8;
 
-    BridgeStick(const Junction& j1, const Junction& j2) {
+    BridgeStick(const Junction& j1, const Junction& j2, double r_mm = 0.8):
+        r(r_mm)
+    {
+        using Quaternion = Eigen::Quaternion<double>;
+        Vec3d dir = (j2.pos - j1.pos).normalized();
+        double d = distance(j2.pos, j1.pos);
 
+        mesh = cylinder(r, d, 2*PI / 45);
+
+        auto quater = Quaternion::FromTwoVectors(Vec3d{0,0,-1}, dir);
+        for(auto& p : mesh.points) p = quater * p + j1.pos;
     }
 
-    BridgeStick(const Head& h, const Junction& j2, double r = 0.8) {
+    BridgeStick(const Head& h, const Junction& j2, double r = 0.8):
+        r(r_mm)
+    {
         double headsize = 2*h.r_pin_mm + h.width_mm + h.r_back_mm;
         Vec3d hp = h.tr + h.dir * headsize;
         Vec3d dir = (j2.pos - hp).normalized();
@@ -508,17 +532,8 @@ double ray_mesh_intersect(const Vec3d& s,
 
 PointSet normals(const PointSet& points, const EigenMesh3D& mesh);
 
-template<class Vec> double distance(const Vec& p) {
-    return std::sqrt(p.transpose() * p);
-}
-
 Vec2d to_vec2(const Vec3d& v3) {
     return {v3(0), v3(1)};
-}
-
-template<class Vec> double distance(const Vec& pp1, const Vec& pp2) {
-    auto p = pp2 - pp1;
-    return distance(p);
 }
 
 bool operator==(const SpatElement& e1, const SpatElement& e2) {
@@ -582,14 +597,27 @@ bool SLASupportTree::generate(const Model& model,
                               const SupportConfig& cfg,
                               const Controller& ctl) {
     auto points = support_points(model);
-    auto mesh = sla::to_eigenmesh(model);
+    auto mesh =   to_eigenmesh(model);
 
-    PointSet filtered_pts;
-    PointSet pt_normals;
+    PointSet filtered_points;
+    PointSet filtered_normals;
     PointSet head_positions;
     PointSet headless_positions;
 
-    auto& result = *m_impl;
+    using IndexSet = std::vector<unsigned>;
+
+    // Distances from head positions to ground or mesh touch points
+    std::vector<double> head_heights;
+
+    // Indices of those who touch the ground
+    IndexSet ground_heads;
+
+    // Indices of those who don't touch the ground
+    IndexSet noground_heads;
+
+    using Result = SLASupportTree::Impl;
+
+    Result& result = *m_impl;
 
     enum Steps {
         BEGIN,
@@ -603,9 +631,14 @@ bool SLASupportTree::generate(const Model& model,
         //...
     };
 
-    auto filterfn =
-    [&points, &filtered_pts, &pt_normals, &head_positions, &headless_positions,
-     &mesh, cfg] ()
+    auto filterfn = [] (
+            const SupportConfig& cfg,
+            const PointSet& points,
+            const EigenMesh3D& mesh,
+            PointSet& filt_pts,
+            PointSet& filt_norm,
+            PointSet& head_pos,
+            PointSet& headless_pos)
     {
 
         /* ******************************************************** */
@@ -620,19 +653,19 @@ bool SLASupportTree::generate(const Model& model,
             return distance(p.first, se.first) < D_SP;
         }, 2);
 
-        filtered_pts.resize(aliases.size(), 3);
+        filt_pts.resize(aliases.size(), 3);
         int count = 0;
         for(auto& a : aliases) {
             // Here we keep only the front point of the cluster. TODO: centroid
-            filtered_pts.row(count++) = points.row(a.front());
+            filt_pts.row(count++) = points.row(a.front());
         }
 
         // calculate the normals to the triangles belonging to filtered points
-        auto nmls = sla::normals(filtered_pts, mesh);
+        auto nmls = sla::normals(filt_pts, mesh);
 
-        pt_normals.resize(count, 3);
-        head_positions.resize(count, 3);
-        headless_positions.resize(count, 3);
+        filt_norm.resize(count, 3);
+        head_pos.resize(count, 3);
+        headless_pos.resize(count, 3);
 
         // Not all of the support points have to be a valid position for
         // support creation. The angle may be inappropriate or there may
@@ -666,7 +699,7 @@ bool SLASupportTree::generate(const Model& model,
                          std::cos(polar));
 
                 // save the head (pinpoint) position
-                Vec3d hp = filtered_pts.row(i);
+                Vec3d hp = filt_pts.row(i);
 
                 // the full width of the head
                 double w = cfg.head_width_mm +
@@ -675,60 +708,74 @@ bool SLASupportTree::generate(const Model& model,
 
                 // We should shoot a ray in the direction of the pinhead and
                 // see if there is enough space for it
-                double t = ray_mesh_intersect(hp + 1e3*nn, nn, mesh);
+                double t = ray_mesh_intersect(hp + 0.1*nn, nn, mesh);
+
                 if(t > 2*w || std::isinf(t)) {
                     // 2*w because of lower and upper pinhead
 
-                    head_positions.row(pcount) = hp;
+                    head_pos.row(pcount) = hp;
 
                     // save the verified and corrected normal
-                    pt_normals.row(pcount) = nn;
+                    filt_norm.row(pcount) = nn;
 
                     ++pcount;
                 } else {
-                    headless_positions.row(hlcount++) = hp;
+                    headless_pos.row(hlcount++) = hp;
                 }
             }
         }
 
-        head_positions.conservativeResize(pcount, Eigen::NoChange);
-        pt_normals.conservativeResize(pcount, Eigen::NoChange);
-        headless_positions.conservativeResize(hlcount, Eigen::NoChange);
-
-        std::cout << "heads: " << head_positions.rows() << std::endl;
-        std::cout << "headless: " << headless_positions.rows() << std::endl;
-
+        head_pos.conservativeResize(pcount, Eigen::NoChange);
+        filt_norm.conservativeResize(pcount, Eigen::NoChange);
+        headless_pos.conservativeResize(hlcount, Eigen::NoChange);
     };
 
-    auto pinheadfn = [&pt_normals, &head_positions, &result, cfg] () {
+    // Function to write the pinheads into the result
+    auto pinheadfn = [] (
+            const SupportConfig& cfg,
+            PointSet& head_pos,
+            PointSet& nmls,
+            Result& result
+            )
+    {
 
         /* ******************************************************** */
         /* Generating Pinheads                                      */
         /* ******************************************************** */
 
-        for (int i = 0; i < pt_normals.rows(); ++i) {
+        for (int i = 0; i < nmls.rows(); ++i) {
             result.heads.emplace_back(
                         cfg.head_back_radius_mm,
                         cfg.head_front_radius_mm,
                         cfg.head_width_mm,
-                        pt_normals.row(i),         // dir
-                        head_positions.row(i)      // displacement
+                        nmls.row(i),         // dir
+                        head_pos.row(i)      // displacement
                         );
         }
     };
 
-    auto classifyfn = [&filtered_pts, &head_positions, &result, &mesh, cfg] () {
+    // &filtered_points, &head_positions, &result, &mesh,
+    // &gndidx, &gndheight, &nogndidx, cfg
+    auto classifyfn = [] (
+            const SupportConfig& cfg,
+            const EigenMesh3D& mesh,
+            PointSet& head_pos,
+            IndexSet& gndidx,
+            IndexSet& nogndidx,
+            std::vector<double>& gndheight,
+            Result& result
+            ) {
 
         /* ******************************************************** */
         /* Classification                                           */
         /* ******************************************************** */
 
         // We should first get the heads that reach the ground directly
-        std::vector<double> gndheight;  gndheight.reserve(head_positions.rows());
-        std::vector<unsigned> gndidx; gndidx.reserve(head_positions.rows());
-        std::vector<unsigned> nogndidx; nogndidx.reserve(head_positions.rows());
+        gndheight.reserve(head_pos.rows());
+        gndidx.reserve(head_pos.rows());
+        nogndidx.reserve(head_pos.rows());
 
-        for(unsigned i = 0; i < head_positions.rows(); i++) {
+        for(unsigned i = 0; i < head_pos.rows(); i++) {
             auto& head = result.heads[i];
 
             Vec3d dir(0, 0, -1);
@@ -745,7 +792,7 @@ bool SLASupportTree::generate(const Model& model,
         PointSet gnd(gndidx.size(), 3);
 
         for(size_t i = 0; i < gndidx.size(); i++)
-            gnd.row(i) = head_positions.row(gndidx[i]);
+            gnd.row(i) = head_pos.row(gndidx[i]);
 
         // We want to search for clusters of points that are far enough from
         // each other in the XY plane to generate the column stick base
@@ -812,14 +859,23 @@ bool SLASupportTree::generate(const Model& model,
         }
     };
 
+    using std::ref;
+    using std::cref;
+    using std::bind;
+
     std::array<std::function<void()>, NUM_STEPS> program = {
         [] () {
             // Begin
             // clear up the shared data
         },
-        filterfn,
-        pinheadfn,
-        classifyfn,
+        bind(filterfn, cref(cfg), cref(points), cref(mesh),
+             ref(filtered_points), ref(filtered_normals),
+             ref(head_positions),  ref(headless_positions)),
+        bind(pinheadfn, cref(cfg),
+             ref(head_positions), ref(filtered_normals), ref(result)),
+        bind(classifyfn, cref(cfg), cref(mesh),
+             ref(head_positions), ref(ground_heads), ref(noground_heads),
+             ref(head_heights), ref(result)),
         [] () {
             // Done
         },
@@ -882,6 +938,7 @@ bool SLASupportTree::generate(const Model& model,
         }
     };
 
+    // Just here we run the computation...
     while(pc < DONE || pc == HALT) {
         progress();
         program[pc]();
