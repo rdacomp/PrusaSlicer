@@ -38,13 +38,17 @@ struct SupportConfig {
     double head_width_mm = 1.0;
 
     // Radius in mm of the support pillars.
+    // Warning: this value will be at most 65% of head_back_radius_mm
     double pillar_radius_mm = 0.8;
 
     // Radius in mm of the pillar base.
-    double base_radius_mm = 1.5;
+    double base_radius_mm = 1.0;
 
     // The height of the pillar base cone in mm.
-    double base_height_mm = 0.8;
+    double base_height_mm = 1.0;
+
+    // The default angle for connecting support sticks and junctions.
+    double tilt = M_PI/4;
 };
 
 /// A Control structure for the support calculation. The algorithm can query a

@@ -255,6 +255,10 @@ struct Head {
         return tr + (2*r_pin_mm + width_mm + r_back_mm)*dir;
     }
 
+    double request_pillar_radius(double radius) const {
+        return radius > 0 && radius < r_back_mm ? radius : r_back_mm * 0.65;
+    }
+
     void add_tail(double length, double radius = -1) {
         auto& cntr = tail.mesh;
         Head& head = *this;
@@ -266,8 +270,7 @@ struct Head {
         Vec3d c = head.tr + head.dir * h;
 
         double r = head.r_back_mm * 0.9;
-        double r_low = radius < 0 || radius > head.r_back_mm * 0.65 ?
-                       head.r_back_mm * 0.65 : radius;
+        double r_low = request_pillar_radius(radius);
 
         double a = 2*PI/steps;
         double z = c(2);
@@ -310,7 +313,7 @@ struct ColumnStick {
     {
         steps = head.steps;
 
-        r = radius < head.r_back_mm ? radius : head.r_back_mm * 0.65;
+        r = head.request_pillar_radius(radius);
 
         auto& points = mesh.points; points.reserve(head.tail.steps*2);
         points.insert(points.end(),
@@ -345,10 +348,11 @@ struct ColumnStick {
 
         double a = 2*PI/steps;
         double z = endpoint(2) + height;
+
         for(int i = 0; i < steps; ++i) {
             double phi = i*a;
-            double x = endpoint(0) + 0.5*(radius + r)*std::cos(phi);
-            double y = endpoint(1) + 0.5*(radius + r)*std::sin(phi);
+            double x = endpoint(0) + r*std::cos(phi);
+            double y = endpoint(1) + r*std::sin(phi);
             base.points.emplace_back(x, y, z);
         }
 
@@ -392,7 +396,7 @@ struct Junction {
     Junction(const Vec3d& tr, double r_mm, size_t stepnum = 45):
         r(r_mm), steps(stepnum), pos(tr)
     {
-        mesh = sphere(r_mm, make_portion(0, 2*PI), 2*PI/steps);
+        mesh = sphere(r_mm, make_portion(0, PI), 2*PI/steps);
         for(auto& p : mesh.points) p += tr;
     }
 };
@@ -410,11 +414,11 @@ struct BridgeStick {
 
         mesh = cylinder(r, d, 2*PI / 45);
 
-        auto quater = Quaternion::FromTwoVectors(Vec3d{0,0,-1}, dir);
+        auto quater = Quaternion::FromTwoVectors(Vec3d{0,0,1}, dir);
         for(auto& p : mesh.points) p = quater * p + j1.pos;
     }
 
-    BridgeStick(const Head& h, const Junction& j2, double r = 0.8):
+    BridgeStick(const Head& h, const Junction& j2, double r_mm = 0.8):
         r(r_mm)
     {
         double headsize = 2*h.r_pin_mm + h.width_mm + h.r_back_mm;
@@ -459,7 +463,7 @@ void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
 }
 
 //enum class ClusterType: double {
-static const double /*constexpr*/ D_SP   = 3;
+static const double /*constexpr*/ D_SP   = 0.1;
 static const double /*constexpr*/ D_BRIDGED_TRIO  = 3;
 //static const double /*constexpr*/ D_SSDH = 1.0;  // Same stick different heads
 //static const double /*constexpr*/ D_DHCS = 3.0;  // different heads, connected sticks
@@ -555,7 +559,9 @@ public:
 };
 
 template<class DistFn>
-long cluster_centroid(const ClusterEl& clust, const PointSet& points, DistFn df)
+long cluster_centroid(const ClusterEl& clust,
+                      std::function<Vec3d(size_t)> pointfn,
+                      DistFn df)
 {
     if(clust.empty()) return -1;
     if(clust.size() == 1) return 0;
@@ -576,8 +582,8 @@ long cluster_centroid(const ClusterEl& clust, const PointSet& points, DistFn df)
         std::array<size_t, 2> idx;
         for(size_t i = 0, j = 0; i < clust.size(); i++) if(sel[i]) idx[j++] = i;
 
-        double d = df(Vec3d(points.row(clust[idx[0]])),
-                      Vec3d(points.row(clust[idx[1]])));
+        double d = df(pointfn(clust[idx[0]]),
+                      pointfn(clust[idx[1]]));
 
         // add the distance to the sums for both associated points
         for(auto i : idx) avgs[i] += d;
@@ -615,6 +621,12 @@ bool SLASupportTree::generate(const Model& model,
     // Indices of those who don't touch the ground
     IndexSet noground_heads;
 
+    ClusteredPoints ground_connectors;
+
+    auto gnd_head_pt = [&ground_heads, &head_positions] (size_t idx) {
+        return Vec3d(head_positions.row(ground_heads[idx]));
+    };
+
     using Result = SLASupportTree::Impl;
 
     Result& result = *m_impl;
@@ -624,6 +636,9 @@ bool SLASupportTree::generate(const Model& model,
         FILTER,
         PINHEADS,
         CLASSIFY,
+        ROUTING_GROUND,
+        ROUTING_NONGROUND,
+        HEADLESS,
         DONE,
         HALT,
         ABORT,
@@ -743,7 +758,9 @@ bool SLASupportTree::generate(const Model& model,
         /* Generating Pinheads                                      */
         /* ******************************************************** */
 
-        for (int i = 0; i < nmls.rows(); ++i) {
+        std::cout << "Heads " << head_pos.rows() << std::endl;
+
+        for (int i = 0; i < head_pos.rows(); ++i) {
             result.heads.emplace_back(
                         cfg.head_back_radius_mm,
                         cfg.head_front_radius_mm,
@@ -763,6 +780,7 @@ bool SLASupportTree::generate(const Model& model,
             IndexSet& gndidx,
             IndexSet& nogndidx,
             std::vector<double>& gndheight,
+            ClusteredPoints& ground_clusters,
             Result& result
             ) {
 
@@ -796,40 +814,12 @@ bool SLASupportTree::generate(const Model& model,
 
         // We want to search for clusters of points that are far enough from
         // each other in the XY plane to generate the column stick base
-        auto d_base = 2*cfg.base_radius_mm;
-        auto ground_connectors = cluster(gnd,
+        auto d_base = 4*cfg.base_radius_mm;
+        ground_clusters = cluster(gnd,
             [d_base](const SpatElement& p, const SpatElement& s){
             return distance(Vec2d(p.first(0), p.first(1)),
                             Vec2d(s.first(0), s.first(1))) < d_base;
-        }, 3); // max 3 heads to connect to one centroid
-
-        for(auto cl : ground_connectors) {
-
-            size_t cidx = cluster_centroid(cl, gnd,
-                                           [](const Vec3d& p1, const Vec3d& p2)
-            {
-                return distance(Vec2d(p1(0), p1(1)), Vec2d(p2(0), p2(1)));
-            });
-
-            size_t index_to_heads = gndidx[cl[cidx]];
-            auto& head = result.heads[ index_to_heads ];
-
-            head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
-            head.transform();
-
-            Vec3d startpoint = head.junction_point();
-            auto endpoint = startpoint; endpoint(2) = 0;
-
-            ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
-            cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
-
-            result.column_sticks.emplace_back(cs);
-
-            cl.erase(cl.begin() + cidx);
-            for(auto c : cl) {
-                // TODO connect this head to the center
-            }
-        }
+        }, 4); // max 3 heads to connect to one centroid
 
         for(auto idx : nogndidx) {
             auto& head = result.heads[idx];
@@ -859,32 +849,127 @@ bool SLASupportTree::generate(const Model& model,
         }
     };
 
+    auto routing_ground_fn = [gnd_head_pt](
+            const SupportConfig& cfg,
+            const ClusteredPoints& gnd_clusters,
+            const IndexSet& gndidx,
+            Result& result)
+    {
+        for(auto cl : gnd_clusters) {
+
+            size_t cidx = cluster_centroid(cl, gnd_head_pt,
+                                           [](const Vec3d& p1, const Vec3d& p2)
+            {
+                return distance(Vec2d(p1(0), p1(1)), Vec2d(p2(0), p2(1)));
+            });
+
+            size_t index_to_heads = gndidx[cl[cidx]];
+            auto& head = result.heads[ index_to_heads ];
+
+            head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
+            head.transform();
+
+            Vec3d startpoint = head.junction_point();
+            auto endpoint = startpoint; endpoint(2) = 0;
+
+            ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
+            cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
+
+            result.column_sticks.emplace_back(cs);
+
+            cl.erase(cl.begin() + cidx);
+
+            for(auto c : cl) {
+                auto& sidehead = result.heads[gndidx[c]];
+                sidehead.transform();
+                sidehead.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
+
+                double r_pillar = sidehead.request_pillar_radius(
+                            cfg.pillar_radius_mm);
+
+                double jstep = sidehead.fullwidth();
+
+
+                // connect to the main column by junction
+                auto jp = sidehead.junction_point();
+
+                jp(2) -= jstep;
+
+                auto jh = head.junction_point();
+                double d = distance(Vec2d{jp(0), jp(1)},
+                                    Vec2d{jh(0), jh(1)});
+                double z = d*sin(-cfg.tilt);
+
+                Vec3d jn(jh(0), jh(1), jp(2) + z);
+
+                if(jn(2) > 0) {
+                    result.junctions.emplace_back(jp,
+                                                  cfg.head_back_radius_mm);
+                    result.column_sticks.emplace_back(sidehead, jp,
+                                                      cfg.pillar_radius_mm);
+
+                    auto& jjp = result.junctions.back();
+
+                    result.junctions.emplace_back(jn,
+                                                  cfg.head_back_radius_mm);
+                    auto& jjn = result.junctions.back();
+                    result.bridge_sticks.emplace_back(jjp, jjn, r_pillar);
+                } else {
+                    jp(2) = 0;
+                    ColumnStick sidecs(sidehead, jp,
+                                       cfg.pillar_radius_mm);
+                    sidecs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
+                    result.column_sticks.emplace_back(sidecs);
+                }
+
+                // TODO connect this head to the center
+            }
+        }
+    };
+
     using std::ref;
     using std::cref;
     using std::bind;
 
     std::array<std::function<void()>, NUM_STEPS> program = {
-        [] () {
-            // Begin
-            // clear up the shared data
-        },
-        bind(filterfn, cref(cfg), cref(points), cref(mesh),
-             ref(filtered_points), ref(filtered_normals),
-             ref(head_positions),  ref(headless_positions)),
-        bind(pinheadfn, cref(cfg),
+    [] () {
+        // Begin
+        // clear up the shared data
+    },
+
+    // Filtering unnecessary support points
+    bind(filterfn, cref(cfg), cref(points), cref(mesh),
+         ref(filtered_points), ref(filtered_normals),
+         ref(head_positions),  ref(headless_positions)),
+
+    // Pinhead generation
+    bind(pinheadfn, cref(cfg),
              ref(head_positions), ref(filtered_normals), ref(result)),
-        bind(classifyfn, cref(cfg), cref(mesh),
+
+    // Classification of support points
+    bind(classifyfn, cref(cfg), cref(mesh),
              ref(head_positions), ref(ground_heads), ref(noground_heads),
-             ref(head_heights), ref(result)),
-        [] () {
-            // Done
-        },
-        [] () {
-            // Halt
-        },
-        [] () {
-            // Abort
-        }
+             ref(head_heights), ref(ground_connectors), ref(result)),
+
+    // Routing ground connecting clusters
+    bind(routing_ground_fn,
+         cref(cfg), cref(ground_connectors), cref(ground_heads), ref(result)),
+
+    [] () {
+        // Routing non ground connecting clusters
+    },
+    [] () {
+        // Processing headless support points
+    },
+    [] () {
+        // Done
+    },
+    [] () {
+        // Halt
+    },
+    [] () {
+        // Abort
+    }
     };
 
     Steps pc = BEGIN, pc_prev = BEGIN;
@@ -895,6 +980,9 @@ bool SLASupportTree::generate(const Model& model,
             "Filtering",
             "Generate pinheads"
             "Classification",
+            "Routing to ground",
+            "Routing supports to model surface",
+            "Processing small holes"
             "Done",
             "Halt",
             "Abort"
@@ -905,6 +993,9 @@ bool SLASupportTree::generate(const Model& model,
             10,
             30,
             50,
+            60,
+            70,
+            80,
             100,
             0,
             0
@@ -918,7 +1009,10 @@ bool SLASupportTree::generate(const Model& model,
             case BEGIN: pc = FILTER; break;
             case FILTER: pc = PINHEADS; break;
             case PINHEADS: pc = CLASSIFY; break;
-            case CLASSIFY: pc = DONE; break;
+            case CLASSIFY: pc = ROUTING_GROUND; break;
+            case ROUTING_GROUND: pc = ROUTING_NONGROUND; break;
+            case ROUTING_NONGROUND: pc = HEADLESS; break;
+            case HEADLESS: pc = DONE; break;
             case HALT: pc = pc_prev; break;
             case DONE:
             case ABORT: break; // we should never get here
@@ -979,6 +1073,14 @@ void add_sla_supports(Model &model,
     for(auto& stick : stree.column_sticks) {
         o->add_volume(mesh(stick.mesh));
         o->add_volume(mesh(stick.base));
+    }
+
+    for(auto& j : stree.junctions) {
+        o->add_volume(mesh(j.mesh));
+    }
+
+    for(auto& bs : stree.bridge_sticks) {
+        o->add_volume(mesh(bs.mesh));
     }
 
 }
