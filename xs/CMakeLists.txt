@@ -199,6 +199,7 @@ add_library(sla_extensions STATIC
     ${LIBDIR}/libslic3r/SLA/SLARotfinder.hpp
     ${LIBDIR}/libslic3r/SLA/SLARotfinder.cpp
     ${LIBDIR}/libslic3r/SLA/SLABoostAdapter.hpp
+    ${LIBDIR}/libslic3r/SLA/SLASpatIndex.hpp
     )
 
 add_library(libslic3r_gui STATIC

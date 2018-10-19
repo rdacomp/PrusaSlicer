@@ -71,8 +71,6 @@ struct EigenMesh3D {
 };
 
 using PointSet = Eigen::MatrixXd;
-
-using SpatElement = std::pair<Vec3d, unsigned>;
 using ClusterEl = std::vector<unsigned>;
 using ClusteredPoints = std::vector<ClusterEl>;
 

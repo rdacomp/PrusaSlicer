@@ -1,5 +1,6 @@
 #include "SLA/SLASupportTree.hpp"
 #include "SLA/SLABoilerPlate.hpp"
+#include "SLA/SLASpatIndex.hpp"
 
 // HEAVY headers... takes eternity to compile
 
@@ -9,10 +10,70 @@
 
 #include <igl/ray_mesh_intersect.h>
 #include <igl/point_mesh_squared_distance.h>
-
+#include "SLASpatIndex.hpp"
 
 namespace Slic3r {
 namespace sla {
+
+class SpatIndex::Impl {
+public:
+    using BoostIndex = boost::geometry::index::rtree< SpatElement,
+                       boost::geometry::index::rstar<16, 4> /* ? */ >;
+
+    BoostIndex m_store;
+};
+
+SpatIndex::SpatIndex(): m_impl(new Impl()) {}
+SpatIndex::~SpatIndex() {}
+
+SpatIndex::SpatIndex(const SpatIndex &cpy): m_impl(new Impl(*cpy.m_impl)) {}
+SpatIndex::SpatIndex(SpatIndex&& cpy): m_impl(std::move(cpy.m_impl)) {}
+
+SpatIndex& SpatIndex::operator=(const SpatIndex &cpy)
+{
+    m_impl.reset(new Impl(*cpy.m_impl));
+    return *this;
+}
+
+SpatIndex& SpatIndex::operator=(SpatIndex &&cpy)
+{
+    m_impl.swap(cpy.m_impl);
+    return *this;
+}
+
+void SpatIndex::insert(const SpatElement &el)
+{
+    m_impl->m_store.insert(el);
+}
+
+void SpatIndex::remove(const SpatElement& el)
+{
+    m_impl->m_store.remove(el);
+}
+
+const SpatElement& SpatIndex::iterator::operator *() {
+    auto it = m.m_store.begin();
+    std::advance(it, idx);
+    return *it;
+}
+
+std::vector<SpatElement>
+SpatIndex::query(std::function<bool(const SpatElement &)> fn)
+{
+    namespace bgi = boost::geometry::index;
+
+    std::vector<SpatElement> ret;
+    m_impl->m_store.query(bgi::satisfies(fn), std::back_inserter(ret));
+    return ret;
+}
+
+std::vector<SpatElement> SpatIndex::nearest(const Vec3d &el, unsigned k = 1)
+{
+    namespace bgi = boost::geometry::index;
+    std::vector<SpatElement> ret; ret.reserve(k);
+    m_impl->m_store.query(bgi::nearest(el, k), std::back_inserter(ret));
+    return ret;
+}
 
 PointSet normals(const PointSet& points, const EigenMesh3D& mesh) {
     Eigen::VectorXd dists;
@@ -55,10 +116,10 @@ ClusteredPoints cluster(
 {
 
     namespace bgi = boost::geometry::index;
-    using SpatIndex = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
+    using Index3D = bgi::rtree< SpatElement, bgi::rstar<16, 4> /* ? */ >;
 
     // A spatial index for querying the nearest points
-    SpatIndex sindex;
+    Index3D sindex;
 
     // Build the index
     for(unsigned idx = 0; idx < points.rows(); idx++)

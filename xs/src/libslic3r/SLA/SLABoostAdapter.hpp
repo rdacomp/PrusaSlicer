@@ -4,15 +4,6 @@
 #include "SLA/SLABoilerPlate.hpp"
 #include <boost/geometry.hpp>
 
-namespace Slic3r { namespace sla {
-
-/// Index of minimum corner of the box.
-std::size_t const min_corner = 0;
-
-/// Index of maximum corner of the box.
-std::size_t const max_corner = 1;
-}
-}
 
 namespace boost {
 namespace geometry {
@@ -111,7 +102,7 @@ template<> struct point_type<Slic3r::BoundingBox> {
 };
 
 template<std::size_t d>
-struct indexed_access<Slic3r::BoundingBox, min_corner, d> {
+struct indexed_access<Slic3r::BoundingBox, 0, d> {
     static inline coord_t get(Slic3r::BoundingBox const& box) {
         return box.min(d);
     }
@@ -121,7 +112,7 @@ struct indexed_access<Slic3r::BoundingBox, min_corner, d> {
 };
 
 template<std::size_t d>
-struct indexed_access<Slic3r::BoundingBox, max_corner, d> {
+struct indexed_access<Slic3r::BoundingBox, 1, d> {
     static inline coord_t get(Slic3r::BoundingBox const& box) {
         return box.max(d);
     }

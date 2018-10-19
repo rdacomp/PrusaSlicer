@@ -95,6 +95,9 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
         // with all axes. If the normal is aligned than the triangle itself is
         // orthogonal to the axes and that is good for print quality.
 
+        // TODO: some applications optimize for minimum z-axis cross section
+        // area. The current function is only an example of how to optimize.
+
         // Later we can add more criteria like the number of overhangs, etc...
         for(int i = 0; i < m.F.rows(); i++) {
             auto idx = m.F.row(i);

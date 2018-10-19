@@ -1,5 +1,7 @@
+#include <numeric>
 #include "SLASupportTree.hpp"
 #include "SLABoilerPlate.hpp"
+#include "SLASpatIndex.hpp"
 
 #include "Model.hpp"
 
@@ -301,14 +303,14 @@ struct Head {
     }
 };
 
-struct ColumnStick {
+struct Pillar {
     Contour3D mesh;
     Contour3D base;
     double r = 1;
     size_t steps = 0;
     Vec3d endpoint;
 
-    ColumnStick(const Head& head, const Vec3d& endp, double radius = 1) :
+    Pillar(const Head& head, const Vec3d& endp, double radius = 1) :
         endpoint(endp)
     {
         steps = head.steps;
@@ -401,11 +403,11 @@ struct Junction {
     }
 };
 
-struct BridgeStick {
+struct Bridge {
     Contour3D mesh;
     double r = 0.8;
 
-    BridgeStick(const Junction& j1, const Junction& j2, double r_mm = 0.8):
+    Bridge(const Junction& j1, const Junction& j2, double r_mm = 0.8):
         r(r_mm)
     {
         using Quaternion = Eigen::Quaternion<double>;
@@ -418,16 +420,16 @@ struct BridgeStick {
         for(auto& p : mesh.points) p = quater * p + j1.pos;
     }
 
-    BridgeStick(const Head& h, const Junction& j2, double r_mm = 0.8):
+    Bridge(const Head& h, const Junction& j2, double r_mm = 0.8):
         r(r_mm)
     {
-        double headsize = 2*h.r_pin_mm + h.width_mm + h.r_back_mm;
-        Vec3d hp = h.tr + h.dir * headsize;
-        Vec3d dir = (j2.pos - hp).normalized();
+//        double headsize = 2*h.r_pin_mm + h.width_mm + h.r_back_mm;
+//        Vec3d hp = h.tr + h.dir * headsize;
+//        Vec3d dir = (j2.pos - hp).normalized();
 
     }
 
-    BridgeStick(const Junction& j, const ColumnStick& cl) {}
+    Bridge(const Junction& j, const Pillar& cl) {}
 
 };
 
@@ -455,7 +457,7 @@ void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
     out.merge(mesh(head.mesh));
     out.merge(mesh(head.tail.mesh));
 
-    ColumnStick cst(head, {0, 0, 0});
+    Pillar cst(head, {0, 0, 0});
     cst.add_base();
 
     out.merge(mesh(cst.mesh));
@@ -551,11 +553,37 @@ ClusteredPoints cluster(
         unsigned max_points = 0);
 
 class SLASupportTree::Impl {
+    std::vector<Head> m_heads;
+    std::vector<Pillar> m_pillars;
+    std::vector<Junction> m_junctions;
+    std::vector<Bridge> m_bridges;
 public:
-    std::vector<Head> heads;
-    std::vector<ColumnStick> column_sticks;
-    std::vector<Junction> junctions;
-    std::vector<BridgeStick> bridge_sticks;
+
+    template<class...Args> Head& add_head(Args&&... args) {
+        m_heads.emplace_back(std::forward<Args>(args)...);
+        return m_heads.back();
+    }
+
+    template<class...Args> Pillar& add_pillar(Args&&... args) {
+        m_pillars.emplace_back(std::forward<Args>(args)...);
+        return m_pillars.back();
+    }
+
+    template<class...Args> Junction& add_junction(Args&&... args) {
+        m_junctions.emplace_back(std::forward<Args>(args)...);
+        return m_junctions.back();
+    }
+
+    template<class...Args> Bridge& add_bridge(Args&&... args) {
+        m_bridges.emplace_back(std::forward<Args>(args)...);
+        return m_bridges.back();
+    }
+
+    const std::vector<Head>& heads() const { return m_heads; }
+    Head& head(size_t idx) { return m_heads[idx]; }
+    const std::vector<Pillar>& pillars() const { return m_pillars; }
+    const std::vector<Bridge>& bridges() const { return m_bridges; }
+    const std::vector<Junction>& junctions() const { return m_junctions; }
 };
 
 template<class DistFn>
@@ -761,7 +789,7 @@ bool SLASupportTree::generate(const Model& model,
         std::cout << "Heads " << head_pos.rows() << std::endl;
 
         for (int i = 0; i < head_pos.rows(); ++i) {
-            result.heads.emplace_back(
+            result.add_head(
                         cfg.head_back_radius_mm,
                         cfg.head_front_radius_mm,
                         cfg.head_width_mm,
@@ -794,7 +822,7 @@ bool SLASupportTree::generate(const Model& model,
         nogndidx.reserve(head_pos.rows());
 
         for(unsigned i = 0; i < head_pos.rows(); i++) {
-            auto& head = result.heads[i];
+            auto& head = result.heads()[i];
 
             Vec3d dir(0, 0, -1);
             Vec3d startpoint = head.junction_point();
@@ -822,7 +850,7 @@ bool SLASupportTree::generate(const Model& model,
         }, 4); // max 3 heads to connect to one centroid
 
         for(auto idx : nogndidx) {
-            auto& head = result.heads[idx];
+            auto& head = result.head(idx);
             head.transform();
             head.add_tail(0.8*head.width_mm);
 
@@ -839,12 +867,12 @@ bool SLASupportTree::generate(const Model& model,
 
             double hl = head.fullwidth() - head.r_back_mm;
 
-            ColumnStick cs(head,
+            Pillar cs(head,
                            Vec3d{headend(0), headend(1), headend(2) - gh + hl},
                            cfg.pillar_radius_mm);
 
             cs.base = base_head.mesh;
-            result.column_sticks.emplace_back(cs);
+            result.add_pillar(cs);
 
         }
     };
@@ -855,6 +883,8 @@ bool SLASupportTree::generate(const Model& model,
             const IndexSet& gndidx,
             Result& result)
     {
+        // Connect closely coupled support points to one pillar if there is
+        // enough downward space.
         for(auto cl : gnd_clusters) {
 
             size_t cidx = cluster_centroid(cl, gnd_head_pt,
@@ -864,7 +894,7 @@ bool SLASupportTree::generate(const Model& model,
             });
 
             size_t index_to_heads = gndidx[cl[cidx]];
-            auto& head = result.heads[ index_to_heads ];
+            auto& head = result.head(index_to_heads);
 
             head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
             head.transform();
@@ -872,15 +902,15 @@ bool SLASupportTree::generate(const Model& model,
             Vec3d startpoint = head.junction_point();
             auto endpoint = startpoint; endpoint(2) = 0;
 
-            ColumnStick cs(head, endpoint, cfg.pillar_radius_mm);
+            Pillar cs(head, endpoint, cfg.pillar_radius_mm);
             cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
 
-            result.column_sticks.emplace_back(cs);
+            result.add_pillar(cs);
 
             cl.erase(cl.begin() + cidx);
 
             for(auto c : cl) {
-                auto& sidehead = result.heads[gndidx[c]];
+                auto& sidehead = result.head(gndidx[c]);
                 sidehead.transform();
                 sidehead.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
 
@@ -903,28 +933,40 @@ bool SLASupportTree::generate(const Model& model,
                 Vec3d jn(jh(0), jh(1), jp(2) + z);
 
                 if(jn(2) > 0) {
-                    result.junctions.emplace_back(jp,
-                                                  cfg.head_back_radius_mm);
-                    result.column_sticks.emplace_back(sidehead, jp,
-                                                      cfg.pillar_radius_mm);
+                    auto& jjp = result.add_junction(jp, cfg.head_back_radius_mm);
+                    result.add_pillar(sidehead, jp, cfg.pillar_radius_mm);
 
-                    auto& jjp = result.junctions.back();
-
-                    result.junctions.emplace_back(jn,
-                                                  cfg.head_back_radius_mm);
-                    auto& jjn = result.junctions.back();
-                    result.bridge_sticks.emplace_back(jjp, jjn, r_pillar);
+                    auto&& jjn = result.add_junction(jn, cfg.head_back_radius_mm);
+                    result.add_bridge(jjp, jjn, r_pillar);
                 } else {
                     jp(2) = 0;
-                    ColumnStick sidecs(sidehead, jp,
+                    Pillar sidecs(sidehead, jp,
                                        cfg.pillar_radius_mm);
                     sidecs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
-                    result.column_sticks.emplace_back(sidecs);
+                    result.add_pillar(sidecs);
                 }
-
-                // TODO connect this head to the center
             }
         }
+
+        // Now connect the created pillars with each other creating a network
+        // of interconnected supports
+        SpatIndex junction_index;
+        SpatIndex pillar_index;
+
+        for(auto ej : enumerate(result.junctions())) {
+            auto& p = ej.value.pos;
+            junction_index.insert({p(0), p(1), 0}, unsigned(ej.index));
+        }
+
+        for(auto ej : enumerate(result.pillars())) {
+            auto& p = ej.value.endpoint;
+            pillar_index.insert({p(0), p(1), 0}, unsigned(ej.index));
+        }
+
+//        for(const SpatElement& ple : pillar_index) {
+
+//        }
+
     };
 
     using std::ref;
@@ -1065,21 +1107,21 @@ void add_sla_supports(Model &model,
     ModelObject* o = model.add_object();
     o->add_instance();
 
-    for(auto& head : stree.heads) {
+    for(auto& head : stree.heads()) {
         o->add_volume(mesh(head.mesh));
         o->add_volume(mesh(head.tail.mesh));
     }
 
-    for(auto& stick : stree.column_sticks) {
+    for(auto& stick : stree.pillars()) {
         o->add_volume(mesh(stick.mesh));
         o->add_volume(mesh(stick.base));
     }
 
-    for(auto& j : stree.junctions) {
+    for(auto& j : stree.junctions()) {
         o->add_volume(mesh(j.mesh));
     }
 
-    for(auto& bs : stree.bridge_sticks) {
+    for(auto& bs : stree.bridges()) {
         o->add_volume(mesh(bs.mesh));
     }
 
