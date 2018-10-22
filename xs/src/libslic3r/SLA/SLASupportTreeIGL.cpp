@@ -51,12 +51,6 @@ void SpatIndex::remove(const SpatElement& el)
     m_impl->m_store.remove(el);
 }
 
-const SpatElement& SpatIndex::iterator::operator *() {
-    auto it = m.m_store.begin();
-    std::advance(it, idx);
-    return *it;
-}
-
 std::vector<SpatElement>
 SpatIndex::query(std::function<bool(const SpatElement &)> fn)
 {
@@ -73,6 +67,11 @@ std::vector<SpatElement> SpatIndex::nearest(const Vec3d &el, unsigned k = 1)
     std::vector<SpatElement> ret; ret.reserve(k);
     m_impl->m_store.query(bgi::nearest(el, k), std::back_inserter(ret));
     return ret;
+}
+
+size_t SpatIndex::size() const
+{
+    return m_impl->m_store.size();
 }
 
 PointSet normals(const PointSet& points, const EigenMesh3D& mesh) {

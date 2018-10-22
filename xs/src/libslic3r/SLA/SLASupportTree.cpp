@@ -309,9 +309,10 @@ struct Pillar {
     double r = 1;
     size_t steps = 0;
     Vec3d endpoint;
+    std::reference_wrapper<const Head> headref;
 
     Pillar(const Head& head, const Vec3d& endp, double radius = 1) :
-        endpoint(endp)
+        endpoint(endp), headref(std::cref(head))
     {
         steps = head.steps;
 
@@ -786,8 +787,6 @@ bool SLASupportTree::generate(const Model& model,
         /* Generating Pinheads                                      */
         /* ******************************************************** */
 
-        std::cout << "Heads " << head_pos.rows() << std::endl;
-
         for (int i = 0; i < head_pos.rows(); ++i) {
             result.add_head(
                         cfg.head_back_radius_mm,
@@ -868,8 +867,8 @@ bool SLASupportTree::generate(const Model& model,
             double hl = head.fullwidth() - head.r_back_mm;
 
             Pillar cs(head,
-                           Vec3d{headend(0), headend(1), headend(2) - gh + hl},
-                           cfg.pillar_radius_mm);
+                      Vec3d{headend(0), headend(1), headend(2) - gh + hl},
+                      cfg.pillar_radius_mm);
 
             cs.base = base_head.mesh;
             result.add_pillar(cs);
@@ -881,6 +880,7 @@ bool SLASupportTree::generate(const Model& model,
             const SupportConfig& cfg,
             const ClusteredPoints& gnd_clusters,
             const IndexSet& gndidx,
+            const EigenMesh3D& emesh,
             Result& result)
     {
         // Connect closely coupled support points to one pillar if there is
@@ -917,28 +917,37 @@ bool SLASupportTree::generate(const Model& model,
                 double r_pillar = sidehead.request_pillar_radius(
                             cfg.pillar_radius_mm);
 
+                // The distance in z direction by which the junctions on the
+                // pillar will be placed subsequently.
                 double jstep = sidehead.fullwidth();
-
 
                 // connect to the main column by junction
                 auto jp = sidehead.junction_point();
 
+                // move to the next junction point
                 jp(2) -= jstep;
 
+                // Now we want to hit the central pillar with a "tilt"ed bridge
+                // stick and (optionally) place a junction point there.
                 auto jh = head.junction_point();
+                // with simple trigonometry, we calculate the z coordinate on
+                // the main pillar. Distance is between the two pillars in 2d:
                 double d = distance(Vec2d{jp(0), jp(1)},
                                     Vec2d{jh(0), jh(1)});
                 double z = d*sin(-cfg.tilt);
 
                 Vec3d jn(jh(0), jh(1), jp(2) + z);
 
-                if(jn(2) > 0) {
+                if(jn(2) > 0) { // if the junction on the main pillar above ground
                     auto& jjp = result.add_junction(jp, cfg.head_back_radius_mm);
                     result.add_pillar(sidehead, jp, cfg.pillar_radius_mm);
 
                     auto&& jjn = result.add_junction(jn, cfg.head_back_radius_mm);
                     result.add_bridge(jjp, jjn, r_pillar);
                 } else {
+                    // if there is no space for the connection, a dedicated
+                    // pillar is created for all the support points in the cluster.
+
                     jp(2) = 0;
                     Pillar sidecs(sidehead, jp,
                                        cfg.pillar_radius_mm);
@@ -963,7 +972,92 @@ bool SLASupportTree::generate(const Model& model,
             pillar_index.insert({p(0), p(1), 0}, unsigned(ej.index));
         }
 
-//        for(const SpatElement& ple : pillar_index) {
+        std::set<size_t> ipillars;
+        for(auto& ep : enumerate(result.pillars())) ipillars.insert(ep.index);
+
+        std::cout << "pillar count " << ipillars.size() << std::endl;
+
+        for(auto it = ipillars.begin(); it != ipillars.end();)
+        {
+            size_t idx = *it;
+            const Pillar& pillar = result.pillars()[idx];
+
+            auto& p = pillar.endpoint;
+            auto pp = Vec3d{p(0), p(1), 0};
+            auto sp = std::make_pair(pp, unsigned(idx));
+            pillar_index.remove(sp);
+
+            auto qv = pillar_index.nearest(pp, 1);
+            if(!qv.empty()) {
+                SpatElement q = qv.front();
+                const Pillar& nearpillar = result.pillars()[q.second];
+                double d = 2*pillar.r;
+
+                std::cout << "nearest pillar: " << q.second << " " << nearpillar.endpoint << std::endl;
+
+                // we must find the already created junctions current pillar
+                auto juncs = junction_index.query([pp, d](const SpatElement& se)
+                {
+                    return distance(pp, se.first) < d;
+                });
+
+                Vec3d sj;
+                if(juncs.empty()) {
+                    // No junctions on the pillar so far. Using the head.
+                    sj = pillar.headref.get().junction_point();
+                } else {
+                    // search for the lowest junction in z direction
+                    auto juncit = std::min_element(juncs.begin(), juncs.end(),
+                                                   [](const SpatElement& se1,
+                                                      const SpatElement& se2){
+                        return se1.first(2) < se2.first(2);
+                    });
+                    sj = result.junctions()[juncit->second].pos;
+                }
+
+                // try to create new bridge to the nearest pillar.
+                // if it bumps into the model, we should try other starting
+                // points and if that fails as well than leave it be and
+                // continue with the second nearest junction and so on.
+
+                // calculate z coord of new junction
+                sj(2) -= cfg.junction_distance;
+
+                Vec3d ej = nearpillar.endpoint;
+                double pillar_dist = distance(Vec2d{sj(0), sj(1)},
+                                              Vec2d{ej(0), ej(1)});
+                ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
+
+                // now we have the two new junction points on the pillars, we
+                // should check if they can be safely connected:
+                double checkdist = ray_mesh_intersect(sj,
+                                                      (ej - sj).normalized(),
+                                                      emesh);
+
+                std::cout << "checkdist " << checkdist << std::endl;
+                std::cout << "pillar_dist = " << pillar_dist << std::endl;
+                while(checkdist >= pillar_dist && nearpillar.endpoint(2) < ej(2)
+                   && pillar.endpoint(2) < sj(2) )
+                {
+                    std::cout << "generate bridges" << std::endl;
+                    auto& jS = result.add_junction(sj, cfg.head_back_radius_mm);
+                    auto& jE = result.add_junction(ej, cfg.head_back_radius_mm);
+                    result.add_bridge(jS, jE, pillar.r);
+
+                    sj.swap(ej);
+                    ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
+                    checkdist = ray_mesh_intersect(sj, (ej - sj).normalized(),
+                                                   emesh);
+                }
+
+                ipillars.erase(it);
+                it = ipillars.find(q.second);
+            } else it = ipillars.end();
+        }
+
+//        for(auto it = result.pillars().begin();
+//            it != result.pillars().end();
+//            ++it) {
 
 //        }
 
@@ -973,6 +1067,8 @@ bool SLASupportTree::generate(const Model& model,
     using std::cref;
     using std::bind;
 
+    // Here we can easily track what goes in and what comes out of each step:
+    // (see the cref-s as inputs and ref-s as outputs)
     std::array<std::function<void()>, NUM_STEPS> program = {
     [] () {
         // Begin
@@ -995,7 +1091,8 @@ bool SLASupportTree::generate(const Model& model,
 
     // Routing ground connecting clusters
     bind(routing_ground_fn,
-         cref(cfg), cref(ground_connectors), cref(ground_heads), ref(result)),
+         cref(cfg), cref(ground_connectors), cref(ground_heads), cref(mesh),
+         ref(result)),
 
     [] () {
         // Routing non ground connecting clusters

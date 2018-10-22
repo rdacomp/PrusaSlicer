@@ -13,6 +13,14 @@ namespace sla {
 typedef Eigen::Matrix<double,   3, 1, Eigen::DontAlign> Vec3d;
 using SpatElement = std::pair<Vec3d, unsigned>;
 
+/**
+ * This class is intended for enhancing range based for loops with indexing.
+ * So instead of this:
+ * { int i = 0; for(auto c : container) { process(c, i); ++i; }
+ *
+ * you can use this:
+ * for(auto ic : container) process(ic.value, ic.index);
+ */
 template<class Container> class Enumerable {
     Container&& m;
     using C = typename std::remove_reference<Container>::type;
@@ -69,6 +77,8 @@ template<class C> inline Enumerable<C> enumerate(C&& c) {
 class SpatIndex {
     class Impl;
 
+    // We use Pimpl because it takes a long time to compile boost headers which
+    // is the engine of this class. We include it only in the cpp file.
     std::unique_ptr<Impl> m_impl;
 public:
 
@@ -91,20 +101,8 @@ public:
     std::vector<SpatElement> query(std::function<bool(const SpatElement&)>);
     std::vector<SpatElement> nearest(const Vec3d&, unsigned k);
 
-    class iterator {
-        Impl& m;
-        size_t idx;
-    public:
-        iterator(Impl& impl): m(impl), idx(0) {}
-        const SpatElement& operator*();
-        iterator& operator++() { ++idx; return *this; }
-        iterator operator++(int) { auto ret = *this; ++idx; return ret; }
-        bool operator!=(const iterator& other) { return idx != other.idx; }
-    };
-
-
-    iterator begin();
-    iterator end();
+    // For testing
+    size_t size() const;
 };
 
 }
