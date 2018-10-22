@@ -388,6 +388,8 @@ struct Pillar {
         indices.emplace_back(offs, offs + last, lcenter);
 
     }
+
+    bool has_base() const { return !base.points.empty(); }
 };
 
 struct Junction {
@@ -1030,37 +1032,34 @@ bool SLASupportTree::generate(const Model& model,
 
                 // now we have the two new junction points on the pillars, we
                 // should check if they can be safely connected:
-                double checkdist = ray_mesh_intersect(sj,
-                                                      (ej - sj).normalized(),
-                                                      emesh);
+                double chkd = ray_mesh_intersect(sj, (ej - sj).normalized(),
+                                                 emesh);
 
-                std::cout << "checkdist " << checkdist << std::endl;
-                std::cout << "pillar_dist = " << pillar_dist << std::endl;
-                while(checkdist >= pillar_dist && nearpillar.endpoint(2) < ej(2)
-                   && pillar.endpoint(2) < sj(2) )
+                while(nearpillar.endpoint(2) < ej(2) &&
+                      pillar.endpoint(2) < sj(2) )
                 {
-                    std::cout << "generate bridges" << std::endl;
+                    if(chkd < pillar_dist) continue;
                     auto& jS = result.add_junction(sj, cfg.head_back_radius_mm);
                     auto& jE = result.add_junction(ej, cfg.head_back_radius_mm);
                     result.add_bridge(jS, jE, pillar.r);
 
                     sj.swap(ej);
                     ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
-                    checkdist = ray_mesh_intersect(sj, (ej - sj).normalized(),
-                                                   emesh);
+                    chkd = ray_mesh_intersect(sj, (ej - sj).normalized(), emesh);
                 }
 
-                ipillars.erase(it);
-                it = ipillars.find(q.second);
+
+                // if the nearest pillar connects to ground, continue with that
+
+                // ////////////////////////////////////////////////////////////
+                // TODO: This crashes for some reason...
+                // ////////////////////////////////////////////////////////////
+                if(nearpillar.has_base()) {
+                    ipillars.erase(it);
+                    it = ipillars.find(q.second);
+                }
             } else it = ipillars.end();
         }
-
-//        for(auto it = result.pillars().begin();
-//            it != result.pillars().end();
-//            ++it) {
-
-//        }
-
     };
 
     using std::ref;
