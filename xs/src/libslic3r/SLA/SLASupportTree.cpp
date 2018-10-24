@@ -261,10 +261,10 @@ struct Head {
         return radius > 0 && radius < r_back_mm ? radius : r_back_mm * 0.65;
     }
 
-    void add_tail(double length, double radius = -1) {
+    void add_tail(double length = -1, double radius = -1) {
         auto& cntr = tail.mesh;
         Head& head = *this;
-        tail.length = length;
+        if(length > 0) tail.length = length;
 
         cntr.points.reserve(2*steps);
 
@@ -287,7 +287,7 @@ struct Head {
             double phi = i*a;
             double lx = c(0) + r_low*std::cos(phi);
             double ly = c(1) + r_low*std::sin(phi);
-            cntr.points.emplace_back(lx, ly, z - length);
+            cntr.points.emplace_back(lx, ly, z - tail.length);
         }
 
         cntr.indices.reserve(2*steps);
@@ -476,6 +476,10 @@ static const double /*constexpr*/ D_BRIDGED_TRIO  = 3;
 //static const double /*constexpr*/ D_DHDS = 8.0;  // different heads, different stick
 //};
 
+enum { // For indexing Eigen vectors as v(X), v(Y), v(Z) instead of numbers
+  X, Y, Z
+};
+
 EigenMesh3D to_eigenmesh(const Model& model) {
     TriangleMesh combined_mesh;
 
@@ -594,8 +598,12 @@ long cluster_centroid(const ClusterEl& clust,
                       std::function<Vec3d(size_t)> pointfn,
                       DistFn df)
 {
-    if(clust.empty()) return -1;
-    if(clust.size() == 1) return 0;
+    switch(clust.size()) {
+    case 0: /* empty cluster */ return -1;
+    case 1: /* only one element */ return 0;
+    case 2: /* if two elements, there is no center */ return 0;
+    default: ;
+    }
 
     // The function works by calculating for each point the average distance
     // from all the other points in the cluster. We create a selector bitmask of
@@ -628,6 +636,80 @@ long cluster_centroid(const ClusterEl& clust,
     // get the lowest average distance and return the index
     auto minit = std::min_element(avgs.begin(), avgs.end());
     return long(minit - avgs.begin());
+}
+
+/**
+ * This function will calculate the convex hull of the input point set and
+ * return the indices of those points belonging to the chull in the right
+ * (counter clockwise) order. The input is also the set of indices and a
+ * functor to get the actual point form the index.
+ */
+ClusterEl pts_convex_hull(const ClusterEl& inpts,
+                          std::function<Vec2d(unsigned)> pfn)
+{
+    using Point = Vec2d;
+    using std::vector;
+
+    static const double ERR = 1e-6;
+
+    auto orientation = [](const Point& p, const Point& q, const Point& r)
+    {
+        double val = (q(Y) - p(Y)) * (r(X) - q(X)) -
+                     (q(X) - p(X)) * (r(Y) - q(Y));
+
+        if (std::abs(val) < ERR) return 0;  // collinear
+        return (val > ERR)? 1: 2; // clock or counterclockwise
+    };
+
+    size_t n = inpts.size();
+
+    if (n < 3) return inpts;
+
+    // Initialize Result
+    ClusterEl hull;
+    vector<Point> points; points.reserve(n);
+    for(auto i : inpts) points.emplace_back(pfn(i));
+
+    // Find the leftmost point
+    int l = 0;
+    for (int i = 1; i < n; i++) {
+        if(std::abs(points[i](X) - points[l](X)) < ERR) {
+            if(points[i](Y) < points[l](Y)) l = i;
+        }
+        else if (points[i](X) < points[l](X)) l = i;
+    }
+
+
+    // Start from leftmost point, keep moving counterclockwise
+    // until reach the start point again.  This loop runs O(h)
+    // times where h is number of points in result or output.
+    int p = l;
+    do
+    {
+        // Add current point to result
+        hull.push_back(p);
+
+        // Search for a point 'q' such that orientation(p, x,
+        // q) is counterclockwise for all points 'x'. The idea
+        // is to keep track of last visited most counterclock-
+        // wise point in q. If any point 'i' is more counterclock-
+        // wise than q, then update q.
+        int q = (p+1)%n;
+        for (int i = 0; i < n; i++)
+        {
+           // If i is more counterclockwise than current q, then
+           // update q
+           if (orientation(points[p], points[i], points[q]) == 2) q = i;
+        }
+
+        // Now q is the most counterclockwise with respect to p
+        // Set p as q for next iteration, so that q is added to
+        // result 'hull'
+        p = q;
+
+    } while (p != l);  // While we don't come to first point
+
+    return hull;
 }
 
 bool SLASupportTree::generate(const Model& model,
@@ -853,7 +935,7 @@ bool SLASupportTree::generate(const Model& model,
         for(auto idx : nogndidx) {
             auto& head = result.head(idx);
             head.transform();
-            head.add_tail(0.8*head.width_mm);
+            head.add_tail();
 
             double gh = gndheight[idx];
             Vec3d headend = head.junction_point();
@@ -885,24 +967,31 @@ bool SLASupportTree::generate(const Model& model,
             const EigenMesh3D& emesh,
             Result& result)
     {
+        const double hbr = cfg.head_back_radius_mm;
+
+        ClusterEl cl_centroids;
+        cl_centroids.reserve(gnd_clusters.size());
+
         // Connect closely coupled support points to one pillar if there is
         // enough downward space.
         for(auto cl : gnd_clusters) {
 
-            size_t cidx = cluster_centroid(cl, gnd_head_pt,
+            unsigned cidx = cluster_centroid(cl, gnd_head_pt,
                                            [](const Vec3d& p1, const Vec3d& p2)
             {
-                return distance(Vec2d(p1(0), p1(1)), Vec2d(p2(0), p2(1)));
+                return distance(Vec2d(p1(X), p1(Y)), Vec2d(p2(X), p2(Y)));
             });
+
+            cl_centroids.emplace_back(cl[cidx]);
 
             size_t index_to_heads = gndidx[cl[cidx]];
             auto& head = result.head(index_to_heads);
 
-            head.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
+            head.add_tail();
             head.transform();
 
             Vec3d startpoint = head.junction_point();
-            auto endpoint = startpoint; endpoint(2) = 0;
+            auto endpoint = startpoint; endpoint(Z) = 0;
 
             Pillar cs(head, endpoint, cfg.pillar_radius_mm);
             cs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
@@ -911,11 +1000,12 @@ bool SLASupportTree::generate(const Model& model,
 
             cl.erase(cl.begin() + cidx);
 
-            for(auto c : cl) {
+            for(auto c : cl) { // point in current cluster
                 auto& sidehead = result.head(gndidx[c]);
                 sidehead.transform();
-                sidehead.add_tail(0.8*cfg.head_width_mm, cfg.pillar_radius_mm);
+                sidehead.add_tail();
 
+                // get an appropriate radius for the pillar
                 double r_pillar = sidehead.request_pillar_radius(
                             cfg.pillar_radius_mm);
 
@@ -927,77 +1017,80 @@ bool SLASupportTree::generate(const Model& model,
                 auto jp = sidehead.junction_point();
 
                 // move to the next junction point
-                jp(2) -= jstep;
+                jp(Z) -= jstep;
 
                 // Now we want to hit the central pillar with a "tilt"ed bridge
                 // stick and (optionally) place a junction point there.
                 auto jh = head.junction_point();
                 // with simple trigonometry, we calculate the z coordinate on
                 // the main pillar. Distance is between the two pillars in 2d:
-                double d = distance(Vec2d{jp(0), jp(1)},
-                                    Vec2d{jh(0), jh(1)});
-                double z = d*sin(-cfg.tilt);
+                double d = distance(Vec2d{jp(X), jp(Y)},
+                                    Vec2d{jh(X), jh(Y)});
 
-                Vec3d jn(jh(0), jh(1), jp(2) + z);
+                Vec3d jn(jh(X), jh(Y), jp(Z) + d*sin(-cfg.tilt));
 
-                if(jn(2) > 0) { // if the junction on the main pillar above ground
-                    auto& jjp = result.add_junction(jp, cfg.head_back_radius_mm);
+                if(jn(Z) > 0) {
+                    // if the junction on the main pillar above ground
+                    auto& jjp = result.add_junction(jp, hbr);
                     result.add_pillar(sidehead, jp, cfg.pillar_radius_mm);
 
-                    auto&& jjn = result.add_junction(jn, cfg.head_back_radius_mm);
+                    auto&& jjn = result.add_junction(jn, hbr);
                     result.add_bridge(jjp, jjn, r_pillar);
                 } else {
                     // if there is no space for the connection, a dedicated
-                    // pillar is created for all the support points in the cluster.
+                    // pillar is created for all the support points in the
+                    // cluster. This is the case with dense support points
+                    // close to the ground.
 
-                    jp(2) = 0;
-                    Pillar sidecs(sidehead, jp,
-                                       cfg.pillar_radius_mm);
+                    jp(Z) = 0;
+                    Pillar sidecs(sidehead, jp, cfg.pillar_radius_mm);
                     sidecs.add_base(cfg.base_height_mm, cfg.base_radius_mm);
                     result.add_pillar(sidecs);
                 }
             }
         }
 
-        // Now connect the created pillars with each other creating a network
-        // of interconnected supports
+        // We will break down the pillar positions in 2D into concentric rings.
+        // Connecting the pillars belonging to the same ring will prevent
+        // bridges from crossing each other. After bridging the rings we can
+        // create bridges between the rings without the possibility of crossing
+        // bridges.
+
         SpatIndex junction_index;
-        SpatIndex pillar_index;
-
-        for(auto ej : enumerate(result.junctions())) {
+        for(auto ej : enumerate(result.junctions())) { // fill the spatial index
             auto& p = ej.value.pos;
-            junction_index.insert({p(0), p(1), 0}, unsigned(ej.index));
+            junction_index.insert({p(X), p(Y), 0}, unsigned(ej.index));
         }
 
-        for(auto ej : enumerate(result.pillars())) {
-            auto& p = ej.value.endpoint;
-            pillar_index.insert({p(0), p(1), 0}, unsigned(ej.index));
-        }
+        ClusterEl rem = cl_centroids;
+        while(!rem.empty()) {
+            std::sort(rem.begin(), rem.end());
 
-        std::set<size_t> ipillars;
-        for(auto& ep : enumerate(result.pillars())) ipillars.insert(ep.index);
+            auto ring = pts_convex_hull(rem,
+                                        [gnd_head_pt](unsigned i) {
+                auto& p = gnd_head_pt(i);
+                return Vec2d(p(X), p(Y)); // project to 2D in along Z axis
+            });
 
-        std::cout << "pillar count " << ipillars.size() << std::endl;
+            std::cout << "ring: \n";
+            for(auto r : ring) std::cout << r << " ";
+            std::cout << std::endl;
 
-        for(auto it = ipillars.begin(); it != ipillars.end();)
-        {
-            size_t idx = *it;
-            const Pillar& pillar = result.pillars()[idx];
+            // now the ring has to be connected with bridge sticks
 
-            auto& p = pillar.endpoint;
-            auto pp = Vec3d{p(0), p(1), 0};
-            auto sp = std::make_pair(pp, unsigned(idx));
-            pillar_index.remove(sp);
+            for(auto it = ring.begin(), next = std::next(it);
+                next != ring.end();
+                ++it, ++next)
+            {
+                auto idx = unsigned(*it);
+                const Pillar& pillar = result.pillars()[*it];
+                const Pillar& nextpillar = result.pillars()[*next];
 
-            auto qv = pillar_index.nearest(pp, 1);
-            if(!qv.empty()) {
-                SpatElement q = qv.front();
-                const Pillar& nearpillar = result.pillars()[q.second];
                 double d = 2*pillar.r;
+                const Vec3d& p = pillar.endpoint;
+                Vec3d  pp{p(X), p(Y), 0};
 
-                std::cout << "nearest pillar: " << q.second << " " << nearpillar.endpoint << std::endl;
-
-                // we must find the already created junctions current pillar
+                // we must find the already created junctions on current pillar
                 auto juncs = junction_index.query([pp, d](const SpatElement& se)
                 {
                     return distance(pp, se.first) < d;
@@ -1008,8 +1101,8 @@ bool SLASupportTree::generate(const Model& model,
                     // No junctions on the pillar so far. Using the head.
                     sj = pillar.headref.get().junction_point();
                 } else {
-                    // search for the lowest junction in z direction
-                    auto juncit = std::min_element(juncs.begin(), juncs.end(),
+                    // search for the highest junction in z direction
+                    auto juncit = std::max_element(juncs.begin(), juncs.end(),
                                                    [](const SpatElement& se1,
                                                       const SpatElement& se2){
                         return se1.first(2) < se2.first(2);
@@ -1022,44 +1115,143 @@ bool SLASupportTree::generate(const Model& model,
                 // points and if that fails as well than leave it be and
                 // continue with the second nearest junction and so on.
 
-                // calculate z coord of new junction
-                sj(2) -= cfg.junction_distance;
-
-                Vec3d ej = nearpillar.endpoint;
-                double pillar_dist = distance(Vec2d{sj(0), sj(1)},
-                                              Vec2d{ej(0), ej(1)});
-                ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
+                Vec3d ej = nextpillar.endpoint;
+                double pillar_dist = distance(Vec2d{sj(X), sj(Y)},
+                                              Vec2d{ej(X), ej(Y)});
+                ej(Z) = sj(Z) + pillar_dist * std::sin(-cfg.tilt);
 
                 // now we have the two new junction points on the pillars, we
                 // should check if they can be safely connected:
                 double chkd = ray_mesh_intersect(sj, (ej - sj).normalized(),
                                                  emesh);
 
-                while(nearpillar.endpoint(2) < ej(2) &&
-                      pillar.endpoint(2) < sj(2) )
+                double nstartz = nextpillar.headref.get().junction_point()(Z);
+                while(nextpillar.endpoint(Z) < ej(Z) &&
+                      pillar.endpoint(Z) < sj(Z))
                 {
-                    if(chkd < pillar_dist) continue;
-                    auto& jS = result.add_junction(sj, cfg.head_back_radius_mm);
-                    auto& jE = result.add_junction(ej, cfg.head_back_radius_mm);
-                    result.add_bridge(jS, jE, pillar.r);
+                    if(chkd >= pillar_dist && nstartz > ej(Z)) {
+                        auto& jS = result.add_junction(sj, hbr);
+                        auto& jE = result.add_junction(ej, hbr);
+                        result.add_bridge(jS, jE, pillar.r);
+                    }
 
                     sj.swap(ej);
-                    ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
+                    ej(Z) = sj(Z) + pillar_dist * std::sin(-cfg.tilt);
                     chkd = ray_mesh_intersect(sj, (ej - sj).normalized(), emesh);
                 }
+            }
 
-
-                // if the nearest pillar connects to ground, continue with that
-
-                // ////////////////////////////////////////////////////////////
-                // TODO: This crashes for some reason...
-                // ////////////////////////////////////////////////////////////
-                if(nearpillar.has_base()) {
-                    ipillars.erase(it);
-                    it = ipillars.find(q.second);
-                }
-            } else it = ipillars.end();
+            auto sring = ring; ClusterEl tmp;
+            std::sort(sring.begin(), sring.end());
+            std::set_difference(rem.begin(), rem.end(),
+                                sring.begin(), sring.end(),
+                                std::back_inserter(tmp));
+            rem.swap(tmp);
         }
+
+
+//        // Now connect the created pillars with each other creating a network
+//        // of interconnected supports
+//        SpatIndex junction_index;
+//        SpatIndex pillar_index;
+
+//        for(auto ej : enumerate(result.junctions())) {
+//            auto& p = ej.value.pos;
+//            junction_index.insert({p(0), p(1), 0}, unsigned(ej.index));
+//        }
+
+//        for(auto ej : enumerate(result.pillars())) {
+//            auto& p = ej.value.endpoint;
+//            pillar_index.insert({p(0), p(1), 0}, unsigned(ej.index));
+//        }
+
+//        std::set<size_t> ipillars;
+
+
+//        for(auto it = ipillars.begin(); it != ipillars.end();)
+//        {
+//            size_t idx = *it;
+//            const Pillar& pillar = result.pillars()[idx];
+
+//            auto& p = pillar.endpoint;
+//            auto pp = Vec3d{p(0), p(1), 0};
+//            auto sp = std::make_pair(pp, unsigned(idx));
+//            pillar_index.remove(sp);
+
+//            auto qv = pillar_index.nearest(pp, 1);
+
+//            // no other pillars to connect to, quit the loop
+//            if(qv.empty()) break;
+
+//            SpatElement q = qv.front();
+//            const Pillar& nearpillar = result.pillars()[q.second];
+//            double d = 2*pillar.r;
+
+//            // we must find the already created junctions current pillar
+//            auto juncs = junction_index.query([pp, d](const SpatElement& se)
+//            {
+//                return distance(pp, se.first) < d;
+//            });
+
+//            Vec3d sj;
+//            if(juncs.empty()) {
+//                // No junctions on the pillar so far. Using the head.
+//                sj = pillar.headref.get().junction_point();
+//            } else {
+//                // search for the lowest junction in z direction
+//                auto juncit = std::min_element(juncs.begin(), juncs.end(),
+//                                               [](const SpatElement& se1,
+//                                                  const SpatElement& se2){
+//                    return se1.first(2) < se2.first(2);
+//                });
+//                sj = result.junctions()[juncit->second].pos;
+//            }
+
+//            // try to create new bridge to the nearest pillar.
+//            // if it bumps into the model, we should try other starting
+//            // points and if that fails as well than leave it be and
+//            // continue with the second nearest junction and so on.
+
+//            // calculate z coord of new junction
+//            sj(2) -= cfg.junction_distance;
+
+//            Vec3d ej = nearpillar.endpoint;
+//            double pillar_dist = distance(Vec2d{sj(0), sj(1)},
+//                                          Vec2d{ej(0), ej(1)});
+//            ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
+
+//            // now we have the two new junction points on the pillars, we
+//            // should check if they can be safely connected:
+//            double chkd = ray_mesh_intersect(sj, (ej - sj).normalized(),
+//                                             emesh);
+
+//            double nstartz = nearpillar.headref.get().junction_point()(2);
+//            while(nearpillar.endpoint(2) < ej(2) &&
+//                  pillar.endpoint(2) < sj(2))
+//            {
+//                if(chkd >= pillar_dist && nstartz > ej(2)) {
+//                    auto& jS = result.add_junction(sj, hbr);
+//                    auto& jE = result.add_junction(ej, hbr);
+//                    result.add_bridge(jS, jE, pillar.r);
+//                }
+
+//                sj.swap(ej);
+//                ej(2) = sj(2) + pillar_dist * std::sin(-cfg.tilt);
+//                chkd = ray_mesh_intersect(sj, (ej - sj).normalized(), emesh);
+//            }
+
+//            // if the nearest pillar connects to ground, continue with that
+//            if(nearpillar.has_base()) {
+//                ipillars.erase(it);
+//                it = ipillars.find(q.second);
+//            } else {
+//                it = ipillars.erase(it);
+
+//                // remove the floating (nearest) pillar from the index
+//                auto np = Vec3d{q.first(0), q.first(1), 0};
+//                pillar_index.remove(std::make_pair(np, unsigned(q.second)));
+//            }
+//        }
     };
 
     using std::ref;

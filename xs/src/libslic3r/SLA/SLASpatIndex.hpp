@@ -91,7 +91,7 @@ public:
     SpatIndex& operator=(SpatIndex&&);
 
     void insert(const SpatElement&);
-    void remove(const SpatElement&);
+    bool remove(const SpatElement&);
 
     inline void insert(const Vec3d& v, unsigned idx)
     {

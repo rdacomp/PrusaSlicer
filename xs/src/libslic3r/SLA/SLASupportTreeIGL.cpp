@@ -46,9 +46,9 @@ void SpatIndex::insert(const SpatElement &el)
     m_impl->m_store.insert(el);
 }
 
-void SpatIndex::remove(const SpatElement& el)
+bool SpatIndex::remove(const SpatElement& el)
 {
-    m_impl->m_store.remove(el);
+    return m_impl->m_store.remove(el);
 }
 
 std::vector<SpatElement>
