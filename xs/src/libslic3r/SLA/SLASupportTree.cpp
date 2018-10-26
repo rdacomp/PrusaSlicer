@@ -690,8 +690,9 @@ long cluster_centroid(const ClusterEl& clust,
  * and modified it so that it starts with the leftmost lower vertex. Also added
  * support for floating point coordinates.
  *
- * I need this to work with collinear points as well in situations where the
- * support points are
+ * This function is a modded version of the standard convex hull. If the points
+ * are all collinear with each other, it will return their indices in spatially
+ * subsequent order (the order they appear on the screen).
  */
 ClusterEl pts_convex_hull(const ClusterEl& inpts,
                           std::function<Vec2d(unsigned)> pfn)
@@ -721,6 +722,8 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
         points.emplace_back(pfn(i));
     }
 
+    // Check if the triplet of points is collinear. The standard convex hull
+    // algorithms are not capable of handling such input properly.
     bool collinear = true;
     for(auto one = points.begin(), two = std::next(one), three = std::next(two);
         three != points.end() && collinear;
@@ -730,7 +733,7 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
         if(orientation(*one, *two, *three) != 0) collinear = false;
     }
 
-    // Find the leftmost point
+    // Find the leftmost (bottom) point
     int l = 0;
     for (int i = 1; i < n; i++) {
         if(std::abs(points[i](X) - points[l](X)) < ERR) {
@@ -740,8 +743,7 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
     }
 
     if(collinear) {
-        // fill the output with the ordered set of points.
-        std::cout << "the points are collinear" << std::endl;
+        // fill the output with the spatially ordered set of points.
 
         // find the direction
         Vec2d dir = (points[l] - points[(l+1)%n]).normalized();
@@ -755,6 +757,9 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
 
         return hull;
     }
+
+    // TODO: this algorithm is O(m*n) and O(n^2) in the worst case so it needs
+    // to be replaced with a graham scan or something O(nlogn)
 
     // Start from leftmost point, keep moving counterclockwise
     // until reach the start point again.  This loop runs O(h)
@@ -1014,9 +1019,6 @@ bool SLASupportTree::generate(const PointSet &points,
                             Vec2d(s.first(0), s.first(1))) < d_base;
         }, 4); // max 3 heads to connect to one centroid
 
-        std::cout << "ground point cout " << gndidx.size() << std::endl;
-        std::cout << "clusters " << ground_clusters.size() << std::endl;
-
         for(auto idx : nogndidx) {
             auto& head = result.head(idx);
             head.transform();
@@ -1126,9 +1128,6 @@ bool SLASupportTree::generate(const PointSet &points,
                     double bridge_distance = d / std::cos(-cfg.tilt);
                     double chkd = ray_mesh_intersect(jp, dirv(jp, jn), emesh);
 
-                    std::cout << "check distance " << chkd << std::endl;
-                    std::cout << "bridge distance " << bridge_distance << std::endl;
-
                     // TODO:
                     // 1. Do something with the intersecting bridges, possibly
                     // connect to the ground, to the nearest junction or create
@@ -1164,16 +1163,21 @@ bool SLASupportTree::generate(const PointSet &points,
         // Connecting the pillars belonging to the same ring will prevent
         // bridges from crossing each other. After bridging the rings we can
         // create bridges between the rings without the possibility of crossing
-        // bridges.
+        // bridges. Two pillars will be bridged with X shaped stick pairs.
+        // If they are really close to each other, than only one stick will be
+        // used in zig-zag mode.
 
-        // First however, we need to create smaller clusters of the pillars
-        // that are not too far away from each other and do the bridging on each
-        // cluster separately.
+        // Breaking down the points into rings will be done with a modified
+        // convex hull algorithm (see pts_convex_hull()), that works for
+        // collinear points as well. If the points are on the same surface,
+        // they can be part of an imaginary line segment for which the convex
+        // hull is not defined. I this case it is enough to sort the points
+        // spatially and create the bridge stick from the one endpoint to
+        // another.
 
         ClusterEl rem = cl_centroids;
 
-        while(!rem.empty()) {
-            std::cout << "rem size " << rem.size() << std::endl;
+        while(!rem.empty()) { // loop until all the points belong to some ring
             std::sort(rem.begin(), rem.end());
 
             auto ring = pts_convex_hull(rem,
@@ -1216,9 +1220,6 @@ bool SLASupportTree::generate(const PointSet &points,
                 while(sj(Z) > pillar.endpoint(Z) &&
                       ej(Z) > nextpillar.endpoint(Z))
                 {
-                    std::cout << "check distance " << chkd << std::endl;
-                    std::cout << "bridge distance " << bridge_distance << std::endl;
-
                     if(chkd >= bridge_distance ) {
                         auto jS = result.add_junction(sj, hbr);
                         auto jE = result.add_junction(ej, hbr);
@@ -1303,13 +1304,13 @@ bool SLASupportTree::generate(const PointSet &points,
 
     auto progress = [&ctl, &pc, &pc_prev] () {
         static const std::array<std::string, NUM_STEPS> stepstr {
-            ""
+            "",
             "Filtering",
-            "Generate pinheads"
+            "Generate pinheads",
             "Classification",
             "Routing to ground",
             "Routing supports to model surface",
-            "Processing small holes"
+            "Processing small holes",
             "Done",
             "Halt",
             "Abort"
@@ -1340,39 +1341,9 @@ bool SLASupportTree::generate(const PointSet &points,
         case HEADLESS: pc = DONE; break;
         case HALT: pc = pc_prev; break;
         case DONE:
-        case ABORT: break; // we should never get here
+        case ABORT: break;
         }
         ctl.statuscb(stepstate[pc], stepstr[pc]);
-
-//        auto cmd = ctl.nextcmd(/* block if: */ pc == HALT);
-
-//        switch(cmd) {
-//        case Controller::Cmd::START_RESUME:
-//            switch(pc) {
-//            case BEGIN: pc = FILTER; break;
-//            case FILTER: pc = PINHEADS; break;
-//            case PINHEADS: pc = CLASSIFY; break;
-//            case CLASSIFY: pc = ROUTING_GROUND; break;
-//            case ROUTING_GROUND: pc = ROUTING_NONGROUND; break;
-//            case ROUTING_NONGROUND: pc = HEADLESS; break;
-//            case HEADLESS: pc = DONE; break;
-//            case HALT: pc = pc_prev; break;
-//            case DONE:
-//            case ABORT: break; // we should never get here
-//            }
-//            ctl.statuscb(stepstate[pc], stepstr[pc]);
-//            break;
-//        case Controller::Cmd::PAUSE:
-//            pc_prev = pc;
-//            pc = HALT;
-//            ctl.statuscb(stepstate[pc], stepstr[pc]);
-//            break;
-//        case Controller::Cmd::STOP:
-//            pc = ABORT; ctl.statuscb(stepstate[pc], stepstr[pc]); break;
-//        case Controller::Cmd::SYNCH:
-//            pc = BEGIN;
-//            // TODO
-//        }
     };
 
     // Just here we run the computation...
