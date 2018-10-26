@@ -161,10 +161,10 @@ void PrintController::slice_to_png()
 //                                       [&abortflg] () { return abortflg; });
 //    model->objects.front()->instances.front()->set_rotation({rot[0], rot[1], rot[2]});
 
-    supportctl.nextcmd = [abortflg] (bool) {
-        return abortflg? sla::Controller::Cmd::STOP :
-                      sla::Controller::Cmd::START_RESUME;
-    };
+//    supportctl.nextcmd = [abortflg] (bool) {
+//        return abortflg? sla::Controller::Cmd::STOP :
+//                      sla::Controller::Cmd::START_RESUME;
+//    };
     supportctl.statuscb = [pri] (unsigned st, const std::string& msg) {
         pri->update(float(st), msg);
     };

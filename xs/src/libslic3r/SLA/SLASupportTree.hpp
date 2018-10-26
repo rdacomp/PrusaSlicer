@@ -42,7 +42,7 @@ struct SupportConfig {
     double pillar_radius_mm = 0.8;
 
     // Radius in mm of the pillar base.
-    double base_radius_mm = 1.0;
+    double base_radius_mm = 2.0;
 
     // The height of the pillar base cone in mm.
     double base_height_mm = 1.0;
@@ -57,36 +57,15 @@ struct SupportConfig {
 /// a start (restart), pause or stop (cancel) command through the nextcmd
 /// function. It can also report its status through the statuscb function.
 struct Controller {
-    enum class Cmd { START_RESUME, PAUSE, STOP, SYNCH };
+//    enum class Cmd { START_RESUME, PAUSE, STOP, SYNCH };
 
     std::function<void(unsigned, const std::string&)> statuscb =
             [](unsigned, const std::string&){};
 
-    std::function<Cmd(bool)> nextcmd = [](bool){ return Cmd::START_RESUME; };
+    std::function<bool(void)> stopcondition = [](){ return false; };
+
+//    std::function<Cmd(bool)> nextcmd = [](bool){ return Cmd::START_RESUME; };
 };
-
-class SLASupportTree {
-public:
-    class Impl;
-private:
-    std::unique_ptr<Impl> m_impl;
-public:
-
-    SLASupportTree();
-    SLASupportTree(const SLASupportTree&);
-    SLASupportTree& operator=(const SLASupportTree&);
-
-    /// Generate the 3D supports for a model intended for SLA print.
-    bool generate(const Model& model, const SupportConfig& cfg = {},
-                  const Controller& ctl = {});
-
-    Impl& get() { return *m_impl; }
-
-    ~SLASupportTree();
-};
-
-/// Slice up the support tree for printing
-SlicedSupports slice(const SLASupportTree& stree, const Controller& ctl);
 
 /* ************************************************************************** */
 /* TODO: May not be needed:                                                   */
@@ -97,6 +76,58 @@ void create_head(TriangleMesh&, double r1_mm, double r2_mm, double width_mm);
 /// Add support volumes to the model directly
 void add_sla_supports(Model& model, const SupportConfig& cfg = {},
                       const Controller& ctl = {});
+
+/* ************************************************************************** */
+
+using PointSet = Eigen::MatrixXd;
+struct EigenMesh3D;
+
+/// Just a wrapper to the runtime error to be recognizable in try blocks
+class SLASupportsStoppedException: public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+    SLASupportsStoppedException(): std::runtime_error("") {}
+};
+
+class SLASupportTree {
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
+    Impl& get() { return *m_impl; }
+    const Impl& get() const { return *m_impl; }
+
+    friend void add_sla_supports(Model&,
+                                 const SupportConfig&,
+                                 const Controller&);
+
+    /// Generate the 3D supports for a model intended for SLA print.
+    bool generate(const PointSet& pts,
+                  const EigenMesh3D& mesh,
+                  const SupportConfig& cfg = {},
+                  const Controller& ctl = {});
+public:
+
+    // Constructors will throw if the stop condition becomes true.
+
+    SLASupportTree(const Model& model,
+                   const SupportConfig& cfg = {},
+                   const Controller& ctl = {});
+
+    SLASupportTree(const PointSet& pts,
+                   const EigenMesh3D& em,
+                   const SupportConfig& cfg = {},
+                   const Controller& ctl = {});
+
+    SLASupportTree(const SLASupportTree&);
+    SLASupportTree& operator=(const SLASupportTree&);
+
+    ~SLASupportTree();
+
+    /// Get the whole mesh united into the output TriangleMesh
+    void merged_mesh(TriangleMesh& outmesh) const;
+
+    // Get the sliced 2d layers of the support geometry.
+    SlicedSupports slice() const;
+};
 
 }
 

@@ -617,12 +617,12 @@ public:
         return m_pillars[h.pillar_id];
     }
 
-    template<class...Args> Junction& add_junction(Args&&... args) {
+    template<class...Args> const Junction& add_junction(Args&&... args) {
         m_junctions.emplace_back(std::forward<Args>(args)...);
         return m_junctions.back();
     }
 
-    template<class...Args> Bridge& add_bridge(Args&&... args) {
+    template<class...Args> const Bridge& add_bridge(Args&&... args) {
         m_bridges.emplace_back(std::forward<Args>(args)...);
         return m_bridges.back();
     }
@@ -706,8 +706,6 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
         double val = (q(Y) - p(Y)) * (r(X) - q(X)) -
                      (q(X) - p(X)) * (r(Y) - q(Y));
 
-        std::cout << "val = " << val << std::endl;
-
         if (std::abs(val) < ERR) return 0;  // collinear
         return (val > ERR)? 1: 2; // clock or counterclockwise
     };
@@ -723,19 +721,14 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
         points.emplace_back(pfn(i));
     }
 
-//    bool coollinear = true;
-//    for(auto one = points.begin(), two = std::next(it), three = std::next(nxt);
-//        three != points.end() && coollinear;
-//        ++one, ++two, ++three)
-//    {
-//        // check if the points are collinear
-//        if(orientation(*one, *two, *three) != 0) collinear = false;
-//    }
-
-//    if(collinear) {
-//        // fill the output with the ordered set of points.
-
-//    }
+    bool collinear = true;
+    for(auto one = points.begin(), two = std::next(one), three = std::next(two);
+        three != points.end() && collinear;
+        ++one, ++two, ++three)
+    {
+        // check if the points are collinear
+        if(orientation(*one, *two, *three) != 0) collinear = false;
+    }
 
     // Find the leftmost point
     int l = 0;
@@ -744,6 +737,23 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
             if(points[i](Y) < points[l](Y)) l = i;
         }
         else if (points[i](X) < points[l](X)) l = i;
+    }
+
+    if(collinear) {
+        // fill the output with the ordered set of points.
+        std::cout << "the points are collinear" << std::endl;
+
+        // find the direction
+        Vec2d dir = (points[l] - points[(l+1)%n]).normalized();
+        hull = inpts;
+        auto& lp = points[l];
+        std::sort(hull.begin(), hull.end(),
+                  [&lp, points](unsigned i1, unsigned i2) {
+            // compare the distance from the leftmost point
+            return distance(lp, points[i1]) < distance(lp, points[i2]);
+        });
+
+        return hull;
     }
 
     // Start from leftmost point, keep moving counterclockwise
@@ -775,15 +785,21 @@ ClusterEl pts_convex_hull(const ClusterEl& inpts,
 
     } while (p != l);  // While we don't come to first point
 
+    auto first = hull.front();
+    hull.emplace_back(first);
+
     return hull;
 }
 
-bool SLASupportTree::generate(const Model& model,
-                              const SupportConfig& cfg,
-                              const Controller& ctl) {
-    auto points = support_points(model);
-    auto mesh =   to_eigenmesh(model);
+Vec3d dirv(const Vec3d& startp, const Vec3d& endp) {
+    return (endp - startp).normalized();
+}
 
+bool SLASupportTree::generate(const PointSet &points,
+                              const EigenMesh3D& mesh,
+                              const SupportConfig &cfg,
+                              const Controller &ctl)
+{
     PointSet filtered_points;
     PointSet filtered_normals;
     PointSet head_positions;
@@ -1096,7 +1112,7 @@ bool SLASupportTree::generate(const Model& model,
                 double d = distance(Vec2d{jp(X), jp(Y)},
                                     Vec2d{jh(X), jh(Y)});
 
-                Vec3d jn(jh(X), jh(Y), jp(Z) + d*sin(-cfg.tilt));
+                Vec3d jn(jh(X), jh(Y), jp(Z) + d*std::tan(-cfg.tilt));
 
                 if(jn(Z) > jh(Z)) {
                     // if the main head is below the point where the bridge
@@ -1107,12 +1123,30 @@ bool SLASupportTree::generate(const Model& model,
                 }
 
                 if(jn(Z) > 0) {
-                    // if the junction on the main pillar above ground
-                    auto&& jjp = result.add_junction(jp, hbr);
-                    result.add_pillar(gndidx[c], jp, cfg.pillar_radius_mm);
+                    double bridge_distance = d / std::cos(-cfg.tilt);
+                    double chkd = ray_mesh_intersect(jp, dirv(jp, jn), emesh);
 
-                    auto&& jjn = result.add_junction(jn, hbr);
-                    result.add_bridge(jjp, jjn, r_pillar);
+                    std::cout << "check distance " << chkd << std::endl;
+                    std::cout << "bridge distance " << bridge_distance << std::endl;
+
+                    // TODO:
+                    // 1. Do something with the intersecting bridges, possibly
+                    // connect to the ground, to the nearest junction or create
+                    // a new junction for them.
+
+                    // 2. Investigate the add_junction return value bug. If the
+                    // returned reference is copied, than ok, but if I just hold
+                    // it in another reference, than it fails.
+
+                    if(chkd >= bridge_distance) { // doesn't cross the model
+
+                        // if the junction on the main pillar above ground
+                        auto jjp = result.add_junction(jp, hbr);
+                        result.add_pillar(gndidx[c], jp, cfg.pillar_radius_mm);
+
+                        auto jjn = result.add_junction(jn, hbr);
+                        result.add_bridge(jjp, jjn, r_pillar);
+                    }
                 } else {
                     // if there is no space for the connection, a dedicated
                     // pillar is created for all the support points in the
@@ -1132,11 +1166,9 @@ bool SLASupportTree::generate(const Model& model,
         // create bridges between the rings without the possibility of crossing
         // bridges.
 
-        SpatIndex junction_index;
-        for(auto ej : enumerate(result.junctions())) { // fill the spatial index
-            auto& p = ej.value.pos;
-            junction_index.insert({p(X), p(Y), 0}, unsigned(ej.index));
-        }
+        // First however, we need to create smaller clusters of the pillars
+        // that are not too far away from each other and do the bridging on each
+        // cluster separately.
 
         ClusterEl rem = cl_centroids;
 
@@ -1168,63 +1200,45 @@ bool SLASupportTree::generate(const Model& model,
                 const Head& nextphead = result.pillar_head(nextpillar.id);
 
                 double d = 2*pillar.r;
-                const Vec3d& p = pillar.endpoint;
-                Vec3d  pp{p(X), p(Y), 0};
+                const Vec3d& pp = pillar.endpoint.cwiseProduct(Vec3d{1, 1, 0});
 
-                // we must find the already created junctions on current pillar
-                auto juncs = junction_index.query([pp, d](const SpatElement& se)
-                {
-                    return distance(pp, se.first) < d;
-                });
-
-                Vec3d sj;
-                if(juncs.empty()) {
-                    // No junctions on the pillar so far. Using the head.
-                    sj = phead.junction_point();
-                } else {
-                    // search for the highest junction in z direction
-                    auto juncit = std::max_element(juncs.begin(), juncs.end(),
-                                                   [](const SpatElement& se1,
-                                                      const SpatElement& se2){
-                        return se1.first(Z) < se2.first(Z);
-                    });
-                    sj = result.junctions()[juncit->second].pos;
-                }
-
-                // try to create new bridge to the nearest pillar.
-                // if it bumps into the model, we should try other starting
-                // points and if that fails as well than leave it be and
-                // continue with the second nearest junction and so on.
-
+                Vec3d sj = phead.junction_point();
+                sj(Z) = std::min(sj(Z), nextphead.junction_point()(Z));
                 Vec3d ej = nextpillar.endpoint;
                 double pillar_dist = distance(Vec2d{sj(X), sj(Y)},
                                               Vec2d{ej(X), ej(Y)});
-                ej(Z) = sj(Z) + pillar_dist * std::sin(-cfg.tilt);
+                double zstep = pillar_dist * std::tan(-cfg.tilt);
+                ej(Z) = sj(Z) + zstep;
 
-                // now we have the two new junction points on the pillars, we
-                // should check if they can be safely connected:
-                double chkd = ray_mesh_intersect(sj, (ej - sj).normalized(),
-                                                 emesh);
+                double chkd = ray_mesh_intersect(sj, dirv(sj, ej), emesh);
+                double bridge_distance = pillar_dist / std::cos(-cfg.tilt);
 
-                double nstartz = nextphead.junction_point()(Z);
-                while(nextpillar.endpoint(Z) < ej(Z) &&
-                      pillar.endpoint(Z) < sj(Z))
+                while(sj(Z) > pillar.endpoint(Z) &&
+                      ej(Z) > nextpillar.endpoint(Z))
                 {
-                    if(chkd >= pillar_dist && nstartz > ej(Z)) {
-                        auto jidxN = result.junctions().size();
-                        auto& jS = result.add_junction(sj, hbr);
-                        junction_index.insert({ Vec3d{sj(X), sj(Y), 0}, jidxN});
-                        jidxN++;
+                    std::cout << "check distance " << chkd << std::endl;
+                    std::cout << "bridge distance " << bridge_distance << std::endl;
 
-                        auto& jE = result.add_junction(ej, hbr);
-                        junction_index.insert({ Vec3d{ej(X), ej(Y), 0}, jidxN});
-
+                    if(chkd >= bridge_distance ) {
+                        auto jS = result.add_junction(sj, hbr);
+                        auto jE = result.add_junction(ej, hbr);
                         result.add_bridge(jS, jE, pillar.r);
-                    }
 
+                        // double bridging: (crosses)
+                        if(bridge_distance > 2*cfg.base_radius_mm) {
+                            // If the columns are close together, no need to
+                            // double bridge them
+                            Vec3d bsj(ej(X), ej(Y), sj(Z));
+                            Vec3d bej(sj(X), sj(Y), ej(Z));
+
+                            auto jbS = result.add_junction(bsj, hbr);
+                            auto jbE = result.add_junction(bej, hbr);
+                            result.add_bridge(jbS, jbE, pillar.r);
+                        }
+                    }
                     sj.swap(ej);
-                    ej(Z) = sj(Z) + pillar_dist * std::sin(-cfg.tilt);
-                    chkd = ray_mesh_intersect(sj, (ej - sj).normalized(), emesh);
+                    ej(Z) = sj(Z) + zstep;
+                    chkd = ray_mesh_intersect(sj, dirv(sj, ej), emesh);
                 }
             }
 
@@ -1287,7 +1301,7 @@ bool SLASupportTree::generate(const Model& model,
 
     Steps pc = BEGIN, pc_prev = BEGIN;
 
-    auto progress = [&ctl, &model, &pc, &pc_prev] () {
+    auto progress = [&ctl, &pc, &pc_prev] () {
         static const std::array<std::string, NUM_STEPS> stepstr {
             ""
             "Filtering",
@@ -1314,35 +1328,51 @@ bool SLASupportTree::generate(const Model& model,
             0
         };
 
-        auto cmd = ctl.nextcmd(/* block if: */ pc == HALT);
+        if(ctl.stopcondition()) pc = ABORT;
 
-        switch(cmd) {
-        case Controller::Cmd::START_RESUME:
-            switch(pc) {
-            case BEGIN: pc = FILTER; break;
-            case FILTER: pc = PINHEADS; break;
-            case PINHEADS: pc = CLASSIFY; break;
-            case CLASSIFY: pc = ROUTING_GROUND; break;
-            case ROUTING_GROUND: pc = ROUTING_NONGROUND; break;
-            case ROUTING_NONGROUND: pc = HEADLESS; break;
-            case HEADLESS: pc = DONE; break;
-            case HALT: pc = pc_prev; break;
-            case DONE:
-            case ABORT: break; // we should never get here
-            }
-            ctl.statuscb(stepstate[pc], stepstr[pc]);
-            break;
-        case Controller::Cmd::PAUSE:
-            pc_prev = pc;
-            pc = HALT;
-            ctl.statuscb(stepstate[pc], stepstr[pc]);
-            break;
-        case Controller::Cmd::STOP:
-            pc = ABORT; ctl.statuscb(stepstate[pc], stepstr[pc]); break;
-        case Controller::Cmd::SYNCH:
-            pc = BEGIN;
-            // TODO
+        switch(pc) {
+        case BEGIN: pc = FILTER; break;
+        case FILTER: pc = PINHEADS; break;
+        case PINHEADS: pc = CLASSIFY; break;
+        case CLASSIFY: pc = ROUTING_GROUND; break;
+        case ROUTING_GROUND: pc = ROUTING_NONGROUND; break;
+        case ROUTING_NONGROUND: pc = HEADLESS; break;
+        case HEADLESS: pc = DONE; break;
+        case HALT: pc = pc_prev; break;
+        case DONE:
+        case ABORT: break; // we should never get here
         }
+        ctl.statuscb(stepstate[pc], stepstr[pc]);
+
+//        auto cmd = ctl.nextcmd(/* block if: */ pc == HALT);
+
+//        switch(cmd) {
+//        case Controller::Cmd::START_RESUME:
+//            switch(pc) {
+//            case BEGIN: pc = FILTER; break;
+//            case FILTER: pc = PINHEADS; break;
+//            case PINHEADS: pc = CLASSIFY; break;
+//            case CLASSIFY: pc = ROUTING_GROUND; break;
+//            case ROUTING_GROUND: pc = ROUTING_NONGROUND; break;
+//            case ROUTING_NONGROUND: pc = HEADLESS; break;
+//            case HEADLESS: pc = DONE; break;
+//            case HALT: pc = pc_prev; break;
+//            case DONE:
+//            case ABORT: break; // we should never get here
+//            }
+//            ctl.statuscb(stepstate[pc], stepstr[pc]);
+//            break;
+//        case Controller::Cmd::PAUSE:
+//            pc_prev = pc;
+//            pc = HALT;
+//            ctl.statuscb(stepstate[pc], stepstr[pc]);
+//            break;
+//        case Controller::Cmd::STOP:
+//            pc = ABORT; ctl.statuscb(stepstate[pc], stepstr[pc]); break;
+//        case Controller::Cmd::SYNCH:
+//            pc = BEGIN;
+//            // TODO
+//        }
     };
 
     // Just here we run the computation...
@@ -1351,10 +1381,48 @@ bool SLASupportTree::generate(const Model& model,
         program[pc]();
     }
 
+    if(pc == ABORT) throw SLASupportsStoppedException();
+
     return pc == ABORT;
 }
 
-SLASupportTree::SLASupportTree(): m_impl(new Impl()) {}
+void SLASupportTree::merged_mesh(TriangleMesh &outmesh) const
+{
+    const SLASupportTree::Impl& stree = get();
+
+    for(auto& head : stree.heads()) {
+        outmesh.merge(mesh(head.mesh));
+        outmesh.merge(mesh(head.tail.mesh));
+    }
+
+    for(auto& stick : stree.pillars()) {
+        outmesh.merge(mesh(stick.mesh));
+        outmesh.merge(mesh(stick.base));
+    }
+
+    for(auto& j : stree.junctions()) {
+        outmesh.merge(mesh(j.mesh));
+    }
+
+    for(auto& bs : stree.bridges()) {
+        outmesh.merge(mesh(bs.mesh));
+    }
+}
+
+SLASupportTree::SLASupportTree(const Model& model,
+                               const SupportConfig& cfg,
+                               const Controller& ctl): m_impl(new Impl())
+{
+    generate(support_points(model), to_eigenmesh(model), cfg, ctl);
+}
+
+SLASupportTree::SLASupportTree(const PointSet &points,
+                               const EigenMesh3D& emesh,
+                               const SupportConfig &cfg,
+                               const Controller &ctl): m_impl(new Impl())
+{
+    generate(points, emesh, cfg, ctl);
+}
 
 SLASupportTree::SLASupportTree(const SLASupportTree &c):
     m_impl( new Impl(*c.m_impl)) {}
@@ -1371,8 +1439,7 @@ void add_sla_supports(Model &model,
                       const SupportConfig &cfg,
                       const Controller &ctl)
 {
-    SLASupportTree _stree;
-    _stree.generate(model, cfg, ctl);
+    SLASupportTree _stree(model, cfg, ctl);
 
     SLASupportTree::Impl& stree = _stree.get();
     ModelObject* o = model.add_object();

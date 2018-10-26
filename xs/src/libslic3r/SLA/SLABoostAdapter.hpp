@@ -4,7 +4,6 @@
 #include "SLA/SLABoilerPlate.hpp"
 #include <boost/geometry.hpp>
 
-
 namespace boost {
 namespace geometry {
 namespace traits {
@@ -123,6 +122,11 @@ struct indexed_access<Slic3r::BoundingBox, 1, d> {
 
 }
 }
+
+template<> struct range_value<std::vector<Slic3r::Vec2d>> {
+    using type = Slic3r::Vec2d;
+};
+
 }
 
 #endif // SLABOOSTADAPTER_HPP
