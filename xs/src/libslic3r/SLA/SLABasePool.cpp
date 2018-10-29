@@ -226,7 +226,6 @@ Contour3D round_edges(const ExPolygon& base_plate,
 
     int steps = 15; // int(std::ceil(10*std::pow(radius_mm, 1.0/3)));
     double stepx = radius_mm / steps;
-    std::cout << "step x: " << stepx << std::endl;
     coord_t s = dir? 1 : -1;
     degrees = std::fmod(degrees, 180);
 

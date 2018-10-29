@@ -53,18 +53,13 @@ struct SupportConfig {
     double junction_distance = 1.5;
 };
 
-/// A Control structure for the support calculation. The algorithm can query a
-/// a start (restart), pause or stop (cancel) command through the nextcmd
-/// function. It can also report its status through the statuscb function.
+/// A Control structure for the support calculation. Consists of the status
+/// indicator callback and the stop condition predicate.
 struct Controller {
-//    enum class Cmd { START_RESUME, PAUSE, STOP, SYNCH };
-
     std::function<void(unsigned, const std::string&)> statuscb =
             [](unsigned, const std::string&){};
 
     std::function<bool(void)> stopcondition = [](){ return false; };
-
-//    std::function<Cmd(bool)> nextcmd = [](bool){ return Cmd::START_RESUME; };
 };
 
 /* ************************************************************************** */
@@ -89,6 +84,7 @@ public:
     SLASupportsStoppedException(): std::runtime_error("") {}
 };
 
+/// The class containing mesh data for the generated supports.
 class SLASupportTree {
     class Impl;
     std::unique_ptr<Impl> m_impl;
@@ -107,7 +103,6 @@ class SLASupportTree {
 public:
 
     // Constructors will throw if the stop condition becomes true.
-
     SLASupportTree(const Model& model,
                    const SupportConfig& cfg = {},
                    const Controller& ctl = {});
@@ -125,7 +120,7 @@ public:
     /// Get the whole mesh united into the output TriangleMesh
     void merged_mesh(TriangleMesh& outmesh) const;
 
-    // Get the sliced 2d layers of the support geometry.
+    /// Get the sliced 2d layers of the support geometry.
     SlicedSupports slice() const;
 };
 

@@ -7,6 +7,7 @@
 #include "SLASupportTree.hpp"
 #include "SLABoilerPlate.hpp"
 #include "SLASpatIndex.hpp"
+#include "SLABasePool.hpp"
 
 #include "Model.hpp"
 
@@ -1273,12 +1274,12 @@ bool SLASupportTree::generate(const PointSet &points,
                 return Vec2d(p(X), p(Y)); // project to 2D in along Z axis
             });
 
-            std::cout << "ring: \n";
+            /*std::cout << "ring: \n";
             for(auto ri : ring) {
                 std::cout << ri << " " << " X = " << gnd_head_pt(ri)(X)
                           << " Y = " << gnd_head_pt(ri)(Y) << std::endl;
             }
-            std::cout << std::endl;
+            std::cout << std::endl;*/
 
             // now the ring has to be connected with bridge sticks
             for(auto it = ring.begin(), next = std::next(it);
@@ -1470,6 +1471,11 @@ void SLASupportTree::merged_mesh(TriangleMesh &outmesh) const
     }
 }
 
+SlicedSupports SLASupportTree::slice() const
+{
+    return {};
+}
+
 SLASupportTree::SLASupportTree(const Model& model,
                                const SupportConfig& cfg,
                                const Controller& ctl): m_impl(new Impl())
@@ -1523,6 +1529,23 @@ void add_sla_supports(Model &model,
     for(auto& bs : stree.bridges()) {
         o->add_volume(mesh(bs.mesh));
     }
+
+    // TODO this would roughly be the code for the base pool
+    ExPolygons plate;
+    auto modelmesh = model.mesh();
+    TriangleMesh poolmesh;
+    sla::PoolConfig poolcfg;
+    std::cout << "Pool generation in progress..." << std::endl;
+    poolcfg.min_wall_height_mm = 0.8;
+    poolcfg.edge_radius_mm = 0.1;
+    poolcfg.min_wall_thickness_mm = 0.5;
+
+    sla::base_plate(modelmesh, plate);
+    sla::create_base_pool(plate, poolmesh, poolcfg);
+
+    std::cout << "Pool generation completed." << std::endl;
+
+    o->add_volume(poolmesh);
 
 }
 
