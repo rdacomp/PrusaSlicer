@@ -271,7 +271,8 @@ struct Head {
     }
 
     double request_pillar_radius(double radius) const {
-        return radius > 0 && radius < r_back_mm ? radius : r_back_mm * 0.65;
+        const double rmax = r_back_mm * 0.65;
+        return radius > 0 && radius < rmax ? radius : rmax;
     }
 
     void add_tail(double length = -1, double radius = -1) {
@@ -434,18 +435,21 @@ struct Bridge {
     long start_jid = -1;
     long end_jid = -1;
 
-    Bridge(const Junction& j1, const Junction& j2, double r_mm = 0.8):
+    Bridge(const Vec3d& j1, const Vec3d& j2, double r_mm = 0.8):
         r(r_mm)
     {
         using Quaternion = Eigen::Quaternion<double>;
-        Vec3d dir = (j2.pos - j1.pos).normalized();
-        double d = distance(j2.pos, j1.pos);
+        Vec3d dir = (j2 - j1).normalized();
+        double d = distance(j2, j1);
 
         mesh = cylinder(r, d, 2*PI / 45);
 
         auto quater = Quaternion::FromTwoVectors(Vec3d{0,0,1}, dir);
-        for(auto& p : mesh.points) p = quater * p + j1.pos;
+        for(auto& p : mesh.points) p = quater * p + j1;
     }
+
+    Bridge(const Junction& j1, const Junction& j2, double r_mm = 0.8):
+        Bridge(j1.pos, j2.pos, r_mm) {}
 
     Bridge(const Head& h, const Junction& j2, double r_mm = 0.8):
         r(r_mm)
@@ -1023,10 +1027,10 @@ bool SLASupportTree::generate(const PointSet &points,
         // each other in the XY plane to generate the column stick base
         auto d_base = 4*cfg.base_radius_mm;
         ground_clusters = cluster(gnd,
-            [d_base](const SpatElement& p, const SpatElement& s){
-            return distance(Vec2d(p.first(0), p.first(1)),
-                            Vec2d(s.first(0), s.first(1))) < d_base;
-        }, 4); // max 3 heads to connect to one centroid
+            [d_base, &cfg](const SpatElement& p, const SpatElement& s){
+                return distance(Vec2d(p.first(X), p.first(Y)),
+                                Vec2d(s.first(X), s.first(Y))) < d_base;
+            }, 4); // max 3 heads to connect to one centroid
 
         for(auto idx : nogndidx) {
             auto& head = result.head(idx);
@@ -1062,9 +1066,12 @@ bool SLASupportTree::generate(const PointSet &points,
             Result& result)
     {
         const double hbr = cfg.head_back_radius_mm;
+        const double pradius = cfg.pillar_radius_mm;
 
         ClusterEl cl_centroids;
         cl_centroids.reserve(gnd_clusters.size());
+
+        SpatIndex pillindex; // spatial index for the junctions
 
         // Connect closely coupled support points to one pillar if there is
         // enough downward space and no model collision.
@@ -1092,11 +1099,7 @@ bool SLASupportTree::generate(const PointSet &points,
             result.add_pillar(index_to_heads, endpoint, cfg.pillar_radius_mm)
                   .add_base(cfg.base_height_mm, cfg.base_radius_mm);
 
-            SpatIndex jindex; // spatial index for the junctions
-            for(auto ej : enumerate(result.junctions())) {
-                auto& p = ej.value.pos;
-                jindex.insert({p(X), p(Y), 0}, unsigned(ej.index));
-            }
+            pillindex.insert(endpoint, unsigned(result.pillars().size() - 1));
 
             // Process side point in current cluster
             cl.erase(cl.begin() + cidx); // delete the centroid before looping
@@ -1122,6 +1125,22 @@ bool SLASupportTree::generate(const PointSet &points,
                 // Now we want to hit the central pillar with a "tilt"ed bridge
                 // stick and (optionally) place a junction point there.
                 auto jh = head.junction_point();
+
+                {   // if there is a pillar closer than the cluster center
+                    // (this may happen as the clustering is not perfect)
+                    // than we will bridge to this closer pillar
+                    Vec3d jp2d = {jp(X), jp(Y), 0};
+                    Vec3d jh2d = {jh(X), jh(Y), 0};
+
+                    auto a = pillindex.nearest(jp, 1);
+                    if(!a.empty() &&
+                            distance(a.front().first, jp2d) <
+                            distance(jp2d, jh2d)) {
+                        const Pillar& pll = result.pillars()[a.front().second];
+                        unsigned hid = pll.start_junction_id;
+                        jh = result.heads()[hid].junction_point();
+                    }
+                }
 
                 // with simple trigonometry, we calculate the z coordinate on
                 // the main pillar. Distance is between the two pillars in 2d:
@@ -1164,22 +1183,17 @@ bool SLASupportTree::generate(const PointSet &points,
                     else {
                         // The head cannot be connected to the cluster's main
                         // pillar so we have to find a suitable place for it.
-                        // check the nearest junction:
+                        // check the nearest pillar:
 
-                        // first check the nearest junction
-                        double maxd = 8*cfg.base_radius_mm;
-                        auto q = jindex.query([jp, maxd](const SpatElement& se){
-                            return distance(se.first, jp) < maxd;
-                        });
-
-                        for(auto juncp : q) {
-                            double dd = distance(jp, juncp.first);
-                            chkd = ray_mesh_intersect(jp, dirv(jp, juncp.first),
+                        auto nres = pillindex.nearest(jp, 3);
+                        for(auto& nr : nres) {
+                            auto brdist = distance(jp, nr.first);
+                            chkd = ray_mesh_intersect(jp, dirv(jp, nr.first),
                                                       emesh);
-                            // TODO still collides with mesh surface
-                            if(chkd >= dd) {
+                            if(chkd >= brdist) {
+                                // no collision, we can use the pillar
+                                nearestjunc = nr;
                                 action = NEAREST_JUNCTION;
-                                nearestjunc = juncp;
                                 break;
                             }
                         }
@@ -1192,6 +1206,9 @@ bool SLASupportTree::generate(const PointSet &points,
                     }
                 }
 
+                // below this length we will not add junctions
+                const double min_bridgelength = 4*hbr;
+
                 switch(action) {
                 case GROUND: {
                     // A dedicated pillar is created for all the support points
@@ -1200,24 +1217,26 @@ bool SLASupportTree::generate(const PointSet &points,
                     jp(Z) = 0;
                     result.add_pillar(gndidx[c], jp, cfg.pillar_radius_mm).
                         add_base(cfg.base_height_mm, cfg.base_radius_mm);
+
+                    // connects to ground, eligible for bridging
+                    cl_centroids.emplace_back(gndidx[c]);
+                    pillindex.insert(jp, unsigned(result.pillars().size() - 1));
                     break;
                 }
                 case CLUSTER_MAIN: {
                     // if the junction on the main pillar above ground
-                    auto jjp = result.add_junction(jp, hbr);
-                    jindex.insert({jp, result.junctions().size() - 1});
                     result.add_pillar(gndidx[c], jp, cfg.pillar_radius_mm);
 
+                    auto jjp = result.add_junction(jp, hbr);
                     auto jjn = result.add_junction(jn, hbr);
-                    jindex.insert({jn, result.junctions().size() - 1});
-                    result.add_bridge(jjp, jjn, r_pillar);
+
+                    result.add_bridge(jp, jn, r_pillar);
                     break;
                 }
                 case NEAREST_JUNCTION: {
-                    // TODO add pillar
+                    result.add_pillar(gndidx[c], jp, cfg.pillar_radius_mm);
                     auto& jjn = result.junctions()[nearestjunc.second];
                     auto jjp = result.add_junction(jp, hbr);
-                    jindex.insert({jp, result.junctions().size() - 1});
                     result.add_bridge(jjp, jjn, r_pillar);
                     break;
                 }
@@ -1285,6 +1304,8 @@ bool SLASupportTree::generate(const PointSet &points,
                 double chkd = ray_mesh_intersect(sj, dirv(sj, ej), emesh);
                 double bridge_distance = pillar_dist / std::cos(-cfg.tilt);
 
+                // If the pillars are so close that they touch each other,
+                // there is no need to bridge them together.
                 if(pillar_dist > 2*cfg.pillar_radius_mm)
                     while(sj(Z) > pillar.endpoint(Z) &&
                           ej(Z) > nextpillar.endpoint(Z))
