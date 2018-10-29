@@ -290,7 +290,8 @@ public:
 	Writer& set_extruder_temp(int temperature, bool wait = false)
 	{
         char buf[128];
-        sprintf(buf, "M%d S%d\n", wait ? 109 : 104, temperature);
+        // The G4 is a workaround to synchronize the command with the planner queue in Prusa i3 firmware:
+        sprintf(buf, "G4\nM%d S%d\n", wait ? 109 : 104, temperature);
         m_gcode += buf;
         return *this;
 	};
