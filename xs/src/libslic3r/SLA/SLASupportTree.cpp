@@ -8,6 +8,7 @@
 #include "SLABoilerPlate.hpp"
 #include "SLASpatIndex.hpp"
 #include "SLABasePool.hpp"
+#include "benchmark.h"
 
 #include "Model.hpp"
 
@@ -122,43 +123,77 @@ Contour3D sphere(double rho, Portion portion = make_portion(0.0, 2.0*PI),
     return ret;
 }
 
-Contour3D cylinder(double r, double h, double fa=(2*PI/360)) {
+Contour3D cylinder(double r, double h, size_t steps) {
     Contour3D ret;
 
-    auto& vertices = ret.points;
-    auto& facets = ret.indices;
+    auto& points = ret.points;
+    auto& indices = ret.indices;
+    points.reserve(2*steps);
+    double a = 2*PI/steps;
 
-    // 2 special vertices, top and bottom center, rest are relative to this
-    vertices.emplace_back(Vec3d(0.0, 0.0, 0.0));
-    vertices.emplace_back(Vec3d(0.0, 0.0, h));
+    Vec3d jp = {0, 0, 0};
+    Vec3d endp = {0, 0, h};
 
-    // adjust via rounding to get an even multiple for any provided angle.
-    double angle = (2*PI / floor(2*PI / fa));
-
-    // for each line along the polygon approximating the top/bottom of the
-    // circle, generate four points and four facets (2 for the wall, 2 for the
-    // top and bottom.
-    // Special case: Last line shares 2 vertices with the first line.
-    auto id = coord_t(vertices.size() - 1);
-    vertices.emplace_back(Vec3d(sin(0) * r , cos(0) * r, 0));
-    vertices.emplace_back(Vec3d(sin(0) * r , cos(0) * r, h));
-    for (double i = 0; i < 2*PI; i+=angle) {
-        Vec2d p = Eigen::Rotation2Dd(i) * Eigen::Vector2d(0, r);
-        vertices.emplace_back(Vec3d(p(0), p(1), 0.));
-        vertices.emplace_back(Vec3d(p(0), p(1), h));
-        id = coord_t(vertices.size() - 1);
-        facets.emplace_back(Vec3crd( 0, id - 1, id - 3)); // top
-        facets.emplace_back(Vec3crd(id,      1, id - 2)); // bottom
-        facets.emplace_back(Vec3crd(id, id - 2, id - 3)); // upper-right of side
-        facets.emplace_back(Vec3crd(id, id - 3, id - 1)); // bottom-left of side
+    for(int i = 0; i < steps; ++i) {
+        double phi = i*a;
+        double ex = endp(X) + r*std::cos(phi);
+        double ey = endp(Y) + r*std::sin(phi);
+        points.emplace_back(ex, ey, endp(Z));
     }
-    // Connect the last set of vertices with the first.
-    facets.emplace_back(Vec3crd( 2, 0, id - 1));
-    facets.emplace_back(Vec3crd( 1, 3,     id));
-    facets.emplace_back(Vec3crd(id, 3,      2));
-    facets.emplace_back(Vec3crd(id, 2, id - 1));
+
+    for(int i = 0; i < steps; ++i) {
+        double phi = i*a;
+        double x = jp(X) + r*std::cos(phi);
+        double y = jp(Y) + r*std::sin(phi);
+        points.emplace_back(x, y, jp(Z));
+    }
+
+    indices.reserve(2*steps);
+    auto offs = steps;
+    for(int i = 0; i < steps - 1; ++i) {
+        indices.emplace_back(i, i + offs, offs + i + 1);
+        indices.emplace_back(i, offs + i + 1, i + 1);
+    }
+
+    auto last = steps - 1;
+    indices.emplace_back(0, last, offs);
+    indices.emplace_back(last, offs + last, offs);
 
     return ret;
+//    auto& vertices = ret.points;
+//    auto& facets = ret.indices;
+
+//    // 2 special vertices, top and bottom center, rest are relative to this
+//    vertices.emplace_back(Vec3d(0.0, 0.0, 0.0));
+//    vertices.emplace_back(Vec3d(0.0, 0.0, h));
+
+//    // adjust via rounding to get an even multiple for any provided angle.
+//    double angle = (2*PI / floor(2*PI / fa));
+
+//    // for each line along the polygon approximating the top/bottom of the
+//    // circle, generate four points and four facets (2 for the wall, 2 for the
+//    // top and bottom.
+//    // Special case: Last line shares 2 vertices with the first line.
+//    auto id = coord_t(vertices.size() - 1);
+//    vertices.emplace_back(Vec3d(sin(0) * r , cos(0) * r, 0));
+//    vertices.emplace_back(Vec3d(sin(0) * r , cos(0) * r, h));
+//    for (double i = 0; i < 2*PI; i+=angle) {
+//        Vec2d p = Eigen::Rotation2Dd(i) * Eigen::Vector2d(0, r);
+//        vertices.emplace_back(Vec3d(p(0), p(1), 0.));
+//        vertices.emplace_back(Vec3d(p(0), p(1), h));
+//        id = coord_t(vertices.size() - 1);
+//        facets.emplace_back(Vec3crd( 0, id - 1, id - 3)); // top
+//        facets.emplace_back(Vec3crd(id,      1, id - 2)); // bottom
+//        facets.emplace_back(Vec3crd(id, id - 2, id - 3)); // upper-right of side
+//        facets.emplace_back(Vec3crd(id, id - 3, id - 1)); // bottom-left of side
+//    }
+//    // Connect the last set of vertices with the first.
+//    facets.emplace_back(Vec3crd( id - 1, 0,  2));
+//    facets.emplace_back(Vec3crd( id,     3,  1));
+//    facets.emplace_back(Vec3crd( 2,      3, id));
+//    facets.emplace_back(Vec3crd( id - 1, 2, id));
+
+//    return ret;
 }
 
 struct Head {
@@ -171,12 +206,6 @@ struct Head {
     double r_back_mm = 1;
     double r_pin_mm = 0.5;
     double width_mm = 2;
-
-    struct Tail {
-        Contour3D mesh;
-        size_t steps = 45;
-        double length = 1.6;
-    } tail;
 
     // For identification purposes. This will be used as the index into the
     // container holding the head structures.
@@ -246,8 +275,6 @@ struct Head {
         // To simplify further processing, we translate the mesh so that the
         // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
         for(auto& p : mesh.points) { z(p) -= (h + r_small_mm); }
-
-        tail.length = 0.8*width_mm;
     }
 
     void transform()
@@ -272,49 +299,24 @@ struct Head {
     }
 
     double request_pillar_radius(double radius) const {
-        const double rmax = r_back_mm * 0.65;
+        const double rmax = r_back_mm /* * 0.65*/ ;
         return radius > 0 && radius < rmax ? radius : rmax;
     }
+};
 
-    void add_tail(double length = -1, double radius = -1) {
-        auto& cntr = tail.mesh;
-        Head& head = *this;
-        if(length > 0) tail.length = length;
+struct Junction {
+    Contour3D mesh;
+    double r = 1;
+    size_t steps = 45;
+    Vec3d pos;
 
-        cntr.points.reserve(2*steps);
+    long id = -1;
 
-        auto h = head.r_back_mm + 2*head.r_pin_mm + head.width_mm;
-        Vec3d c = head.tr + head.dir * h;
-
-        double r = head.r_back_mm * 0.9;
-        double r_low = request_pillar_radius(radius);
-
-        double a = 2*PI/steps;
-        double z = c(2);
-        for(int i = 0; i < steps; ++i) {
-            double phi = i*a;
-            double x = c(0) + r*std::cos(phi);
-            double y = c(1) + r*std::sin(phi);
-            cntr.points.emplace_back(x, y, z);
-        }
-
-        for(int i = 0; i < steps; ++i) {
-            double phi = i*a;
-            double lx = c(0) + r_low*std::cos(phi);
-            double ly = c(1) + r_low*std::sin(phi);
-            cntr.points.emplace_back(lx, ly, z - tail.length);
-        }
-
-        cntr.indices.reserve(2*steps);
-        auto offs = steps;
-        for(int i = 0; i < steps - 1; ++i) {
-            cntr.indices.emplace_back(i, i + offs, offs + i + 1);
-            cntr.indices.emplace_back(i, offs + i + 1, i + 1);
-        }
-
-        auto last = steps - 1;
-        cntr.indices.emplace_back(0, last, offs);
-        cntr.indices.emplace_back(last, offs + last, offs);
+    Junction(const Vec3d& tr, double r_mm, size_t stepnum = 45):
+        r(r_mm), steps(stepnum), pos(tr)
+    {
+        mesh = sphere(r_mm, make_portion(0, PI), 2*PI/steps);
+        for(auto& p : mesh.points) p += tr;
     }
 };
 
@@ -331,28 +333,30 @@ struct Pillar {
     bool starts_from_head = true; // Could start from a junction as well
     long start_junction_id = -1;
 
-    Pillar(Head& head, const Vec3d& endp, double radius = 1) :
-        endpoint(endp)
+    Pillar(const Vec3d& jp, const Vec3d& endp,
+           double radius = 1, size_t st = 45):
+        r(radius), steps(st), endpoint(endp), starts_from_head(false)
     {
-        steps = head.steps;
+        auto& points = mesh.points;
+        auto& indices = mesh.indices;
+        points.reserve(2*steps);
+        double a = 2*PI/steps;
 
-        r = head.request_pillar_radius(radius);
-
-        auto& points = mesh.points; points.reserve(head.tail.steps*2);
-        points.insert(points.end(),
-                      head.tail.mesh.points.begin() + steps,
-                      head.tail.mesh.points.end()
-                      );
-
-        for(auto it = head.tail.mesh.points.begin() + steps;
-            it != head.tail.mesh.points.end();
-            ++it)
-        {
-            auto& s = *it;
-            points.emplace_back(s(0), s(1), endp(2));
+        for(int i = 0; i < steps; ++i) {
+            double phi = i*a;
+            double x = jp(X) + r*std::cos(phi);
+            double y = jp(Y) + r*std::sin(phi);
+            points.emplace_back(x, y, jp(Z));
         }
 
-        auto& indices = mesh.indices;
+        for(int i = 0; i < steps; ++i) {
+            double phi = i*a;
+            double ex = endp(X) + r*std::cos(phi);
+            double ey = endp(Y) + r*std::sin(phi);
+            points.emplace_back(ex, ey, endp(Z));
+        }
+
+        indices.reserve(2*steps);
         auto offs = steps;
         for(int i = 0; i < steps - 1; ++i) {
             indices.emplace_back(i, i + offs, offs + i + 1);
@@ -362,6 +366,15 @@ struct Pillar {
         auto last = steps - 1;
         indices.emplace_back(0, last, offs);
         indices.emplace_back(last, offs + last, offs);
+    }
+
+    Pillar(const Junction& junc, const Vec3d& endp):
+        Pillar(junc.pos, endp, junc.r, junc.steps){}
+
+    Pillar(const Head& head, const Vec3d& endp, double radius = 1):
+        Pillar(head.junction_point(), endp, head.request_pillar_radius(radius),
+               head.steps)
+    {
     }
 
     void add_base(double height = 3, double radius = 2) {
@@ -412,22 +425,7 @@ struct Pillar {
     bool has_base() const { return !base.points.empty(); }
 };
 
-struct Junction {
-    Contour3D mesh;
-    double r = 1;
-    size_t steps = 45;
-    Vec3d pos;
-
-    long id = -1;
-
-    Junction(const Vec3d& tr, double r_mm, size_t stepnum = 45):
-        r(r_mm), steps(stepnum), pos(tr)
-    {
-        mesh = sphere(r_mm, make_portion(0, PI), 2*PI/steps);
-        for(auto& p : mesh.points) p += tr;
-    }
-};
-
+// A Bridge between two pillars (with junction endpoints)
 struct Bridge {
     Contour3D mesh;
     double r = 0.8;
@@ -436,30 +434,23 @@ struct Bridge {
     long start_jid = -1;
     long end_jid = -1;
 
-    Bridge(const Vec3d& j1, const Vec3d& j2, double r_mm = 0.8):
+    // We should reduce the radius a tiny bit to help the convex hull algorithm
+    Bridge(const Vec3d& j1, const Vec3d& j2,
+           double r_mm = 0.8, size_t steps = 45):
         r(r_mm)
     {
         using Quaternion = Eigen::Quaternion<double>;
         Vec3d dir = (j2 - j1).normalized();
         double d = distance(j2, j1);
 
-        mesh = cylinder(r, d, 2*PI / 45);
+        mesh = cylinder(r, d, steps);
 
         auto quater = Quaternion::FromTwoVectors(Vec3d{0,0,1}, dir);
         for(auto& p : mesh.points) p = quater * p + j1;
     }
 
     Bridge(const Junction& j1, const Junction& j2, double r_mm = 0.8):
-        Bridge(j1.pos, j2.pos, r_mm) {}
-
-    Bridge(const Head& h, const Junction& j2, double r_mm = 0.8):
-        r(r_mm)
-    {
-//        double headsize = 2*h.r_pin_mm + h.width_mm + h.r_back_mm;
-//        Vec3d hp = h.tr + h.dir * headsize;
-//        Vec3d dir = (j2.pos - hp).normalized();
-
-    }
+        Bridge(j1.pos, j2.pos, r_mm, j1.steps) {}
 
     Bridge(const Junction& j, const Pillar& cl) {}
 
@@ -487,7 +478,6 @@ void create_head(TriangleMesh& out, double r1_mm, double r2_mm, double width_mm)
     Head head(r1_mm, r2_mm, width_mm, {0, std::sqrt(0.5), -std::sqrt(0.5)},
               {0, 0, 30});
     out.merge(mesh(head.mesh));
-    out.merge(mesh(head.tail.mesh));
 
     Pillar cst(head, {0, 0, 0});
     cst.add_base();
@@ -1026,17 +1016,16 @@ bool SLASupportTree::generate(const PointSet &points,
 
         // We want to search for clusters of points that are far enough from
         // each other in the XY plane to generate the column stick base
-        auto d_base = 4*cfg.base_radius_mm;
+        auto d_base = 2*cfg.base_radius_mm;
         ground_clusters = cluster(gnd,
             [d_base, &cfg](const SpatElement& p, const SpatElement& s){
                 return distance(Vec2d(p.first(X), p.first(Y)),
                                 Vec2d(s.first(X), s.first(Y))) < d_base;
-            }, 4); // max 3 heads to connect to one centroid
+            }, 3); // max 3 heads to connect to one centroid
 
         for(auto idx : nogndidx) {
             auto& head = result.head(idx);
             head.transform();
-            head.add_tail();
 
             double gh = gndheight[idx];
             Vec3d headend = head.junction_point();
@@ -1091,7 +1080,6 @@ bool SLASupportTree::generate(const PointSet &points,
 
             long index_to_heads = gndidx[cl[cidx]];
             auto& head = result.head(index_to_heads);
-            head.add_tail();
             head.transform();
 
             Vec3d startpoint = head.junction_point();
@@ -1107,7 +1095,6 @@ bool SLASupportTree::generate(const PointSet &points,
             for(auto c : cl) {
                 auto& sidehead = result.head(gndidx[c]);
                 sidehead.transform();
-                sidehead.add_tail();
 
                 // get an appropriate radius for the pillar
                 double r_pillar = sidehead.request_pillar_radius(
@@ -1115,10 +1102,12 @@ bool SLASupportTree::generate(const PointSet &points,
 
                 // The distance in z direction by which the junctions on the
                 // pillar will be placed subsequently.
-                double jstep = sidehead.fullwidth();
+                double jstep = 0; // zero is the advice from SLA team
+
 
                 // connect to the main column by junction
-                auto jp = sidehead.junction_point();
+                auto jsh = sidehead.junction_point();
+                auto jp = jsh;
 
                 // move to the next junction point
                 jp(Z) -= jstep;
@@ -1228,8 +1217,8 @@ bool SLASupportTree::generate(const PointSet &points,
                     // if the junction on the main pillar above ground
                     result.add_pillar(gndidx[c], jp, cfg.pillar_radius_mm);
 
-                    auto jjp = result.add_junction(jp, hbr);
-                    auto jjn = result.add_junction(jn, hbr);
+                    if(jp(Z) < jsh(Z)) result.add_junction(jp, hbr);
+                    if(jn(Z) >= jh(Z)) result.add_junction(jn, hbr);
 
                     result.add_bridge(jp, jn, r_pillar);
                     break;
@@ -1274,12 +1263,12 @@ bool SLASupportTree::generate(const PointSet &points,
                 return Vec2d(p(X), p(Y)); // project to 2D in along Z axis
             });
 
-            /*std::cout << "ring: \n";
+            std::cout << "ring: \n";
             for(auto ri : ring) {
                 std::cout << ri << " " << " X = " << gnd_head_pt(ri)(X)
                           << " Y = " << gnd_head_pt(ri)(Y) << std::endl;
             }
-            std::cout << std::endl;*/
+            std::cout << std::endl;
 
             // now the ring has to be connected with bridge sticks
             for(auto it = ring.begin(), next = std::next(it);
@@ -1311,10 +1300,11 @@ bool SLASupportTree::generate(const PointSet &points,
                     while(sj(Z) > pillar.endpoint(Z) &&
                           ej(Z) > nextpillar.endpoint(Z))
                 {
-                    if(chkd >= bridge_distance ) {
-                        auto jS = result.add_junction(sj, hbr);
-                        auto jE = result.add_junction(ej, hbr);
-                        result.add_bridge(jS, jE, pillar.r);
+                    if(chkd >= bridge_distance) {
+//                        auto jS = result.add_junction(sj, hbr);
+//                        auto jE = result.add_junction(ej, hbr);
+//                        result.add_bridge(jS, jE, pillar.r);
+                        result.add_bridge(sj, ej, pillar.r);
 
                         // double bridging: (crosses)
                         if(bridge_distance > 2*cfg.base_radius_mm) {
@@ -1323,9 +1313,17 @@ bool SLASupportTree::generate(const PointSet &points,
                             Vec3d bsj(ej(X), ej(Y), sj(Z));
                             Vec3d bej(sj(X), sj(Y), ej(Z));
 
-                            auto jbS = result.add_junction(bsj, hbr);
-                            auto jbE = result.add_junction(bej, hbr);
-                            result.add_bridge(jbS, jbE, pillar.r);
+                            // need to check collision for the cross stick
+                            double backchkd = ray_mesh_intersect(bsj,
+                                                                 dirv(bsj, bej),
+                                                                 emesh);
+
+                            if(backchkd >= bridge_distance) {
+//                                auto jbS = result.add_junction(bsj, hbr);
+//                                auto jbE = result.add_junction(bej, hbr);
+//                                result.add_bridge(jbS, jbE, pillar.r);
+                                result.add_bridge(bsj, bej, pillar.r);
+                            }
                         }
                     }
                     sj.swap(ej);
@@ -1454,7 +1452,6 @@ void SLASupportTree::merged_mesh(TriangleMesh &outmesh) const
 
     for(auto& head : stree.heads()) {
         outmesh.merge(mesh(head.mesh));
-        outmesh.merge(mesh(head.tail.mesh));
     }
 
     for(auto& stick : stree.pillars()) {
@@ -1506,46 +1503,44 @@ void add_sla_supports(Model &model,
                       const SupportConfig &cfg,
                       const Controller &ctl)
 {
-    SLASupportTree _stree(model, cfg, ctl);
+    Benchmark bench;
 
+    bench.start();
+    SLASupportTree _stree(model, cfg, ctl);
+    bench.stop();
+
+    std::cout << "Support tree creation time: " << bench.getElapsedSec()
+              << " seconds" << std::endl;
+
+    bench.start();
     SLASupportTree::Impl& stree = _stree.get();
     ModelObject* o = model.add_object();
     o->add_instance();
 
-    for(auto& head : stree.heads()) {
-        o->add_volume(mesh(head.mesh));
-        o->add_volume(mesh(head.tail.mesh));
-    }
+    TriangleMesh streemsh;
+    _stree.merged_mesh(streemsh);
+    o->add_volume(streemsh);
 
-    for(auto& stick : stree.pillars()) {
-        o->add_volume(mesh(stick.mesh));
-        o->add_volume(mesh(stick.base));
-    }
-
-    for(auto& j : stree.junctions()) {
-        o->add_volume(mesh(j.mesh));
-    }
-
-    for(auto& bs : stree.bridges()) {
-        o->add_volume(mesh(bs.mesh));
-    }
+    bench.stop();
+    std::cout << "support tree added to model in: " << bench.getElapsedSec()
+              << " seconds" << std::endl;
 
     // TODO this would roughly be the code for the base pool
-    ExPolygons plate;
-    auto modelmesh = model.mesh();
-    TriangleMesh poolmesh;
-    sla::PoolConfig poolcfg;
-    std::cout << "Pool generation in progress..." << std::endl;
-    poolcfg.min_wall_height_mm = 0.8;
-    poolcfg.edge_radius_mm = 0.1;
-    poolcfg.min_wall_thickness_mm = 0.5;
+//    ExPolygons plate;
+//    auto modelmesh = model.mesh();
+//    TriangleMesh poolmesh;
+//    sla::PoolConfig poolcfg;
+//    std::cout << "Pool generation in progress..." << std::endl;
+//    poolcfg.min_wall_height_mm = 0.8;
+//    poolcfg.edge_radius_mm = 0.1;
+//    poolcfg.min_wall_thickness_mm = 0.5;
 
-    sla::base_plate(modelmesh, plate);
-    sla::create_base_pool(plate, poolmesh, poolcfg);
+//    sla::base_plate(modelmesh, plate);
+//    sla::create_base_pool(plate, poolmesh, poolcfg);
 
-    std::cout << "Pool generation completed." << std::endl;
+//    std::cout << "Pool generation completed." << std::endl;
 
-    o->add_volume(poolmesh);
+//    o->add_volume(poolmesh);
 
 }
 
