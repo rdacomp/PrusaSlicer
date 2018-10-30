@@ -31,6 +31,12 @@ template<class Vec> double distance(const Vec& p) {
     return std::sqrt(p.transpose() * p);
 }
 
+/// The horizontally projected 2D boundary of the model as individual line
+/// segments. This can be used later to create a spatial index of line segments
+/// and query for possible pillar positions for non-ground facing support points
+std::vector<std::pair<Vec2d, Vec2d>> model_boundary(const EigenMesh3D& emesh,
+                                                    double offs = 0.01);
+
 Contour3D sphere(double rho, Portion portion = make_portion(0.0, 2.0*PI),
                  double fa=(2*PI/360)) {
 
@@ -947,6 +953,8 @@ bool SLASupportTree::generate(const PointSet &points,
         head_pos.conservativeResize(pcount, Eigen::NoChange);
         filt_norm.conservativeResize(pcount, Eigen::NoChange);
         headless_pos.conservativeResize(hlcount, Eigen::NoChange);
+
+        std::cout << "headless count " << hlcount << std::endl;
     };
 
     // Function to write the pinheads into the result
@@ -1044,7 +1052,6 @@ bool SLASupportTree::generate(const PointSet &points,
                 Vec3d{headend(X), headend(Y), headend(Z) - gh + hl},
                 cfg.pillar_radius_mm
             ).base = base_head.mesh;
-
         }
     };
 
@@ -1301,9 +1308,6 @@ bool SLASupportTree::generate(const PointSet &points,
                           ej(Z) > nextpillar.endpoint(Z))
                 {
                     if(chkd >= bridge_distance) {
-//                        auto jS = result.add_junction(sj, hbr);
-//                        auto jE = result.add_junction(ej, hbr);
-//                        result.add_bridge(jS, jE, pillar.r);
                         result.add_bridge(sj, ej, pillar.r);
 
                         // double bridging: (crosses)
@@ -1319,9 +1323,6 @@ bool SLASupportTree::generate(const PointSet &points,
                                                                  emesh);
 
                             if(backchkd >= bridge_distance) {
-//                                auto jbS = result.add_junction(bsj, hbr);
-//                                auto jbE = result.add_junction(bej, hbr);
-//                                result.add_bridge(jbS, jbE, pillar.r);
                                 result.add_bridge(bsj, bej, pillar.r);
                             }
                         }
@@ -1338,6 +1339,29 @@ bool SLASupportTree::generate(const PointSet &points,
                                 sring.begin(), sring.end(),
                                 std::back_inserter(tmp));
             rem.swap(tmp);
+        }
+    };
+
+    auto process_headless = [](
+            const SupportConfig& cfg,
+            const PointSet& headless_pts,
+            const EigenMesh3D& emesh,
+            Result& result)
+    {
+        // For now we will just generate smaller headless sticks with a sharp
+        // ending point that connects to the mesh surface.
+
+
+        for(int i = 0; i < headless_pts.rows(); i++) {
+            Vec3d sj = headless_pts.row(i);
+            Vec3d dir = {0, 0, -1};
+            double dist = ray_mesh_intersect(sj, dir, emesh);
+
+            if(std::isinf(dist) || std::isnan(dist)) continue;
+
+            Vec3d ej = sj + dist * dir;
+
+            result.add_bridge(sj, ej, 0.5*cfg.pillar_radius_mm);
         }
     };
 
@@ -1375,9 +1399,8 @@ bool SLASupportTree::generate(const PointSet &points,
     [] () {
         // Routing non ground connecting clusters
     },
-    [] () {
-        // Processing headless support points
-    },
+    bind(process_headless, cref(cfg), cref(headless_positions), cref(mesh),
+         ref(result)),
     [] () {
         // Done
     },

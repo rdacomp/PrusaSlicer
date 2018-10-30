@@ -11,6 +11,7 @@
 #include <igl/ray_mesh_intersect.h>
 #include <igl/point_mesh_squared_distance.h>
 #include "SLASpatIndex.hpp"
+#include "ClipperUtils.hpp"
 
 namespace Slic3r {
 namespace sla {
@@ -183,6 +184,54 @@ ClusteredPoints cluster(
 
     return result;
 }
+
+using Segments = std::vector<std::pair<Vec2d, Vec2d>>;
+
+Segments model_boundary(const EigenMesh3D& emesh, double offs)
+{
+    Segments ret;
+    Polygons pp;
+    pp.reserve(emesh.F.rows());
+
+    for (int i = 0; i < emesh.F.rows(); i++) {
+        auto trindex = emesh.F.row(i);
+        auto& p1 = emesh.V.row(trindex(0));
+        auto& p2 = emesh.V.row(trindex(1));
+        auto& p3 = emesh.V.row(trindex(2));
+
+        Polygon p;
+        p.points.resize(3);
+        p.points[0] = Point::new_scale(p1(X), p1(Y));
+        p.points[1] = Point::new_scale(p2(X), p2(Y));
+        p.points[2] = Point::new_scale(p3(X), p3(Y));
+        p.make_counter_clockwise();
+        pp.emplace_back(p);
+    }
+
+    ExPolygons merged = union_ex(offset(pp, float(scale_(offs))), true);
+
+    for(auto& expoly : merged) {
+        auto lines = expoly.lines();
+        for(Line& l : lines) {
+            Vec2d a(l.a(X) * SCALING_FACTOR, l.a(Y) * SCALING_FACTOR);
+            Vec2d b(l.b(X) * SCALING_FACTOR, l.b(Y) * SCALING_FACTOR);
+            ret.emplace_back(std::make_pair(a, b));
+        }
+    }
+
+    return ret;
+}
+
+//struct SegmentIndex {
+
+//};
+
+//using SegmentIndexEl = std::pair<Segment, unsigned>;
+
+//SegmentIndexEl
+
+
+
 
 }
 }
