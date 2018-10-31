@@ -318,7 +318,7 @@ struct Head {
 
         // To simplify further processing, we translate the mesh so that the
         // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
-        for(auto& p : mesh.points) { z(p) -= (h /*+ r_small_mm*/); }
+        for(auto& p : mesh.points) { z(p) -= (h + 0.5 * r_small_mm); }
     }
 
     void transform()
@@ -335,11 +335,11 @@ struct Head {
     }
 
     double fullwidth() const {
-        return /* 2* */r_pin_mm + width_mm + 2*r_back_mm;
+        return 1.5 * r_pin_mm + width_mm + 2*r_back_mm;
     }
 
     Vec3d junction_point() const {
-        return tr + (/* 2* */r_pin_mm + width_mm + r_back_mm)*dir;
+        return tr + ( 1.5 * r_pin_mm + width_mm + r_back_mm)*dir;
     }
 
     double request_pillar_radius(double radius) const {
@@ -1128,7 +1128,7 @@ bool SLASupportTree::generate(const PointSet &points,
                  cfg.head_front_radius_mm,
                  cfg.head_width_mm,
                  {0.0, 0.0, 1.0},
-                 {headend(X), headend(Y), headend(Z) - gh - head.r_pin_mm});
+                 {headend(X), headend(Y), headend(Z) - gh});
 
             base_head.transform();
 
@@ -1660,6 +1660,12 @@ void add_sla_supports(Model &model,
 
     bench.start();
     sla::base_plate(modelmesh, plate);
+    bench.stop();
+
+    std::cout << "Base plate calculation time: " << bench.getElapsedSec()
+              << " seconds." << std::endl;
+
+    bench.start();
     sla::create_base_pool(plate, poolmesh, poolcfg);
     bench.stop();
 
@@ -1671,9 +1677,11 @@ void add_sla_supports(Model &model,
     o->add_volume(poolmesh);
     bench.stop();
 
-    o->translate({0, 0, poolcfg.min_wall_height_mm / 2});
+    // TODO: will cause incorrect placement of the model;
+//    o->translate({0, 0, poolcfg.min_wall_height_mm / 2});
 
-    std::cout << "Added support to model in " << bench.getElapsedSec() << " seconds." << std::endl;
+    std::cout << "Added pool to model in " << bench.getElapsedSec()
+              << " seconds." << std::endl;
 
 }
 
