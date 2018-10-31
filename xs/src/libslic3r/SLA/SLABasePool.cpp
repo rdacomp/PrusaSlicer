@@ -317,8 +317,22 @@ inline Point centroid(Points& pp) {
     case 1: c = pp.front(); break;
     case 2: c = (pp[0] + pp[1]) / 2; break;
     default: {
-        c = std::accumulate(pp.begin(), pp.end(), Point{0, 0});
-        x(c) /= coord_t(pp.size()); y(c) /= coord_t(pp.size());
+        auto MAX = std::numeric_limits<Point::coord_type>::max();
+        auto MIN = std::numeric_limits<Point::coord_type>::min();
+        Point min = {MAX, MAX}, max = {MIN, MIN};
+
+        for(auto& p : pp) {
+            if(p(0) < min(0)) min(0) = p(0);
+            if(p(1) < min(1)) min(1) = p(1);
+            if(p(0) > max(0)) max(0) = p(0);
+            if(p(1) > max(1)) max(1) = p(1);
+        }
+        c(0) = min(0) + (max(0) - min(0)) / 2;
+        c(1) = min(1) + (max(1) - min(1)) / 2;
+
+        // TODO: fails for non convex cluster
+//        c = std::accumulate(pp.begin(), pp.end(), Point{0, 0});
+//        x(c) /= coord_t(pp.size()); y(c) /= coord_t(pp.size());
         break;
     }
     }
