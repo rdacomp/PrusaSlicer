@@ -12,6 +12,44 @@
 
 #include "Model.hpp"
 
+/**
+ * Terminology:
+ *
+ * Support point:
+ * The point on the model surface that needs support.
+ *
+ * Pillar:
+ * A thick column that spans from a support point to the ground and has
+ * a thick cone shaped base where it touches the ground.
+ *
+ * Ground facing support point:
+ * A support point that can be directly connected with the ground with a pillar
+ * that does not collide or cut through the model.
+ *
+ * Non ground facing support point:
+ * A support point that cannot be directly connected with the ground.
+ *
+ * Head:
+ * The pinhead that connects to the model surface with the sharp end end
+ * to a pillar or bridge stick with the dull end.
+ *
+ * Headless support point:
+ * A support point on the model surface for which there is not enough place for
+ * the head. It id either in a hole or there is some barrier that would collide
+ * with the head geometry. The headless support point can be ground facing and
+ * non ground facing as well.
+ *
+ * Bridge:
+ * A stick that connects two pillars or a head with a pillar.
+ *
+ * Junction:
+ * A small ball in the intersection of two or more sticks (pillar, bridge, ...)
+ *
+ * CompactBridge:
+ * A bridge that connects a headless support point with the model surface or a
+ * nearby pillar.
+ */
+
 namespace Slic3r {
 namespace sla {
 
@@ -280,7 +318,7 @@ struct Head {
 
         // To simplify further processing, we translate the mesh so that the
         // last vertex of the pointing sphere (the pinpoint) will be at (0,0,0)
-        for(auto& p : mesh.points) { z(p) -= (h + r_small_mm); }
+        for(auto& p : mesh.points) { z(p) -= (h /*+ r_small_mm*/); }
     }
 
     void transform()
@@ -297,11 +335,11 @@ struct Head {
     }
 
     double fullwidth() const {
-        return 2*r_pin_mm + width_mm + 2*r_back_mm;
+        return /* 2* */r_pin_mm + width_mm + 2*r_back_mm;
     }
 
     Vec3d junction_point() const {
-        return tr + (2*r_pin_mm + width_mm + r_back_mm)*dir;
+        return tr + (/* 2* */r_pin_mm + width_mm + r_back_mm)*dir;
     }
 
     double request_pillar_radius(double radius) const {
@@ -462,6 +500,38 @@ struct Bridge {
 
 };
 
+// A bridge that spans from model surface to model surface with small connecting
+// edges on the endpoints. Used for headless support points.
+struct CompactBridge {
+    Contour3D mesh;
+    long id = -1;
+
+    CompactBridge(const Vec3d& sp,
+                  const Vec3d& ep,
+                  const Vec3d& n,
+                  double r,
+                  size_t steps = 45)
+    {
+        Vec3d startp = sp + r * n;
+        Vec3d dir = (ep - startp).normalized();
+        Vec3d endp = ep - r * dir;
+
+        Bridge br(startp, endp, r, steps);
+        mesh.merge(br.mesh);
+
+        // now add the pins
+        double fa = 2*PI/steps;
+        auto upperball = sphere(r, Portion{PI / 2 - fa, PI}, fa);
+        for(auto& p : upperball.points) p += startp;
+
+        auto lowerball = sphere(r, Portion{0, PI/2 + 2*fa}, fa);
+        for(auto& p : lowerball.points) p += endp;
+
+        mesh.merge(upperball);
+        mesh.merge(lowerball);
+    }
+};
+
 EigenMesh3D to_eigenmesh(const Contour3D& cntr) {
     EigenMesh3D emesh;
 
@@ -589,6 +659,7 @@ class SLASupportTree::Impl {
     std::vector<Pillar> m_pillars;
     std::vector<Junction> m_junctions;
     std::vector<Bridge> m_bridges;
+    std::vector<CompactBridge> m_compact_bridges;
 public:
 
     template<class...Args> Head& add_head(Args&&... args) {
@@ -626,12 +697,21 @@ public:
 
     template<class...Args> const Junction& add_junction(Args&&... args) {
         m_junctions.emplace_back(std::forward<Args>(args)...);
+        m_junctions.back().id = long(m_junctions.size() - 1);
         return m_junctions.back();
     }
 
     template<class...Args> const Bridge& add_bridge(Args&&... args) {
         m_bridges.emplace_back(std::forward<Args>(args)...);
+        m_bridges.back().id = long(m_bridges.size() - 1);
         return m_bridges.back();
+    }
+
+    template<class...Args>
+    const CompactBridge& add_compact_bridge(Args&&...args) {
+        m_compact_bridges.emplace_back(std::forward<Args>(args)...);
+        m_compact_bridges.back().id = long(m_compact_bridges.size() - 1);
+        return m_compact_bridges.back();
     }
 
     const std::vector<Head>& heads() const { return m_heads; }
@@ -639,6 +719,9 @@ public:
     const std::vector<Pillar>& pillars() const { return m_pillars; }
     const std::vector<Bridge>& bridges() const { return m_bridges; }
     const std::vector<Junction>& junctions() const { return m_junctions; }
+    const std::vector<CompactBridge>& compact_bridges() const {
+        return m_compact_bridges;
+    }
 };
 
 template<class DistFn>
@@ -815,10 +898,11 @@ bool SLASupportTree::generate(const PointSet &points,
                               const SupportConfig &cfg,
                               const Controller &ctl)
 {
-    PointSet filtered_points;
-    PointSet filtered_normals;
-    PointSet head_positions;
-    PointSet headless_positions;
+    PointSet filtered_points;       // all valid support points
+    PointSet head_positions;        // support points with pinhead
+    PointSet head_normals;          // head normals
+    PointSet headless_positions;    // headless support points
+    PointSet headless_normals;      // headless support point normals
 
     using IndexSet = std::vector<unsigned>;
 
@@ -861,9 +945,10 @@ bool SLASupportTree::generate(const PointSet &points,
             const PointSet& points,
             const EigenMesh3D& mesh,
             PointSet& filt_pts,
-            PointSet& filt_norm,
+            PointSet& head_norm,
             PointSet& head_pos,
-            PointSet& headless_pos)
+            PointSet& headless_pos,
+            PointSet& headless_norm)
     {
 
         /* ******************************************************** */
@@ -888,9 +973,10 @@ bool SLASupportTree::generate(const PointSet &points,
         // calculate the normals to the triangles belonging to filtered points
         auto nmls = sla::normals(filt_pts, mesh);
 
-        filt_norm.resize(count, 3);
+        head_norm.resize(count, 3);
         head_pos.resize(count, 3);
         headless_pos.resize(count, 3);
+        headless_norm.resize(count, 3);
 
         // Not all of the support points have to be a valid position for
         // support creation. The angle may be inappropriate or there may
@@ -941,20 +1027,20 @@ bool SLASupportTree::generate(const PointSet &points,
                     head_pos.row(pcount) = hp;
 
                     // save the verified and corrected normal
-                    filt_norm.row(pcount) = nn;
+                    head_norm.row(pcount) = nn;
 
                     ++pcount;
                 } else {
+                    headless_norm.row(hlcount) = nn;
                     headless_pos.row(hlcount++) = hp;
                 }
             }
         }
 
         head_pos.conservativeResize(pcount, Eigen::NoChange);
-        filt_norm.conservativeResize(pcount, Eigen::NoChange);
+        head_norm.conservativeResize(pcount, Eigen::NoChange);
         headless_pos.conservativeResize(hlcount, Eigen::NoChange);
-
-        std::cout << "headless count " << hlcount << std::endl;
+        headless_norm.conservativeResize(hlcount, Eigen::NoChange);
     };
 
     // Function to write the pinheads into the result
@@ -1270,12 +1356,12 @@ bool SLASupportTree::generate(const PointSet &points,
                 return Vec2d(p(X), p(Y)); // project to 2D in along Z axis
             });
 
-            std::cout << "ring: \n";
+            /*std::cout << "ring: \n";
             for(auto ri : ring) {
                 std::cout << ri << " " << " X = " << gnd_head_pt(ri)(X)
                           << " Y = " << gnd_head_pt(ri)(Y) << std::endl;
             }
-            std::cout << std::endl;
+            std::cout << std::endl;*/
 
             // now the ring has to be connected with bridge sticks
             for(auto it = ring.begin(), next = std::next(it);
@@ -1345,23 +1431,32 @@ bool SLASupportTree::generate(const PointSet &points,
     auto process_headless = [](
             const SupportConfig& cfg,
             const PointSet& headless_pts,
+            const PointSet& headless_norm,
             const EigenMesh3D& emesh,
             Result& result)
     {
         // For now we will just generate smaller headless sticks with a sharp
         // ending point that connects to the mesh surface.
 
+        const double R = 0.5*cfg.pillar_radius_mm;
+        const double HWIDTH_MM = R/3;
 
+        // We will sink the pins into the model surface for a distance of 1/3 of
+        // HWIDTH_MM
         for(int i = 0; i < headless_pts.rows(); i++) {
-            Vec3d sj = headless_pts.row(i);
+            Vec3d sp = headless_pts.row(i);
+
+            Vec3d n = headless_norm.row(i);
+            sp = sp - n * HWIDTH_MM;
+
             Vec3d dir = {0, 0, -1};
+            Vec3d sj = sp + R * n;
             double dist = ray_mesh_intersect(sj, dir, emesh);
 
             if(std::isinf(dist) || std::isnan(dist)) continue;
 
-            Vec3d ej = sj + dist * dir;
-
-            result.add_bridge(sj, ej, 0.5*cfg.pillar_radius_mm);
+            Vec3d ej = sj + (dist + HWIDTH_MM)* dir;
+            result.add_compact_bridge(sp, ej, n, R);
         }
     };
 
@@ -1379,12 +1474,12 @@ bool SLASupportTree::generate(const PointSet &points,
 
     // Filtering unnecessary support points
     bind(filterfn, cref(cfg), cref(points), cref(mesh),
-         ref(filtered_points), ref(filtered_normals),
-         ref(head_positions),  ref(headless_positions)),
+         ref(filtered_points), ref(head_normals),
+         ref(head_positions),  ref(headless_positions), ref(headless_normals)),
 
     // Pinhead generation
     bind(pinheadfn, cref(cfg),
-             ref(head_positions), ref(filtered_normals), ref(result)),
+             ref(head_positions), ref(head_normals), ref(result)),
 
     // Classification of support points
     bind(classifyfn, cref(cfg), cref(mesh),
@@ -1399,7 +1494,9 @@ bool SLASupportTree::generate(const PointSet &points,
     [] () {
         // Routing non ground connecting clusters
     },
-    bind(process_headless, cref(cfg), cref(headless_positions), cref(mesh),
+    bind(process_headless,
+         cref(cfg), cref(headless_positions),
+         cref(headless_normals), cref(mesh),
          ref(result)),
     [] () {
         // Done
@@ -1486,6 +1583,10 @@ void SLASupportTree::merged_mesh(TriangleMesh &outmesh) const
         outmesh.merge(mesh(j.mesh));
     }
 
+    for(auto& cb : stree.compact_bridges()) {
+        outmesh.merge(mesh(cb.mesh));
+    }
+
     for(auto& bs : stree.bridges()) {
         outmesh.merge(mesh(bs.mesh));
     }
@@ -1549,21 +1650,30 @@ void add_sla_supports(Model &model,
               << " seconds" << std::endl;
 
     // TODO this would roughly be the code for the base pool
-//    ExPolygons plate;
-//    auto modelmesh = model.mesh();
-//    TriangleMesh poolmesh;
-//    sla::PoolConfig poolcfg;
-//    std::cout << "Pool generation in progress..." << std::endl;
-//    poolcfg.min_wall_height_mm = 0.8;
-//    poolcfg.edge_radius_mm = 0.1;
-//    poolcfg.min_wall_thickness_mm = 0.5;
+    ExPolygons plate;
+    auto modelmesh = model.mesh();
+    TriangleMesh poolmesh;
+    sla::PoolConfig poolcfg;
+    poolcfg.min_wall_height_mm = 1;
+    poolcfg.edge_radius_mm = 0.1;
+    poolcfg.min_wall_thickness_mm = 0.8;
 
-//    sla::base_plate(modelmesh, plate);
-//    sla::create_base_pool(plate, poolmesh, poolcfg);
+    bench.start();
+    sla::base_plate(modelmesh, plate);
+    sla::create_base_pool(plate, poolmesh, poolcfg);
+    bench.stop();
 
-//    std::cout << "Pool generation completed." << std::endl;
+    std::cout << "Pool generation completed in " << bench.getElapsedSec()
+              << " second." << std::endl;
 
-//    o->add_volume(poolmesh);
+    bench.start();
+    poolmesh.translate(0, 0, poolcfg.min_wall_height_mm / 2);
+    o->add_volume(poolmesh);
+    bench.stop();
+
+    o->translate({0, 0, poolcfg.min_wall_height_mm / 2});
+
+    std::cout << "Added support to model in " << bench.getElapsedSec() << " seconds." << std::endl;
 
 }
 
