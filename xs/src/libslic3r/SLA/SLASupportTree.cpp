@@ -1146,7 +1146,7 @@ bool SLASupportTree::generate(const PointSet &points,
     {
         const double hbr = cfg.head_back_radius_mm;
         const double pradius = cfg.pillar_radius_mm;
-        const double MAX_BRIDGE_DISTANCE = cfg.pillar_radius_mm * 10;
+        const double maxbridgelen = cfg.max_bridge_length_mm;
 
         ClusterEl cl_centroids;
         cl_centroids.reserve(gnd_clusters.size());
@@ -1199,8 +1199,12 @@ bool SLASupportTree::generate(const PointSet &points,
             // Process side point in current cluster
             cl.erase(cl.begin() + cidx); // delete the centroid before looping
 
+            // TODO: dont consider the cluster centroid but calculate a central
+            // position where the pillar can be placed. this way the weight
+            // is distributed more effectively on the pillar.
+
             auto search_nearest =
-                    [&cfg, &result, &emesh, MAX_BRIDGE_DISTANCE]
+                    [&cfg, &result, &emesh, maxbridgelen]
                     (SpatIndex& spindex, const Vec3d& jsh)
             {
                 long nearest_id = -1;
@@ -1231,7 +1235,7 @@ bool SLASupportTree::generate(const PointSet &points,
                     }
 
                     double d = distance(jp, jn);
-                    if(jn(Z) <= 0 || d > MAX_BRIDGE_DISTANCE) break;
+                    if(jn(Z) <= 0 || d > maxbridgelen) break;
 
                     double chkd = ray_mesh_intersect(jp, dirv(jp, jn), emesh);
                     if(chkd >= d) nearest_id = ne.second;
