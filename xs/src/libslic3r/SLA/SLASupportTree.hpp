@@ -50,7 +50,7 @@ struct SupportConfig {
     // The default angle for connecting support sticks and junctions.
     double tilt = M_PI/4;
 
-    double junction_distance = 1.5;
+//    double junction_distance = 1.5;
 };
 
 /// A Control structure for the support calculation. Consists of the status

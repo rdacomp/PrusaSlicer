@@ -103,6 +103,7 @@ public:
 
     // For testing
     size_t size() const;
+    bool empty() const { return size() == 0; }
 };
 
 }
