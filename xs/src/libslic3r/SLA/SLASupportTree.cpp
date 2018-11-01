@@ -61,13 +61,13 @@ inline Portion make_portion(double a, double b) {
     return std::make_tuple(a, b);
 }
 
+template<class Vec> double distance(const Vec& p) {
+    return std::sqrt(p.transpose() * p);
+}
+
 template<class Vec> double distance(const Vec& pp1, const Vec& pp2) {
     auto p = pp2 - pp1;
     return distance(p);
-}
-
-template<class Vec> double distance(const Vec& p) {
-    return std::sqrt(p.transpose() * p);
 }
 
 /// The horizontally projected 2D boundary of the model as individual line
@@ -1107,7 +1107,8 @@ bool SLASupportTree::generate(const PointSet &points,
 
         // If the pillars are so close that they touch each other,
         // there is no need to bridge them together.
-        if(pillar_dist > 2*cfg.pillar_radius_mm)
+        if(pillar_dist > 2*cfg.pillar_radius_mm &&
+           bridge_distance < cfg.max_bridge_length_mm)
             while(sj(Z) > pillar.endpoint(Z) &&
                   ej(Z) > nextpillar.endpoint(Z))
         {
@@ -1208,6 +1209,9 @@ bool SLASupportTree::generate(const PointSet &points,
                     (SpatIndex& spindex, const Vec3d& jsh)
             {
                 long nearest_id = -1;
+                // the close bridges are more delicate
+                const double max_len = maxbridgelen / 2;
+
                 while(nearest_id < 0 && !spindex.empty()) {
                     // loop until a suitable head is not found
                     // if there is a pillar closer than the cluster center
@@ -1229,13 +1233,17 @@ bool SLASupportTree::generate(const PointSet &points,
                         // if the main head is below the point where the bridge
                         // would connect, than we must adjust the bridge
                         // endpoints
-                        double hdiff = jn(Z) - jh(Z);
-                        jp(Z) -= hdiff;
-                        jn(Z) -= hdiff;
+//                        double hdiff = jn(Z) - jh(Z);
+//                        jp(Z) -= hdiff;
+//                        jn(Z) -= hdiff;
+
+                        // NOTE: this may be a bad idea
+                        spindex.remove(ne);
+                        continue;
                     }
 
                     double d = distance(jp, jn);
-                    if(jn(Z) <= 0 || d > maxbridgelen) break;
+                    if(jn(Z) <= 0 || d > max_len) break;
 
                     double chkd = ray_mesh_intersect(jp, dirv(jp, jn), emesh);
                     if(chkd >= d) nearest_id = ne.second;
@@ -1625,38 +1633,38 @@ void add_sla_supports(Model &model,
               << " seconds" << std::endl;
 
     // TODO this would roughly be the code for the base pool
-//    ExPolygons plate;
-//    auto modelmesh = model.mesh();
-//    TriangleMesh poolmesh;
-//    sla::PoolConfig poolcfg;
-//    poolcfg.min_wall_height_mm = 1;
-//    poolcfg.edge_radius_mm = 0.1;
-//    poolcfg.min_wall_thickness_mm = 0.8;
+    ExPolygons plate;
+    auto modelmesh = model.mesh();
+    TriangleMesh poolmesh;
+    sla::PoolConfig poolcfg;
+    poolcfg.min_wall_height_mm = 1;
+    poolcfg.edge_radius_mm = 0.1;
+    poolcfg.min_wall_thickness_mm = 0.8;
 
-//    bench.start();
-//    sla::base_plate(modelmesh, plate);
-//    bench.stop();
+    bench.start();
+    sla::base_plate(modelmesh, plate);
+    bench.stop();
 
-//    std::cout << "Base plate calculation time: " << bench.getElapsedSec()
-//              << " seconds." << std::endl;
+    std::cout << "Base plate calculation time: " << bench.getElapsedSec()
+              << " seconds." << std::endl;
 
-//    bench.start();
-//    sla::create_base_pool(plate, poolmesh, poolcfg);
-//    bench.stop();
+    bench.start();
+    sla::create_base_pool(plate, poolmesh, poolcfg);
+    bench.stop();
 
-//    std::cout << "Pool generation completed in " << bench.getElapsedSec()
-//              << " second." << std::endl;
+    std::cout << "Pool generation completed in " << bench.getElapsedSec()
+              << " second." << std::endl;
 
-//    bench.start();
-//    poolmesh.translate(0, 0, poolcfg.min_wall_height_mm / 2);
-//    o->add_volume(poolmesh);
-//    bench.stop();
+    bench.start();
+    poolmesh.translate(0, 0, poolcfg.min_wall_height_mm / 2);
+    o->add_volume(poolmesh);
+    bench.stop();
 
-//    // TODO: will cause incorrect placement of the model;
-////    o->translate({0, 0, poolcfg.min_wall_height_mm / 2});
+    // TODO: will cause incorrect placement of the model;
+//    o->translate({0, 0, poolcfg.min_wall_height_mm / 2});
 
-//    std::cout << "Added pool to model in " << bench.getElapsedSec()
-//              << " seconds." << std::endl;
+    std::cout << "Added pool to model in " << bench.getElapsedSec()
+              << " seconds." << std::endl;
 
 }
 

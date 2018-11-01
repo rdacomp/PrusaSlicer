@@ -51,7 +51,7 @@ struct SupportConfig {
     double tilt = M_PI/4;
 
     // The max length of a bridge in mm
-    double max_bridge_length_mm = 10.0;
+    double max_bridge_length_mm = 15.0;
 };
 
 /// A Control structure for the support calculation. Consists of the status
