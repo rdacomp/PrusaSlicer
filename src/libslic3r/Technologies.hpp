@@ -65,4 +65,13 @@
 // Toolbar items hidden/shown in dependence of the user mode
 #define ENABLE_MODE_AWARE_TOOLBAR_ITEMS (1 && ENABLE_1_42_0_ALPHA5)
 
+
+//====================
+// 1.42.0.alpha6 techs
+//====================
+#define ENABLE_1_42_0_ALPHA6 1
+
+// Texture generated from imported svg files
+#define ENABLE_TEXTURES_FROM_SVG (1 && ENABLE_1_42_0_ALPHA6)
+
 #endif // _technologies_h_

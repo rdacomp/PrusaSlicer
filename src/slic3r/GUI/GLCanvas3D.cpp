@@ -599,10 +599,19 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
     // use higher resolution images if graphic card allows
     GLint max_tex_size;
     ::glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
-    if (max_tex_size >= 8192)
-        tex_path += "_8192";
-    else if (max_tex_size >= 4096)
-        tex_path += "_4096";
+#if ENABLE_TEXTURES_FROM_SVG
+    max_tex_size = std::min(max_tex_size, 8192);
+
+    if (key != "sl1")
+    {
+#endif // ENABLE_TEXTURES_FROM_SVG
+        if (max_tex_size >= 8192)
+            tex_path += "_8192";
+        else if (max_tex_size >= 4096)
+            tex_path += "_4096";
+#if ENABLE_TEXTURES_FROM_SVG
+    }
+#endif // ENABLE_TEXTURES_FROM_SVG
 
 #if ENABLE_PRINT_BED_MODELS
     std::string model_path = resources_dir() + "/models/" + key;
@@ -615,14 +624,42 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
         ::glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_anisotropy);
 #endif // ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
 
+#if ENABLE_TEXTURES_FROM_SVG
+    std::string filename = tex_path + "_top";
+#else
     std::string filename = tex_path + "_top.png";
+#endif // ENABLE_TEXTURES_FROM_SVG
+
+#if ENABLE_TEXTURES_FROM_SVG
+    if (key == "sl1")
+        filename += ".svg";
+    else
+        filename += ".png";
+#endif // ENABLE_TEXTURES_FROM_SVG
+
     if ((m_top_texture.get_id() == 0) || (m_top_texture.get_source() != filename))
     {
-        if (!m_top_texture.load_from_file(filename, true))
+#if ENABLE_TEXTURES_FROM_SVG
+        if (key == "sl1")
         {
-            _render_custom();
-            return;
+            if (!m_top_texture.load_from_svg_file(filename, true, max_tex_size))
+            {
+                _render_custom();
+                return;
+            }
         }
+        else
+        {
+#endif // ENABLE_TEXTURES_FROM_SVG
+            if (!m_top_texture.load_from_file(filename, true))
+            {
+                _render_custom();
+                return;
+            }
+#if ENABLE_TEXTURES_FROM_SVG
+        }
+#endif // ENABLE_TEXTURES_FROM_SVG
+
 #if ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
         if (max_anisotropy > 0.0f)
         {
