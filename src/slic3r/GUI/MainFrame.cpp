@@ -37,7 +37,7 @@ wxFrame(NULL, wxID_ANY, SLIC3R_BUILD, wxDefaultPosition, wxDefaultSize, wxDEFAUL
         m_printhost_queue_dlg(new PrintHostQueueDialog(this))
 {
 
-    Slic3r::Utils::vojtikuv_pokus();
+    Slic3r::Utils::svg_import_test_remove_me();
 
     // Load the icon either from the exe, or from the ico file.
 #if _WIN32

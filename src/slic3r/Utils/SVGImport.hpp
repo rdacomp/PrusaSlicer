@@ -4,7 +4,7 @@
 namespace Slic3r {
 namespace Utils {
 
-int vojtikuv_pokus();
+void svg_import_test_remove_me();
 
 }; // namespace Utils
 }; // namespace Slic3r

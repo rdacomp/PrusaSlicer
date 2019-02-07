@@ -14,7 +14,7 @@
 
 namespace Slic3r { namespace Utils {
 
-int vojtikuv_pokus()
+void svg_import_test_remove_me()
 {
 	std::string fname = "D:\\temp\\svg_examples\\slicer_vnitrni-menu.svg";
 	try
@@ -91,8 +91,6 @@ int vojtikuv_pokus()
     {
 //        app.message(e.msg());
     }
-
-	return 0;
 }
 
 } } // namespace Slic3r::Utils
