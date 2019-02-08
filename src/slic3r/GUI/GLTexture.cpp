@@ -254,6 +254,7 @@ bool GLTexture::load_from_svg(const std::string& filename, bool use_mipmaps, uns
         return false;
     }
 
+    // creates the temporary buffer only once, with max size, and reuse it for all the levels, if generating mipmaps
     std::vector<unsigned char> data(n_pixels * 4, 0);
     nsvgRasterize(rast, image, 0, 0, scale, data.data(), m_width, m_height, m_width * 4);
 
@@ -276,10 +277,8 @@ bool GLTexture::load_from_svg(const std::string& filename, bool use_mipmaps, uns
             lod_h = std::max(lod_h / 2, 1);
             scale /= 2.0f;
 
-            std::vector<unsigned char> lod_data(lod_w * lod_h * 4, 0);
-            nsvgRasterize(rast, image, 0, 0, scale, lod_data.data(), lod_w, lod_h, lod_w * 4);
-
-            ::glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, (GLsizei)lod_w, (GLsizei)lod_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)lod_data.data());
+            nsvgRasterize(rast, image, 0, 0, scale, data.data(), lod_w, lod_h, lod_w * 4);
+            ::glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, (GLsizei)lod_w, (GLsizei)lod_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, (const void*)data.data());
         }
 
         ::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1 + level);
