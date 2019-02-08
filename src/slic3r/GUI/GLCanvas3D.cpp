@@ -600,17 +600,8 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
     GLint max_tex_size;
     ::glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
 #if ENABLE_TEXTURES_FROM_SVG
+    // clamp or the texture generation becomes too slow
     max_tex_size = std::min(max_tex_size, 8192);
-
-    if (key != "sl1")
-    {
-#endif // ENABLE_TEXTURES_FROM_SVG
-        if (max_tex_size >= 8192)
-            tex_path += "_8192";
-        else if (max_tex_size >= 4096)
-            tex_path += "_4096";
-#if ENABLE_TEXTURES_FROM_SVG
-    }
 #endif // ENABLE_TEXTURES_FROM_SVG
 
 #if ENABLE_PRINT_BED_MODELS
@@ -625,40 +616,22 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
 #endif // ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
 
 #if ENABLE_TEXTURES_FROM_SVG
-    std::string filename = tex_path + "_top";
+    std::string filename = tex_path + "_top.svg";
 #else
     std::string filename = tex_path + "_top.png";
-#endif // ENABLE_TEXTURES_FROM_SVG
-
-#if ENABLE_TEXTURES_FROM_SVG
-    if (key == "sl1")
-        filename += ".svg";
-    else
-        filename += ".png";
 #endif // ENABLE_TEXTURES_FROM_SVG
 
     if ((m_top_texture.get_id() == 0) || (m_top_texture.get_source() != filename))
     {
 #if ENABLE_TEXTURES_FROM_SVG
-        if (key == "sl1")
-        {
-            if (!m_top_texture.load_from_svg_file(filename, true, max_tex_size))
-            {
-                _render_custom();
-                return;
-            }
-        }
-        else
-        {
+        if (!m_top_texture.load_from_svg_file(filename, true, max_tex_size))
+#else
+        if (!m_top_texture.load_from_file(filename, true))
 #endif // ENABLE_TEXTURES_FROM_SVG
-            if (!m_top_texture.load_from_file(filename, true))
-            {
-                _render_custom();
-                return;
-            }
-#if ENABLE_TEXTURES_FROM_SVG
+        {
+            _render_custom();
+            return;
         }
-#endif // ENABLE_TEXTURES_FROM_SVG
 
 #if ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
         if (max_anisotropy > 0.0f)
@@ -670,10 +643,18 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
 #endif // ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
     }
 
+#if ENABLE_TEXTURES_FROM_SVG
+    filename = tex_path + "_bottom.svg";
+#else
     filename = tex_path + "_bottom.png";
+#endif // ENABLE_TEXTURES_FROM_SVG
     if ((m_bottom_texture.get_id() == 0) || (m_bottom_texture.get_source() != filename))
     {
+#if ENABLE_TEXTURES_FROM_SVG
+        if (!m_bottom_texture.load_from_svg_file(filename, true, max_tex_size))
+#else
         if (!m_bottom_texture.load_from_file(filename, true))
+#endif // ENABLE_TEXTURES_FROM_SVG
         {
             _render_custom();
             return;
