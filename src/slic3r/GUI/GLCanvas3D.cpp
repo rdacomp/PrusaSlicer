@@ -599,10 +599,19 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
     // use higher resolution images if graphic card allows
     GLint max_tex_size;
     ::glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
+
 #if ENABLE_TEXTURES_FROM_SVG
     // clamp or the texture generation becomes too slow
     max_tex_size = std::min(max_tex_size, 8192);
 #endif // ENABLE_TEXTURES_FROM_SVG
+
+    // temporary set to lowest resolution
+    max_tex_size = 2048;
+
+    if (max_tex_size >= 8192)
+        tex_path += "_8192";
+    else if (max_tex_size >= 4096)
+        tex_path += "_4096";
 
 #if ENABLE_PRINT_BED_MODELS
     std::string model_path = resources_dir() + "/models/" + key;
@@ -5824,7 +5833,7 @@ void GLCanvas3D::set_tooltip(const std::string& tooltip) const
             else
                 t->SetTip(tooltip);
         }
-        else
+        else if (!tooltip.empty()) // Avoid "empty" tooltips => unset of the empty tooltip leads to application crash under OSX
             m_canvas->SetToolTip(tooltip);
     }
 }
