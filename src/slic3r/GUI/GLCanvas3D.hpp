@@ -47,17 +47,43 @@ class RetinaHelper;
 
 class GeometryBuffer
 {
+#if ENABLE_DISTANCE_FIELD_SHADER
+    struct Vertex
+    {
+        float position[3];
+        float tex_coords[2];
+
+        Vertex()
+        {
+            position[0] = 0.0f; position[1] = 0.0f; position[2] = 0.0f;
+            tex_coords[0] = 0.0f; tex_coords[1] = 0.0f;
+        }
+    };
+
+    std::vector<Vertex> m_vertices;
+#else
     std::vector<float> m_vertices;
     std::vector<float> m_tex_coords;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
 public:
     bool set_from_triangles(const Polygons& triangles, float z, bool generate_tex_coords);
     bool set_from_lines(const Lines& lines, float z);
 
+#if ENABLE_DISTANCE_FIELD_SHADER
+    const float* get_vertices_data() const;
+#else
     const float* get_vertices() const;
     const float* get_tex_coords() const;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     unsigned int get_vertices_count() const;
+#if ENABLE_DISTANCE_FIELD_SHADER
+    unsigned int get_vertices_data_size() const { return (unsigned int)m_vertices.size() * get_vertex_data_size(); }
+    unsigned int get_vertex_data_size() const { return (unsigned int)(5 * sizeof(float)); }
+    unsigned int get_position_offset() const { return 0; }
+    unsigned int get_tex_coords_offset() const { return (unsigned int)(3 * sizeof(float)); }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 };
 
 class Size
@@ -196,6 +222,31 @@ class GLCanvas3D
         void set_scene_box(const BoundingBoxf3& box, GLCanvas3D& canvas);
     };
 
+    class Shader
+    {
+        GLShader* m_shader;
+
+    public:
+        Shader();
+        ~Shader();
+
+        bool init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename);
+
+        bool is_initialized() const;
+
+        bool start_using() const;
+        void stop_using() const;
+
+        void set_uniform(const std::string& name, float value) const;
+        void set_uniform(const std::string& name, const float* matrix) const;
+        void set_uniform(const std::string& name, bool value) const;
+
+        const GLShader* get_shader() const;
+
+    private:
+        void reset();
+    };
+
     class Bed
     {
     public:
@@ -220,11 +271,17 @@ class GLCanvas3D
 #if ENABLE_PRINT_BED_MODELS
         mutable GLBed m_model;
 #endif // ENABLE_PRINT_BED_MODELS
+#if ENABLE_DISTANCE_FIELD_SHADER
+        mutable unsigned int m_vbo_id;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
         mutable float m_scale_factor;
 
     public:
         Bed();
+#if ENABLE_DISTANCE_FIELD_SHADER
+        ~Bed();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
 #if ENABLE_REWORKED_BED_SHAPE_CHANGE
         EType get_type() const { return m_type; }
@@ -242,29 +299,42 @@ class GLCanvas3D
         Point point_projection(const Point& point) const;
 
 #if ENABLE_PRINT_BED_MODELS
+#if ENABLE_DISTANCE_FIELD_SHADER
+        void render(float theta, bool useVBOs, float scale_factor, const Shader& shader) const;
+#else
         void render(float theta, bool useVBOs, float scale_factor) const;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 #else
         void render(float theta, float scale_factor) const;
 #endif // ENABLE_PRINT_BED_MODELS
 
     private:
-        void _calc_bounding_box();
-        void _calc_triangles(const ExPolygon& poly);
-        void _calc_gridlines(const ExPolygon& poly, const BoundingBox& bed_bbox);
+        void calc_bounding_box();
+        void calc_triangles(const ExPolygon& poly);
+        void calc_gridlines(const ExPolygon& poly, const BoundingBox& bed_bbox);
 #if ENABLE_REWORKED_BED_SHAPE_CHANGE
-        EType _detect_type(const Pointfs& shape) const;
+        EType detect_type(const Pointfs& shape) const;
 #else
-        EType _detect_type() const;
+        EType detect_type() const;
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
 #if ENABLE_PRINT_BED_MODELS
-        void _render_prusa(const std::string &key, float theta, bool useVBOs) const;
+#if ENABLE_DISTANCE_FIELD_SHADER
+        void render_prusa(const std::string& key, float theta, bool useVBOs, const Shader& shader) const;
+        void render_prusa_shader(const Shader& shader, unsigned int vertices_count, bool transparent) const;
 #else
-        void _render_prusa(const std::string &key, float theta) const;
+        void render_prusa(const std::string& key, float theta, bool useVBOs) const;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
+#else
+        void render_prusa(const std::string &key, float theta) const;
 #endif // ENABLE_PRINT_BED_MODELS
-        void _render_custom() const;
+        void render_custom() const;
+
 #if !ENABLE_REWORKED_BED_SHAPE_CHANGE
-        static bool _are_equal(const Pointfs& bed_1, const Pointfs& bed_2);
+        static bool are_equal(const Pointfs& bed_1, const Pointfs& bed_2);
 #endif // !ENABLE_REWORKED_BED_SHAPE_CHANGE
+#if ENABLE_DISTANCE_FIELD_SHADER
+        void reset();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
     };
 
     struct Axes
@@ -283,30 +353,6 @@ class GLCanvas3D
 
     private:
         void render_axis(double length) const;
-    };
-
-    class Shader
-    {
-        GLShader* m_shader;
-
-    public:
-        Shader();
-        ~Shader();
-
-        bool init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename);
-
-        bool is_initialized() const;
-
-        bool start_using() const;
-        void stop_using() const;
-
-        void set_uniform(const std::string& name, float value) const;
-        void set_uniform(const std::string& name, const float* matrix) const;
-
-        const GLShader* get_shader() const;
-
-    private:
-        void _reset();
     };
 
     class LayersEditing
@@ -887,16 +933,12 @@ private:
     Bed m_bed;
     Axes m_axes;
     LayersEditing m_layers_editing;
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 #if ENABLE_DISTANCE_FIELD_SHADER
     Shader m_gouraud_shader;
     Shader m_distance_field_shader;
 #else
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
     Shader m_shader;
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 #endif // ENABLE_DISTANCE_FIELD_SHADER
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
     Mouse m_mouse;
     mutable Gizmos m_gizmos;
     mutable GLToolbar m_toolbar;

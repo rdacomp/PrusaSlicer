@@ -192,13 +192,14 @@ void GLIndexedVertexArray::render(
     if (! this->indexed())
         return;
 
+    glsafe(glEnableClientState(GL_VERTEX_ARRAY));
+    glsafe(glEnableClientState(GL_NORMAL_ARRAY));
+
     if (this->vertices_and_normals_interleaved_VBO_id) {
         // Render using the Vertex Buffer Objects.
         glsafe(glBindBuffer(GL_ARRAY_BUFFER, this->vertices_and_normals_interleaved_VBO_id));
         glsafe(glVertexPointer(3, GL_FLOAT, 6 * sizeof(float), (const void*)(3 * sizeof(float))));
         glsafe(glNormalPointer(GL_FLOAT, 6 * sizeof(float), nullptr));
-        glsafe(glEnableClientState(GL_VERTEX_ARRAY));
-        glsafe(glEnableClientState(GL_NORMAL_ARRAY));
         if (this->triangle_indices_size > 0) {
             glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_id));
             glsafe(glDrawElements(GL_TRIANGLES, GLsizei(std::min(this->triangle_indices_size, tverts_range.second - tverts_range.first)), GL_UNSIGNED_INT, (const void*)(tverts_range.first * 4)));
@@ -213,9 +214,7 @@ void GLIndexedVertexArray::render(
         // Render in an immediate mode.
         glsafe(glVertexPointer(3, GL_FLOAT, 6 * sizeof(float), this->vertices_and_normals_interleaved.data() + 3));
         glsafe(glNormalPointer(GL_FLOAT, 6 * sizeof(float), this->vertices_and_normals_interleaved.data()));
-        glsafe(glEnableClientState(GL_VERTEX_ARRAY));
-        glsafe(glEnableClientState(GL_NORMAL_ARRAY));
-        if (! this->triangle_indices.empty())
+        if (!this->triangle_indices.empty())
             glsafe(glDrawElements(GL_TRIANGLES, GLsizei(std::min(this->triangle_indices_size, tverts_range.second - tverts_range.first)), GL_UNSIGNED_INT, (const void*)(this->triangle_indices.data() + tverts_range.first)));
         if (! this->quad_indices.empty())
             glsafe(glDrawElements(GL_QUADS, GLsizei(std::min(this->quad_indices_size, qverts_range.second - qverts_range.first)), GL_UNSIGNED_INT, (const void*)(this->quad_indices.data() + qverts_range.first)));

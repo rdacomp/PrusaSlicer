@@ -86,6 +86,67 @@ namespace GUI {
 
 bool GeometryBuffer::set_from_triangles(const Polygons& triangles, float z, bool generate_tex_coords)
 {
+#if ENABLE_DISTANCE_FIELD_SHADER
+    m_vertices.clear();
+    unsigned int v_size = 3 * (unsigned int)triangles.size();
+
+    if (v_size == 0)
+        return false;
+
+    m_vertices = std::vector<Vertex>(v_size, Vertex());
+
+    float min_x = unscale<float>(triangles[0].points[0](0));
+    float min_y = unscale<float>(triangles[0].points[0](1));
+    float max_x = min_x;
+    float max_y = min_y;
+
+    unsigned int v_count = 0;
+    for (const Polygon& t : triangles)
+    {
+        for (unsigned int i = 0; i < 3; ++i)
+        {
+            Vertex& v = m_vertices[v_count];
+
+            const Point& p = t.points[i];
+            float x = unscale<float>(p(0));
+            float y = unscale<float>(p(1));
+
+            v.position[0] = x;
+            v.position[1] = y;
+            v.position[2] = z;
+
+            if (generate_tex_coords)
+            {
+                v.tex_coords[0] = x;
+                v.tex_coords[1] = y;
+
+                min_x = std::min(min_x, x);
+                max_x = std::max(max_x, x);
+                min_y = std::min(min_y, y);
+                max_y = std::max(max_y, y);
+            }
+
+            ++v_count;
+        }
+    }
+
+    if (generate_tex_coords)
+    {
+        float size_x = max_x - min_x;
+        float size_y = max_y - min_y;
+
+        if ((size_x != 0.0f) && (size_y != 0.0f))
+        {
+            float inv_size_x = 1.0f / size_x;
+            float inv_size_y = -1.0f / size_y;
+            for (Vertex& v : m_vertices)
+            {
+                v.tex_coords[0] = (v.tex_coords[0] - min_x) * inv_size_x;
+                v.tex_coords[1] = (v.tex_coords[1] - min_y) * inv_size_y;
+            }
+        }
+    }
+#else
     m_vertices.clear();
     m_tex_coords.clear();
 
@@ -146,12 +207,38 @@ bool GeometryBuffer::set_from_triangles(const Polygons& triangles, float z, bool
             }
         }
     }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     return true;
 }
 
 bool GeometryBuffer::set_from_lines(const Lines& lines, float z)
 {
+#if ENABLE_DISTANCE_FIELD_SHADER
+    m_vertices.clear();
+
+    unsigned int v_size = 2 * (unsigned int)lines.size();
+    if (v_size == 0)
+        return false;
+
+    m_vertices = std::vector<Vertex>(v_size, Vertex());
+
+    unsigned int v_count = 0;
+    for (const Line& l : lines)
+    {
+        Vertex& v1 = m_vertices[v_count];
+        v1.position[0] = unscale<float>(l.a(0));
+        v1.position[1] = unscale<float>(l.a(1));
+        v1.position[2] = z;
+        ++v_count;
+
+        Vertex& v2 = m_vertices[v_count];
+        v2.position[0] = unscale<float>(l.b(0));
+        v2.position[1] = unscale<float>(l.b(1));
+        v2.position[2] = z;
+        ++v_count;
+    }
+#else
     m_vertices.clear();
     m_tex_coords.clear();
 
@@ -171,10 +258,17 @@ bool GeometryBuffer::set_from_lines(const Lines& lines, float z)
         m_vertices[coord++] = unscale<float>(l.b(1));
         m_vertices[coord++] = z;
     }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     return true;
 }
 
+#if ENABLE_DISTANCE_FIELD_SHADER
+const float* GeometryBuffer::get_vertices_data() const
+{
+    return (m_vertices.size() > 0) ? (const float*)m_vertices.data() : nullptr;
+}
+#else
 const float* GeometryBuffer::get_vertices() const
 {
     return m_vertices.data();
@@ -184,10 +278,15 @@ const float* GeometryBuffer::get_tex_coords() const
 {
     return m_tex_coords.data();
 }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
 unsigned int GeometryBuffer::get_vertices_count() const
 {
+#if ENABLE_DISTANCE_FIELD_SHADER
+    return (unsigned int)m_vertices.size();
+#else
     return (unsigned int)m_vertices.size() / 3;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 }
 
 Size::Size()
@@ -344,11 +443,106 @@ void GLCanvas3D::Camera::set_scene_box(const BoundingBoxf3& box, GLCanvas3D& can
     }
 }
 
+GLCanvas3D::Shader::Shader()
+    : m_shader(nullptr)
+{
+}
+
+GLCanvas3D::Shader::~Shader()
+{
+    reset();
+}
+
+bool GLCanvas3D::Shader::init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename)
+{
+    if (is_initialized())
+        return true;
+
+    m_shader = new GLShader();
+    if (m_shader != nullptr)
+    {
+        if (!m_shader->load_from_file(fragment_shader_filename.c_str(), vertex_shader_filename.c_str()))
+        {
+            std::cout << "Compilaton of shader failed:" << std::endl;
+            std::cout << m_shader->last_error << std::endl;
+            reset();
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool GLCanvas3D::Shader::is_initialized() const
+{
+    return (m_shader != nullptr);
+}
+
+bool GLCanvas3D::Shader::start_using() const
+{
+    if (is_initialized())
+    {
+        m_shader->enable();
+        return true;
+    }
+    else
+        return false;
+}
+
+void GLCanvas3D::Shader::stop_using() const
+{
+    if (m_shader != nullptr)
+        m_shader->disable();
+}
+
+void GLCanvas3D::Shader::set_uniform(const std::string& name, float value) const
+{
+    if (m_shader != nullptr)
+        m_shader->set_uniform(name.c_str(), value);
+}
+
+void GLCanvas3D::Shader::set_uniform(const std::string& name, const float* matrix) const
+{
+    if (m_shader != nullptr)
+        m_shader->set_uniform(name.c_str(), matrix);
+}
+
+void GLCanvas3D::Shader::set_uniform(const std::string& name, bool value) const
+{
+    if (m_shader != nullptr)
+        m_shader->set_uniform(name.c_str(), value);
+}
+
+const GLShader* GLCanvas3D::Shader::get_shader() const
+{
+    return m_shader;
+}
+
+void GLCanvas3D::Shader::reset()
+{
+    if (m_shader != nullptr)
+    {
+        m_shader->release();
+        delete m_shader;
+        m_shader = nullptr;
+    }
+}
+
 GLCanvas3D::Bed::Bed()
     : m_type(Custom)
+#if ENABLE_DISTANCE_FIELD_SHADER
+    , m_vbo_id(0)
+#endif // ENABLE_DISTANCE_FIELD_SHADER
     , m_scale_factor(1.0f)
 {
 }
+
+#if ENABLE_DISTANCE_FIELD_SHADER
+GLCanvas3D::Bed::~Bed()
+{
+    reset();
+}
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
 bool GLCanvas3D::Bed::is_prusa() const
 {
@@ -368,9 +562,9 @@ const Pointfs& GLCanvas3D::Bed::get_shape() const
 bool GLCanvas3D::Bed::set_shape(const Pointfs& shape)
 {
 #if ENABLE_REWORKED_BED_SHAPE_CHANGE
-    EType new_type = _detect_type(shape);
+    EType new_type = detect_type(shape);
 #else
-    EType new_type = _detect_type();
+    EType new_type = detect_type();
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
     if (m_shape == shape && m_type == new_type)
         // No change, no need to update the UI.
@@ -379,7 +573,7 @@ bool GLCanvas3D::Bed::set_shape(const Pointfs& shape)
     m_shape = shape;
     m_type = new_type;
 
-    _calc_bounding_box();
+    calc_bounding_box();
 
     ExPolygon poly;
     for (const Vec2d& p : m_shape)
@@ -387,12 +581,17 @@ bool GLCanvas3D::Bed::set_shape(const Pointfs& shape)
         poly.contour.append(Point(scale_(p(0)), scale_(p(1))));
     }
 
-    _calc_triangles(poly);
+    calc_triangles(poly);
 
     const BoundingBox& bed_bbox = poly.contour.bounding_box();
-    _calc_gridlines(poly, bed_bbox);
+    calc_gridlines(poly, bed_bbox);
 
     m_polygon = offset_ex(poly.contour, (float)bed_bbox.radius() * 1.7f, jtRound, scale_(0.5))[0].contour;
+
+#if ENABLE_DISTANCE_FIELD_SHADER
+    reset();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
+
     // Let the calee to update the UI.
     return true;
 }
@@ -413,7 +612,11 @@ Point GLCanvas3D::Bed::point_projection(const Point& point) const
 }
 
 #if ENABLE_PRINT_BED_MODELS
+#if ENABLE_DISTANCE_FIELD_SHADER
+void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor, const Shader& shader) const
+#else
 void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) const
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 {
     m_scale_factor = scale_factor;
 
@@ -421,23 +624,35 @@ void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) cons
     {
     case MK2:
     {
-        _render_prusa("mk2", theta, useVBOs);
+#if ENABLE_DISTANCE_FIELD_SHADER
+        render_prusa("mk2", theta, useVBOs, shader);
+#else
+        render_prusa("mk2", theta, useVBOs);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         break;
     }
     case MK3:
     {
-        _render_prusa("mk3", theta, useVBOs);
+#if ENABLE_DISTANCE_FIELD_SHADER
+        render_prusa("mk3", theta, useVBOs, shader);
+#else
+        render_prusa("mk3", theta, useVBOs);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         break;
     }
     case SL1:
     {
-        _render_prusa("sl1", theta, useVBOs);
+#if ENABLE_DISTANCE_FIELD_SHADER
+        render_prusa("sl1", theta, useVBOs, shader);
+#else
+        render_prusa("sl1", theta, useVBOs);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         break;
     }
     default:
     case Custom:
     {
-        _render_custom();
+        render_custom();
         break;
     }
     }
@@ -451,30 +666,30 @@ void GLCanvas3D::Bed::render(float theta, float scale_factor) const
     {
     case MK2:
     {
-        _render_prusa("mk2", theta);
+        render_prusa("mk2", theta);
         break;
     }
     case MK3:
     {
-        _render_prusa("mk3", theta);
+        render_prusa("mk3", theta);
         break;
     }
     case SL1:
     {
-        _render_prusa("sl1", theta);
+        render_prusa("sl1", theta);
         break;
     }
     default:
     case Custom:
     {
-        _render_custom();
+        render_custom();
         break;
     }
     }
 }
 #endif // ENABLE_PRINT_BED_MODELS
 
-void GLCanvas3D::Bed::_calc_bounding_box()
+void GLCanvas3D::Bed::calc_bounding_box()
 {
     m_bounding_box = BoundingBoxf3();
     for (const Vec2d& p : m_shape)
@@ -483,7 +698,7 @@ void GLCanvas3D::Bed::_calc_bounding_box()
     }
 }
 
-void GLCanvas3D::Bed::_calc_triangles(const ExPolygon& poly)
+void GLCanvas3D::Bed::calc_triangles(const ExPolygon& poly)
 {
     Polygons triangles;
     poly.triangulate(&triangles);
@@ -492,7 +707,7 @@ void GLCanvas3D::Bed::_calc_triangles(const ExPolygon& poly)
         printf("Unable to create bed triangles\n");
 }
 
-void GLCanvas3D::Bed::_calc_gridlines(const ExPolygon& poly, const BoundingBox& bed_bbox)
+void GLCanvas3D::Bed::calc_gridlines(const ExPolygon& poly, const BoundingBox& bed_bbox)
 {
     Polylines axes_lines;
     for (coord_t x = bed_bbox.min(0); x <= bed_bbox.max(0); x += scale_(10.0))
@@ -522,7 +737,7 @@ void GLCanvas3D::Bed::_calc_gridlines(const ExPolygon& poly, const BoundingBox& 
 }
 
 #if ENABLE_REWORKED_BED_SHAPE_CHANGE
-GLCanvas3D::Bed::EType GLCanvas3D::Bed::_detect_type(const Pointfs& shape) const
+GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type(const Pointfs& shape) const
 #else
 GLCanvas3D::Bed::EType GLCanvas3D::Bed::_detect_type() const
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
@@ -589,7 +804,11 @@ GLCanvas3D::Bed::EType GLCanvas3D::Bed::_detect_type() const
 }
 
 #if ENABLE_PRINT_BED_MODELS
-void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta, bool useVBOs) const
+#if ENABLE_DISTANCE_FIELD_SHADER
+void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool useVBOs, const Shader& shader) const
+#else
+void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool useVBOs) const
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 #else
 void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
 #endif // ENABLE_PRINT_BED_MODELS
@@ -627,7 +846,15 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
 #if ENABLE_TEXTURES_FROM_SVG
     std::string filename = tex_path + "_top.svg";
 #else
+#if ENABLE_DISTANCE_FIELD_SHADER
+    std::string filename = tex_path;
+    if (key == "sl1")
+        filename += "_df.png";
+    else
+        filename += "_top.png";
+#else
     std::string filename = tex_path + "_top.png";
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 #endif // ENABLE_TEXTURES_FROM_SVG
 
     if ((m_top_texture.get_id() == 0) || (m_top_texture.get_source() != filename))
@@ -638,7 +865,7 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
         if (!m_top_texture.load_from_file(filename, true))
 #endif // ENABLE_TEXTURES_FROM_SVG
         {
-            _render_custom();
+            render_custom();
             return;
         }
 
@@ -652,31 +879,40 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
 #endif // ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
     }
 
-#if ENABLE_TEXTURES_FROM_SVG
-    filename = tex_path + "_bottom.svg";
-#else
-    filename = tex_path + "_bottom.png";
-#endif // ENABLE_TEXTURES_FROM_SVG
-    if ((m_bottom_texture.get_id() == 0) || (m_bottom_texture.get_source() != filename))
+#if ENABLE_DISTANCE_FIELD_SHADER
+    if (key != "sl1")
     {
+#endif // ENABLE_DISTANCE_FIELD_SHADER
+
 #if ENABLE_TEXTURES_FROM_SVG
-        if (!m_bottom_texture.load_from_svg_file(filename, true, max_tex_size))
+        filename = tex_path + "_bottom.svg";
 #else
-        if (!m_bottom_texture.load_from_file(filename, true))
+        filename = tex_path + "_bottom.png";
 #endif // ENABLE_TEXTURES_FROM_SVG
+        if ((m_bottom_texture.get_id() == 0) || (m_bottom_texture.get_source() != filename))
         {
-            _render_custom();
-            return;
-        }
+#if ENABLE_TEXTURES_FROM_SVG
+            if (!m_bottom_texture.load_from_svg_file(filename, true, max_tex_size))
+#else
+            if (!m_bottom_texture.load_from_file(filename, true))
+#endif // ENABLE_TEXTURES_FROM_SVG
+            {
+                render_custom();
+                return;
+            }
 #if ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
-        if (max_anisotropy > 0.0f)
-        {
-            ::glBindTexture(GL_TEXTURE_2D, m_bottom_texture.get_id());
-            ::glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_anisotropy);
-            ::glBindTexture(GL_TEXTURE_2D, 0);
-        }
+            if (max_anisotropy > 0.0f)
+            {
+                ::glBindTexture(GL_TEXTURE_2D, m_bottom_texture.get_id());
+                ::glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_anisotropy);
+                ::glBindTexture(GL_TEXTURE_2D, 0);
+            }
 #endif // ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
+        }
+
+#if ENABLE_DISTANCE_FIELD_SHADER
     }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
 #if ENABLE_PRINT_BED_MODELS
     if (theta <= 90.0f)
@@ -706,6 +942,67 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
     }
 #endif // ENABLE_PRINT_BED_MODELS
 
+#if ENABLE_DISTANCE_FIELD_SHADER
+    unsigned int triangles_vcount = m_triangles.get_vertices_count();
+    if (triangles_vcount > 0)
+    {
+        if (m_vbo_id == 0)
+        {
+            ::glGenBuffers(1, &m_vbo_id);
+            ::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+            ::glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)m_triangles.get_vertices_data_size(), (const GLvoid*)m_triangles.get_vertices_data(), GL_STATIC_DRAW);
+            ::glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_position_offset());
+            ::glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_tex_coords_offset());
+            ::glBindBuffer(GL_ARRAY_BUFFER, 0);
+        }
+
+        ::glEnable(GL_DEPTH_TEST);
+        ::glDepthMask(GL_FALSE);
+
+        ::glEnable(GL_BLEND);
+        ::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        ::glEnable(GL_TEXTURE_2D);
+        ::glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+        if (theta <= 90.0f)
+            render_prusa_shader(shader, triangles_vcount, false);
+        else
+        {
+            ::glFrontFace(GL_CW);
+
+#if ENABLE_DISTANCE_FIELD_SHADER
+            if (key == "sl1")
+                render_prusa_shader(shader, triangles_vcount, true);
+            else
+            {
+#endif // ENABLE_DISTANCE_FIELD_SHADER
+                ::glEnableClientState(GL_VERTEX_ARRAY);
+                ::glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+
+                ::glBindTexture(GL_TEXTURE_2D, (GLuint)m_bottom_texture.get_id());
+                ::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+                ::glVertexPointer(3, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_position_offset());
+                ::glTexCoordPointer(2, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_tex_coords_offset());
+                ::glDrawArrays(GL_TRIANGLES, 0, (GLsizei)triangles_vcount);
+                ::glBindBuffer(GL_ARRAY_BUFFER, 0);
+                ::glBindTexture(GL_TEXTURE_2D, 0);
+
+                ::glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+                ::glDisableClientState(GL_VERTEX_ARRAY);
+#if ENABLE_DISTANCE_FIELD_SHADER
+            }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
+
+            ::glFrontFace(GL_CCW);
+        }
+
+        ::glDisable(GL_TEXTURE_2D);
+
+        ::glDisable(GL_BLEND);
+        ::glDepthMask(GL_TRUE);
+    }
+#else
     unsigned int triangles_vcount = m_triangles.get_vertices_count();
     if (triangles_vcount > 0)
     {
@@ -741,9 +1038,30 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
         ::glDisable(GL_BLEND);
         ::glDepthMask(GL_TRUE);
     }
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 }
 
-void GLCanvas3D::Bed::_render_custom() const
+#if ENABLE_DISTANCE_FIELD_SHADER
+void GLCanvas3D::Bed::render_prusa_shader(const Shader& shader, unsigned int vertices_count, bool transparent) const
+{
+    shader.start_using();
+    shader.set_uniform("transparent_background", transparent);
+
+    ::glBindTexture(GL_TEXTURE_2D, (GLuint)m_top_texture.get_id());
+    ::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
+    ::glEnableVertexAttribArray(0);
+    ::glEnableVertexAttribArray(1);
+    ::glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertices_count);
+    ::glDisableVertexAttribArray(1);
+    ::glDisableVertexAttribArray(0);
+    ::glBindBuffer(GL_ARRAY_BUFFER, 0);
+    ::glBindTexture(GL_TEXTURE_2D, 0);
+
+    shader.stop_using();
+}
+#endif // ENABLE_DISTANCE_FIELD_SHADER
+
+void GLCanvas3D::Bed::render_custom() const
 {
     m_top_texture.reset();
     m_bottom_texture.reset();
@@ -761,7 +1079,11 @@ void GLCanvas3D::Bed::_render_custom() const
 
         ::glColor4f(0.35f, 0.35f, 0.35f, 0.4f);
         ::glNormal3d(0.0f, 0.0f, 1.0f);
+#if ENABLE_DISTANCE_FIELD_SHADER
+        ::glVertexPointer(3, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_vertices_data());
+#else
         ::glVertexPointer(3, GL_FLOAT, 0, (GLvoid*)m_triangles.get_vertices());
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         ::glDrawArrays(GL_TRIANGLES, 0, (GLsizei)triangles_vcount);
 
         // draw grid
@@ -771,7 +1093,11 @@ void GLCanvas3D::Bed::_render_custom() const
         ::glEnable(GL_DEPTH_TEST);
         ::glLineWidth(3.0f * m_scale_factor);
         ::glColor4f(0.2f, 0.2f, 0.2f, 0.4f);
+#if ENABLE_DISTANCE_FIELD_SHADER
+        ::glVertexPointer(3, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_gridlines.get_vertices_data());
+#else
         ::glVertexPointer(3, GL_FLOAT, 0, (GLvoid*)m_gridlines.get_vertices());
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         ::glDrawArrays(GL_LINES, 0, (GLsizei)gridlines_vcount);
 
         ::glDisableClientState(GL_VERTEX_ARRAY);
@@ -782,7 +1108,7 @@ void GLCanvas3D::Bed::_render_custom() const
 }
 
 #if !ENABLE_REWORKED_BED_SHAPE_CHANGE
-bool GLCanvas3D::Bed::_are_equal(const Pointfs& bed_1, const Pointfs& bed_2)
+bool GLCanvas3D::Bed::are_equal(const Pointfs& bed_1, const Pointfs& bed_2)
 {
     if (bed_1.size() != bed_2.size())
         return false;
@@ -796,6 +1122,17 @@ bool GLCanvas3D::Bed::_are_equal(const Pointfs& bed_1, const Pointfs& bed_2)
     return true;
 }
 #endif // !ENABLE_REWORKED_BED_SHAPE_CHANGE
+
+#if ENABLE_DISTANCE_FIELD_SHADER
+void GLCanvas3D::Bed::reset()
+{
+    if (m_vbo_id > 0)
+    {
+        ::glDeleteBuffers(1, &m_vbo_id);
+        m_vbo_id = 0;
+    }
+}
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
 const double GLCanvas3D::Axes::Radius = 0.5;
 const double GLCanvas3D::Axes::ArrowBaseRadius = 2.5 * GLCanvas3D::Axes::Radius;
@@ -861,85 +1198,6 @@ void GLCanvas3D::Axes::render_axis(double length) const
     ::gluCylinder(m_quadric, ArrowBaseRadius, 0.0, ArrowLength, 32, 1);
     ::gluQuadricOrientation(m_quadric, GLU_INSIDE);
     ::gluDisk(m_quadric, 0.0, ArrowBaseRadius, 32, 1);
-}
-
-GLCanvas3D::Shader::Shader()
-    : m_shader(nullptr)
-{
-}
-
-GLCanvas3D::Shader::~Shader()
-{
-    _reset();
-}
-
-bool GLCanvas3D::Shader::init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename)
-{
-    if (is_initialized())
-        return true;
-
-    m_shader = new GLShader();
-    if (m_shader != nullptr)
-    {
-        if (!m_shader->load_from_file(fragment_shader_filename.c_str(), vertex_shader_filename.c_str()))
-        {
-            std::cout << "Compilaton of shader failed:" << std::endl;
-            std::cout << m_shader->last_error << std::endl;
-            _reset();
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool GLCanvas3D::Shader::is_initialized() const
-{
-    return (m_shader != nullptr);
-}
-
-bool GLCanvas3D::Shader::start_using() const
-{
-    if (is_initialized())
-    {
-        m_shader->enable();
-        return true;
-    }
-    else
-        return false;
-}
-
-void GLCanvas3D::Shader::stop_using() const
-{
-    if (m_shader != nullptr)
-        m_shader->disable();
-}
-
-void GLCanvas3D::Shader::set_uniform(const std::string& name, float value) const
-{
-    if (m_shader != nullptr)
-        m_shader->set_uniform(name.c_str(), value);
-}
-
-void GLCanvas3D::Shader::set_uniform(const std::string& name, const float* matrix) const
-{
-    if (m_shader != nullptr)
-        m_shader->set_uniform(name.c_str(), matrix);
-}
-
-const GLShader* GLCanvas3D::Shader::get_shader() const
-{
-    return m_shader;
-}
-
-void GLCanvas3D::Shader::_reset()
-{
-    if (m_shader != nullptr)
-    {
-        m_shader->release();
-        delete m_shader;
-        m_shader = nullptr;
-    }
 }
 
 GLCanvas3D::LayersEditing::LayersEditing()
@@ -4201,8 +4459,17 @@ bool GLCanvas3D::init(bool useVBOs, bool use_legacy_opengl)
     if (m_multisample_allowed)
         ::glEnable(GL_MULTISAMPLE);
 
+#if ENABLE_DISTANCE_FIELD_SHADER
+    if (useVBOs && !m_gouraud_shader.init("gouraud.vs", "gouraud.fs"))
+#else
     if (useVBOs && !m_shader.init("gouraud.vs", "gouraud.fs"))
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         return false;
+
+#if ENABLE_DISTANCE_FIELD_SHADER
+    if (useVBOs && !m_distance_field_shader.init("distance_field.vs", "distance_field.fs"))
+        return false;
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     if (useVBOs && !m_layers_editing.init("variable_layer_height.vs", "variable_layer_height.fs"))
         return false;
@@ -6559,7 +6826,11 @@ void GLCanvas3D::_render_bed(float theta) const
 #endif
 
 #if ENABLE_PRINT_BED_MODELS
+#if ENABLE_DISTANCE_FIELD_SHADER
+    m_bed.render(theta, m_use_VBOs, scale_factor, m_distance_field_shader);
+#else
     m_bed.render(theta, m_use_VBOs, scale_factor);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 #else
     m_bed.render(theta, scale_factor);
 #endif // ENABLE_PRINT_BED_MODELS
@@ -6598,7 +6869,11 @@ void GLCanvas3D::_render_objects() const
         else
             m_volumes.set_z_range(-FLT_MAX, FLT_MAX);
 
+#if ENABLE_DISTANCE_FIELD_SHADER
+        m_gouraud_shader.start_using();
+#else
         m_shader.start_using();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         if (m_picking_enabled && m_layers_editing.is_enabled() && m_layers_editing.last_object_id != -1) {
 			int object_id = m_layers_editing.last_object_id;
 			m_volumes.render_VBOs(GLVolumeCollection::Opaque, false, [object_id](const GLVolume &volume) {
@@ -6612,7 +6887,11 @@ void GLCanvas3D::_render_objects() const
             m_volumes.render_VBOs(GLVolumeCollection::Opaque, m_picking_enabled);
         }
         m_volumes.render_VBOs(GLVolumeCollection::Transparent, false);
+#if ENABLE_DISTANCE_FIELD_SHADER
+        m_gouraud_shader.stop_using();
+#else
         m_shader.stop_using();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
     }
     else
     {
@@ -6919,12 +7198,20 @@ void GLCanvas3D::_render_sla_slices() const
 void GLCanvas3D::_render_selection_sidebar_hints() const
 {
     if (m_use_VBOs)
+#if ENABLE_DISTANCE_FIELD_SHADER
+        m_gouraud_shader.start_using();
+#else
         m_shader.start_using();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     m_selection.render_sidebar_hints(m_sidebar_field);
 
     if (m_use_VBOs)
+#if ENABLE_DISTANCE_FIELD_SHADER
+        m_gouraud_shader.stop_using();
+#else
         m_shader.stop_using();
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 }
 
 void GLCanvas3D::_update_volumes_hover_state() const

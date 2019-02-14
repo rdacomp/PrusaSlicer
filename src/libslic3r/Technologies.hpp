@@ -67,18 +67,13 @@
 
 
 //====================
-// 1.42.0.alpha6 techs
+// 1.42.0.alpha7 techs
 //====================
-#define ENABLE_1_42_0_ALPHA6 1
+#define ENABLE_1_42_0_ALPHA7 1
 
 // Texture generated from imported svg files
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-#define ENABLE_TEXTURES_FROM_SVG (0 && ENABLE_1_42_0_ALPHA6)
-//#define ENABLE_TEXTURES_FROM_SVG (1 && ENABLE_1_42_0_ALPHA6)
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+#define ENABLE_TEXTURES_FROM_SVG (0 && ENABLE_1_42_0_ALPHA7)
 // Enable rendering using distance field textures
-#define ENABLE_DISTANCE_FIELD_SHADER (1 && ENABLE_1_42_0_ALPHA6)
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+#define ENABLE_DISTANCE_FIELD_SHADER (1 && ENABLE_1_42_0_ALPHA7)
 
 #endif // _technologies_h_
