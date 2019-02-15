@@ -241,7 +241,8 @@ class GLCanvas3D
         void set_uniform(const std::string& name, const float* matrix) const;
         void set_uniform(const std::string& name, bool value) const;
 
-        const GLShader* get_shader() const;
+        const GLShader* get_shader() const { return m_shader; }
+        unsigned int get_shader_program_id() const;
 
     private:
         void reset();
@@ -266,10 +267,15 @@ class GLCanvas3D
         Polygon m_polygon;
         GeometryBuffer m_triangles;
         GeometryBuffer m_gridlines;
+#if ENABLE_TEXTURES_FROM_SVG
+        mutable GLTexture m_texture;
+#else
         mutable GLTexture m_top_texture;
         mutable GLTexture m_bottom_texture;
+#endif // ENABLE_TEXTURES_FROM_SVG
         mutable GLBed m_model;
 #if ENABLE_DISTANCE_FIELD_SHADER
+        mutable Shader m_shader;
         mutable unsigned int m_vbo_id;
 #endif // ENABLE_DISTANCE_FIELD_SHADER
 
@@ -296,11 +302,7 @@ class GLCanvas3D
         bool contains(const Point& point) const;
         Point point_projection(const Point& point) const;
 
-#if ENABLE_DISTANCE_FIELD_SHADER
-        void render(float theta, bool useVBOs, float scale_factor, const Shader& shader) const;
-#else
         void render(float theta, bool useVBOs, float scale_factor) const;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     private:
         void calc_bounding_box();
@@ -311,11 +313,9 @@ class GLCanvas3D
 #else
         EType detect_type() const;
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
-#if ENABLE_DISTANCE_FIELD_SHADER
-        void render_prusa(const std::string& key, float theta, bool useVBOs, const Shader& shader) const;
-        void render_prusa_shader(const Shader& shader, unsigned int vertices_count, bool transparent) const;
-#else
         void render_prusa(const std::string& key, float theta, bool useVBOs) const;
+#if ENABLE_DISTANCE_FIELD_SHADER
+        void render_prusa_shader(unsigned int vertices_count, bool transparent) const;
 #endif // ENABLE_DISTANCE_FIELD_SHADER
         void render_custom() const;
 
@@ -923,12 +923,7 @@ private:
     Bed m_bed;
     Axes m_axes;
     LayersEditing m_layers_editing;
-#if ENABLE_DISTANCE_FIELD_SHADER
     Shader m_gouraud_shader;
-    Shader m_distance_field_shader;
-#else
-    Shader m_shader;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
     Mouse m_mouse;
     mutable Gizmos m_gizmos;
     mutable GLToolbar m_toolbar;
