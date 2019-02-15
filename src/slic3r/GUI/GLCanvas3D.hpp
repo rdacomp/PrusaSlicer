@@ -47,7 +47,7 @@ class RetinaHelper;
 
 class GeometryBuffer
 {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     struct Vertex
     {
         float position[3];
@@ -64,26 +64,26 @@ class GeometryBuffer
 #else
     std::vector<float> m_vertices;
     std::vector<float> m_tex_coords;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
 public:
     bool set_from_triangles(const Polygons& triangles, float z, bool generate_tex_coords);
     bool set_from_lines(const Lines& lines, float z);
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     const float* get_vertices_data() const;
 #else
     const float* get_vertices() const;
     const float* get_tex_coords() const;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
     unsigned int get_vertices_count() const;
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     unsigned int get_vertices_data_size() const { return (unsigned int)m_vertices.size() * get_vertex_data_size(); }
     unsigned int get_vertex_data_size() const { return (unsigned int)(5 * sizeof(float)); }
     unsigned int get_position_offset() const { return 0; }
     unsigned int get_tex_coords_offset() const { return (unsigned int)(3 * sizeof(float)); }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 };
 
 class Size
@@ -267,25 +267,23 @@ class GLCanvas3D
         Polygon m_polygon;
         GeometryBuffer m_triangles;
         GeometryBuffer m_gridlines;
-#if ENABLE_TEXTURES_FROM_SVG || ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         mutable GLTexture m_texture;
+        mutable Shader m_shader;
+        mutable unsigned int m_vbo_id;
 #else
         mutable GLTexture m_top_texture;
         mutable GLTexture m_bottom_texture;
-#endif // ENABLE_TEXTURES_FROM_SVG
+#endif // ENABLE_PRINTBED_SHADER
         mutable GLBed m_model;
-#if ENABLE_DISTANCE_FIELD_SHADER
-        mutable Shader m_shader;
-        mutable unsigned int m_vbo_id;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
 
         mutable float m_scale_factor;
 
     public:
         Bed();
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         ~Bed();
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
         EType get_type() const { return m_type; }
 
@@ -307,17 +305,17 @@ class GLCanvas3D
         void calc_triangles(const ExPolygon& poly);
         void calc_gridlines(const ExPolygon& poly, const BoundingBox& bed_bbox);
         EType detect_type(const Pointfs& shape) const;
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         void render_prusa(const std::string& key, bool bottom, bool useVBOs) const;
         void render_prusa_shader(unsigned int vertices_count, bool transparent) const;
 #else
         void render_prusa(const std::string& key, float theta, bool useVBOs) const;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
         void render_custom() const;
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         void reset();
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
     };
 
     struct Axes

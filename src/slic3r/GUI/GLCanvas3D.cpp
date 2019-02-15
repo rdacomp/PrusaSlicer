@@ -85,7 +85,7 @@ namespace GUI {
 
 bool GeometryBuffer::set_from_triangles(const Polygons& triangles, float z, bool generate_tex_coords)
 {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     m_vertices.clear();
     unsigned int v_size = 3 * (unsigned int)triangles.size();
 
@@ -206,14 +206,14 @@ bool GeometryBuffer::set_from_triangles(const Polygons& triangles, float z, bool
             }
         }
     }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
     return true;
 }
 
 bool GeometryBuffer::set_from_lines(const Lines& lines, float z)
 {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     m_vertices.clear();
 
     unsigned int v_size = 2 * (unsigned int)lines.size();
@@ -257,12 +257,12 @@ bool GeometryBuffer::set_from_lines(const Lines& lines, float z)
         m_vertices[coord++] = unscale<float>(l.b(1));
         m_vertices[coord++] = z;
     }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
     return true;
 }
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
 const float* GeometryBuffer::get_vertices_data() const
 {
     return (m_vertices.size() > 0) ? (const float*)m_vertices.data() : nullptr;
@@ -277,15 +277,15 @@ const float* GeometryBuffer::get_tex_coords() const
 {
     return m_tex_coords.data();
 }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
 unsigned int GeometryBuffer::get_vertices_count() const
 {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     return (unsigned int)m_vertices.size();
 #else
     return (unsigned int)m_vertices.size() / 3;
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 }
 
 Size::Size()
@@ -529,19 +529,19 @@ void GLCanvas3D::Shader::reset()
 
 GLCanvas3D::Bed::Bed()
     : m_type(Custom)
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     , m_vbo_id(0)
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
     , m_scale_factor(1.0f)
 {
 }
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
 GLCanvas3D::Bed::~Bed()
 {
     reset();
 }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
 bool GLCanvas3D::Bed::is_prusa() const
 {
@@ -583,9 +583,9 @@ bool GLCanvas3D::Bed::set_shape(const Pointfs& shape)
 
     m_polygon = offset_ex(poly.contour, (float)bed_bbox.radius() * 1.7f, jtRound, scale_(0.5))[0].contour;
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     reset();
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
     // Let the calee to update the UI.
     return true;
@@ -614,29 +614,29 @@ void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) cons
     {
     case MK2:
     {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         render_prusa("mk2", theta > 90.0f, useVBOs);
 #else
         render_prusa("mk2", theta, useVBOs);
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
         break;
     }
     case MK3:
     {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         render_prusa("mk3", theta > 90.0f, useVBOs);
 #else
         render_prusa("mk3", theta, useVBOs);
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
         break;
     }
     case SL1:
     {
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         render_prusa("sl1", theta > 90.0f, useVBOs);
 #else
         render_prusa("sl1", theta, useVBOs);
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
         break;
     }
     default:
@@ -734,7 +734,7 @@ GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type(const Pointfs& shape) const
     return type;
 }
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
 void GLCanvas3D::Bed::render_prusa(const std::string &key, bool bottom, bool useVBOs) const
 {
     std::string tex_path = resources_dir() + "/icons/bed/" + key;
@@ -746,11 +746,26 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, bool bottom, bool use
     if (glewIsSupported("GL_EXT_texture_filter_anisotropic"))
         ::glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_anisotropy);
 
+#if ENABLE_DISTANCE_FIELD_SHADER
     std::string filename = tex_path + "_df.png";
+#else
+    // use higher resolution images if graphic card allows
+    GLint max_tex_size;
+    ::glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
+
+    // clamp or the texture generation becomes too slow
+    max_tex_size = std::min(max_tex_size, 8192);
+
+    std::string filename = tex_path + ".svg";
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     if ((m_texture.get_id() == 0) || (m_texture.get_source() != filename))
     {
+#if ENABLE_DISTANCE_FIELD_SHADER
         if (!m_texture.load_from_file(filename, true))
+#else
+        if (!m_texture.load_from_svg_file(filename, true, max_tex_size))
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         {
             render_custom();
             return;
@@ -835,20 +850,13 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
     GLint max_tex_size;
     ::glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
 
-#if ENABLE_TEXTURES_FROM_SVG
-    // clamp or the texture generation becomes too slow
-    max_tex_size = std::min(max_tex_size, 8192);
-#endif // ENABLE_TEXTURES_FROM_SVG
-
     // temporary set to lowest resolution
     max_tex_size = 2048;
 
-#if !ENABLE_TEXTURES_FROM_SVG
     if (max_tex_size >= 8192)
         tex_path += "_8192";
     else if (max_tex_size >= 4096)
         tex_path += "_4096";
-#endif // !ENABLE_TEXTURES_FROM_SVG
 
     std::string model_path = resources_dir() + "/models/" + key;
 
@@ -857,29 +865,7 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
     if (glewIsSupported("GL_EXT_texture_filter_anisotropic"))
         ::glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_anisotropy);
 
-#if ENABLE_TEXTURES_FROM_SVG
-    std::string filename = tex_path + ".svg";
-#else
     std::string filename = tex_path + "_top.png";
-#endif // ENABLE_TEXTURES_FROM_SVG
-
-#if ENABLE_TEXTURES_FROM_SVG
-    if ((m_texture.get_id() == 0) || (m_texture.get_source() != filename))
-    {
-        if (!m_texture.load_from_svg_file(filename, true, max_tex_size))
-        {
-            render_custom();
-            return;
-        }
-
-        if (max_anisotropy > 0.0f)
-        {
-            ::glBindTexture(GL_TEXTURE_2D, m_texture.get_id());
-            ::glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_anisotropy);
-            ::glBindTexture(GL_TEXTURE_2D, 0);
-        }
-    }
-#else
     if ((m_top_texture.get_id() == 0) || (m_top_texture.get_source() != filename))
     {
         if (!m_top_texture.load_from_file(filename, true))
@@ -895,7 +881,6 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
             ::glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
-
 
     filename = tex_path + "_bottom.png";
     if ((m_bottom_texture.get_id() == 0) || (m_bottom_texture.get_source() != filename))
@@ -913,7 +898,6 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
             ::glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
-#endif // ENABLE_TEXTURES_FROM_SVG
 
     if (theta <= 90.0f)
     {
@@ -959,11 +943,7 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
         if (theta > 90.0f)
             ::glFrontFace(GL_CW);
 
-#if ENABLE_TEXTURES_FROM_SVG
-        ::glBindTexture(GL_TEXTURE_2D, (GLuint)m_texture.get_id());
-#else
         ::glBindTexture(GL_TEXTURE_2D, (theta <= 90.0f) ? (GLuint)m_top_texture.get_id() : (GLuint)m_bottom_texture.get_id());
-#endif // ENABLE_TEXTURES_FROM_SVG
         ::glVertexPointer(3, GL_FLOAT, 0, (GLvoid*)m_triangles.get_vertices());
         ::glTexCoordPointer(2, GL_FLOAT, 0, (GLvoid*)m_triangles.get_tex_coords());
         ::glDrawArrays(GL_TRIANGLES, 0, (GLsizei)triangles_vcount);
@@ -981,13 +961,17 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
         ::glDepthMask(GL_TRUE);
     }
 }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
 void GLCanvas3D::Bed::render_prusa_shader(unsigned int vertices_count, bool transparent) const
 {
     if (m_shader.get_shader_program_id() == 0)
+#if ENABLE_DISTANCE_FIELD_SHADER
         m_shader.init("distance_field.vs", "distance_field.fs");
+#else
+        m_shader.init("printbed.vs", "printbed.fs");
+#endif // ENABLE_DISTANCE_FIELD_SHADER
 
     if (m_shader.is_initialized())
     {
@@ -1007,16 +991,16 @@ void GLCanvas3D::Bed::render_prusa_shader(unsigned int vertices_count, bool tran
         m_shader.stop_using();
     }
     }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
 void GLCanvas3D::Bed::render_custom() const
 {
-#if ENABLE_TEXTURES_FROM_SVG || ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
     m_texture.reset();
 #else
     m_top_texture.reset();
     m_bottom_texture.reset();
-#endif // ENABLE_TEXTURES_FROM_SVG
+#endif // ENABLE_PRINTBED_SHADER
 
     unsigned int triangles_vcount = m_triangles.get_vertices_count();
     if (triangles_vcount > 0)
@@ -1031,11 +1015,11 @@ void GLCanvas3D::Bed::render_custom() const
 
         ::glColor4f(0.35f, 0.35f, 0.35f, 0.4f);
         ::glNormal3d(0.0f, 0.0f, 1.0f);
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         ::glVertexPointer(3, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_vertices_data());
 #else
         ::glVertexPointer(3, GL_FLOAT, 0, (GLvoid*)m_triangles.get_vertices());
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
         ::glDrawArrays(GL_TRIANGLES, 0, (GLsizei)triangles_vcount);
 
         // draw grid
@@ -1045,11 +1029,11 @@ void GLCanvas3D::Bed::render_custom() const
         ::glEnable(GL_DEPTH_TEST);
         ::glLineWidth(3.0f * m_scale_factor);
         ::glColor4f(0.2f, 0.2f, 0.2f, 0.4f);
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
         ::glVertexPointer(3, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_gridlines.get_vertices_data());
 #else
         ::glVertexPointer(3, GL_FLOAT, 0, (GLvoid*)m_gridlines.get_vertices());
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
         ::glDrawArrays(GL_LINES, 0, (GLsizei)gridlines_vcount);
 
         ::glDisableClientState(GL_VERTEX_ARRAY);
@@ -1059,7 +1043,7 @@ void GLCanvas3D::Bed::render_custom() const
     }
 }
 
-#if ENABLE_DISTANCE_FIELD_SHADER
+#if ENABLE_PRINTBED_SHADER
 void GLCanvas3D::Bed::reset()
 {
     if (m_vbo_id > 0)
@@ -1068,7 +1052,7 @@ void GLCanvas3D::Bed::reset()
         m_vbo_id = 0;
     }
 }
-#endif // ENABLE_DISTANCE_FIELD_SHADER
+#endif // ENABLE_PRINTBED_SHADER
 
 const double GLCanvas3D::Axes::Radius = 0.5;
 const double GLCanvas3D::Axes::ArrowBaseRadius = 2.5 * GLCanvas3D::Axes::Radius;
