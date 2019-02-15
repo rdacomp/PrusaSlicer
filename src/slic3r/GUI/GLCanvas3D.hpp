@@ -306,7 +306,7 @@ class GLCanvas3D
         void calc_gridlines(const ExPolygon& poly, const BoundingBox& bed_bbox);
         EType detect_type(const Pointfs& shape) const;
 #if ENABLE_PRINTBED_SHADER
-        void render_prusa(const std::string& key, bool bottom, bool useVBOs) const;
+        void render_prusa(const std::string& key, bool bottom) const;
         void render_prusa_shader(unsigned int vertices_count, bool transparent) const;
 #else
         void render_prusa(const std::string& key, float theta, bool useVBOs) const;

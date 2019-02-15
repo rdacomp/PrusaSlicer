@@ -561,7 +561,7 @@ const Pointfs& GLCanvas3D::Bed::get_shape() const
 bool GLCanvas3D::Bed::set_shape(const Pointfs& shape)
 {
     EType new_type = detect_type(shape);
-    if (m_shape == shape && m_type == new_type)
+    if ((m_type == new_type) && (m_shape == shape))
         // No change, no need to update the UI.
         return false;
 
@@ -606,37 +606,28 @@ Point GLCanvas3D::Bed::point_projection(const Point& point) const
     return m_polygon.point_projection(point);
 }
 
+#if ENABLE_PRINTBED_SHADER
 void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) const
 {
     m_scale_factor = scale_factor;
 
-    switch (m_type)
+    EType type = useVBOs ? m_type : Custom;
+    switch (type)
+
     {
     case MK2:
     {
-#if ENABLE_PRINTBED_SHADER
-        render_prusa("mk2", theta > 90.0f, useVBOs);
-#else
-        render_prusa("mk2", theta, useVBOs);
-#endif // ENABLE_PRINTBED_SHADER
+        render_prusa("mk2", theta > 90.0f);
         break;
     }
     case MK3:
     {
-#if ENABLE_PRINTBED_SHADER
-        render_prusa("mk3", theta > 90.0f, useVBOs);
-#else
-        render_prusa("mk3", theta, useVBOs);
-#endif // ENABLE_PRINTBED_SHADER
+        render_prusa("mk3", theta > 90.0f);
         break;
     }
     case SL1:
     {
-#if ENABLE_PRINTBED_SHADER
-        render_prusa("sl1", theta > 90.0f, useVBOs);
-#else
-        render_prusa("sl1", theta, useVBOs);
-#endif // ENABLE_PRINTBED_SHADER
+        render_prusa("sl1", theta > 90.0f);
         break;
     }
     default:
@@ -647,6 +638,37 @@ void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) cons
     }
     }
 }
+#else
+void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) const
+{
+    m_scale_factor = scale_factor;
+
+    switch (m_type)
+    {
+    case MK2:
+    {
+        render_prusa("mk2", theta, useVBOs);
+        break;
+    }
+    case MK3:
+    {
+        render_prusa("mk3", theta, useVBOs);
+        break;
+    }
+    case SL1:
+    {
+        render_prusa("sl1", theta, useVBOs);
+        break;
+    }
+    default:
+    case Custom:
+    {
+        render_custom();
+        break;
+    }
+    }
+}
+#endif // ENABLE_PRINTBED_SHADER
 
 void GLCanvas3D::Bed::calc_bounding_box()
 {
@@ -705,8 +727,8 @@ GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type(const Pointfs& shape) const
         const Preset* curr = &bundle->printers.get_selected_preset();
         while (curr != nullptr)
         {
-			if (curr->config.has("bed_shape"))
-			{
+            if (curr->config.has("bed_shape"))
+            {
                 if ((curr->vendor != nullptr) && (curr->vendor->name == "Prusa Research") && (shape == dynamic_cast<const ConfigOptionPoints*>(curr->config.option("bed_shape"))->values))
                 {
                     if (boost::contains(curr->name, "SL1"))
@@ -735,7 +757,7 @@ GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type(const Pointfs& shape) const
 }
 
 #if ENABLE_PRINTBED_SHADER
-void GLCanvas3D::Bed::render_prusa(const std::string &key, bool bottom, bool useVBOs) const
+void GLCanvas3D::Bed::render_prusa(const std::string &key, bool bottom) const
 {
     std::string tex_path = resources_dir() + "/icons/bed/" + key;
 
@@ -782,7 +804,7 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, bool bottom, bool use
     if (!bottom)
     {
         filename = model_path + "_bed.stl";
-        if ((m_model.get_filename() != filename) && m_model.init_from_file(filename, useVBOs)) {
+        if ((m_model.get_filename() != filename) && m_model.init_from_file(filename, true)) {
             Vec3d offset = m_bounding_box.center() - Vec3d(0.0, 0.0, 0.5 * m_model.get_bounding_box().size()(2));
             if (key == "mk2")
                 // hardcoded value to match the stl model
@@ -6683,8 +6705,7 @@ void GLCanvas3D::_render_bed(float theta) const
     float scale_factor = 1.0;
 #if ENABLE_RETINA_GL
     scale_factor = m_retina_helper->get_scale_factor();
-#endif
-
+#endif // ENABLE_RETINA_GL
     m_bed.render(theta, m_use_VBOs, scale_factor);
 }
 
