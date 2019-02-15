@@ -611,7 +611,6 @@ Point GLCanvas3D::Bed::point_projection(const Point& point) const
     return m_polygon.point_projection(point);
 }
 
-#if ENABLE_PRINT_BED_MODELS
 #if ENABLE_DISTANCE_FIELD_SHADER
 void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor, const Shader& shader) const
 #else
@@ -657,37 +656,6 @@ void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) cons
     }
     }
 }
-#else
-void GLCanvas3D::Bed::render(float theta, float scale_factor) const
-{
-    m_scale_factor = scale_factor;
-
-    switch (m_type)
-    {
-    case MK2:
-    {
-        render_prusa("mk2", theta);
-        break;
-    }
-    case MK3:
-    {
-        render_prusa("mk3", theta);
-        break;
-    }
-    case SL1:
-    {
-        render_prusa("sl1", theta);
-        break;
-    }
-    default:
-    case Custom:
-    {
-        render_custom();
-        break;
-    }
-    }
-}
-#endif // ENABLE_PRINT_BED_MODELS
 
 void GLCanvas3D::Bed::calc_bounding_box()
 {
@@ -739,7 +707,7 @@ void GLCanvas3D::Bed::calc_gridlines(const ExPolygon& poly, const BoundingBox& b
 #if ENABLE_REWORKED_BED_SHAPE_CHANGE
 GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type(const Pointfs& shape) const
 #else
-GLCanvas3D::Bed::EType GLCanvas3D::Bed::_detect_type() const
+GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type() const
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
 {
     EType type = Custom;
@@ -803,15 +771,11 @@ GLCanvas3D::Bed::EType GLCanvas3D::Bed::_detect_type() const
     return type;
 }
 
-#if ENABLE_PRINT_BED_MODELS
 #if ENABLE_DISTANCE_FIELD_SHADER
 void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool useVBOs, const Shader& shader) const
 #else
 void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool useVBOs) const
 #endif // ENABLE_DISTANCE_FIELD_SHADER
-#else
-void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
-#endif // ENABLE_PRINT_BED_MODELS
 {
     std::string tex_path = resources_dir() + "/icons/bed/" + key;
 
@@ -832,9 +796,7 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
     else if (max_tex_size >= 4096)
         tex_path += "_4096";
 
-#if ENABLE_PRINT_BED_MODELS
     std::string model_path = resources_dir() + "/models/" + key;
-#endif // ENABLE_PRINT_BED_MODELS
 
 #if ENABLE_ANISOTROPIC_FILTER_ON_BED_TEXTURES
     // use anisotropic filter if graphic card allows
@@ -914,7 +876,6 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
     }
 #endif // ENABLE_DISTANCE_FIELD_SHADER
 
-#if ENABLE_PRINT_BED_MODELS
     if (theta <= 90.0f)
     {
         filename = model_path + "_bed.stl";
@@ -940,7 +901,6 @@ void GLCanvas3D::Bed::_render_prusa(const std::string &key, float theta) const
             ::glDisable(GL_LIGHTING);
         }
     }
-#endif // ENABLE_PRINT_BED_MODELS
 
 #if ENABLE_DISTANCE_FIELD_SHADER
     unsigned int triangles_vcount = m_triangles.get_vertices_count();
@@ -6825,15 +6785,11 @@ void GLCanvas3D::_render_bed(float theta) const
     scale_factor = m_retina_helper->get_scale_factor();
 #endif
 
-#if ENABLE_PRINT_BED_MODELS
 #if ENABLE_DISTANCE_FIELD_SHADER
     m_bed.render(theta, m_use_VBOs, scale_factor, m_distance_field_shader);
 #else
     m_bed.render(theta, m_use_VBOs, scale_factor);
 #endif // ENABLE_DISTANCE_FIELD_SHADER
-#else
-    m_bed.render(theta, scale_factor);
-#endif // ENABLE_PRINT_BED_MODELS
 }
 
 void GLCanvas3D::_render_axes() const

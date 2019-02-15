@@ -268,9 +268,7 @@ class GLCanvas3D
         GeometryBuffer m_gridlines;
         mutable GLTexture m_top_texture;
         mutable GLTexture m_bottom_texture;
-#if ENABLE_PRINT_BED_MODELS
         mutable GLBed m_model;
-#endif // ENABLE_PRINT_BED_MODELS
 #if ENABLE_DISTANCE_FIELD_SHADER
         mutable unsigned int m_vbo_id;
 #endif // ENABLE_DISTANCE_FIELD_SHADER
@@ -298,15 +296,11 @@ class GLCanvas3D
         bool contains(const Point& point) const;
         Point point_projection(const Point& point) const;
 
-#if ENABLE_PRINT_BED_MODELS
 #if ENABLE_DISTANCE_FIELD_SHADER
         void render(float theta, bool useVBOs, float scale_factor, const Shader& shader) const;
 #else
         void render(float theta, bool useVBOs, float scale_factor) const;
 #endif // ENABLE_DISTANCE_FIELD_SHADER
-#else
-        void render(float theta, float scale_factor) const;
-#endif // ENABLE_PRINT_BED_MODELS
 
     private:
         void calc_bounding_box();
@@ -317,16 +311,12 @@ class GLCanvas3D
 #else
         EType detect_type() const;
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
-#if ENABLE_PRINT_BED_MODELS
 #if ENABLE_DISTANCE_FIELD_SHADER
         void render_prusa(const std::string& key, float theta, bool useVBOs, const Shader& shader) const;
         void render_prusa_shader(const Shader& shader, unsigned int vertices_count, bool transparent) const;
 #else
         void render_prusa(const std::string& key, float theta, bool useVBOs) const;
 #endif // ENABLE_DISTANCE_FIELD_SHADER
-#else
-        void render_prusa(const std::string &key, float theta) const;
-#endif // ENABLE_PRINT_BED_MODELS
         void render_custom() const;
 
 #if !ENABLE_REWORKED_BED_SHAPE_CHANGE
