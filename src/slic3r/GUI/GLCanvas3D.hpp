@@ -267,7 +267,7 @@ class GLCanvas3D
         Polygon m_polygon;
         GeometryBuffer m_triangles;
         GeometryBuffer m_gridlines;
-#if ENABLE_TEXTURES_FROM_SVG
+#if ENABLE_TEXTURES_FROM_SVG || ENABLE_DISTANCE_FIELD_SHADER
         mutable GLTexture m_texture;
 #else
         mutable GLTexture m_top_texture;
@@ -313,9 +313,11 @@ class GLCanvas3D
 #else
         EType detect_type() const;
 #endif // ENABLE_REWORKED_BED_SHAPE_CHANGE
-        void render_prusa(const std::string& key, float theta, bool useVBOs) const;
 #if ENABLE_DISTANCE_FIELD_SHADER
+        void render_prusa(const std::string& key, bool bottom, bool useVBOs) const;
         void render_prusa_shader(unsigned int vertices_count, bool transparent) const;
+#else
+        void render_prusa(const std::string& key, float theta, bool useVBOs) const;
 #endif // ENABLE_DISTANCE_FIELD_SHADER
         void render_custom() const;
 

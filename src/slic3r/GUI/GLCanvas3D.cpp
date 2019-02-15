@@ -618,17 +618,29 @@ void GLCanvas3D::Bed::render(float theta, bool useVBOs, float scale_factor) cons
     {
     case MK2:
     {
+#if ENABLE_DISTANCE_FIELD_SHADER
+        render_prusa("mk2", theta > 90.0f, useVBOs);
+#else
         render_prusa("mk2", theta, useVBOs);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         break;
     }
     case MK3:
     {
+#if ENABLE_DISTANCE_FIELD_SHADER
+        render_prusa("mk3", theta > 90.0f, useVBOs);
+#else
         render_prusa("mk3", theta, useVBOs);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         break;
     }
     case SL1:
     {
+#if ENABLE_DISTANCE_FIELD_SHADER
+        render_prusa("sl1", theta > 90.0f, useVBOs);
+#else
         render_prusa("sl1", theta, useVBOs);
+#endif // ENABLE_DISTANCE_FIELD_SHADER
         break;
     }
     default:
@@ -755,21 +767,9 @@ GLCanvas3D::Bed::EType GLCanvas3D::Bed::detect_type() const
 }
 
 #if ENABLE_DISTANCE_FIELD_SHADER
-void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool useVBOs) const
+void GLCanvas3D::Bed::render_prusa(const std::string &key, bool bottom, bool useVBOs) const
 {
     std::string tex_path = resources_dir() + "/icons/bed/" + key;
-
-    // use higher resolution images if graphic card allows
-    GLint max_tex_size;
-    ::glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_tex_size);
-
-    // temporary set to lowest resolution
-    max_tex_size = 2048;
-
-    if (max_tex_size >= 8192)
-        tex_path += "_8192";
-    else if (max_tex_size >= 4096)
-        tex_path += "_4096";
 
     std::string model_path = resources_dir() + "/models/" + key;
 
@@ -778,15 +778,11 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
     if (glewIsSupported("GL_EXT_texture_filter_anisotropic"))
         ::glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_anisotropy);
 
-    std::string filename = tex_path;
-    if (key == "sl1")
-        filename += "_df.png";
-    else
-        filename += "_top.png";
+    std::string filename = tex_path + "_df.png";
 
-    if ((m_top_texture.get_id() == 0) || (m_top_texture.get_source() != filename))
+    if ((m_texture.get_id() == 0) || (m_texture.get_source() != filename))
     {
-        if (!m_top_texture.load_from_file(filename, true))
+        if (!m_texture.load_from_file(filename, true))
         {
             render_custom();
             return;
@@ -794,33 +790,13 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
 
         if (max_anisotropy > 0.0f)
         {
-            ::glBindTexture(GL_TEXTURE_2D, m_top_texture.get_id());
+            ::glBindTexture(GL_TEXTURE_2D, m_texture.get_id());
             ::glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_anisotropy);
             ::glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
 
-    if (key != "sl1")
-    {
-        filename = tex_path + "_bottom.png";
-        if ((m_bottom_texture.get_id() == 0) || (m_bottom_texture.get_source() != filename))
-        {
-            if (!m_bottom_texture.load_from_file(filename, true))
-            {
-                render_custom();
-                return;
-            }
-
-            if (max_anisotropy > 0.0f)
-            {
-                ::glBindTexture(GL_TEXTURE_2D, m_bottom_texture.get_id());
-                ::glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_anisotropy);
-                ::glBindTexture(GL_TEXTURE_2D, 0);
-            }
-        }
-    }
-
-    if (theta <= 90.0f)
+    if (!bottom)
     {
         filename = model_path + "_bed.stl";
         if ((m_model.get_filename() != filename) && m_model.init_from_file(filename, useVBOs)) {
@@ -868,33 +844,13 @@ void GLCanvas3D::Bed::render_prusa(const std::string &key, float theta, bool use
         ::glEnable(GL_TEXTURE_2D);
         ::glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
-        if (theta <= 90.0f)
-            render_prusa_shader(triangles_vcount, false);
-        else
-        {
+        if (bottom)
             ::glFrontFace(GL_CW);
 
-            if (key == "sl1")
-                render_prusa_shader(triangles_vcount, true);
-            else
-            {
-                ::glEnableClientState(GL_VERTEX_ARRAY);
-                ::glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        render_prusa_shader(triangles_vcount, bottom);
 
-                ::glBindTexture(GL_TEXTURE_2D, (GLuint)m_bottom_texture.get_id());
-                ::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
-                ::glVertexPointer(3, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_position_offset());
-                ::glTexCoordPointer(2, GL_FLOAT, m_triangles.get_vertex_data_size(), (GLvoid*)m_triangles.get_tex_coords_offset());
-                ::glDrawArrays(GL_TRIANGLES, 0, (GLsizei)triangles_vcount);
-                ::glBindBuffer(GL_ARRAY_BUFFER, 0);
-                ::glBindTexture(GL_TEXTURE_2D, 0);
-
-                ::glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-                ::glDisableClientState(GL_VERTEX_ARRAY);
-            }
-
+        if (bottom)
             ::glFrontFace(GL_CCW);
-        }
 
         ::glDisable(GL_TEXTURE_2D);
 
@@ -1065,13 +1021,12 @@ void GLCanvas3D::Bed::render_prusa_shader(unsigned int vertices_count, bool tran
     if (m_shader.get_shader_program_id() == 0)
         m_shader.init("distance_field.vs", "distance_field.fs");
 
-
     if (m_shader.is_initialized())
     {
         m_shader.start_using();
         m_shader.set_uniform("transparent_background", transparent);
 
-        ::glBindTexture(GL_TEXTURE_2D, (GLuint)m_top_texture.get_id());
+        ::glBindTexture(GL_TEXTURE_2D, (GLuint)m_texture.get_id());
         ::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id);
         ::glEnableVertexAttribArray(0);
         ::glEnableVertexAttribArray(1);
@@ -1088,7 +1043,7 @@ void GLCanvas3D::Bed::render_prusa_shader(unsigned int vertices_count, bool tran
 
 void GLCanvas3D::Bed::render_custom() const
 {
-#if ENABLE_TEXTURES_FROM_SVG
+#if ENABLE_TEXTURES_FROM_SVG || ENABLE_DISTANCE_FIELD_SHADER
     m_texture.reset();
 #else
     m_top_texture.reset();

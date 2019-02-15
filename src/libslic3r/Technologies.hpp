@@ -61,8 +61,8 @@
 #define ENABLE_1_42_0_ALPHA7 1
 
 // Texture generated from imported svg files
-#define ENABLE_TEXTURES_FROM_SVG (1 && ENABLE_1_42_0_ALPHA7)
+#define ENABLE_TEXTURES_FROM_SVG (0 && ENABLE_1_42_0_ALPHA7)
 // Enable rendering using distance field textures
-#define ENABLE_DISTANCE_FIELD_SHADER (0 && !ENABLE_TEXTURES_FROM_SVG)
+#define ENABLE_DISTANCE_FIELD_SHADER (1 && !ENABLE_TEXTURES_FROM_SVG)
 
 #endif // _technologies_h_
