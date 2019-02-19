@@ -83,6 +83,7 @@ static const float AXES_COLOR[3][3] = { { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f
 namespace Slic3r {
 namespace GUI {
 
+#if !ENABLE_UNIQUE_BED
 bool GeometryBuffer::set_from_triangles(const Polygons& triangles, float z, bool generate_tex_coords)
 {
 #if ENABLE_PRINTBED_SHADER
@@ -287,6 +288,7 @@ unsigned int GeometryBuffer::get_vertices_count() const
     return (unsigned int)m_vertices.size() / 3;
 #endif // ENABLE_PRINTBED_SHADER
 }
+#endif // !ENABLE_UNIQUE_BED
 
 Size::Size()
     : m_width(0)
@@ -527,6 +529,7 @@ void GLCanvas3D::Shader::reset()
     }
 }
 
+#if !ENABLE_UNIQUE_BED
 GLCanvas3D::Bed::Bed()
     : m_type(Custom)
 #if ENABLE_PRINTBED_SHADER
@@ -1141,6 +1144,7 @@ void GLCanvas3D::Axes::render_axis(double length) const
     ::gluQuadricOrientation(m_quadric, GLU_INSIDE);
     ::gluDisk(m_quadric, 0.0, ArrowBaseRadius, 32, 1);
 }
+#endif // !ENABLE_UNIQUE_BED
 
 GLCanvas3D::LayersEditing::LayersEditing()
     : m_use_legacy_opengl(false)
@@ -4284,6 +4288,9 @@ wxDEFINE_EVENT(EVT_GLCANVAS_WIPETOWER_MOVED, Vec3dEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_ENABLE_ACTION_BUTTONS, Event<bool>);
 wxDEFINE_EVENT(EVT_GLCANVAS_UPDATE_GEOMETRY, Vec3dsEvent<2>);
 wxDEFINE_EVENT(EVT_GLCANVAS_MOUSE_DRAGGING_FINISHED, SimpleEvent);
+#if ENABLE_UNIQUE_BED
+wxDEFINE_EVENT(EVT_GLCANVAS_UPDATE_BED_SHAPE, SimpleEvent);
+#endif // ENABLE_UNIQUE_BED
 
 GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas)
     : m_canvas(canvas)
@@ -4292,6 +4299,9 @@ GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas)
     , m_retina_helper(nullptr)
 #endif
     , m_in_render(false)
+#if ENABLE_UNIQUE_BED
+    , m_bed(nullptr)
+#endif // ENABLE_UNIQUE_BED
     , m_toolbar(GLToolbar::Normal)
     , m_view_toolbar(nullptr)
     , m_use_clipping_planes(false)
@@ -4491,6 +4501,15 @@ void GLCanvas3D::set_model(Model* model)
     m_selection.set_model(m_model);
 }
 
+#if ENABLE_UNIQUE_BED
+void GLCanvas3D::bed_shape_changed()
+{
+    m_camera.set_scene_box(scene_bounding_box(), *this);
+    m_requires_zoom_to_bed = true;
+
+    m_dirty = true;
+}
+#else
 void GLCanvas3D::set_bed_shape(const Pointfs& shape)
 {
     bool new_shape = m_bed.set_shape(shape);
@@ -4511,6 +4530,7 @@ void GLCanvas3D::set_bed_axes_length(double length)
 {
     m_axes.length = length * Vec3d::Ones();
 }
+#endif // ENABLE_UNIQUE_BED
 
 void GLCanvas3D::set_color_by(const std::string& value)
 {
@@ -4536,7 +4556,12 @@ BoundingBoxf3 GLCanvas3D::volumes_bounding_box() const
 BoundingBoxf3 GLCanvas3D::scene_bounding_box() const
 {
     BoundingBoxf3 bb = volumes_bounding_box();
+#if ENABLE_UNIQUE_BED
+    if (m_bed != nullptr)
+        bb.merge(m_bed->get_bounding_box());
+#else
     bb.merge(m_bed.get_bounding_box());
+#endif // ENABLE_UNIQUE_BED
     if (m_config != nullptr)
     {
         double h = m_config->opt_float("max_print_height");
@@ -4629,7 +4654,12 @@ bool GLCanvas3D::is_toolbar_item_pressed(const std::string& name) const
 
 void GLCanvas3D::zoom_to_bed()
 {
+#if ENABLE_UNIQUE_BED
+    if (m_bed != nullptr)
+        _zoom_to_bounding_box(m_bed->get_bounding_box());
+#else
     _zoom_to_bounding_box(m_bed.get_bounding_box());
+#endif // ENABLE_UNIQUE_BED
 }
 
 void GLCanvas3D::zoom_to_volumes()
@@ -4742,12 +4772,20 @@ void GLCanvas3D::render()
     if (!_set_current() || !_3DScene::init(m_canvas))
         return;
 
+#if ENABLE_UNIQUE_BED
+    if ((m_bed != nullptr) && m_bed->get_shape().empty())
+    {
+        // this happens at startup when no data is still saved under <>\AppData\Roaming\Slic3rPE
+        post_event(SimpleEvent(EVT_GLCANVAS_UPDATE_BED_SHAPE));
+    }
+#else
     if (m_bed.get_shape().empty())
     {
         // this happens at startup when no data is still saved under <>\AppData\Roaming\Slic3rPE
         if (m_config != nullptr)
             set_bed_shape(m_config->opt<ConfigOptionPoints>("bed_shape")->values);
     }
+#endif // ENABLE_UNIQUE_BED
 
     if (m_requires_zoom_to_bed)
     {
@@ -4769,7 +4807,11 @@ void GLCanvas3D::render()
         // absolute value of the rotation
         theta = 360.f - theta;
 
+#if ENABLE_UNIQUE_BED
+    bool is_custom_bed = (m_bed == nullptr) || m_bed->is_custom();
+#else
     bool is_custom_bed = m_bed.is_custom();
+#endif // ENABLE_UNIQUE_BED
 
 #if ENABLE_IMGUI
     wxGetApp().imgui()->new_frame();
@@ -6499,9 +6541,16 @@ void GLCanvas3D::_resize(unsigned int w, unsigned int h)
 
 BoundingBoxf3 GLCanvas3D::_max_bounding_box() const
 {
+#if ENABLE_UNIQUE_BED
+    BoundingBoxf3 bb = volumes_bounding_box();
+    if (m_bed != nullptr)
+        bb.merge(m_bed->get_bounding_box());
+    return bb;
+#else
     BoundingBoxf3 bb = m_bed.get_bounding_box();
     bb.merge(volumes_bounding_box());
     return bb;
+#endif // ENABLE_UNIQUE_BED
 }
 
 void GLCanvas3D::_zoom_to_bounding_box(const BoundingBoxf3& bbox)
@@ -6704,12 +6753,23 @@ void GLCanvas3D::_render_bed(float theta) const
 #if ENABLE_RETINA_GL
     scale_factor = m_retina_helper->get_scale_factor();
 #endif // ENABLE_RETINA_GL
+
+#if ENABLE_UNIQUE_BED
+    if (m_bed != nullptr)
+        m_bed->render(theta, m_use_VBOs, scale_factor);
+#else
     m_bed.render(theta, m_use_VBOs, scale_factor);
+#endif // ENABLE_UNIQUE_BED
 }
 
 void GLCanvas3D::_render_axes() const
 {
+#if ENABLE_UNIQUE_BED
+    if (m_bed != nullptr)
+        m_bed->render_axes();
+#else
     m_axes.render();
+#endif // ENABLE_UNIQUE_BED
 }
 
 void GLCanvas3D::_render_objects() const
@@ -6727,12 +6787,21 @@ void GLCanvas3D::_render_objects() const
             // Update the layer editing selection to the first object selected, update the current object maximum Z.
             const_cast<LayersEditing&>(m_layers_editing).select_object(*m_model, this->is_layers_editing_enabled() ? m_selection.get_object_idx() : -1);
 
+#if ENABLE_UNIQUE_BED
+            if ((m_config != nullptr) && (m_bed != nullptr))
+            {
+                const BoundingBoxf3& bed_bb = m_bed->get_bounding_box();
+                m_volumes.set_print_box((float)bed_bb.min(0), (float)bed_bb.min(1), 0.0f, (float)bed_bb.max(0), (float)bed_bb.max(1), (float)m_config->opt_float("max_print_height"));
+                m_volumes.check_outside_state(m_config, nullptr);
+            }
+#else
             if (m_config != nullptr)
             {
                 const BoundingBoxf3& bed_bb = m_bed.get_bounding_box();
                 m_volumes.set_print_box((float)bed_bb.min(0), (float)bed_bb.min(1), 0.0f, (float)bed_bb.max(0), (float)bed_bb.max(1), (float)m_config->opt_float("max_print_height"));
                 m_volumes.check_outside_state(m_config, nullptr);
             }
+#endif // ENABLE_UNIQUE_BED
         }
 
         if (m_use_clipping_planes)
