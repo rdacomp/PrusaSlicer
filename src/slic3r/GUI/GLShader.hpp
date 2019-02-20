@@ -37,6 +37,34 @@ public:
     std::string     last_error;
 };
 
+#if ENABLE_UNIQUE_BED
+class Shader
+{
+    GLShader* m_shader;
+
+public:
+    Shader();
+    ~Shader();
+
+    bool init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename);
+
+    bool is_initialized() const;
+
+    bool start_using() const;
+    void stop_using() const;
+
+    void set_uniform(const std::string& name, float value) const;
+    void set_uniform(const std::string& name, const float* matrix) const;
+    void set_uniform(const std::string& name, bool value) const;
+
+    const GLShader* get_shader() const { return m_shader; }
+    unsigned int get_shader_program_id() const;
+
+private:
+    void reset();
+};
+#endif // ENABLE_UNIQUE_BED
+
 }
 
 #endif /* slic3r_GLShader_hpp_ */
