@@ -61,10 +61,7 @@
 // Printbed textures generated from distance fields files
 #define ENABLE_DISTANCE_FIELD_SHADER (0 && !ENABLE_TEXTURES_FROM_SVG)
 #define ENABLE_PRINTBED_SHADER (ENABLE_TEXTURES_FROM_SVG || ENABLE_DISTANCE_FIELD_SHADER)
-
-// Moves bed from GLCanva3d to Plater to have a unique instance of it
-#define ENABLE_UNIQUE_BED (1 && ENABLE_1_42_0_ALPHA7)
 // Printbed uses an stl model in place of a texture
-#define ENABLE_BED_MODEL_TEXTURE (1 && ENABLE_UNIQUE_BED && !ENABLE_TEXTURES_FROM_SVG && !ENABLE_DISTANCE_FIELD_SHADER)
+#define ENABLE_BED_MODEL_TEXTURE (1 && !ENABLE_TEXTURES_FROM_SVG && !ENABLE_DISTANCE_FIELD_SHADER)
 
 #endif // _technologies_h_

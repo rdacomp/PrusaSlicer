@@ -3,9 +3,7 @@
 
 #include "GLTexture.hpp"
 #include "3DScene.hpp"
-#if ENABLE_UNIQUE_BED
 #include "GLShader.hpp"
-#endif // ENABLE_UNIQUE_BED
 
 class GLUquadric;
 typedef class GLUquadric GLUquadricObj;
@@ -13,7 +11,6 @@ typedef class GLUquadric GLUquadricObj;
 namespace Slic3r {
 namespace GUI {
 
-#if ENABLE_UNIQUE_BED
 class GeometryBuffer
 {
 #if ENABLE_PRINTBED_SHADER
@@ -147,7 +144,6 @@ private:
     void reset();
 #endif // ENABLE_PRINTBED_SHADER
 };
-#endif // ENABLE_UNIQUE_BED
 
 } // GUI
 } // Slic3r

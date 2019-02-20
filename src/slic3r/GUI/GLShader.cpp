@@ -264,7 +264,6 @@ sub SetMatrix
 }
 */
 
-#if ENABLE_UNIQUE_BED
 Shader::Shader()
     : m_shader(nullptr)
 {
@@ -349,6 +348,5 @@ void Shader::reset()
         m_shader = nullptr;
     }
 }
-#endif // ENABLE_UNIQUE_BED
 
 } // namespace Slic3r

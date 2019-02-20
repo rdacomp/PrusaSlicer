@@ -37,7 +37,6 @@ public:
     std::string     last_error;
 };
 
-#if ENABLE_UNIQUE_BED
 class Shader
 {
     GLShader* m_shader;
@@ -63,7 +62,6 @@ public:
 private:
     void reset();
 };
-#endif // ENABLE_UNIQUE_BED
 
 }
 

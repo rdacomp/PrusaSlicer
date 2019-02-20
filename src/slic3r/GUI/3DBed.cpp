@@ -18,7 +18,6 @@ static const float GROUND_Z = -0.02f;
 namespace Slic3r {
 namespace GUI {
 
-#if ENABLE_UNIQUE_BED
 bool GeometryBuffer::set_from_triangles(const Polygons& triangles, float z, bool generate_tex_coords)
 {
 #if ENABLE_PRINTBED_SHADER
@@ -876,7 +875,6 @@ void Bed3D::reset()
     }
 }
 #endif // ENABLE_PRINTBED_SHADER
-#endif // ENABLE_UNIQUE_BED
 
 } // GUI
 } // Slic3r
