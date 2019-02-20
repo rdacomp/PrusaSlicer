@@ -5524,14 +5524,21 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
         // Set focus in order to remove it from sidebar fields
         if (m_canvas != nullptr) {
             // Only set focus, if the top level window of this canvas is active.
-			auto p = dynamic_cast<wxWindow*>(evt.GetEventObject());
+            auto p = dynamic_cast<wxWindow*>(evt.GetEventObject());
             while (p->GetParent())
                 p = p->GetParent();
             auto *top_level_wnd = dynamic_cast<wxTopLevelWindow*>(p);
             if (top_level_wnd && top_level_wnd->IsActive())
+            {
                 m_canvas->SetFocus();
-        }
 
+                // forces a frame render to ensure that m_hover_volume_id is updated even when the user right clicks while
+                // the context menu is shown, ensuring it to disappear if the mouse is outside any volume and to
+                // change the volume hover state if any is under the mouse 
+                m_mouse.position = pos.cast<double>();
+                render();
+            }
+        }
         m_mouse.set_start_position_2D_as_invalid();
 //#endif
     }
@@ -5666,7 +5673,6 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
             }
 
             // propagate event through callback
-
             if (m_hover_volume_id != -1)
             {
                 if (evt.LeftDown() && m_moving_enabled && (m_mouse.drag.move_volume_idx == -1))
@@ -5685,9 +5691,9 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
                 }
                 else if (evt.RightDown())
                 {
+                    m_mouse.position = pos.cast<double>();
                     // forces a frame render to ensure that m_hover_volume_id is updated even when the user right clicks while
-                    // the context menu is already shown, ensuring it to disappear if the mouse is outside any volume
-                    m_mouse.position = Vec2d((double)pos(0), (double)pos(1));
+                    // the context menu is already shown
                     render();
                     if (m_hover_volume_id != -1)
                     {
@@ -5701,14 +5707,14 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
                             post_event(SimpleEvent(EVT_GLCANVAS_OBJECT_SELECT));
                             _update_gizmos_data();
                             wxGetApp().obj_manipul()->update_settings_value(m_selection);
-                            // forces a frame render to update the view before the context menu is shown
-                            render();
-
+//                            // forces a frame render to update the view before the context menu is shown
+//                            render();
+                            
                             Vec2d logical_pos = pos.cast<double>();
 #if ENABLE_RETINA_GL
                             const float factor = m_retina_helper->get_scale_factor();
                             logical_pos = logical_pos.cwiseQuotient(Vec2d(factor, factor));
-#endif
+#endif // ENABLE_RETINA_GL
                             post_event(Vec2dEvent(EVT_GLCANVAS_RIGHT_CLICK, logical_pos));
                         }
                     }
@@ -6327,7 +6333,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "add";
     item.tooltip = GUI::L_str("Add...") + " [" + GUI::shortkey_ctrl_prefix() + "I]";
     item.sprite_id = 0;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_ADD;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6335,7 +6340,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "delete";
     item.tooltip = GUI::L_str("Delete") + " [Del]";
     item.sprite_id = 1;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_DELETE;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6343,7 +6347,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "deleteall";
     item.tooltip = GUI::L_str("Delete all") + " [" + GUI::shortkey_ctrl_prefix() + "Del]";
     item.sprite_id = 2;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_DELETE_ALL;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6351,7 +6354,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "arrange";
     item.tooltip = GUI::L_str("Arrange [A]");
     item.sprite_id = 3;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_ARRANGE;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6362,7 +6364,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "more";
     item.tooltip = GUI::L_str("Add instance [+]");
     item.sprite_id = 4;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_MORE;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6370,7 +6371,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "fewer";
     item.tooltip = GUI::L_str("Remove instance [-]");
     item.sprite_id = 5;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_FEWER;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6381,7 +6381,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "splitobjects";
     item.tooltip = GUI::L_str("Split to objects");
     item.sprite_id = 6;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_SPLIT_OBJECTS;
     if (!m_toolbar.add_item(item))
         return false;
@@ -6389,7 +6388,6 @@ bool GLCanvas3D::_init_toolbar()
     item.name = "splitvolumes";
     item.tooltip = GUI::L_str("Split to parts");
     item.sprite_id = 8;
-    item.is_toggable = false;
     item.action_event = EVT_GLTOOLBAR_SPLIT_VOLUMES;
     if (!m_toolbar.add_item(item))
         return false;
