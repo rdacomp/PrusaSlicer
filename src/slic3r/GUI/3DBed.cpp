@@ -609,6 +609,7 @@ void Bed3D::render_prusa(const std::string &key, bool bottom) const
 #else
 void Bed3D::render_prusa(const std::string &key, float theta, bool useVBOs) const
 {
+#if !ENABLE_BED_MODEL_TEXTURE
     std::string tex_path = resources_dir() + "/icons/bed/" + key;
 
     // use higher resolution images if graphic card allows
@@ -622,9 +623,65 @@ void Bed3D::render_prusa(const std::string &key, float theta, bool useVBOs) cons
         tex_path += "_8192";
     else if (max_tex_size >= 4096)
         tex_path += "_4096";
+#endif // !ENABLE_BED_MODEL_TEXTURE
 
     std::string model_path = resources_dir() + "/models/" + key;
 
+#if ENABLE_BED_MODEL_TEXTURE
+    std::string filename = model_path + "_bed.stl";
+    Vec3d half_z = Vec3d::Zero();
+    Vec3d offset = Vec3d::Zero();
+    if ((m_model.get_filename() != filename) && m_model.init_from_file(filename, true, useVBOs))
+    {
+        half_z = Vec3d(0.0, 0.0, 0.5 * m_model.get_bounding_box().size()(2));
+        offset = m_bounding_box.center() - half_z;
+
+        if (key == "mk2")
+            // hardcoded value to match the stl model
+            offset += Vec3d(0.0, 7.5, -0.03);
+        else if (key == "mk3")
+            // hardcoded value to match the stl model
+            offset += Vec3d(0.0, 5.5, 2.43);
+        else if (key == "sl1")
+            // hardcoded value to match the stl model
+            offset += Vec3d(0.0, 0.0, -0.03);
+
+        m_model.center_around(offset);
+        float color[4] = { 0.235f, 0.235f, 0.235f, 1.0f };
+        m_model.set_color(color, 4);
+    }
+
+    filename = model_path + "_bed_tex.stl";
+    if ((m_texture_model.get_filename() != filename) && m_texture_model.init_from_file(filename, false, useVBOs))
+    {
+        // this is temporary, it needs to be fixed in dependence of the model to center it properly on the bed model
+        offset(2) = 0.0;
+        m_texture_model.center_around(offset);
+    }
+
+    if (theta <= 90.0f)
+    {
+        if (!m_model.get_filename().empty())
+        {
+            glsafe(::glEnable(GL_LIGHTING));
+            m_model.render();
+            glsafe(::glDisable(GL_LIGHTING));
+        }
+    }
+
+    if (theta > 90.0f)
+        glsafe(::glFrontFace(GL_CW));
+
+    if (!m_texture_model.get_filename().empty())
+    {
+        glsafe(::glEnable(GL_LIGHTING));
+        m_texture_model.render();
+        glsafe(::glDisable(GL_LIGHTING));
+    }
+
+    if (theta > 90.0f)
+        glsafe(::glFrontFace(GL_CCW));
+#else
     // use anisotropic filter if graphic card allows
     GLfloat max_anisotropy = 0.0f;
     if (glewIsSupported("GL_EXT_texture_filter_anisotropic"))
@@ -725,6 +782,7 @@ void Bed3D::render_prusa(const std::string &key, float theta, bool useVBOs) cons
         ::glDisable(GL_BLEND);
         ::glDepthMask(GL_TRUE);
     }
+#endif // ENABLE_BED_MODEL_TEXTURE
 }
 #endif // ENABLE_PRINTBED_SHADER
 
@@ -762,7 +820,7 @@ void Bed3D::render_custom() const
 {
 #if ENABLE_PRINTBED_SHADER
     m_texture.reset();
-#else
+#elif !ENABLE_BED_MODEL_TEXTURE
     m_top_texture.reset();
     m_bottom_texture.reset();
 #endif // ENABLE_PRINTBED_SHADER

@@ -505,7 +505,11 @@ public:
     virtual ~GLModel();
 
     bool init(bool useVBOs) { return on_init(useVBOs); }
+#if ENABLE_BED_MODEL_TEXTURE
+    bool init_from_file(const std::string& filename, bool repair, bool useVBOs) { return on_init_from_file(filename, repair, useVBOs); }
+#else
     bool init_from_file(const std::string& filename, bool useVBOs) { return on_init_from_file(filename, useVBOs); }
+#endif // ENABLE_BED_MODEL_TEXTURE
 
     void center_around(const Vec3d& center) { m_volume.set_volume_offset(center - m_volume.bounding_box.center()); }
     void set_color(const float* color, unsigned int size);
@@ -526,7 +530,11 @@ public:
 
 protected:
     virtual bool on_init(bool useVBOs) { return false; }
+#if ENABLE_BED_MODEL_TEXTURE
+    virtual bool on_init_from_file(const std::string& filename, bool repair, bool useVBOs) { return false; }
+#else
     virtual bool on_init_from_file(const std::string& filename, bool useVBOs) { return false; }
+#endif // ENABLE_BED_MODEL_TEXTURE
 
 private:
     void render_VBOs() const;
@@ -550,10 +558,14 @@ protected:
     virtual bool on_init(bool useVBOs);
 };
 
-class GLBed : public GLModel
+class GLStlModel : public GLModel
 {
 protected:
+#if ENABLE_BED_MODEL_TEXTURE
+    virtual bool on_init_from_file(const std::string& filename, bool repair, bool useVBOs);
+#else
     virtual bool on_init_from_file(const std::string& filename, bool useVBOs);
+#endif // ENABLE_BED_MODEL_TEXTURE
 };
 
 class _3DScene

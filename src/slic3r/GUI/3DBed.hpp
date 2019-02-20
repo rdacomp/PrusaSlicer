@@ -96,11 +96,14 @@ private:
     mutable GLTexture m_texture;
     mutable Shader m_shader;
     mutable unsigned int m_vbo_id;
-#else
+#elif !ENABLE_BED_MODEL_TEXTURE
     mutable GLTexture m_top_texture;
     mutable GLTexture m_bottom_texture;
 #endif // ENABLE_PRINTBED_SHADER
-    mutable GLBed m_model;
+    mutable GLStlModel m_model;
+#if ENABLE_BED_MODEL_TEXTURE
+    mutable GLStlModel m_texture_model;
+#endif // ENABLE_BED_MODEL_TEXTURE
     Axes m_axes;
 
     mutable float m_scale_factor;

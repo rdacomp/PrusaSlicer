@@ -1953,7 +1953,11 @@ bool GLCurvedArrow::on_init(bool useVBOs)
     return true;
 }
 
-bool GLBed::on_init_from_file(const std::string& filename, bool useVBOs)
+#if ENABLE_BED_MODEL_TEXTURE
+bool GLStlModel::on_init_from_file(const std::string& filename, bool repair, bool useVBOs)
+#else
+bool GLStlModel::on_init_from_file(const std::string& filename, bool useVBOs)
+#endif // ENABLE_BED_MODEL_TEXTURE
 {
     reset();
 
@@ -1980,14 +1984,21 @@ bool GLBed::on_init_from_file(const std::string& filename, bool useVBOs)
     model_object->center_around_origin();
 
     TriangleMesh mesh = model.mesh();
-    mesh.repair();
+#if ENABLE_BED_MODEL_TEXTURE
+    if (repair)
+#endif // ENABLE_BED_MODEL_TEXTURE
+        mesh.repair();
 
     if (m_useVBOs)
         m_volume.indexed_vertex_array.load_mesh_full_shading(mesh);
     else
         m_volume.indexed_vertex_array.load_mesh_flat_shading(mesh);
 
+#if ENABLE_BED_MODEL_TEXTURE
+    float color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+#else
     float color[4] = { 0.235f, 0.235f, 0.235f, 1.0f };
+#endif // ENABLE_BED_MODEL_TEXTURE
     set_color(color, 4);
 
     m_volume.bounding_box = m_volume.indexed_vertex_array.bounding_box();
