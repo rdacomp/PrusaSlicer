@@ -280,7 +280,7 @@ bool Print::is_step_done(PrintObjectStep step) const
         return false;
 	tbb::mutex::scoped_lock lock(this->state_mutex());
     for (const PrintObject *object : m_objects)
-        if (! object->m_state.is_done_unguarded(step))
+        if (! object->is_step_done_unguarded(step))
             return false;
     return true;
 }
@@ -549,10 +549,14 @@ void Print::model_volume_list_update_supports(ModelObject &model_object_dst, con
             assert(! it->second); // not consumed yet
             it->second = true;
             ModelVolume *model_volume_dst = const_cast<ModelVolume*>(it->first);
-            assert(model_volume_dst->type() == model_volume_src->type());
+			// For support modifiers, the type may have been switched from blocker to enforcer and vice versa.
+			assert((model_volume_dst->is_support_modifier() && model_volume_src->is_support_modifier()) || model_volume_dst->type() == model_volume_src->type());
             model_object_dst.volumes.emplace_back(model_volume_dst);
-			if (model_volume_dst->is_support_modifier())
-                model_volume_dst->set_transformation(model_volume_src->get_transformation());
+			if (model_volume_dst->is_support_modifier()) {
+				// For support modifiers, the type may have been switched from blocker to enforcer and vice versa.
+				model_volume_dst->set_type(model_volume_src->type());
+				model_volume_dst->set_transformation(model_volume_src->get_transformation());
+			}
             assert(model_volume_dst->get_matrix().isApprox(model_volume_src->get_matrix()));
         } else {
             // The volume was not found in the old list. Create a new copy.
@@ -713,7 +717,7 @@ Print::ApplyStatus Print::apply(const Model &model, const DynamicPrintConfig &co
     if (model.id() != m_model.id()) {
         // Kill everything, initialize from scratch.
         // Stop background processing.
-        this->call_cancell_callback();
+        this->call_cancel_callback();
         update_apply_status(this->invalidate_all_steps());
         for (PrintObject *object : m_objects) {
             model_object_status.emplace(object->model_object()->id(), ModelObjectStatus::Deleted);
@@ -745,7 +749,7 @@ Print::ApplyStatus Print::apply(const Model &model, const DynamicPrintConfig &co
         } else {
             // Reorder the objects, add new objects.
             // First stop background processing before shuffling or deleting the PrintObjects in the object list.
-            this->call_cancell_callback();
+            this->call_cancel_callback();
             update_apply_status(this->invalidate_step(psGCodeExport));
             // Second create a new list of objects.
             std::vector<ModelObject*> model_objects_old(std::move(m_model.objects));
@@ -855,7 +859,7 @@ Print::ApplyStatus Print::apply(const Model &model, const DynamicPrintConfig &co
             model_object.assign_copy(model_object_new);
         } else if (support_blockers_differ || support_enforcers_differ) {
             // First stop background processing before shuffling or deleting the ModelVolumes in the ModelObject's list.
-            this->call_cancell_callback();
+            this->call_cancel_callback();
             update_apply_status(false);
             // Invalidate just the supports step.
             auto range = print_object_status.equal_range(PrintObjectStatus(model_object.id()));
@@ -956,7 +960,7 @@ Print::ApplyStatus Print::apply(const Model &model, const DynamicPrintConfig &co
             }
         }
         if (m_objects != print_objects_new) {
-            this->call_cancell_callback();
+            this->call_cancel_callback();
 			update_apply_status(this->invalidate_all_steps());
             m_objects = print_objects_new;
             // Delete the PrintObjects marked as Unknown or Deleted.
@@ -1863,7 +1867,7 @@ std::string Print::output_filename() const
     DynamicConfig config = this->finished() ? this->print_statistics().config() : this->print_statistics().placeholders();
     return this->PrintBase::output_filename(m_config.output_filename_format.value, "gcode", &config);
 }
-
+/*
 // Shorten the dhms time by removing the seconds, rounding the dhm to full minutes
 // and removing spaces.
 static std::string short_time(const std::string &time)
@@ -1903,7 +1907,7 @@ static std::string short_time(const std::string &time)
         ::sprintf(buffer, "%ds", seconds);
     return buffer;
 }
-
+*/
 DynamicConfig PrintStatistics::config() const
 {
     DynamicConfig config;

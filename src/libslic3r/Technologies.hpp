@@ -57,11 +57,11 @@
 #define ENABLE_1_42_0_ALPHA7 1
 
 // Printbed textures generated from svg files
-#define ENABLE_TEXTURES_FROM_SVG (0 && ENABLE_1_42_0_ALPHA7)
+#define ENABLE_TEXTURES_FROM_SVG (1 && ENABLE_1_42_0_ALPHA7)
 // Printbed textures generated from distance fields files
 #define ENABLE_DISTANCE_FIELD_SHADER (0 && !ENABLE_TEXTURES_FROM_SVG)
 #define ENABLE_PRINTBED_SHADER (ENABLE_TEXTURES_FROM_SVG || ENABLE_DISTANCE_FIELD_SHADER)
 // Printbed uses an stl model in place of a texture
-#define ENABLE_BED_MODEL_TEXTURE (1 && !ENABLE_TEXTURES_FROM_SVG && !ENABLE_DISTANCE_FIELD_SHADER)
+#define ENABLE_BED_MODEL_TEXTURE (0 && !ENABLE_TEXTURES_FROM_SVG && !ENABLE_DISTANCE_FIELD_SHADER)
 
 #endif // _technologies_h_
