@@ -3,10 +3,21 @@
 
 #include <functional>
 #include <array>
+#include <vector>
 
 namespace Slic3r {
 
 class ModelObject;
+class TriangleMesh;
+class ExPolygon;
+
+struct CrossSection {
+    double area;
+    float slice_h;
+};
+
+CrossSection find_max_cross_section_subplx(const TriangleMesh &);
+CrossSection find_max_cross_section_gen(const TriangleMesh &);
 
 namespace sla {
 
@@ -25,7 +36,14 @@ namespace sla {
   *
   * @return Returns the rotations around each axis (x, y, z)
   */
-std::array<double, 3> find_best_rotation(
+std::array<double, 2> find_best_rotation(
+        const ModelObject& modelobj,
+        float accuracy = 1.0f,
+        std::function<void(unsigned)> statuscb = [] (unsigned) {},
+        std::function<bool()> stopcond = [] () { return false; }
+        );
+
+std::array<double, 2> find_best_rotation_cr(
         const ModelObject& modelobj,
         float accuracy = 1.0f,
         std::function<void(unsigned)> statuscb = [] (unsigned) {},

@@ -52,6 +52,7 @@ target_sources( NloptOptimizer INTERFACE
 ${CMAKE_CURRENT_SOURCE_DIR}/simplex.hpp
 ${CMAKE_CURRENT_SOURCE_DIR}/subplex.hpp
 ${CMAKE_CURRENT_SOURCE_DIR}/genetic.hpp
+${CMAKE_CURRENT_SOURCE_DIR}/direct.hpp
 ${CMAKE_CURRENT_SOURCE_DIR}/nlopt_boilerplate.hpp
 )
 

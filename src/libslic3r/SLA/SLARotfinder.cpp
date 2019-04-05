@@ -2,15 +2,273 @@
 #include <exception>
 
 #include <libnest2d/optimizers/nlopt/genetic.hpp>
+#include <libnest2d/optimizers/nlopt/direct.hpp>
+#include <libnest2d/optimizers/nlopt/subplex.hpp>
+#include <libnest2d/tools/benchmark.h>
+
 #include "SLABoilerPlate.hpp"
 #include "SLARotfinder.hpp"
 #include "SLASupportTree.hpp"
 #include "Model.hpp"
 
 namespace Slic3r {
+
+CrossSection find_max_cross_section_gen(TriangleMesh &mesh)
+{
+    namespace opt = libnest2d::opt;
+
+    auto bb = mesh.bounding_box();
+    Vec3d bsize = bb.size();
+
+    opt::StopCriteria stc;
+    stc.max_iterations = 100;
+    stc.relative_score_difference = 1e-3;
+    stc.stop_score = bsize(X) * bsize(Y);
+    opt::GeneticOptimizer solver(stc);
+
+    double sf = std::pow(SCALING_FACTOR, 2);
+
+    TriangleMeshSlicer slicer(&mesh);
+
+    auto result = solver.optimize_max(
+        [&slicer, sf](float h) {
+            std::vector<Polygons> slices;
+
+            try { slicer.slice({h}, &slices, [](){}); } catch(...) {}
+
+            if(slices.empty()) return std::nan("");
+
+            auto& sl = slices.front();
+
+            return std::accumulate(sl.begin(), sl.end(), 0.0,
+                                   [sf](double a, const Polygon &p) {
+                return a + p.area() * sf;
+            });
+        },
+        opt::initvals(float(bb.min(Z) + bsize(Z)/2)),
+        opt::bound(float(bb.min(Z)), float(bb.max(Z)))
+    );
+
+    CrossSection cs;
+    cs.area = result.score;
+    cs.slice_h = std::get<0>(result.optimum);
+
+    return cs;
+}
+
+CrossSection find_max_cross_section_direct(TriangleMesh &mesh)
+{
+    namespace opt = libnest2d::opt;
+
+    auto bb = mesh.bounding_box();
+    Vec3d bsize = bb.size();
+
+    opt::StopCriteria stc;
+    stc.max_iterations = 100;
+    stc.relative_score_difference = 1e-3;
+    stc.stop_score = bsize(X) * bsize(Y);
+    opt::DirectOptimizer solver(stc);
+
+    double sf = std::pow(SCALING_FACTOR, 2);
+
+    TriangleMeshSlicer slicer(&mesh);
+
+    auto result = solver.optimize_max(
+        [&slicer, sf](float h) {
+            std::vector<Polygons> slices;
+
+            try { slicer.slice({h}, &slices, [](){}); } catch(...) {}
+
+            if(slices.empty()) return std::nan("");
+
+            auto& sl = slices.front();
+
+            return std::accumulate(sl.begin(), sl.end(), 0.0,
+                                   [sf](double a, const Polygon &p) {
+                return a + p.area() * sf;
+            });
+        },
+        opt::initvals(float(bb.min(Z) + bsize(Z)/2)),
+        opt::bound(float(bb.min(Z)), float(bb.max(Z)))
+    );
+
+    CrossSection cs;
+    cs.area = result.score;
+    cs.slice_h = std::get<0>(result.optimum);
+
+    return cs;
+}
+
+CrossSection find_max_cross_section_subplx(TriangleMesh &mesh,
+                                           float presample_dist = 10.f,
+                                           unsigned localtries = 10)
+{
+    namespace opt = libnest2d::opt;
+
+    auto bb = mesh.bounding_box();
+    Vec3d bsize = bb.size();
+
+    double sf = std::pow(SCALING_FACTOR, 2);
+
+    // pre-sample with 1cm grid (max model height is 15 cm)
+    float halfstride = presample_dist / 2.f;
+
+    CrossSection cs; cs.area = 0.0;
+
+    opt::StopCriteria stc;
+    stc.max_iterations = localtries;
+    stc.relative_score_difference = 1e-3;
+    stc.stop_score = bsize(X) * bsize(Y);
+    opt::SubplexOptimizer solver(stc);
+
+    TriangleMeshSlicer slicer(&mesh);
+
+    for(float h = float(bb.min(Z)) + halfstride;
+        h < float(bb.max(Z));
+        h += presample_dist)
+    {
+        auto result = solver.optimize_max(
+            [&slicer, sf](float h) {
+                std::vector<Polygons> slices;
+
+                try { slicer.slice({h}, &slices, [](){}); } catch(...) {}
+
+                if(slices.empty()) return std::nan("");
+
+                auto& sl = slices.front();
+
+                return std::accumulate(sl.begin(), sl.end(), 0.0,
+                                       [sf](double a, const Polygon &p) {
+                    return a + p.area() * sf;
+                });
+            },
+            opt::initvals(h),
+            opt::bound(h - halfstride, h + halfstride)
+        );
+
+        if(result.score > cs.area) { cs.area = result.score; cs.slice_h = h; }
+    };
+
+    return cs;
+}
+
 namespace sla {
 
-std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
+std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
+                                         float accuracy,
+                                         std::function<void(unsigned)> statuscb,
+                                         std::function<bool()> stopcond)
+{
+    namespace opt = libnest2d::opt;
+    static const unsigned MAX_TRIES = 100000;
+
+    // return value
+    std::array<double, 2> rot;
+
+    TriangleMesh mesh = modelobj.raw_mesh();
+
+    if(!modelobj.instances.empty()) {
+        mesh.scale(modelobj.instances.front()->get_scaling_factor());
+    }
+
+    // The maximum number of iterations
+    auto max_tries = unsigned(accuracy * MAX_TRIES);
+
+    double status = 0.0;
+    double statusinc = 100.0 / max_tries;
+
+    statuscb(0);
+
+    // Firing up the genetic optimizer. For now it uses the nlopt library.
+    opt::StopCriteria stc;
+    stc.max_iterations = max_tries;
+    stc.relative_score_difference = 1e-3;
+    stc.stop_condition = stopcond;      // stop when stopcond returns true
+    opt::GeneticOptimizer solver(stc);
+
+    // We are searching rotations around the three axes x, y, z. Thus the
+    // problem becomes a 3 dimensional optimization task.
+    // We can specify the bounds for a dimension in the following way:
+    auto b = opt::bound(-PI/2, PI/2);
+    auto iv = opt::initvals(0.0, 0.0);
+
+    std::vector<double> areas_subpl;
+    std::vector<double> dur_subplx;
+
+    std::vector<double> areas_gen;
+    std::vector<double> dur_gen;
+
+
+    auto result = solver.optimize_min(
+        [&mesh, &status, statusinc, statuscb, &areas_gen, &areas_subpl, &dur_gen, &dur_subplx](double rx, double ry)
+    {
+        TriangleMesh m = mesh;
+        m.rotate_x(float(rx)); m.rotate_y(float(ry));
+
+        auto bb = m.bounding_box();
+        Vec3d bsize = bb.size();
+
+        double hnorm = 150; // mm;
+        double areanorm = 120.96 * 68.040;
+
+        Benchmark bench;
+
+        bench.start();
+        CrossSection cs1 = find_max_cross_section_subplx(m);
+//        CrossSection cs1 = find_max_cross_section_direct(m);
+        bench.stop();
+
+        areas_subpl.emplace_back(cs1.area);
+        dur_subplx.emplace_back(bench.getElapsedSec());
+
+        std::cout << "subplex value: " << cs1.area << " duration: " << bench.getElapsedSec() << std::endl;
+
+        bench.start();
+//        CrossSection cs2 = find_max_cross_section_gen(m);
+        CrossSection cs2 = find_max_cross_section_direct(m);
+        bench.stop();
+
+        areas_gen.emplace_back(cs2.area);
+        dur_gen.emplace_back(bench.getElapsedSec());
+
+        std::cout << "genetic value: " << cs2.area << " duration: " << bench.getElapsedSec() << std::endl;
+
+
+        double h = bsize(Z) / hnorm;
+        double a = cs1.area / areanorm;
+
+        double st = status + statusinc;
+        auto ist = unsigned(std::round(st));
+
+        if(ist > std::round(status)) { statuscb(ist); }
+        status = st;
+
+        return std::max(cs1.area, cs2.area);
+//        return 0.8 * a + 0.2 * h;
+//        return cs1.area;
+
+    }, iv, b, b);
+
+    double avg_subplx = std::accumulate(dur_subplx.begin(), dur_subplx.end(), 0.0);
+    double avg_gen    = std::accumulate(dur_gen.begin(), dur_gen.end(), 0.0);
+
+    size_t gen_wins = 0;
+
+    for(size_t i = 0; i < areas_gen.size(); i++) {
+        if(areas_gen[i] > areas_subpl[i]) gen_wins++;
+    }
+
+    std::cout << "avg subplex = " << avg_subplx << " wins = " << areas_gen.size() - gen_wins << std::endl;
+    std::cout << "avg gen = " << avg_gen << " wins = " << gen_wins << std::endl;
+
+    // Save the result and fck off
+    rot[0] = std::get<0>(result.optimum);
+    rot[1] = std::get<1>(result.optimum);
+
+    return rot;
+}
+
+std::array<double, 2> find_best_rotation(const ModelObject& modelobj,
                                          float accuracy,
                                          std::function<void(unsigned)> statuscb,
                                          std::function<bool()> stopcond)
@@ -24,7 +282,7 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
     static const unsigned MAX_TRIES = 100000;
 
     // return value
-    std::array<double, 3> rot;
+    std::array<double, 2> rot;
 
     // We will use only one instance of this converted mesh to examine different
     // rotations
@@ -45,14 +303,14 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
     // the same for subsequent iterations (status goes from 0 to 100 but
     // iterations can be many more)
     auto objfunc = [&emesh, &status, &statuscb, max_tries]
-            (double rx, double ry, double rz)
+            (double rx, double ry/*, double rz*/)
     {
         EigenMesh3D& m = emesh;
 
         // prepare the rotation transformation
         Transform3d rt = Transform3d::Identity();
 
-        rt.rotate(Eigen::AngleAxisd(rz, Vec3d::UnitZ()));
+//        rt.rotate(Eigen::AngleAxisd(rz, Vec3d::UnitZ()));
         rt.rotate(Eigen::AngleAxisd(ry, Vec3d::UnitY()));
         rt.rotate(Eigen::AngleAxisd(rx, Vec3d::UnitX()));
 
@@ -110,13 +368,13 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
 
     // Now we start the optimization process with initial angles (0, 0, 0)
     auto result = solver.optimize_max(objfunc,
-                                      libnest2d::opt::initvals(0.0, 0.0, 0.0),
-                                      b, b, b);
+                                      libnest2d::opt::initvals(0.0, 0.0),
+                                      b, b);
 
     // Save the result and fck off
     rot[0] = std::get<0>(result.optimum);
     rot[1] = std::get<1>(result.optimum);
-    rot[2] = std::get<2>(result.optimum);
+//    rot[2] = std::get<2>(result.optimum);
 
     return rot;
 }

@@ -2124,7 +2124,7 @@ void Plater::priv::sla_optimize_rotation() {
         stfn(0, L("Orientation search canceled"));
     });
 
-    auto r = sla::find_best_rotation(
+    auto r = sla::find_best_rotation_cr(
                 *o, .005f,
                 [stfn](unsigned s) { stfn(s, L("Searching for optimal orientation")); },
                 [this](){ return !rotoptimizing.load(); }
@@ -2142,7 +2142,7 @@ void Plater::priv::sla_optimize_rotation() {
 
     if(rotoptimizing.load()) // wasn't canceled
     for(ModelInstance * oi : o->instances) {
-        oi->set_rotation({r[X], r[Y], r[Z]});
+        oi->set_rotation({r[X], r[Y], oi->get_rotation(Z)});
 
         auto trchull = o->convex_hull_2d(oi->get_transformation().get_matrix());
 
@@ -2174,7 +2174,7 @@ void Plater::priv::sla_optimize_rotation() {
             if(hdiff > 0) diff += hdiff;
 
             return diff;
-        }, opt::initvals(0.0), opt::bound(-PI/2, PI/2));
+        }, opt::initvals(oi->get_rotation(Z)), opt::bound(-PI/2, PI/2));
 
         double r = std::get<0>(result.optimum);
 

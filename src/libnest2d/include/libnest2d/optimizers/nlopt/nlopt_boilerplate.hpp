@@ -20,13 +20,14 @@
 namespace libnest2d { namespace opt {
 
 inline nlopt::algorithm method2nloptAlg(Method m) {
-
     switch(m) {
     case Method::L_SIMPLEX: return nlopt::LN_NELDERMEAD;
     case Method::L_SUBPLEX: return nlopt::LN_SBPLX;
     case Method::G_GENETIC: return nlopt::GN_ESCH;
-    default: assert(false); throw(m);
+    case Method::G_DIRECT:  return nlopt::GN_DIRECT;
     }
+
+    return nlopt::algorithm(0);
 }
 
 /**
@@ -156,7 +157,7 @@ protected:
         if(!std::isnan(stopval))  opt_.set_stopval(stopval);
 
         if(this->stopcr_.max_iterations > 0)
-            opt_.set_maxeval(this->stopcr_.max_iterations );
+            opt_.set_maxeval(int(this->stopcr_.max_iterations));
 
         // Take care of the initial values, copy them to initvals_
         metaloop::apply(InitValFunc(*this), initvals);
