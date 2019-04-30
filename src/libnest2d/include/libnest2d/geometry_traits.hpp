@@ -7,11 +7,10 @@
 #include <array>
 #include <vector>
 #include <numeric>
-#include <limits>
 #include <iterator>
 #include <cmath>
 
-#include "common.hpp"
+#include <libnest2d/common.hpp>
 
 namespace libnest2d {
 
@@ -31,10 +30,10 @@ template<class Shape>
 using TPoint = typename PointType<remove_cvref_t<Shape>>::Type;
 
 
-template<class RawShape> struct CountourType { using Type = RawShape; };
+template<class RawShape> struct ContourType { using Type = RawShape; };
 
 template<class RawShape>
-using TContour = typename CountourType<remove_cvref_t<RawShape>>::Type;
+using TContour = typename ContourType<remove_cvref_t<RawShape>>::Type;
 
 
 template<class RawShape>
@@ -58,6 +57,10 @@ struct OrientationType {
     // Default Polygon orientation that the library expects
     static const Orientation Value = Orientation::CLOCKWISE;
 };
+
+template<class T> inline /*constexpr*/ bool is_clockwise() { 
+    return OrientationType<T>::Value == Orientation::CLOCKWISE; 
+}
 
 /**
  * \brief A point pair base class for other point pairs (segment, box, ...).
@@ -185,7 +188,7 @@ public:
     inline Radians angleToXaxis() const;
 
     /// The length of the segment in the measure of the coordinate system.
-    inline double length();
+    inline double length() const;
 };
 
 // This struct serves almost as a namespace. The only difference is that is can
@@ -250,8 +253,8 @@ inline std::pair<TCoord<RawPoint>, bool> horizontalDistance(
         ret = std::min( x-x1, x -x2);
     else if( (y == y1 && y == y2) && (x < x1 && x < x2))
         ret = -std::min(x1 - x, x2 - x);
-    else if(std::abs(y - y1) <= std::numeric_limits<Unit>::epsilon() &&
-            std::abs(y - y2) <= std::numeric_limits<Unit>::epsilon())
+    else if(std::abs(y - y1) <= Epsilon<Unit>::Value &&
+            std::abs(y - y2) <= Epsilon<Unit>::Value)
         ret = 0;
     else
         ret = x - x1 + (x1 - x2)*(y1 - y)/(y1 - y2);
@@ -276,8 +279,8 @@ inline std::pair<TCoord<RawPoint>, bool> verticalDistance(
         ret = std::min( y-y1, y -y2);
     else if( (x == x1 && x == x2) && (y < y1 && y < y2))
         ret = -std::min(y1 - y, y2 - y);
-    else if(std::abs(x - x1) <= std::numeric_limits<Unit>::epsilon() &&
-            std::abs(x - x2) <= std::numeric_limits<Unit>::epsilon())
+    else if(std::abs(x - x1) <= Epsilon<Unit>::Value &&
+            std::abs(x - x2) <= Epsilon<Unit>::Value)
         ret = 0;
     else
         ret = y - y1 + (y1 - y2)*(x1 - x)/(x1 - x2);
@@ -333,7 +336,7 @@ inline Radians _Segment<RawPoint>::angleToXaxis() const
 }
 
 template<class RawPoint>
-inline double _Segment<RawPoint>::length()
+inline double _Segment<RawPoint>::length() const
 {
     return pointlike::distance(first(), second());
 }
@@ -382,13 +385,13 @@ inline RawShape create(TContour<RawShape>&& contour,
 template<class RawShape>
 inline RawShape create(const TContour<RawShape>& contour)
 {
-    return create<RawShape>(contour, {});
+    return RawShape(contour);
 }
 
 template<class RawShape>
 inline RawShape create(TContour<RawShape>&& contour)
 {
-    return create<RawShape>(contour, {});
+    return RawShape(contour);
 }
 
 template<class RawShape>
@@ -556,7 +559,7 @@ inline bool touches( const TPoint<RawShape>& /*point*/,
 
 template<class RawShape>
 inline _Box<TPoint<RawShape>> boundingBox(const RawShape& /*sh*/,
-                                          const PolygonTag&)
+                                          const PathTag&)
 {
     static_assert(always_false<RawShape>::value,
                   "shapelike::boundingBox(shape) unimplemented!");
@@ -571,10 +574,10 @@ boundingBox(const RawShapes& /*sh*/, const MultiPolygonTag&)
 }
 
 template<class RawShape>
-inline RawShape convexHull(const RawShape& /*sh*/, const PolygonTag&)
+inline RawShape convexHull(const RawShape& /*sh*/, const PathTag&)
 {
     static_assert(always_false<RawShape>::value,
-                  "shapelike::convexHull(shape) unimplemented!");
+                  "shapelike::convexHull(path) unimplemented!");
     return RawShape();
 }
 
@@ -754,6 +757,12 @@ inline void addVertex(RawShape& sh, Args...args)
     return addVertex(sh, Tag<RawShape>(), std::forward<Args>(args)...);
 }
 
+template<class RawShape>
+inline _Box<TPoint<RawShape>> boundingBox(const RawShape& poly, const PolygonTag&)
+{
+    return boundingBox(contour(poly), PathTag());
+}
+
 template<class Box>
 inline Box boundingBox(const Box& box, const BoxTag& )
 {
@@ -809,6 +818,12 @@ inline double area(const RawShapes& shapes, const MultiPolygonTag&)
                     [](double a, const RawShape& b) {
         return a += area(b);
     });
+}
+
+template<class RawShape>
+inline RawShape convexHull(const RawShape& sh, const PolygonTag&)
+{
+    return create<RawShape>(convexHull(contour(sh), PathTag()));
 }
 
 template<class RawShape>
@@ -971,6 +986,9 @@ template<class RawShape> inline bool isConvex(const RawShape& sh) // dispatch
     using Circle  = _Circle<Point>;  \
     using Segment = _Segment<Point>; \
     using Polygons = TMultiShape<T>
+
+namespace sl = shapelike;
+namespace pl = pointlike;
 
 }
 

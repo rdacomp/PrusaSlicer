@@ -38,7 +38,7 @@ template<> struct PointType<PointImpl> {
     using Type = PointImpl;
 };
 
-template<> struct CountourType<PolygonImpl> {
+template<> struct ContourType<PolygonImpl> {
     using Type = PathImpl;
 };
 
@@ -200,6 +200,9 @@ inline PolygonImpl create(const PathImpl& path, const HoleStore& holes)
 {
     PolygonImpl p;
     p.Contour = path;
+    
+    static_assert(OrientationType<PolygonImpl>::Value == Orientation::CLOCKWISE, 
+                  "Libnest2D is ready only for clockwise oriented geometries.");
 
     // Expecting that the coordinate system Y axis is positive in upwards
     // direction
@@ -221,6 +224,9 @@ inline PolygonImpl create(const PathImpl& path, const HoleStore& holes)
 template<> inline PolygonImpl create( PathImpl&& path, HoleStore&& holes) {
     PolygonImpl p;
     p.Contour.swap(path);
+    
+    static_assert(OrientationType<PolygonImpl>::Value == Orientation::CLOCKWISE, 
+                  "Libnest2D is ready only for clockwise oriented geometries.");
 
     // Expecting that the coordinate system Y axis is positive in upwards
     // direction

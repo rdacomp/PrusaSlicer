@@ -410,9 +410,9 @@ inline bp2d::Box boundingBox<bp2d::Shapes>(const bp2d::Shapes& shapes,
 
 #ifndef DISABLE_BOOST_CONVEX_HULL
 template<>
-inline PolygonImpl convexHull(const PolygonImpl& sh, const PolygonTag&)
+inline PathImpl convexHull(const PathImpl& sh, const PathTag&)
 {
-    PolygonImpl ret;
+    PathImpl ret;
     boost::geometry::convex_hull(sh, ret);
     return ret;
 }

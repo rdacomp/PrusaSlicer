@@ -584,7 +584,7 @@ ShapeData2D projectModelFromTop(const Slic3r::Model &model) {
 
                 // Invalid geometries would throw exceptions when arranging
                 if(item.vertexCount() > 3) {
-                    item.rotation(float(Geometry::rotation_diff_z(rotation0, objinst->get_rotation()))),
+                    item.rotation(Geometry::rotation_diff_z(rotation0, objinst->get_rotation()));
                     item.translation({
                     ClipperLib::cInt(objinst->get_offset(X)/SCALING_FACTOR),
                     ClipperLib::cInt(objinst->get_offset(Y)/SCALING_FACTOR)

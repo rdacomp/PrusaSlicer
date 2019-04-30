@@ -12,9 +12,6 @@
 
 namespace libnest2d {
 
-namespace sl = shapelike;
-namespace pl = pointlike;
-
 /**
  * \brief An item to be placed on a bin.
  *
