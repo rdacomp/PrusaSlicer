@@ -898,13 +898,12 @@ TEST(RotatingCalipers, AllPrusaAndStegoMinBB) {
         double area = double(bb.area());
         
         bool succ = std::abs(arearef - area) < err_epsilon;
-        if(!succ) {
-            std::cout << "failed " << idx << " ref: " << arearef << " actual: " << area << std::endl;
-        }
+        std::cout << idx << " " << (succ? "ok" : "failed") << " ref: " 
+                  << arearef << " actual: " << area << std::endl;
         
         idx++;
        
-        ASSERT_TRUE(std::abs(arearef - area) < err_epsilon);
+        ASSERT_TRUE(succ);
     }
     
     for(ClipperLib::Path rinput : STEGOSAUR_POLYGONS) {
@@ -922,13 +921,12 @@ TEST(RotatingCalipers, AllPrusaAndStegoMinBB) {
         double area = double(bb.area());
         
         bool succ = std::abs(arearef - area) < err_epsilon;
-        if(!succ) {
-            std::cout << "failed " << idx << " ref: " << arearef << " actual: " << area << std::endl;
-        }
-        
+        std::cout << idx << " " << (succ? "ok" : "failed") << " ref: " 
+                  << arearef << " actual: " << area << std::endl;
+       
         idx++;
         
-        ASSERT_TRUE(std::abs(arearef - area) < err_epsilon);
+        ASSERT_TRUE(succ);
     }
 }
 

@@ -244,7 +244,7 @@ RotatedBox<TPoint<RawShape>, Unit> minAreaBoundingBox(const RawShape& sh)
     // We will examine edge count + 1 bounding boxes. The one additional is 
     // the initial axis aligned bounding box
     size_t c = 0, count = last - first;
-    std::vector<bool> edgemask(count, false);
+    std::vector<bool> edgemask(count + 1, false);
     
     while(c++ < count) 
     {   
@@ -252,7 +252,7 @@ RotatedBox<TPoint<RawShape>, Unit> minAreaBoundingBox(const RawShape& sh)
         if(! update(w, rect)) break;
         
         size_t eidx = size_t(rect[0] - first);
-        
+
         if(edgemask[eidx]) break;
         edgemask[eidx] = true;
                 
