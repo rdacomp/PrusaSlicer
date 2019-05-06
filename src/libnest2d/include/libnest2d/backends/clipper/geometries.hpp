@@ -69,9 +69,6 @@ template<> inline TCoord<PointImpl>& y(PointImpl& p)
 
 }
 
-// Using the libnest2d default area implementation
-#define DISABLE_BOOST_AREA
-
 namespace shapelike {
 
 template<> inline void offset(PolygonImpl& sh, TCoord<PointImpl> distance)
@@ -321,6 +318,10 @@ merge(const TMultiShape<PolygonImpl>& shapes)
 }
 
 }
+
+// Using the libnest2d default area implementation and chull implementation
+#define DISABLE_BOOST_AREA
+#define DISABLE_BOOST_CONVEX_HULL
 
 //#define DISABLE_BOOST_SERIALIZE
 //#define DISABLE_BOOST_UNSERIALIZE

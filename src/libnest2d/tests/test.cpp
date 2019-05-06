@@ -149,6 +149,16 @@ TEST(GeometryAlgorithms, boundingCircle) {
 
 }
 
+TEST(GeometryAlgorithms, convexHull) {
+    using namespace libnest2d;
+
+    ClipperLib::Path poly = PRINTER_PART_POLYGONS[0];
+
+    auto chull = sl::convexHull(poly);
+    
+    ASSERT_EQ(chull.size(), poly.size());
+}
+
 TEST(GeometryAlgorithms, Distance) {
     using namespace libnest2d;
 

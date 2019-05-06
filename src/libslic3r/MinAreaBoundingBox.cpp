@@ -55,31 +55,6 @@ template<> inline Slic3r::Polygon create<Slic3r::Polygon>(Slic3r::Points&& conto
     return poly;
 }
 
-template<> Slic3r::Points convexHull(const Slic3r::Points& pts, const PathTag&) 
-{
-    Slic3r::Points hull;
-    size_t n = pts.size();
-    if (n >= 3) {
-        size_t k = 0;
-        hull.resize(2 * n);
-        // Build lower hull
-        for (size_t i = 0; i < n; ++ i) {
-            while (k >= 2 && pts[i].ccw(hull[k-2], hull[k-1]) <= 0) --k;
-            hull[size_t(k ++)] = pts[i];
-        }
-        // Build upper hull
-        for (int i = int(n-2), t = int(k+1); i >= 0; i--) {
-            while (int(k) >= t && pts[size_t(i)].ccw(hull[k-2], hull[k-1]) <= 0)
-                -- k;
-            hull[k ++] = pts[size_t(i)];
-        }
-        hull.resize(size_t(k));
-        assert(hull.front() == hull.back());
-        hull.pop_back();
-    }
-    return hull;   
-}
-
 } // shapelike
 } // libnest2d
 
