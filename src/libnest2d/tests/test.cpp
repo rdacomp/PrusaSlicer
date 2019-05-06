@@ -12,6 +12,7 @@
 
 #include <boost/multiprecision/integer.hpp>
 #include <boost/rational.hpp>
+#include <libslic3r/Int128.hpp>
 
 namespace libnest2d {
 template<> struct _NumTag<boost::multiprecision::int128_t> { using Type = ScalarTag; };
@@ -884,7 +885,7 @@ using Ratio = boost::rational<__int128>;
 }
 
 TEST(RotatingCalipers, AllPrusaAndStegoMinBB) {
-    // size_t idx = 0;
+    size_t idx = 0;
     double err_epsilon = 500e6;
     
     for(ClipperLib::Path rinput : PRINTER_PART_POLYGONS) {
@@ -895,6 +896,13 @@ TEST(RotatingCalipers, AllPrusaAndStegoMinBB) {
         double arearef = refMinAreaBox(poly);
         auto bb = minAreaBoundingBox<PathImpl, Unit, Ratio>(rinput);
         double area = double(bb.area());
+        
+        bool succ = std::abs(arearef - area) < err_epsilon;
+        if(!succ) {
+            std::cout << "failed " << idx << " ref: " << arearef << " actual: " << area << std::endl;
+        }
+        
+        idx++;
        
         ASSERT_TRUE(std::abs(arearef - area) < err_epsilon);
     }
@@ -912,6 +920,13 @@ TEST(RotatingCalipers, AllPrusaAndStegoMinBB) {
         double arearef = refMinAreaBox(poly);
         auto bb = minAreaBoundingBox<PolygonImpl, Unit, Ratio>(poly);
         double area = double(bb.area());
+        
+        bool succ = std::abs(arearef - area) < err_epsilon;
+        if(!succ) {
+            std::cout << "failed " << idx << " ref: " << arearef << " actual: " << area << std::endl;
+        }
+        
+        idx++;
         
         ASSERT_TRUE(std::abs(arearef - area) < err_epsilon);
     }
