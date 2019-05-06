@@ -20,38 +20,21 @@ using PathImpl  = ClipperLib::Path;
 using HoleStore = ClipperLib::Paths;
 using PolygonImpl = ClipperLib::Polygon;
 
+template<> struct ShapeTag<PolygonImpl> { using Type = PolygonTag; };
+template<> struct ShapeTag<PathImpl>    { using Type = PathTag; };
+template<> struct ShapeTag<PointImpl>   { using Type = PointTag; };
+
 // Type of coordinate units used by Clipper
 template<> struct CoordType<PointImpl> {
     using Type = ClipperLib::cInt;
-};
-
-// Type of point used by Clipper
-template<> struct PointType<PolygonImpl> {
-    using Type = PointImpl;
 };
 
 template<> struct PointType<PathImpl> {
     using Type = PointImpl;
 };
 
-template<> struct PointType<PointImpl> {
-    using Type = PointImpl;
-};
-
 template<> struct ContourType<PolygonImpl> {
     using Type = PathImpl;
-};
-
-template<> struct ShapeTag<PolygonImpl> { using Type = PolygonTag; };
-template<> struct ShapeTag<PathImpl> { using Type = PathTag; };
-template<> struct ShapeTag<PointImpl> { using Type = PointTag; };
-
-template<> struct ShapeTag<TMultiShape<PolygonImpl>> {
-    using Type = MultiPolygonTag;
-};
-
-template<> struct PointType<TMultiShape<PolygonImpl>> {
-    using Type = PointImpl;
 };
 
 template<> struct HolesContainer<PolygonImpl> {
@@ -86,38 +69,10 @@ template<> inline TCoord<PointImpl>& y(PointImpl& p)
 
 }
 
+// Using the libnest2d default area implementation
 #define DISABLE_BOOST_AREA
 
-namespace _smartarea {
-
-template<Orientation o>
-inline double area(const PolygonImpl& /*sh*/) {
-    return std::nan("");
-}
-
-template<>
-inline double area<Orientation::COUNTER_CLOCKWISE>(const PolygonImpl& sh) {
-    return std::accumulate(sh.Holes.begin(), sh.Holes.end(),
-                           ClipperLib::Area(sh.Contour),
-                           [](double a, const ClipperLib::Path& pt){
-        return a + ClipperLib::Area(pt);
-    });
-}
-
-template<>
-inline double area<Orientation::CLOCKWISE>(const PolygonImpl& sh) {
-    return -area<Orientation::COUNTER_CLOCKWISE>(sh);
-}
-
-}
-
 namespace shapelike {
-
-// Tell libnest2d how to make string out of a ClipperPolygon object
-template<> inline double area(const PolygonImpl& sh, const PolygonTag&)
-{
-    return _smartarea::area<OrientationType<PolygonImpl>::Value>(sh);
-}
 
 template<> inline void offset(PolygonImpl& sh, TCoord<PointImpl> distance)
 {
@@ -200,49 +155,16 @@ inline PolygonImpl create(const PathImpl& path, const HoleStore& holes)
 {
     PolygonImpl p;
     p.Contour = path;
-    
-    static_assert(OrientationType<PolygonImpl>::Value == Orientation::CLOCKWISE, 
-                  "Libnest2D is ready only for clockwise oriented geometries.");
-
-    // Expecting that the coordinate system Y axis is positive in upwards
-    // direction
-    if(ClipperLib::Orientation(p.Contour)) {
-        // Not clockwise then reverse the b*tch
-        ClipperLib::ReversePath(p.Contour);
-    }
-
     p.Holes = holes;
-    for(auto& h : p.Holes) {
-        if(!ClipperLib::Orientation(h)) {
-            ClipperLib::ReversePath(h);
-        }
-    }
-
+   
     return p;
 }
 
 template<> inline PolygonImpl create( PathImpl&& path, HoleStore&& holes) {
     PolygonImpl p;
     p.Contour.swap(path);
-    
-    static_assert(OrientationType<PolygonImpl>::Value == Orientation::CLOCKWISE, 
-                  "Libnest2D is ready only for clockwise oriented geometries.");
-
-    // Expecting that the coordinate system Y axis is positive in upwards
-    // direction
-    if(ClipperLib::Orientation(p.Contour)) {
-        // Not clockwise then reverse the b*tch
-        ClipperLib::ReversePath(p.Contour);
-    }
-
     p.Holes.swap(holes);
-
-    for(auto& h : p.Holes) {
-        if(!ClipperLib::Orientation(h)) {
-            ClipperLib::ReversePath(h);
-        }
-    }
-
+    
     return p;
 }
 
@@ -320,13 +242,13 @@ inline void rotate(PolygonImpl& sh, const Radians& rads)
 } // namespace shapelike
 
 #define DISABLE_BOOST_NFP_MERGE
-inline std::vector<PolygonImpl> clipper_execute(
+inline TMultiShape<PolygonImpl> clipper_execute(
         ClipperLib::Clipper& clipper,
         ClipperLib::ClipType clipType,
         ClipperLib::PolyFillType subjFillType = ClipperLib::pftEvenOdd,
         ClipperLib::PolyFillType clipFillType = ClipperLib::pftEvenOdd)
 {
-    shapelike::Shapes<PolygonImpl> retv;
+    TMultiShape<PolygonImpl> retv;
 
     ClipperLib::PolyTree result;
     clipper.Execute(clipType, result, subjFillType, clipFillType);
@@ -376,8 +298,8 @@ inline std::vector<PolygonImpl> clipper_execute(
 
 namespace nfp {
 
-template<> inline std::vector<PolygonImpl>
-merge(const std::vector<PolygonImpl>& shapes)
+template<> inline TMultiShape<PolygonImpl>
+merge(const TMultiShape<PolygonImpl>& shapes)
 {
     ClipperLib::Clipper clipper(ClipperLib::ioReverseSolution);
 

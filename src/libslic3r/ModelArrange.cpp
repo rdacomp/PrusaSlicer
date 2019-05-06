@@ -130,7 +130,7 @@ Box boundingBox(const Box& pilebb, const Box& ibb ) {
 // at the same time, it has to provide reasonable results.
 std::tuple<double /*score*/, Box /*farthest point from bin center*/>
 objfunc(const PointImpl& bincenter,
-        const shapelike::Shapes<PolygonImpl>& merged_pile,
+        const TMultiShape<PolygonImpl>& merged_pile,
         const Box& pilebb,
         const ItemGroup& items,
         const Item &item,
@@ -301,7 +301,7 @@ protected:
     using Packer = Nester<Placer, Selector>;
     using PConfig = typename Packer::PlacementConfig;
     using Distance = TCoord<PointImpl>;
-    using Pile = sl::Shapes<PolygonImpl>;
+    using Pile = TMultiShape<PolygonImpl>;
 
     Packer m_pck;
     PConfig m_pconf;            // Placement configuration

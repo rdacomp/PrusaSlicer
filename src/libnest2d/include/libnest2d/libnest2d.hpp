@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "geometry_traits.hpp"
+#include <libnest2d/geometry_traits.hpp>
 
 namespace libnest2d {
 
@@ -419,13 +419,9 @@ private:
 
     static inline bool vsort(const Vertex& v1, const Vertex& v2)
     {
-        Coord &&x1 = getX(v1), &&x2 = getX(v2);
-        Coord &&y1 = getY(v1), &&y2 = getY(v2);
-        auto diff = y1 - y2;
-        if(std::abs(diff) <= std::numeric_limits<Coord>::epsilon())
-            return x1 < x2;
-
-        return diff < 0;
+        TCompute<Vertex> x1 = getX(v1), x2 = getX(v2);
+        TCompute<Vertex> y1 = getY(v1), y2 = getY(v2);
+        return y1 == y2 ? x1 < x2 : y1 < y2;
     }
 };
 

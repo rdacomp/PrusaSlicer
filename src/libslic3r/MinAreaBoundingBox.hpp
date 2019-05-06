@@ -18,16 +18,16 @@ class MinAreaBoundigBox {
 public:
     
     // Polygons can be convex or simple (convex or concave with possible holes)
-    enum PolygonClass {
+    enum PolygonLevel {
         pcConvex, pcSimple
     };
    
     // Constructors with various types of geometry data used in Slic3r.
     // If the convexity is known apriory, pcConvex can be used to skip 
     // convex hull calculation.
-    explicit MinAreaBoundigBox(const Polygon&, PolygonClass = pcSimple);
-    explicit MinAreaBoundigBox(const ExPolygon&, PolygonClass = pcSimple);
-    explicit MinAreaBoundigBox(const Points&, PolygonClass = pcSimple);
+    explicit MinAreaBoundigBox(const Polygon&, PolygonLevel = pcSimple);
+    explicit MinAreaBoundigBox(const ExPolygon&, PolygonLevel = pcSimple);
+    explicit MinAreaBoundigBox(const Points&, PolygonLevel = pcSimple);
     
     // Returns the angle in radians needed to for the box to be aligned with the 
     // X axis. Rotate the polygon by this angle and it will be aligned.

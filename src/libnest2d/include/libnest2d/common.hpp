@@ -198,17 +198,13 @@ public:
     }
 };
 
-template <class Coord> struct Epsilon { 
-    static const constexpr Coord Value = std::numeric_limits<Coord>::epsilon();
-};
-
 struct ScalarTag {};
 struct BigIntTag {};
 struct RationalTag {};
 
 template<class T> struct _NumTag { 
     using Type = 
-        typename std::enable_if<std::is_arithmetic<T>::value, ScalarTag>::type; 
+        enable_if_t<std::is_arithmetic<T>::value, ScalarTag>; 
 };
 
 template<class T> using NumTag = typename _NumTag<remove_cvref_t<T>>::Type;
@@ -229,8 +225,6 @@ template<class T2, class T1> inline T2 cast(const T1& v, ScalarTag, ScalarTag)
 template<class T2, class T1> inline T2 cast(const T1& v) { 
     return cast<T2, T1>(v, NumTag<T1>(), NumTag<T2>());
 }
-
-
 
 }
 #endif // LIBNEST2D_CONFIG_HPP
