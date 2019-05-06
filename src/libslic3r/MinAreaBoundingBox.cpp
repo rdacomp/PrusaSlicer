@@ -129,4 +129,14 @@ long double MinAreaBoundigBox::area() const
     return m_bottom * m_right / asq;   
 }
 
+void remove_collinear_points(Polygon &p)
+{
+    p = libnest2d::removeCollinearPoints<Polygon>(p, Unit(0));
+}
+
+void remove_collinear_points(ExPolygon &p)
+{
+    p = libnest2d::removeCollinearPoints<ExPolygon>(p, Unit(0));
+}
+
 }

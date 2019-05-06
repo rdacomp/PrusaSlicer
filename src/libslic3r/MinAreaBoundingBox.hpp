@@ -8,6 +8,9 @@ namespace Slic3r {
 class Polygon;
 class ExPolygon;
 
+void remove_collinear_points(Polygon& p);
+void remove_collinear_points(ExPolygon& p);
+
 /// A class that holds a rotated bounding box. If instantiated with a polygon
 /// type it will hold the minimum area bounding box for the given polygon.
 /// If the input polygon is convex, the complexity is linear to the number of 
@@ -24,12 +27,16 @@ public:
    
     // Constructors with various types of geometry data used in Slic3r.
     // If the convexity is known apriory, pcConvex can be used to skip 
-    // convex hull calculation.
+    // convex hull calculation. It is very important that the input polygons
+    // do NOT have any collinear points (except for the first and the last 
+    // vertex being the same -- meaning a closed polygon for boost)
+    // To make sure this constraint is satisfied, you can call 
+    // remove_collinear_points on the input polygon before handing over here)
     explicit MinAreaBoundigBox(const Polygon&, PolygonLevel = pcSimple);
     explicit MinAreaBoundigBox(const ExPolygon&, PolygonLevel = pcSimple);
     explicit MinAreaBoundigBox(const Points&, PolygonLevel = pcSimple);
     
-    // Returns the angle in radians needed to for the box to be aligned with the 
+    // Returns the angle in radians needed for the box to be aligned with the 
     // X axis. Rotate the polygon by this angle and it will be aligned.
     double angle_to_X()  const;
     
