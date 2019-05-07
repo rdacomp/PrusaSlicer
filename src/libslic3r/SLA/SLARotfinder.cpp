@@ -6,6 +6,8 @@
 #include <libnest2d/optimizers/nlopt/subplex.hpp>
 #include <libnest2d/tools/benchmark.h>
 
+#include <igl/slice.h>
+
 #include "SLABoilerPlate.hpp"
 #include "SLARotfinder.hpp"
 #include "SLASupportTree.hpp"
@@ -167,7 +169,6 @@ std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
     std::array<double, 2> rot;
 
     TriangleMesh mesh = modelobj.raw_mesh();
-    mesh.require_shared_vertices();
 
     if(!modelobj.instances.empty()) {
         mesh.scale(modelobj.instances.front()->get_scaling_factor());
@@ -204,9 +205,9 @@ std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
     auto result = solver.optimize_min(
         [&mesh, &status, statusinc, statuscb/*, &areas_gen, &areas_subpl, &dur_gen, &dur_subplx*/](double rx, double ry)
     {
-        // TODO: this is wrong:
-        mesh.rotate_x(float(rx)); mesh.rotate_y(float(ry));
-        mesh.require_shared_vertices();
+        auto meshcpy = mesh;
+        meshcpy.rotate_x(float(rx)); meshcpy.rotate_y(float(ry));
+        meshcpy.require_shared_vertices();
         
         std::cout << "trying rotation x = " << rx << " y = " << ry << std::endl;
 
@@ -230,7 +231,7 @@ std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
 
         bench.start();
 //        CrossSection cs2 = find_max_cross_section_gen(m);
-        CrossSection cs2 = find_max_cross_section_direct(mesh);
+        CrossSection cs2 = find_max_cross_section_direct(meshcpy);
         bench.stop();
 
 //        areas_gen.emplace_back(cs2.area);
