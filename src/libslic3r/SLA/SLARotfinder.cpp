@@ -13,7 +13,7 @@
 
 namespace Slic3r {
 
-CrossSection find_max_cross_section_gen(TriangleMesh &mesh)
+CrossSection find_max_cross_section_gen(const TriangleMesh &mesh)
 {
     namespace opt = libnest2d::opt;
 
@@ -56,7 +56,7 @@ CrossSection find_max_cross_section_gen(TriangleMesh &mesh)
     return cs;
 }
 
-CrossSection find_max_cross_section_direct(TriangleMesh &mesh)
+CrossSection find_max_cross_section_direct(const TriangleMesh &mesh)
 {
     namespace opt = libnest2d::opt;
 
@@ -77,6 +77,7 @@ CrossSection find_max_cross_section_direct(TriangleMesh &mesh)
         [&slicer, sf](float h) {
             std::vector<Polygons> slices;
 
+            std::cout << "trying h = " << h << std::endl;
             try { slicer.slice({h}, &slices, [](){}); } catch(...) {}
 
             if(slices.empty()) return std::nan("");
@@ -99,9 +100,9 @@ CrossSection find_max_cross_section_direct(TriangleMesh &mesh)
     return cs;
 }
 
-CrossSection find_max_cross_section_subplx(TriangleMesh &mesh,
-                                           float presample_dist = 10.f,
-                                           unsigned localtries = 10)
+CrossSection find_max_cross_section_subplx(const TriangleMesh &mesh,
+                                           float presample_dist,
+                                           unsigned localtries)
 {
     namespace opt = libnest2d::opt;
 
@@ -166,6 +167,7 @@ std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
     std::array<double, 2> rot;
 
     TriangleMesh mesh = modelobj.raw_mesh();
+    mesh.require_shared_vertices();
 
     if(!modelobj.instances.empty()) {
         mesh.scale(modelobj.instances.front()->get_scaling_factor());
@@ -186,56 +188,59 @@ std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
     stc.stop_condition = stopcond;      // stop when stopcond returns true
     opt::GeneticOptimizer solver(stc);
 
-    // We are searching rotations around the three axes x, y, z. Thus the
-    // problem becomes a 3 dimensional optimization task.
+    // We are searching rotations around the two axes x, y. Thus the
+    // problem becomes a 2 dimensional optimization task.
     // We can specify the bounds for a dimension in the following way:
     auto b = opt::bound(-PI/2, PI/2);
     auto iv = opt::initvals(0.0, 0.0);
 
-    std::vector<double> areas_subpl;
-    std::vector<double> dur_subplx;
+//    std::vector<double> areas_subpl;
+//    std::vector<double> dur_subplx;
 
-    std::vector<double> areas_gen;
-    std::vector<double> dur_gen;
+//    std::vector<double> areas_gen;
+//    std::vector<double> dur_gen;
 
 
     auto result = solver.optimize_min(
-        [&mesh, &status, statusinc, statuscb, &areas_gen, &areas_subpl, &dur_gen, &dur_subplx](double rx, double ry)
+        [&mesh, &status, statusinc, statuscb/*, &areas_gen, &areas_subpl, &dur_gen, &dur_subplx*/](double rx, double ry)
     {
-        TriangleMesh m = mesh;
-        m.rotate_x(float(rx)); m.rotate_y(float(ry));
+        // TODO: this is wrong:
+        mesh.rotate_x(float(rx)); mesh.rotate_y(float(ry));
+        mesh.require_shared_vertices();
+        
+        std::cout << "trying rotation x = " << rx << " y = " << ry << std::endl;
 
-        auto bb = m.bounding_box();
-        Vec3d bsize = bb.size();
+//        auto bb = mesh.bounding_box();
+//        Vec3d bsize = bb.size();
 
-        double hnorm = 150; // mm;
-        double areanorm = 120.96 * 68.040;
+//        double hnorm = 150; // mm;
+//        double areanorm = 120.96 * 68.040;
 
         Benchmark bench;
 
-        bench.start();
-        CrossSection cs1 = find_max_cross_section_subplx(m);
-//        CrossSection cs1 = find_max_cross_section_direct(m);
-        bench.stop();
+//        bench.start();
+//        CrossSection cs1 = find_max_cross_section_subplx(mesh);
+////        CrossSection cs1 = find_max_cross_section_direct(m);
+//        bench.stop();
 
-        areas_subpl.emplace_back(cs1.area);
-        dur_subplx.emplace_back(bench.getElapsedSec());
+//        areas_subpl.emplace_back(cs1.area);
+//        dur_subplx.emplace_back(bench.getElapsedSec());
 
-        std::cout << "subplex value: " << cs1.area << " duration: " << bench.getElapsedSec() << std::endl;
+//        std::cout << "subplex value: " << cs1.area << " duration: " << bench.getElapsedSec() << std::endl;
 
         bench.start();
 //        CrossSection cs2 = find_max_cross_section_gen(m);
-        CrossSection cs2 = find_max_cross_section_direct(m);
+        CrossSection cs2 = find_max_cross_section_direct(mesh);
         bench.stop();
 
-        areas_gen.emplace_back(cs2.area);
-        dur_gen.emplace_back(bench.getElapsedSec());
+//        areas_gen.emplace_back(cs2.area);
+//        dur_gen.emplace_back(bench.getElapsedSec());
 
         std::cout << "genetic value: " << cs2.area << " duration: " << bench.getElapsedSec() << std::endl;
 
 
-        double h = bsize(Z) / hnorm;
-        double a = cs1.area / areanorm;
+//        double h = bsize(Z) / hnorm;
+//        double a = cs1.area / areanorm;
 
         double st = status + statusinc;
         auto ist = unsigned(std::round(st));
@@ -243,23 +248,23 @@ std::array<double, 2> find_best_rotation_cr(const ModelObject& modelobj,
         if(ist > std::round(status)) { statuscb(ist); }
         status = st;
 
-        return std::max(cs1.area, cs2.area);
+//        return std::max(cs1.area, cs2.area);
 //        return 0.8 * a + 0.2 * h;
-//        return cs1.area;
+        return cs2.area;
 
     }, iv, b, b);
 
-    double avg_subplx = std::accumulate(dur_subplx.begin(), dur_subplx.end(), 0.0);
-    double avg_gen    = std::accumulate(dur_gen.begin(), dur_gen.end(), 0.0);
+//    double avg_subplx = std::accumulate(dur_subplx.begin(), dur_subplx.end(), 0.0);
+//    double avg_gen    = std::accumulate(dur_gen.begin(), dur_gen.end(), 0.0);
 
-    size_t gen_wins = 0;
+//    size_t gen_wins = 0;
 
-    for(size_t i = 0; i < areas_gen.size(); i++) {
-        if(areas_gen[i] > areas_subpl[i]) gen_wins++;
-    }
+//    for(size_t i = 0; i < areas_gen.size(); i++) {
+//        if(areas_gen[i] > areas_subpl[i]) gen_wins++;
+//    }
 
-    std::cout << "avg subplex = " << avg_subplx << " wins = " << areas_gen.size() - gen_wins << std::endl;
-    std::cout << "avg gen = " << avg_gen << " wins = " << gen_wins << std::endl;
+//    std::cout << "avg subplex = " << avg_subplx << " wins = " << areas_gen.size() - gen_wins << std::endl;
+//    std::cout << "avg gen = " << avg_gen << " wins = " << gen_wins << std::endl;
 
     // Save the result and fck off
     rot[0] = std::get<0>(result.optimum);

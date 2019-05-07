@@ -2190,11 +2190,13 @@ void Plater::priv::sla_optimize_rotation() {
         stfn(0, L("Orientation search canceled"));
     });
 
-    auto r = sla::find_best_rotation_cr(
-                *o, .005f,
-                [stfn](unsigned s) { stfn(s, L("Searching for optimal orientation")); },
-                [this](){ return !rotoptimizing; }
-    );
+    float accuracy = .005f;
+    auto statusfn = std::bind(stfn, std::placeholders::_1, 
+                              L("Searching for optimal orientation"));
+    auto cancelfn = [this](){ return !rotoptimizing; };
+    
+    std::array<double, 2> bestrot = 
+            sla::find_best_rotation_cr(*o, accuracy, statusfn, cancelfn);
 
     const auto *bed_shape_opt = config->opt<ConfigOptionPoints>("bed_shape");
     assert(bed_shape_opt);
@@ -2207,7 +2209,7 @@ void Plater::priv::sla_optimize_rotation() {
     
     if(rotoptimizing) // wasn't canceled
     for(ModelInstance * oi : o->instances) {
-        oi->set_rotation({r[X], r[Y], r[Z]});
+        oi->set_rotation({bestrot[X], bestrot[Y], oi->get_rotation(Z)});
         
         Polygon trchull = o->convex_hull_2d(oi->get_transformation().get_matrix());
         MinAreaBoundigBox rotbb(trchull, MinAreaBoundigBox::pcConvex);

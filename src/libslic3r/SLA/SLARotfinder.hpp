@@ -16,7 +16,9 @@ struct CrossSection {
     float slice_h;
 };
 
-CrossSection find_max_cross_section_subplx(const TriangleMesh &);
+CrossSection find_max_cross_section_subplx(const TriangleMesh &,
+                                           float presample_dist = 10.f,
+                                           unsigned localtries = 10);
 CrossSection find_max_cross_section_gen(const TriangleMesh &);
 
 namespace sla {
