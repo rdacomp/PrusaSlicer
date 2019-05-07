@@ -94,10 +94,13 @@ public:
 
     GUI_App();
 
-    unsigned        get_colour_approx_luma(const wxColour &colour);
+    static unsigned get_colour_approx_luma(const wxColour &colour);
+    static bool     dark_mode();
+    static bool     dark_mode_menus();
     void            init_label_colours();
     void            update_label_colours_from_appconfig();
     void            init_fonts();
+    void            update_fonts();
     void            set_label_clr_modified(const wxColour& clr);
     void            set_label_clr_sys(const wxColour& clr);
 
@@ -121,7 +124,7 @@ public:
                                 const std::string& err);
 //     void            notify(/*message*/);
 
-    void            persist_window_geometry(wxTopLevelWindow *window);
+    void            persist_window_geometry(wxTopLevelWindow *window, bool default_maximized = false);
     void            update_ui_from_settings();
 
     bool            select_language(wxArrayString & names, wxArrayLong & identifiers);
@@ -138,6 +141,8 @@ public:
     bool            check_unsaved_changes();
     bool            checked_tab(Tab* tab);
     void            load_current_presets();
+
+    wxString        current_language_code() { return m_wxLocale != nullptr ? m_wxLocale->GetCanonicalName() : wxString("en_US"); }
 
     virtual bool OnExceptionInMainLoop();
 
@@ -169,9 +174,13 @@ public:
     PrintHostJobQueue& printhost_job_queue() { return *m_printhost_job_queue.get(); }
 
 private:
+    bool            on_init_inner();
     void            window_pos_save(wxTopLevelWindow* window, const std::string &name);
-    void            window_pos_restore(wxTopLevelWindow* window, const std::string &name);
+    void            window_pos_restore(wxTopLevelWindow* window, const std::string &name, bool default_maximized = false);
     void            window_pos_sanitize(wxTopLevelWindow* window);
+#ifdef __WXMSW__
+    void associate_3mf_files();
+#endif // __WXMSW__
 };
 DECLARE_APP(GUI_App)
 

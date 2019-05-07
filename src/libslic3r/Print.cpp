@@ -126,7 +126,6 @@ bool Print::invalidate_state_by_config_options(const std::vector<t_config_option
         "first_layer_bed_temperature",
         "first_layer_speed",
         "gcode_comments",
-        "gcode_flavor",
         "gcode_label_objects",
         "infill_acceleration",
         "layer_gcode",
@@ -1139,31 +1138,29 @@ std::string Print::validate() const
         // Check horizontal clearance.
         {
             Polygons convex_hulls_other;
-            for (const PrintObject *object : m_objects) {
+            for (const PrintObject *print_object : m_objects) {
+                assert(! print_object->model_object()->instances.empty());
+                assert(! print_object->copies().empty());
                 // Get convex hull of all meshes assigned to this print object.
-                Polygon convex_hull;
-                {
-                    Polygons mesh_convex_hulls;
-                    for (const std::vector<int> &volumes : object->region_volumes)
-                        for (int volume_id : volumes)
-                            mesh_convex_hulls.emplace_back(object->model_object()->volumes[volume_id]->mesh.convex_hull());
-                    // make a single convex hull for all of them
-                    convex_hull = Slic3r::Geometry::convex_hull(mesh_convex_hulls);
-                }
-                // Apply the same transformations we apply to the actual meshes when slicing them.
-                object->model_object()->instances.front()->transform_polygon(&convex_hull);
+                ModelInstance *model_instance0 = print_object->model_object()->instances.front();
+                Vec3d          rotation        = model_instance0->get_rotation();
+                rotation.z() = 0.;
+                // Calculate the convex hull of a printable object centered around X=0,Y=0. 
                 // Grow convex hull with the clearance margin.
                 // FIXME: Arrangement has different parameters for offsetting (jtMiter, limit 2)
                 // which causes that the warning will be showed after arrangement with the
                 // appropriate object distance. Even if I set this to jtMiter the warning still shows up.
-                convex_hull = offset(convex_hull, scale_(m_config.extruder_clearance_radius.value)/2, jtRound, scale_(0.1)).front();
+                Polygon        convex_hull0    = offset(
+                    print_object->model_object()->convex_hull_2d(
+                        Geometry::assemble_transform(Vec3d::Zero(), rotation, model_instance0->get_scaling_factor(), model_instance0->get_mirror())),
+                    scale_(m_config.extruder_clearance_radius.value) / 2., jtRound, scale_(0.1)).front();
                 // Now we check that no instance of convex_hull intersects any of the previously checked object instances.
-                for (const Point &copy : object->m_copies) {
-                    Polygon p = convex_hull;
-                    p.translate(copy);
-                    if (! intersection(convex_hulls_other, p).empty())
+                for (const Point &copy : print_object->m_copies) {
+                    Polygon convex_hull = convex_hull0;
+                    convex_hull.translate(copy);
+                    if (! intersection(convex_hulls_other, convex_hull).empty())
                         return L("Some objects are too close; your extruder will collide with them.");
-                    polygons_append(convex_hulls_other, p);
+                    polygons_append(convex_hulls_other, convex_hull);
                 }
             }
         }
@@ -1476,7 +1473,7 @@ void Print::process()
     BOOST_LOG_TRIVIAL(info) << "Staring the slicing process." << log_memory_info();
     for (PrintObject *obj : m_objects)
         obj->make_perimeters();
-    this->set_status(70, "Infilling layers");
+    this->set_status(70, L("Infilling layers"));
     for (PrintObject *obj : m_objects)
         obj->infill();
     for (PrintObject *obj : m_objects)
@@ -1484,7 +1481,7 @@ void Print::process()
     if (this->set_started(psSkirt)) {
         m_skirt.clear();
         if (this->has_skirt()) {
-            this->set_status(88, "Generating skirt");
+            this->set_status(88, L("Generating skirt"));
             this->_make_skirt();
         }
         this->set_done(psSkirt);
@@ -1492,7 +1489,7 @@ void Print::process()
 	if (this->set_started(psBrim)) {
         m_brim.clear();
         if (m_config.brim_width > 0) {
-            this->set_status(88, "Generating brim");
+            this->set_status(88, L("Generating brim"));
             this->_make_brim();
         }
        this->set_done(psBrim);
@@ -1500,7 +1497,7 @@ void Print::process()
     if (this->set_started(psWipeTower)) {
         m_wipe_tower_data.clear();
         if (this->has_wipe_tower()) {
-            //this->set_status(95, "Generating wipe tower");
+            //this->set_status(95, L("Generating wipe tower"));
             this->_make_wipe_tower();
         }
        this->set_done(psWipeTower);
@@ -1517,7 +1514,8 @@ std::string Print::export_gcode(const std::string &path_template, GCodePreviewDa
     // output everything to a G-code file
     // The following call may die if the output_filename_format template substitution fails.
     std::string path = this->output_filepath(path_template);
-    std::string message = "Exporting G-code";
+    std::string message = L("Exporting G-code");
+    // #ys_FIXME_localization
     if (! path.empty() && preview_data == nullptr) {
         // Only show the path if preview_data is not set -> running from command line.
         message += " to ";
@@ -1779,7 +1777,7 @@ void Print::_make_wipe_tower()
         float(m_config.wipe_tower_rotation_angle.value), float(m_config.cooling_tube_retraction.value),
         float(m_config.cooling_tube_length.value), float(m_config.parking_pos_retraction.value),
         float(m_config.extra_loading_move.value), float(m_config.wipe_tower_bridging), 
-        m_config.high_current_on_filament_swap.value, wipe_volumes,
+        m_config.high_current_on_filament_swap.value, m_config.gcode_flavor, wipe_volumes,
         m_wipe_tower_data.tool_ordering.first_extruder());
 
     //wipe_tower.set_retract();

@@ -1,5 +1,6 @@
 #include "ModelArrange.hpp"
 #include "Model.hpp"
+#include "Geometry.hpp"
 #include "SVG.hpp"
 
 #include <libnest2d.h>
@@ -129,7 +130,7 @@ Box boundingBox(const Box& pilebb, const Box& ibb ) {
 // at the same time, it has to provide reasonable results.
 std::tuple<double /*score*/, Box /*farthest point from bin center*/>
 objfunc(const PointImpl& bincenter,
-        const shapelike::Shapes<PolygonImpl>& merged_pile,
+        const TMultiShape<PolygonImpl>& merged_pile,
         const Box& pilebb,
         const ItemGroup& items,
         const Item &item,
@@ -300,7 +301,7 @@ protected:
     using Packer = Nester<Placer, Selector>;
     using PConfig = typename Packer::PlacementConfig;
     using Distance = TCoord<PointImpl>;
-    using Pile = sl::Shapes<PolygonImpl>;
+    using Pile = TMultiShape<PolygonImpl>;
 
     Packer m_pck;
     PConfig m_pconf;            // Placement configuration
@@ -551,7 +552,7 @@ ShapeData2D projectModelFromTop(const Slic3r::Model &model) {
     ret.reserve(s);
 
     for(ModelObject* objptr : model.objects) {
-        if(objptr) {
+        if (! objptr->instances.empty()) {
 
             // TODO export the exact 2D projection. Cannot do it as libnest2d
             // does not support concave shapes (yet).
@@ -572,23 +573,23 @@ ShapeData2D projectModelFromTop(const Slic3r::Model &model) {
                 clpath = Slic3rMultiPoint_to_ClipperPath(p);
             }
 
+            Vec3d rotation0 = objptr->instances.front()->get_rotation();
+            rotation0(2) = 0.;
             for(ModelInstance* objinst : objptr->instances) {
-                if(objinst) {
-                    ClipperLib::Polygon pn;
-                    pn.Contour = clpath;
+                ClipperLib::Polygon pn;
+                pn.Contour = clpath;
 
-                    // Efficient conversion to item.
-                    Item item(std::move(pn));
+                // Efficient conversion to item.
+                Item item(std::move(pn));
 
-                    // Invalid geometries would throw exceptions when arranging
-                    if(item.vertexCount() > 3) {
-                        item.rotation(objinst->get_rotation(Z));
-                        item.translation({
-                        ClipperLib::cInt(objinst->get_offset(X)/SCALING_FACTOR),
-                        ClipperLib::cInt(objinst->get_offset(Y)/SCALING_FACTOR)
-                        });
-                        ret.emplace_back(objinst, item);
-                    }
+                // Invalid geometries would throw exceptions when arranging
+                if(item.vertexCount() > 3) {
+                    item.rotation(Geometry::rotation_diff_z(rotation0, objinst->get_rotation()));
+                    item.translation({
+                    ClipperLib::cInt(objinst->get_offset(X)/SCALING_FACTOR),
+                    ClipperLib::cInt(objinst->get_offset(Y)/SCALING_FACTOR)
+                    });
+                    ret.emplace_back(objinst, item);
                 }
             }
         }

@@ -396,6 +396,18 @@ void Preview::refresh_print()
     load_print(true);
 }
 
+void Preview::msw_rescale()
+{
+    // rescale slider
+    if (m_slider) m_slider->msw_rescale();
+
+    // rescale warning legend on the canvas
+    get_canvas3d()->msw_rescale();
+
+    // rescale legend
+    refresh_print();
+}
+
 void Preview::bind_event_handlers()
 {
     this->Bind(wxEVT_SIZE, &Preview::on_size, this);
@@ -507,7 +519,7 @@ void Preview::on_checkbox_shells(wxCommandEvent& evt)
 
 void Preview::create_double_slider()
 {
-    m_slider = new PrusaDoubleSlider(this, wxID_ANY, 0, 0, 0, 100);
+    m_slider = new DoubleSlider(this, wxID_ANY, 0, 0, 0, 100);
     m_double_slider_sizer->Add(m_slider, 0, wxEXPAND, 0);
 
     // sizer, m_canvas_widget
@@ -818,8 +830,8 @@ void Preview::on_sliders_scroll_changed(wxEvent& event)
         }
         else if (tech == ptSLA)
         {
-            m_canvas->set_clipping_plane(0, GLCanvas3D::ClippingPlane(Vec3d::UnitZ(), -m_slider->GetLowerValueD()));
-            m_canvas->set_clipping_plane(1, GLCanvas3D::ClippingPlane(-Vec3d::UnitZ(), m_slider->GetHigherValueD()));
+            m_canvas->set_clipping_plane(0, ClippingPlane(Vec3d::UnitZ(), -m_slider->GetLowerValueD()));
+            m_canvas->set_clipping_plane(1, ClippingPlane(-Vec3d::UnitZ(), m_slider->GetHigherValueD()));
             m_canvas->set_use_clipping_planes(m_slider->GetHigherValue() != 0);
             m_canvas_widget->Refresh();
         }

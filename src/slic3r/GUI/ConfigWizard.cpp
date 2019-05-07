@@ -18,6 +18,7 @@
 #include <wx/dataview.h>
 #include <wx/notebook.h>
 #include <wx/display.h>
+#include <wx/filefn.h>
 #include <wx/debug.h>
 
 #include "libslic3r/Utils.hpp"
@@ -81,11 +82,17 @@ PrinterPicker::PrinterPicker(wxWindow *parent, const VendorProfile &vendor, wxSt
     for (const auto &model : models) {
         if (! filter(model)) { continue; }
 
-        wxBitmap bitmap(GUI::from_u8(Slic3r::var((boost::format("printers/%1%_%2%.png") % vendor.id % model.id).str())), wxBITMAP_TYPE_PNG);
+        wxBitmap bitmap;
+        int bitmap_width = 0;
+        const wxString bitmap_file = GUI::from_u8(Slic3r::var((boost::format("printers/%1%_%2%.png") % vendor.id % model.id).str()));
+        if (wxFileExists(bitmap_file)) {
+            bitmap.LoadFile(bitmap_file, wxBITMAP_TYPE_PNG);
+            bitmap_width = bitmap.GetWidth();
+        }
 
         auto *title = new wxStaticText(this, wxID_ANY, model.name, wxDefaultPosition, wxDefaultSize, wxALIGN_LEFT);
         title->SetFont(font_name);
-        const int wrap_width = std::max((int)MODEL_MIN_WRAP, bitmap.GetWidth());
+        const int wrap_width = std::max((int)MODEL_MIN_WRAP, bitmap_width);
         title->Wrap(wrap_width);
 
         current_row_width += wrap_width;
@@ -187,6 +194,9 @@ PrinterPicker::PrinterPicker(wxWindow *parent, const VendorProfile &vendor, wxSt
         title_sizer->Add(sel_all_std, 0, wxRIGHT, BTN_SPACING);
         title_sizer->Add(sel_all, 0, wxRIGHT, BTN_SPACING);
         title_sizer->Add(sel_none);
+
+        // fill button indexes used later for buttons rescaling
+        m_button_indexes = { sel_all_std->GetId(), sel_all->GetId(), sel_none->GetId() };
     }
 
     sizer->Add(title_sizer, 0, wxEXPAND | wxBOTTOM, BTN_SPACING);
@@ -281,13 +291,14 @@ void ConfigWizardPage::append_spacer(int space)
 // Wizard pages
 
 PageWelcome::PageWelcome(ConfigWizard *parent)
-    : ConfigWizardPage(parent, wxString::Format(_(L("Welcome to the Slic3r %s")), ConfigWizard::name()), _(L("Welcome")))
+    : ConfigWizardPage(parent, wxString::Format(_(L("Welcome to the %s %s")), SLIC3R_APP_NAME, ConfigWizard::name()), _(L("Welcome")))
     , cbox_reset(nullptr)
 {
     if (wizard_p()->run_reason == ConfigWizard::RR_DATA_EMPTY) {
         wxString::Format(_(L("Run %s")), ConfigWizard::name());
         append_text(wxString::Format(
-            _(L("Hello, welcome to Slic3r Prusa Edition! This %s helps you with the initial configuration; just a few settings and you will be ready to print.")),
+            _(L("Hello, welcome to %s! This %s helps you with the initial configuration; just a few settings and you will be ready to print.")),
+            SLIC3R_APP_NAME,
             ConfigWizard::name())
         );
     } else {
@@ -398,14 +409,20 @@ PageUpdate::PageUpdate(ConfigWizard *parent)
     auto *box_slic3r = new wxCheckBox(this, wxID_ANY, _(L("Check for application updates")));
     box_slic3r->SetValue(app_config->get("version_check") == "1");
     append(box_slic3r);
-    append_text(_(L("If enabled, Slic3r checks for new versions of Slic3r PE online. When a new version becomes available a notification is displayed at the next application startup (never during program usage). This is only a notification mechanisms, no automatic installation is done.")));
+    append_text(wxString::Format(_(L(
+        "If enabled, %s checks for new application versions online. When a new version becomes available, "
+         "a notification is displayed at the next application startup (never during program usage). "
+         "This is only a notification mechanisms, no automatic installation is done.")), SLIC3R_APP_NAME));
 
     append_spacer(VERTICAL_SPACING);
 
     auto *box_presets = new wxCheckBox(this, wxID_ANY, _(L("Update built-in Presets automatically")));
     box_presets->SetValue(app_config->get("preset_update") == "1");
     append(box_presets);
-    append_text(_(L("If enabled, Slic3r downloads updates of built-in system presets in the background. These updates are downloaded into a separate temporary location. When a new preset version becomes available it is offered at application startup.")));
+    append_text(wxString::Format(_(L(
+        "If enabled, %s downloads updates of built-in system presets in the background."
+        "These updates are downloaded into a separate temporary location."
+        "When a new preset version becomes available it is offered at application startup.")), SLIC3R_APP_NAME));
     const auto text_bold = _(L("Updates are never applied without user's consent and never overwrite user's customized settings."));
     auto *label_bold = new wxStaticText(this, wxID_ANY, text_bold);
     label_bold->SetFont(boldfont);
@@ -420,7 +437,7 @@ PageUpdate::PageUpdate(ConfigWizard *parent)
 PageVendors::PageVendors(ConfigWizard *parent)
     : ConfigWizardPage(parent, _(L("Other Vendors")), _(L("Other Vendors")))
 {
-    append_text(_(L("Pick another vendor supported by Slic3r PE:")));
+    append_text(wxString::Format(_(L("Pick another vendor supported by %s:")), SLIC3R_APP_NAME));
 
     auto boldfont = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
     boldfont.SetWeight(wxFONTWEIGHT_BOLD);
@@ -632,18 +649,18 @@ void PageTemperatures::apply_custom_config(DynamicPrintConfig &config)
 
 ConfigWizardIndex::ConfigWizardIndex(wxWindow *parent)
     : wxPanel(parent)
-    , bg(GUI::from_u8(Slic3r::var("Slic3r_192px_transparent.png")), wxBITMAP_TYPE_PNG)
-    , bullet_black(GUI::from_u8(Slic3r::var("bullet_black.png")), wxBITMAP_TYPE_PNG)
-    , bullet_blue(GUI::from_u8(Slic3r::var("bullet_blue.png")), wxBITMAP_TYPE_PNG)
-    , bullet_white(GUI::from_u8(Slic3r::var("bullet_white.png")), wxBITMAP_TYPE_PNG)
+    , bg(ScalableBitmap(parent, "Slic3r_192px_transparent.png", 192))
+    , bullet_black(ScalableBitmap(parent, "bullet_black.png"))
+    , bullet_blue(ScalableBitmap(parent, "bullet_blue.png"))
+    , bullet_white(ScalableBitmap(parent, "bullet_white.png"))
     , item_active(0)
     , item_hover(-1)
     , last_page((size_t)-1)
 {
-    SetMinSize(bg.GetSize());
+    SetMinSize(bg.bmp().GetSize());
 
     const wxSize size = GetTextExtent("m");
-    em = size.x;
+    em_w = size.x;
     em_h = size.y;
 
     // Add logo bitmap.
@@ -652,7 +669,7 @@ ConfigWizardIndex::ConfigWizardIndex(wxWindow *parent)
     // In some cases it didn't work at all. And so wxStaticBitmap is used here instead,
     // because it has all the platform quirks figured out.
     auto *sizer = new wxBoxSizer(wxVERTICAL);
-    auto *logo = new wxStaticBitmap(this, wxID_ANY, bg);
+    logo = new wxStaticBitmap(this, wxID_ANY, bg.bmp());
     sizer->AddStretchSpacer();
     sizer->Add(logo);
     SetSizer(sizer);
@@ -760,25 +777,38 @@ void ConfigWizardIndex::on_paint(wxPaintEvent & evt)
 
     wxPaintDC dc(this);
 
-    const auto bullet_w = bullet_black.GetSize().GetWidth();
-    const auto bullet_h = bullet_black.GetSize().GetHeight();
+    const auto bullet_w = bullet_black.bmp().GetSize().GetWidth();
+    const auto bullet_h = bullet_black.bmp().GetSize().GetHeight();
     const int yoff_icon = bullet_h < em_h ? (em_h - bullet_h) / 2 : 0;
     const int yoff_text = bullet_h > em_h ? (bullet_h - em_h) / 2 : 0;
     const int yinc = item_height();
 
+    int index_width = 0;
+
     unsigned y = 0;
     for (size_t i = 0; i < items.size(); i++) {
         const Item& item = items[i];
-        unsigned x = em/2 + item.indent * em;
+        unsigned x = em_w/2 + item.indent * em_w;
 
         if (i == item_active || item_hover >= 0 && i == (size_t)item_hover) {
-            dc.DrawBitmap(bullet_blue,  x, y + yoff_icon, false);
+            dc.DrawBitmap(bullet_blue.bmp(), x, y + yoff_icon, false);
         }
-        else if (i < item_active)  { dc.DrawBitmap(bullet_black, x, y + yoff_icon, false); }
-        else if (i > item_active)  { dc.DrawBitmap(bullet_white, x, y + yoff_icon, false); }
+        else if (i < item_active)  { dc.DrawBitmap(bullet_black.bmp(), x, y + yoff_icon, false); }
+        else if (i > item_active)  { dc.DrawBitmap(bullet_white.bmp(), x, y + yoff_icon, false); }
 
-        dc.DrawText(item.label, x + bullet_w + em/2, y + yoff_text);
+        x += + bullet_w + em_w/2;
+        const auto text_size = dc.GetTextExtent(item.label);
+        dc.DrawText(item.label, x, y + yoff_text);
+
         y += yinc;
+        index_width = std::max(index_width, (int)x + text_size.x);
+    }
+
+    if (GetMinSize().x < index_width) {
+        CallAfter([this, index_width]() {
+            SetMinSize(wxSize(index_width, GetMinSize().y));
+            Refresh();
+        });
     }
 }
 
@@ -795,6 +825,22 @@ void ConfigWizardIndex::on_mouse_move(wxMouseEvent &evt)
     }
 
     evt.Skip();
+}
+
+void ConfigWizardIndex::msw_rescale()
+{
+    const wxSize size = GetTextExtent("m");
+    em_w = size.x;
+    em_h = size.y;
+
+    bg.msw_rescale();
+    SetMinSize(bg.bmp().GetSize());
+    logo->SetBitmap(bg.bmp());
+
+    bullet_black.msw_rescale();
+    bullet_blue.msw_rescale();
+    bullet_white.msw_rescale();
+    Refresh();
 }
 
 
@@ -834,6 +880,29 @@ void ConfigWizard::priv::load_pages(bool custom_setup)
     index->go_to(former_active);   // Will restore the active item/page if possible
 
     q->Layout();
+}
+
+void ConfigWizard::priv::init_dialog_size()
+{
+    // Clamp the Wizard size based on screen dimensions
+
+    const auto idx = wxDisplay::GetFromWindow(q);
+    wxDisplay display(idx != wxNOT_FOUND ? idx : 0u);
+
+    const auto disp_rect = display.GetClientArea();
+    wxRect window_rect(
+        disp_rect.x + disp_rect.width / 20,
+        disp_rect.y + disp_rect.height / 20,
+        9*disp_rect.width / 10,
+        9*disp_rect.height / 10);
+
+    const int width_hint = index->GetSize().GetWidth() + page_fff->get_width() + 30 * em();    // XXX: magic constant, I found no better solution
+    if (width_hint < window_rect.width) {
+        window_rect.x += (window_rect.width - width_hint) / 2;
+        window_rect.width = width_hint;
+    }
+
+    q->SetSize(window_rect);
 }
 
 bool ConfigWizard::priv::check_first_variant() const
@@ -921,10 +990,11 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
 
         size_t size_sum = 0;
         for (const auto &model : vendor->second) { size_sum += model.second.size(); }
-        if (size_sum == 0) { continue; }
 
-        // This vendor needs to be installed
-        install_bundles.emplace_back(vendor_rsrc.second);
+        if (size_sum > 0) {
+            // This vendor needs to be installed
+            install_bundles.emplace_back(vendor_rsrc.second);
+        }
     }
 
     // Decide whether to create snapshot based on run_reason and the reset profile checkbox
@@ -950,9 +1020,26 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
     app_config->set_vendors(appconfig_vendors);
     app_config->set("version_check", page_update->version_check ? "1" : "0");
     app_config->set("preset_update", page_update->preset_update ? "1" : "0");
-    app_config->reset_selections();
-    preset_bundle->load_presets(*app_config);
 
+    std::string preferred_model;
+
+    // Figure out the default pre-selected printer based on the seletions in the picker.
+    // The default is the first selected printer model (one with at least 1 variant selected).
+    // The default is only applied by load_presets() if the user doesn't have a (visible) printer
+    // selected already.
+    const auto vendor_prusa = vendors.find("PrusaResearch");
+    const auto config_prusa = enabled_vendors.find("PrusaResearch");
+    if (vendor_prusa != vendors.end() && config_prusa != enabled_vendors.end()) {
+        for (const auto &model : vendor_prusa->second.models) {
+            const auto model_it = config_prusa->second.find(model.id);
+            if (model_it != config_prusa->second.end() && model_it->second.size() > 0) {
+                preferred_model = model.id;
+                break;
+            }
+        }
+    }
+
+    preset_bundle->load_presets(*app_config, preferred_model);
 
     if (page_custom->custom_wanted()) {
         page_firmware->apply_custom_config(*custom_config);
@@ -971,9 +1058,10 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
 // Public
 
 ConfigWizard::ConfigWizard(wxWindow *parent, RunReason reason)
-    : wxDialog(parent, wxID_ANY, _(name().ToStdString()), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
+    : DPIDialog(parent, wxID_ANY, _(name().ToStdString()), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , p(new priv(this))
 {
+    this->SetFont(wxGetApp().normal_font());
     p->run_reason = reason;
 
     p->load_vendors();
@@ -998,8 +1086,8 @@ ConfigWizard::ConfigWizard(wxWindow *parent, RunReason reason)
     topsizer->AddSpacer(INDEX_MARGIN);
     topsizer->Add(p->hscroll, 1, wxEXPAND);
 
-    auto *btn_sel_all = new wxButton(this, wxID_ANY, _(L("Select all standard printers")));
-    p->btnsizer->Add(btn_sel_all);
+    p->btn_sel_all = new wxButton(this, wxID_ANY, _(L("Select all standard printers")));
+    p->btnsizer->Add(p->btn_sel_all);
 
     p->btn_prev = new wxButton(this, wxID_ANY, _(L("< &Back")));
     p->btn_next = new wxButton(this, wxID_ANY, _(L("&Next >")));
@@ -1045,25 +1133,7 @@ ConfigWizard::ConfigWizard(wxWindow *parent, RunReason reason)
     p->hscroll->SetScrollRate(30, 30);
 
     on_window_geometry(this, [this]() {
-        // Clamp the Wizard size based on screen dimensions
-
-        const auto idx = wxDisplay::GetFromWindow(this);
-        wxDisplay display(idx != wxNOT_FOUND ? idx : 0u);
-
-        const auto disp_rect = display.GetClientArea();
-        wxRect window_rect(
-            disp_rect.x + disp_rect.width / 20,
-            disp_rect.y + disp_rect.height / 20,
-            9*disp_rect.width / 10,
-            9*disp_rect.height / 10);
-
-        const int width_hint = p->index->GetSize().GetWidth() + p->page_fff->get_width() + 300;    // XXX: magic constant, I found no better solution
-        if (width_hint < window_rect.width) {
-            window_rect.x += (window_rect.width - width_hint) / 2;
-            window_rect.width = width_hint;
-        }
-
-        SetSize(window_rect);
+        p->init_dialog_size();
     });
 
     p->btn_prev->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &) { this->p->index->go_prev(); });
@@ -1071,7 +1141,7 @@ ConfigWizard::ConfigWizard(wxWindow *parent, RunReason reason)
     p->btn_finish->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &) { this->EndModal(wxID_OK); });
     p->btn_finish->Hide();
 
-    btn_sel_all->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &) {
+    p->btn_sel_all->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &) {
         p->page_fff->select_all(true, false);
         p->page_msla->select_all(true, false);
         p->index->go_to(p->page_update);
@@ -1115,6 +1185,26 @@ const wxString& ConfigWizard::name(const bool from_menu/* = false*/)
     static const wxString config_wizard_name_menu = L("Configuration &Assistant");
 #endif
     return from_menu ? config_wizard_name_menu : config_wizard_name;
+}
+
+void ConfigWizard::on_dpi_changed(const wxRect &suggested_rect)
+{
+    p->index->msw_rescale();
+
+    const int& em = em_unit();
+
+    msw_buttons_rescale(this, em, { wxID_APPLY, 
+                                    wxID_CANCEL,
+                                    p->btn_sel_all->GetId(),
+                                    p->btn_next->GetId(),
+                                    p->btn_prev->GetId() });
+
+    for (auto printer_picker: p->page_fff->printer_pickers)
+        msw_buttons_rescale(this, em, printer_picker->get_button_indexes());
+
+    p->init_dialog_size();
+
+    Refresh();
 }
 
 }

@@ -43,11 +43,21 @@ typedef Eigen::Matrix<float, 3, 1, Eigen::DontAlign> stl_normal;
 static_assert(sizeof(stl_vertex) == 12, "size of stl_vertex incorrect");
 static_assert(sizeof(stl_normal) == 12, "size of stl_normal incorrect");
 
-typedef struct {
+struct stl_facet {
   stl_normal normal;
   stl_vertex vertex[3];
   char       extra[2];
-} stl_facet;
+
+  stl_facet  rotated(const Eigen::Quaternion<float, Eigen::DontAlign> &rot) {
+    stl_facet out;
+    out.normal    = rot * this->normal;
+    out.vertex[0] = rot * this->vertex[0];
+    out.vertex[1] = rot * this->vertex[1];
+    out.vertex[2] = rot * this->vertex[2];
+    return out;
+  }
+};
+
 #define SIZEOF_STL_FACET       50
 
 static_assert(offsetof(stl_facet, normal) == 0, "stl_facet.normal has correct offset");
@@ -127,7 +137,6 @@ typedef struct {
 typedef struct {
   FILE          *fp;
   stl_facet     *facet_start;
-  stl_edge      *edge_start;
   stl_hash_edge **heads;
   stl_hash_edge *tail;
   int           M;
@@ -142,7 +151,6 @@ typedef struct {
 extern void stl_open(stl_file *stl, const char *file);
 extern void stl_close(stl_file *stl);
 extern void stl_stats_out(stl_file *stl, FILE *file, char *input_file);
-extern void stl_print_edges(stl_file *stl, FILE *file);
 extern void stl_print_neighbors(stl_file *stl, char *file);
 extern void stl_put_little_int(FILE *fp, int value_in);
 extern void stl_put_little_float(FILE *fp, float value_in);

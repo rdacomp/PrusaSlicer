@@ -49,6 +49,10 @@ foreach (_cache_var ${_cache_vars})
     endif ()
 endforeach()
 
+if (SLIC3R_GUI)
+    add_definitions(-DSLIC3R_GUI)
+endif ()
+
 if (MSVC)
     if (SLIC3R_MSVC_COMPILE_PARALLEL)
 	   add_compile_options(/MP)
@@ -135,6 +139,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
         # Workaround for an old CMake, which does not understand CMAKE_CXX_STANDARD.
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
     endif()
+
+    # Boost on Raspberry-Pi does not link to pthreads.
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
 endif()
 
 if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUXX)
@@ -317,7 +325,7 @@ include_directories(${GLEW_INCLUDE_DIRS})
 # l10n
 set(L10N_DIR "${SLIC3R_RESOURCES_DIR}/localization")
 add_custom_target(pot
-    COMMAND xgettext --keyword=L --from-code=UTF-8 --debug
+    COMMAND xgettext --keyword=L --add-comments=TRN --from-code=UTF-8 --debug
         -f "${L10N_DIR}/list.txt"
         -o "${L10N_DIR}/Slic3rPE.pot"
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

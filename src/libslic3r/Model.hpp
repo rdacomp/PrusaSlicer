@@ -212,7 +212,7 @@ public:
     // This bounding box is approximate and not snug.
     // This bounding box is being cached.
     const BoundingBoxf3& bounding_box() const;
-    void invalidate_bounding_box() { m_bounding_box_valid = false; m_raw_mesh_bounding_box_valid = false; }
+    void invalidate_bounding_box() { m_bounding_box_valid = false; m_raw_bounding_box_valid = false; m_raw_mesh_bounding_box_valid = false; }
 
     // A mesh containing all transformed instances of this object.
     TriangleMesh mesh() const;
@@ -223,18 +223,18 @@ public:
     TriangleMesh full_raw_mesh() const;
     // A transformed snug bounding box around the non-modifier object volumes, without the translation applied.
     // This bounding box is only used for the actual slicing.
-    BoundingBoxf3 raw_bounding_box() const;
+    const BoundingBoxf3& raw_bounding_box() const;
     // A snug bounding box around the transformed non-modifier object volumes.
     BoundingBoxf3 instance_bounding_box(size_t instance_idx, bool dont_translate = false) const;
 	// A snug bounding box of non-transformed (non-rotated, non-scaled, non-translated) sum of non-modifier object volumes.
-	BoundingBoxf3 raw_mesh_bounding_box() const;
+	const BoundingBoxf3& raw_mesh_bounding_box() const;
 	// A snug bounding box of non-transformed (non-rotated, non-scaled, non-translated) sum of all object volumes.
     BoundingBoxf3 full_raw_mesh_bounding_box() const;
 
     // Calculate 2D convex hull of of a projection of the transformed printable volumes into the XY plane.
     // This method is cheap in that it does not make any unnecessary copy of the volume meshes.
     // This method is used by the auto arrange function.
-    Polygon       convex_hull_2d(const Transform3d &trafo_instance);
+    Polygon       convex_hull_2d(const Transform3d &trafo_instance) const;
 
 #if ENABLE_VOLUMES_CENTERING_FIXES
     void center_around_origin(bool include_modifiers = true);
@@ -277,6 +277,11 @@ public:
 
     std::string get_export_filename() const;
 
+    // Get full stl statistics for all object's meshes 
+    stl_stats   get_object_stl_stats() const;
+    // Get count of errors in the mesh( or all object's meshes, if volume index isn't defined) 
+    int         get_mesh_errors_count(const int vol_idx = -1) const;
+
 protected:
     friend class Print;
     friend class SLAPrint;
@@ -285,7 +290,7 @@ protected:
 
 private:
     ModelObject(Model *model) : m_model(model), origin_translation(Vec3d::Zero()), 
-        m_bounding_box_valid(false), m_raw_mesh_bounding_box_valid(false) {}
+        m_bounding_box_valid(false), m_raw_bounding_box_valid(false), m_raw_mesh_bounding_box_valid(false) {}
     ~ModelObject();
 
     /* To be able to return an object from own copy / clone methods. Hopefully the compiler will do the "Copy elision" */
@@ -304,6 +309,8 @@ private:
     // Bounding box, cached.
     mutable BoundingBoxf3 m_bounding_box;
     mutable bool          m_bounding_box_valid;
+    mutable BoundingBoxf3 m_raw_bounding_box;
+    mutable bool          m_raw_bounding_box_valid;
     mutable BoundingBoxf3 m_raw_mesh_bounding_box;
     mutable bool          m_raw_mesh_bounding_box_valid;    
 };
@@ -368,6 +375,8 @@ public:
 
     void                calculate_convex_hull();
     const TriangleMesh& get_convex_hull() const;
+    // Get count of errors in the mesh
+    int                 get_mesh_errors_count() const;
 
     // Helpers for loading / storing into AMF / 3MF files.
     static ModelVolumeType type_from_string(const std::string &s);

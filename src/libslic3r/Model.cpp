@@ -593,6 +593,8 @@ ModelObject& ModelObject::assign_copy(const ModelObject &rhs)
     this->origin_translation          = rhs.origin_translation;
     m_bounding_box                    = rhs.m_bounding_box;
     m_bounding_box_valid              = rhs.m_bounding_box_valid;
+    m_raw_bounding_box                = rhs.m_raw_bounding_box;
+    m_raw_bounding_box_valid          = rhs.m_raw_bounding_box_valid;
     m_raw_mesh_bounding_box           = rhs.m_raw_mesh_bounding_box;
     m_raw_mesh_bounding_box_valid     = rhs.m_raw_mesh_bounding_box_valid;
 
@@ -627,6 +629,8 @@ ModelObject& ModelObject::assign_copy(ModelObject &&rhs)
     this->origin_translation          = std::move(rhs.origin_translation);
     m_bounding_box                    = std::move(rhs.m_bounding_box);
     m_bounding_box_valid              = std::move(rhs.m_bounding_box_valid);
+    m_raw_bounding_box                = rhs.m_raw_bounding_box;
+    m_raw_bounding_box_valid          = rhs.m_raw_bounding_box_valid;
     m_raw_mesh_bounding_box           = rhs.m_raw_mesh_bounding_box;
     m_raw_mesh_bounding_box_valid     = rhs.m_raw_mesh_bounding_box_valid;
 
@@ -859,7 +863,7 @@ TriangleMesh ModelObject::full_raw_mesh() const
     return mesh;
 }
 
-BoundingBoxf3 ModelObject::raw_mesh_bounding_box() const
+const BoundingBoxf3& ModelObject::raw_mesh_bounding_box() const
 {
     if (! m_raw_mesh_bounding_box_valid) {
         m_raw_mesh_bounding_box_valid = true;
@@ -880,33 +884,36 @@ BoundingBoxf3 ModelObject::full_raw_mesh_bounding_box() const
 }
 
 // A transformed snug bounding box around the non-modifier object volumes, without the translation applied.
-// This bounding box is only used for the actual slicing.
-BoundingBoxf3 ModelObject::raw_bounding_box() const
+// This bounding box is only used for the actual slicing and for layer editing UI to calculate the layers.
+const BoundingBoxf3& ModelObject::raw_bounding_box() const
 {
-    BoundingBoxf3 bb;
-#if ENABLE_GENERIC_SUBPARTS_PLACEMENT
-    if (this->instances.empty())
-        throw std::invalid_argument("Can't call raw_bounding_box() with no instances");
+    if (! m_raw_bounding_box_valid) {
+        m_raw_bounding_box_valid = true;
+        m_raw_bounding_box.reset();
+    #if ENABLE_GENERIC_SUBPARTS_PLACEMENT
+        if (this->instances.empty())
+            throw std::invalid_argument("Can't call raw_bounding_box() with no instances");
 
-    const Transform3d& inst_matrix = this->instances.front()->get_transformation().get_matrix(true);
-#endif // ENABLE_GENERIC_SUBPARTS_PLACEMENT
-    for (const ModelVolume *v : this->volumes)
-        if (v->is_model_part()) {
-#if !ENABLE_GENERIC_SUBPARTS_PLACEMENT
-            if (this->instances.empty())
-                throw std::invalid_argument("Can't call raw_bounding_box() with no instances");
-#endif // !ENABLE_GENERIC_SUBPARTS_PLACEMENT
+        const Transform3d& inst_matrix = this->instances.front()->get_transformation().get_matrix(true);
+    #endif // ENABLE_GENERIC_SUBPARTS_PLACEMENT
+        for (const ModelVolume *v : this->volumes)
+            if (v->is_model_part()) {
+    #if !ENABLE_GENERIC_SUBPARTS_PLACEMENT
+                if (this->instances.empty())
+                    throw std::invalid_argument("Can't call raw_bounding_box() with no instances");
+    #endif // !ENABLE_GENERIC_SUBPARTS_PLACEMENT
 
-            TriangleMesh vol_mesh(v->mesh);
-#if ENABLE_GENERIC_SUBPARTS_PLACEMENT
-            vol_mesh.transform(inst_matrix * v->get_matrix());
-            bb.merge(vol_mesh.bounding_box());
-#else
-            vol_mesh.transform(v->get_matrix());
-            bb.merge(this->instances.front()->transform_mesh_bounding_box(vol_mesh, true));
-#endif // ENABLE_GENERIC_SUBPARTS_PLACEMENT
-        }
-    return bb;
+    #if ENABLE_GENERIC_SUBPARTS_PLACEMENT
+				m_raw_bounding_box.merge(v->mesh.transformed_bounding_box(inst_matrix * v->get_matrix()));
+    #else
+                // unmaintaned
+                assert(false);
+                // vol_mesh.transform(v->get_matrix());
+                // m_raw_bounding_box_valid.merge(this->instances.front()->transform_mesh_bounding_box(vol_mesh, true));
+    #endif // ENABLE_GENERIC_SUBPARTS_PLACEMENT
+            }
+    }
+	return m_raw_bounding_box;
 }
 
 // This returns an accurate snug bounding box of the transformed object instance, without the translation applied.
@@ -920,13 +927,13 @@ BoundingBoxf3 ModelObject::instance_bounding_box(size_t instance_idx, bool dont_
     {
         if (v->is_model_part())
         {
-            TriangleMesh mesh(v->mesh);
 #if ENABLE_GENERIC_SUBPARTS_PLACEMENT
-            mesh.transform(inst_matrix * v->get_matrix());
-            bb.merge(mesh.bounding_box());
+            bb.merge(v->mesh.transformed_bounding_box(inst_matrix * v->get_matrix()));
 #else
-            mesh.transform(v->get_matrix());
-            bb.merge(this->instances[instance_idx]->transform_mesh_bounding_box(mesh, dont_translate));
+            // not maintained
+            assert(false);
+            //mesh.transform(v->get_matrix());
+            //bb.merge(this->instances[instance_idx]->transform_mesh_bounding_box(mesh, dont_translate));
 #endif // ENABLE_GENERIC_SUBPARTS_PLACEMENT
         }
     }
@@ -936,7 +943,7 @@ BoundingBoxf3 ModelObject::instance_bounding_box(size_t instance_idx, bool dont_
 // Calculate 2D convex hull of of a projection of the transformed printable volumes into the XY plane.
 // This method is cheap in that it does not make any unnecessary copy of the volume meshes.
 // This method is used by the auto arrange function.
-Polygon ModelObject::convex_hull_2d(const Transform3d &trafo_instance)
+Polygon ModelObject::convex_hull_2d(const Transform3d &trafo_instance) const
 {
     Points pts;
     for (const ModelVolume *v : this->volumes)
@@ -1182,6 +1189,7 @@ ModelObjectPtrs ModelObject::cut(size_t instance, coordf_t z, bool keep_upper, b
             volume->mesh.transform(instance_matrix * volume_matrix, true);
 
             // Perform cut
+            volume->mesh.require_shared_vertices(); // TriangleMeshSlicer needs this
             TriangleMeshSlicer tms(&volume->mesh);
             tms.cut(float(z), &upper_mesh, &lower_mesh);
 
@@ -1443,6 +1451,50 @@ std::string ModelObject::get_export_filename() const
     return ret;
 }
 
+stl_stats ModelObject::get_object_stl_stats() const
+{
+    if (this->volumes.size() == 1)
+        return this->volumes[0]->mesh.stl.stats;
+
+    stl_stats full_stats = this->volumes[0]->mesh.stl.stats;
+
+    // fill full_stats from all objet's meshes
+    for (ModelVolume* volume : this->volumes)
+    {
+        if (volume->id() == this->volumes[0]->id())
+            continue;
+
+        const stl_stats& stats = volume->mesh.stl.stats;
+
+        // initialize full_stats (for repaired errors)
+        full_stats.degenerate_facets    += stats.degenerate_facets;
+        full_stats.edges_fixed          += stats.edges_fixed;
+        full_stats.facets_removed       += stats.facets_removed;
+        full_stats.facets_added         += stats.facets_added;
+        full_stats.facets_reversed      += stats.facets_reversed;
+        full_stats.backwards_edges      += stats.backwards_edges;
+
+        // another used satistics value
+        if (volume->is_model_part()) {
+            full_stats.volume           += stats.volume;
+            full_stats.number_of_parts  += stats.number_of_parts;
+        }
+    }
+
+    return full_stats;
+}
+
+int ModelObject::get_mesh_errors_count(const int vol_idx /*= -1*/) const
+{
+    if (vol_idx >= 0)
+        return this->volumes[vol_idx]->get_mesh_errors_count();
+
+    const stl_stats& stats = get_object_stl_stats();
+
+    return  stats.degenerate_facets + stats.edges_fixed     + stats.facets_removed +
+            stats.facets_added      + stats.facets_reversed + stats.backwards_edges;
+}
+
 void ModelVolume::set_material_id(t_model_material_id material_id)
 {
     m_material_id = material_id;
@@ -1506,6 +1558,14 @@ void ModelVolume::center_geometry()
 void ModelVolume::calculate_convex_hull()
 {
     m_convex_hull = mesh.convex_hull_3d();
+}
+
+int ModelVolume::get_mesh_errors_count() const
+{
+    const stl_stats& stats = this->mesh.stl.stats;
+
+    return  stats.degenerate_facets + stats.edges_fixed     + stats.facets_removed +
+            stats.facets_added      + stats.facets_reversed + stats.backwards_edges;
 }
 
 const TriangleMesh& ModelVolume::get_convex_hull() const

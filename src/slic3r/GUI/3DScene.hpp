@@ -19,9 +19,11 @@
 extern void glAssertRecentCallImpl(const char *file_name, unsigned int line, const char *function_name);
 inline void glAssertRecentCall() { glAssertRecentCallImpl(__FILE__, __LINE__, __FUNCTION__); }
 #define glsafe(cmd) do { cmd; glAssertRecentCallImpl(__FILE__, __LINE__, __FUNCTION__); } while (false)
+#define glcheck() do { glAssertRecentCallImpl(__FILE__, __LINE__, __FUNCTION__); } while (false)
 #else
 inline void glAssertRecentCall() { }
 #define glsafe(cmd) cmd
+#define glcheck()
 #endif
 
 namespace Slic3r {
@@ -114,6 +116,7 @@ public:
 
     void load_mesh_flat_shading(const TriangleMesh &mesh);
     void load_mesh_full_shading(const TriangleMesh &mesh);
+	void load_mesh(const TriangleMesh &mesh, bool use_VBOs) { use_VBOs ? this->load_mesh_full_shading(mesh) : this->load_mesh_flat_shading(mesh); }
 
     inline bool has_VBOs() const { return vertices_and_normals_interleaved_VBO_id != 0; }
 
@@ -222,12 +225,21 @@ private:
 class GLVolume {
 public:
     static const float SELECTED_COLOR[4];
-    static const float HOVER_COLOR[4];
+    static const float HOVER_SELECT_COLOR[4];
+    static const float HOVER_DESELECT_COLOR[4];
     static const float OUTSIDE_COLOR[4];
     static const float SELECTED_OUTSIDE_COLOR[4];
     static const float DISABLED_COLOR[4];
+    static const float MODEL_COLOR[4][4];
     static const float SLA_SUPPORT_COLOR[4];
     static const float SLA_PAD_COLOR[4];
+
+    enum EHoverState : unsigned char
+    {
+        HS_None,
+        HS_Select,
+        HS_Deselect
+    };
 
     GLVolume(float r = 1.f, float g = 1.f, float b = 1.f, float a = 1.f);
     GLVolume(const float *rgba) : GLVolume(rgba[0], rgba[1], rgba[2], rgba[3]) {}
@@ -292,8 +304,8 @@ public:
     bool                shader_outside_printer_detection_enabled;
     // Wheter or not this volume is outside print volume.
     bool                is_outside;
-    // Boolean: Is mouse over this object?
-    bool                hover;
+    // Is mouse or rectangle selection over this object to select/deselect it ?
+    EHoverState         hover;
     // Wheter or not this volume has been generated from a modifier
     bool                is_modifier;
     // Wheter or not this volume has been generated from the wipe tower
@@ -408,6 +420,8 @@ public:
 };
 
 typedef std::vector<GLVolume*> GLVolumePtrs;
+typedef std::pair<GLVolume*, std::pair<unsigned int, double>> GLVolumeWithIdAndZ;
+typedef std::vector<GLVolumeWithIdAndZ> GLVolumeWithIdAndZList;
 
 class GLVolumeCollection
 {
@@ -426,6 +440,9 @@ private:
 
     // z range for clipping in shaders
     float z_range[2];
+
+    // plane coeffs for clipping in shaders
+    float clipping_plane[4];
 
 public:
     GLVolumePtrs volumes;
@@ -463,8 +480,8 @@ public:
         int obj_idx, float pos_x, float pos_y, float width, float depth, float height, float rotation_angle, bool use_VBOs, bool size_unknown, float brim_width);
 
     // Render the volumes by OpenGL.
-	void render_VBOs(ERenderType type, bool disable_cullface, std::function<bool(const GLVolume&)> filter_func = std::function<bool(const GLVolume&)>()) const;
-    void render_legacy(ERenderType type, bool disable_cullface, std::function<bool(const GLVolume&)> filter_func = std::function<bool(const GLVolume&)>()) const;
+    void render_VBOs(ERenderType type, bool disable_cullface, const Transform3d& view_matrix, std::function<bool(const GLVolume&)> filter_func = std::function<bool(const GLVolume&)>()) const;
+    void render_legacy(ERenderType type, bool disable_cullface, const Transform3d& view_matrix, std::function<bool(const GLVolume&)> filter_func = std::function<bool(const GLVolume&)>()) const;
 
     // Finalize the initialization of the geometry & indices,
     // upload the geometry and indices to OpenGL VBO objects
@@ -485,6 +502,7 @@ public:
     }
 
     void set_z_range(float min_z, float max_z) { z_range[0] = min_z; z_range[1] = max_z; }
+    void set_clipping_plane(const double* coeffs) { clipping_plane[0] = coeffs[0]; clipping_plane[1] = coeffs[1]; clipping_plane[2] = coeffs[2]; clipping_plane[3] = coeffs[3]; }
 
     // returns true if all the volumes are completely contained in the print volume
     // returns the containment state in the given out_state, if non-null
@@ -500,6 +518,8 @@ private:
     GLVolumeCollection(const GLVolumeCollection &other);
     GLVolumeCollection& operator=(const GLVolumeCollection &);
 };
+
+GLVolumeWithIdAndZList volumes_to_render(const GLVolumePtrs& volumes, GLVolumeCollection::ERenderType type, const Transform3d& view_matrix, std::function<bool(const GLVolume&)> filter_func = nullptr);
 
 class GLModel
 {

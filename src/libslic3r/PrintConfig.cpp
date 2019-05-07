@@ -92,9 +92,9 @@ void PrintConfigDef::init_common_params()
     def->default_value = new ConfigOptionString("");
     
     def = this->add("printhost_cafile", coString);
-    def->label = "HTTPS CA File";
-    def->tooltip = "Custom CA certificate file can be specified for HTTPS OctoPrint connections, in crt/pem format. "
-                   "If left blank, the default OS CA certificate repository is used.";
+    def->label = L("HTTPS CA File");
+    def->tooltip = L("Custom CA certificate file can be specified for HTTPS OctoPrint connections, in crt/pem format. "
+                   "If left blank, the default OS CA certificate repository is used.");
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionString("");
 }
@@ -131,7 +131,7 @@ void PrintConfigDef::init_fff_params()
                    "as [layer_num] and [layer_z].");
     def->multiline = true;
     def->full_width = true;
-    def->height = 50;
+    def->height = 5;
     def->mode = comExpert;
     def->default_value = new ConfigOptionString("");
 
@@ -140,11 +140,12 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("This code is inserted between objects when using sequential printing. By default extruder and bed temperature are reset using non-wait command; however if M104, M109, M140 or M190 are detected in this custom code, Slic3r will not add temperature commands. Note that you can use placeholder variables for all Slic3r settings, so you can put a \"M109 S[first_layer_temperature]\" command wherever you want.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 120;
+    def->height = 12;
     def->mode = comExpert;
     def->default_value = new ConfigOptionString("");
 
     def = this->add("bottom_solid_layers", coInt);
+    //TRN To be shown in Print Settings "Bottom solid layers"
     def->label = L("Bottom");
     def->category = L("Layers and Perimeters");
     def->tooltip = L("Number of solid layers to generate on bottom surfaces.");
@@ -213,7 +214,7 @@ void PrintConfigDef::init_fff_params()
 
     def = this->add("clip_multipart_objects", coBool);
     def->label = L("Clip multi-part objects");
-    def->tooltip = L("When printing multi-material objects, this settings will make slic3r "
+    def->tooltip = L("When printing multi-material objects, this settings will make Slic3r "
                    "to clip the overlapping object parts one by the other "
                    "(2nd part will be clipped by the 1st, 3rd part will be clipped by the 1st and 2nd etc).");
     def->mode = comExpert;
@@ -360,7 +361,7 @@ void PrintConfigDef::init_fff_params()
                    "Note that you can use placeholder variables for all Slic3r settings.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 120;
+    def->height = 12;
     def->mode = comExpert;
     def->default_value = new ConfigOptionString("M104 S0 ; turn off temperature\nG28 X0  ; home X axis\nM84     ; disable motors\n");
 
@@ -539,7 +540,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("If layer print time is estimated below this number of seconds, fan will be enabled "
                    "and its speed will be calculated by interpolating the minimum and maximum speeds.");
     def->sidetext = L("approximate seconds");
-    def->width = 60;
+    def->width = 6;
     def->min = 0;
     def->max = 1000;
     def->mode = comExpert;
@@ -556,7 +557,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("You can put your notes regarding the filament here.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 130;
+    def->height = 13;
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionStrings { "" };
 
@@ -913,10 +914,10 @@ void PrintConfigDef::init_fff_params()
     def->default_value = new ConfigOptionEnum<GCodeFlavor>(gcfRepRap);
 
     def = this->add("gcode_label_objects", coBool);
-    def->label = "Label objects";
-    def->tooltip = "Enable this to add comments into the G-Code labeling print moves with what object they belong to,"
+    def->label = L("Label objects");
+    def->tooltip = L("Enable this to add comments into the G-Code labeling print moves with what object they belong to,"
                    " which is useful for the Octoprint CancelObject plugin. This settings is NOT compatible with "
-                   "Single Extruder Multi Material setup and Wipe into Object / Wipe into Infill.";
+                   "Single Extruder Multi Material setup and Wipe into Object / Wipe into Infill.");
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionBool(0);
 
@@ -1007,7 +1008,7 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Inherits profile");
     def->tooltip = L("Name of the profile, from which this profile inherits.");
     def->full_width = true;
-    def->height = 50;
+    def->height = 5;
     def->default_value = new ConfigOptionString();
     def->cli = ConfigOptionDef::nocli;
 
@@ -1034,7 +1035,7 @@ void PrintConfigDef::init_fff_params()
     def->cli = "after-layer-gcode|layer-gcode";
     def->multiline = true;
     def->full_width = true;
-    def->height = 50;
+    def->height = 5;
     def->mode = comExpert;
     def->default_value = new ConfigOptionString("");
 
@@ -1053,7 +1054,7 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert;
 	def->default_value = new ConfigOptionBool(true);
 
-	const int machine_limits_opt_width = 70;
+	const int machine_limits_opt_width = 7;
 	{
 		struct AxisDefault {
 			std::string         name;
@@ -1252,7 +1253,7 @@ void PrintConfigDef::init_fff_params()
                    "header comments.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 130;
+    def->height = 13;
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionString("");
 
@@ -1387,7 +1388,7 @@ void PrintConfigDef::init_fff_params()
     def->gui_flags = "serialized";
     def->multiline = true;
     def->full_width = true;
-	def->height = 60;
+	def->height = 6;
     def->mode = comExpert;
 	def->default_value = new ConfigOptionStrings();
 
@@ -1402,7 +1403,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("You can put your notes regarding the printer here.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 130;
+    def->height = 13;
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionString("");
 
@@ -1589,7 +1590,7 @@ void PrintConfigDef::init_fff_params()
     def->label = "";
     def->full_label = L("Serial port");
     def->tooltip = L("USB/serial port for printer connection.");
-    def->width = 200;
+    def->width = 20;
     def->default_value = new ConfigOptionString("");
 
     def = this->add("serial_speed", coInt);
@@ -1635,7 +1636,7 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("If layer print time is estimated below this number of seconds, print moves "
                    "speed will be scaled down to extend duration to this value.");
     def->sidetext = L("approximate seconds");
-    def->width = 60;
+    def->width = 6;
     def->min = 0;
     def->max = 1000;
     def->mode = comExpert;
@@ -1742,7 +1743,7 @@ void PrintConfigDef::init_fff_params()
                    "a \"M109 S[first_layer_temperature]\" command wherever you want.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 120;
+    def->height = 12;
     def->mode = comExpert;
     def->default_value = new ConfigOptionString("G28 ; home all axes\nG1 Z5 F5000 ; lift nozzle\n");
 
@@ -1758,7 +1759,7 @@ void PrintConfigDef::init_fff_params()
                    "in extruder order.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 120;
+    def->height = 12;
     def->mode = comExpert;
     def->default_value = new ConfigOptionStrings { "; Filament gcode\n" };
 
@@ -2008,7 +2009,7 @@ void PrintConfigDef::init_fff_params()
                    "as [previous_extruder] and [next_extruder].");
     def->multiline = true;
     def->full_width = true;
-    def->height = 50;
+    def->height = 5;
     def->mode = comExpert;
     def->default_value = new ConfigOptionString("");
 
@@ -2038,6 +2039,7 @@ void PrintConfigDef::init_fff_params()
     def->default_value = new ConfigOptionFloatOrPercent(15, false);
 
     def = this->add("top_solid_layers", coInt);
+    //TRN To be shown in Print Settings "Top solid layers"
     def->label = L("Top");
     def->category = L("Layers and Perimeters");
     def->tooltip = L("Number of solid layers to generate on top surfaces.");
@@ -2141,7 +2143,7 @@ void PrintConfigDef::init_fff_params()
     def = this->add("wipe_tower_rotation_angle", coFloat);
     def->label = L("Wipe tower rotation angle");
     def->tooltip = L("Wipe tower rotation angle with respect to x-axis ");
-    def->sidetext = L("degrees");
+    def->sidetext = L("°");
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionFloat(0.);
 
@@ -2260,11 +2262,33 @@ void PrintConfigDef::init_sla_params()
     def->mode = comExpert;
     def->default_value = new ConfigOptionFloat(50.);
 
-    def = this->add("printer_correction", coFloats);
+    def = this->add("relative_correction", coFloats);
+    def->label = L("Printer scaling correction");
     def->full_label = L("Printer scaling correction");
     def->tooltip  = L("Printer scaling correction");
     def->min = 0;
-    def->default_value = new ConfigOptionFloats( { 1., 1., 1. } );
+    def->mode = comExpert;
+    def->default_value = new ConfigOptionFloats( { 1., 1. } );
+    
+    def = this->add("absolute_correction", coFloat);
+    def->label = L("Printer absolute correction");
+    def->full_label = L("Printer absolute correction");
+    def->tooltip  = L("Will inflate or deflate the sliced 2D polygons according "
+                      "to the sign of the correction.");
+    def->mode = comExpert;
+    def->default_value = new ConfigOptionFloat(0.0);
+    
+    def = this->add("gamma_correction", coFloat);
+    def->label = L("Printer gamma correction");
+    def->full_label = L("Printer gamma correction");
+    def->tooltip  = L("This will apply a gamma correction to the rasterized 2D "
+                      "polygons. A gamma value of zero means thresholding with "
+                      "the threshold in the middle. This behaviour eliminates "
+                      "antialiasing without losing holes in polygons.");
+    def->min = 0;
+    def->mode = comExpert;
+    def->default_value = new ConfigOptionFloat(1.0);
+    
 
     // SLA Material settings.
     def = this->add("initial_layer_height", coFloat);
@@ -2296,24 +2320,19 @@ void PrintConfigDef::init_sla_params()
     def->min = 0;
     def->default_value = new ConfigOptionFloat(15);
 
-    def = this->add("material_correction_printing", coFloats);
-    def->full_label = L("Correction for expansion when printing");
-    def->tooltip  = L("Correction for expansion when printing");
+    def = this->add("material_correction", coFloats);
+    def->full_label = L("Correction for expansion");
+    def->tooltip  = L("Correction for expansion");
     def->min = 0;
-    def->default_value = new ConfigOptionFloats( { 1. , 1., 1. } );
-
-    def = this->add("material_correction_curing", coFloats);
-    def->full_label = L("Correction for expansion after curing");
-    def->tooltip  = L("Correction for expansion after curing");
-    def->min = 0;
-    def->default_value = new ConfigOptionFloats( { 1. , 1., 1. } );
+    def->mode = comExpert;
+    def->default_value = new ConfigOptionFloats( { 1. , 1. } );
 
     def = this->add("material_notes", coString);
     def->label = L("SLA print material notes");
     def->tooltip = L("You can put your notes regarding the SLA print material here.");
     def->multiline = true;
     def->full_width = true;
-    def->height = 130;
+    def->height = 13;
     def->mode = comAdvanced;
     def->default_value = new ConfigOptionString("");
 
@@ -2490,7 +2509,7 @@ void PrintConfigDef::init_sla_params()
     def->tooltip = L("No support points will be placed closer than this threshold.");
     def->sidetext = L("mm");
     def->min = 0;
-    def->default_value = new ConfigOptionFloat(0.f);
+    def->default_value = new ConfigOptionFloat(1.f);
 
     def = this->add("pad_enable", coBool);
     def->label = L("Use pad");
@@ -2511,14 +2530,17 @@ void PrintConfigDef::init_sla_params()
 
     def = this->add("pad_wall_height", coFloat);
     def->label = L("Pad wall height");
-    def->tooltip = L("Defines the cavity depth. Set to zero to disable the cavity.");
+    def->tooltip = L("Defines the pad cavity depth. Set to zero to disable the cavity. "
+                     "Be careful when enabling this feature, as some resins may "
+                     "produce an extreme suction effect inside the cavity, "
+                     "which makes pealing the print off the vat foil difficult.");
     def->category = L("Pad");
 //     def->tooltip = L("");
     def->sidetext = L("mm");
     def->min = 0;
     def->max = 30;
-    def->mode = comSimple;
-    def->default_value = new ConfigOptionFloat(5.0);
+    def->mode = comExpert;
+    def->default_value = new ConfigOptionFloat(0.);
 
     def = this->add("pad_max_merge_distance", coFloat);
     def->label = L("Max merge distance");
@@ -2906,7 +2928,7 @@ CLIActionsConfigDef::CLIActionsConfigDef()
     
     // Actions:
     def = this->add("export_obj", coBool);
-    def->label = L("Export SVG");
+    def->label = L("Export OBJ");
     def->tooltip = L("Export the model(s) as OBJ.");
     def->default_value = new ConfigOptionBool(false);
     
@@ -3097,6 +3119,13 @@ CLIMiscConfigDef::CLIMiscConfigDef()
     def->label = L("Logging level");
     def->tooltip = L("Messages with severity lower or eqal to the loglevel will be printed out. 0:trace, 1:debug, 2:info, 3:warning, 4:error, 5:fatal");
     def->min = 0;
+
+#if defined(_MSC_VER) && defined(SLIC3R_GUI)
+    def = this->add("sw_renderer", coBool);
+    def->label = L("Render with a software renderer");
+    def->tooltip = L("Render with a software renderer. The bundled MESA software renderer is loaded instead of the default OpenGL driver.");
+    def->min = 0;
+#endif /* _MSC_VER */
 }
 
 const CLIActionsConfigDef    cli_actions_config_def;

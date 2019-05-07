@@ -4,9 +4,20 @@
 #include <libnest2d.h>
 #include "printer_parts.h"
 #include <libnest2d/geometry_traits_nfp.hpp>
+#include <libnest2d/utils/rotcalipers.hpp>
 #include "../tools/svgtools.hpp"
+
 //#include "../tools/libnfpglue.hpp"
 //#include "../tools/nfp_svgnest_glue.hpp"
+
+#include <boost/multiprecision/integer.hpp>
+#include <boost/rational.hpp>
+#include <libslic3r/Int128.hpp>
+
+namespace libnest2d {
+template<> struct _NumTag<boost::multiprecision::int128_t> { using Type = ScalarTag; };
+template<class T> struct _NumTag<boost::rational<T>> { using Type = RationalTag; };
+}
 
 std::vector<libnest2d::Item>& prusaParts() {
     static std::vector<libnest2d::Item> ret;
@@ -138,6 +149,16 @@ TEST(GeometryAlgorithms, boundingCircle) {
 
 }
 
+TEST(GeometryAlgorithms, convexHull) {
+    using namespace libnest2d;
+
+    ClipperLib::Path poly = PRINTER_PART_POLYGONS[0];
+
+    auto chull = sl::convexHull(poly);
+    
+    ASSERT_EQ(chull.size(), poly.size());
+}
+
 TEST(GeometryAlgorithms, Distance) {
     using namespace libnest2d;
 
@@ -151,7 +172,7 @@ TEST(GeometryAlgorithms, Distance) {
 
     Segment seg(p1, p3);
 
-    ASSERT_DOUBLE_EQ(pointlike::distance(p2, seg), 7.0710678118654755);
+    // ASSERT_DOUBLE_EQ(pointlike::distance(p2, seg), 7.0710678118654755);
 
     auto result = pointlike::horizontalDistance(p2, seg);
 
@@ -820,7 +841,7 @@ TEST(GeometryAlgorithms, mergePileWithPolygon) {
     rect2.translate({10, 0});
     rect3.translate({25, 0});
 
-    shapelike::Shapes<PolygonImpl> pile;
+    TMultiShape<PolygonImpl> pile;
     pile.push_back(rect1.transformedShape());
     pile.push_back(rect2.transformedShape());
 
@@ -831,6 +852,92 @@ TEST(GeometryAlgorithms, mergePileWithPolygon) {
     Rectangle ref(45, 15);
 
     ASSERT_EQ(shapelike::area(result.front()), ref.area());
+}
+
+namespace {
+
+double refMinAreaBox(const PolygonImpl& p) {    
+    
+    auto it = sl::cbegin(p), itx = std::next(it);
+    
+    double min_area = std::numeric_limits<double>::max();
+    
+ 
+    auto update_min = [&min_area, &it, &itx, &p]() {
+        Segment s(*it, *itx);
+        
+        PolygonImpl rotated = p;
+        sl::rotate(rotated, -s.angleToXaxis());
+        auto bb = sl::boundingBox(rotated);
+        double area = sl::area(bb);
+        if(min_area > area) min_area = area;
+    };
+    
+    while(itx != sl::cend(p)) {
+        update_min();
+        ++it; ++itx;
+    }
+    
+    it = std::prev(sl::cend(p)); itx = sl::cbegin(p);
+    update_min();
+    
+    return min_area;
+}
+
+#if !defined(HAS_INTRINSIC_128_TYPE) || defined(__APPLE__)
+using Unit = int64_t;
+using Ratio = boost::rational<boost::multiprecision::int128_t>;
+#else
+using Unit = int64_t;
+using Ratio = boost::rational<__int128>;
+#endif
+
+}
+
+TEST(RotatingCalipers, AllPrusaAndStegoMinBB) {
+    size_t idx = 0;
+    double err_epsilon = 500e6;
+    
+    for(ClipperLib::Path rinput : PRINTER_PART_POLYGONS) {
+        
+        // Test with anti clockwise, closed paths (last vertex the first)
+        PolygonImpl poly(rinput);
+        
+        double arearef = refMinAreaBox(poly);
+        auto bb = minAreaBoundingBox<PathImpl, Unit, Ratio>(rinput);
+        double area = double(bb.area());
+        
+        bool succ = std::abs(arearef - area) < err_epsilon;
+        std::cout << idx << " " << (succ? "ok" : "failed") << " ref: " 
+                  << arearef << " actual: " << area << std::endl;
+        
+        idx++;
+       
+        ASSERT_TRUE(succ);
+    }
+    
+    for(ClipperLib::Path rinput : STEGOSAUR_POLYGONS) {
+        // Last vertex will not be the first
+        rinput.pop_back();
+        
+        // Clocwise polygons
+        std::reverse(rinput.begin(), rinput.end());
+        
+        // And remove all the collinear points for safety
+        PolygonImpl poly(removeCollinearPoints<PathImpl, PointImpl, Unit>(rinput, 1000000));
+        
+        double arearef = refMinAreaBox(poly);
+        auto bb = minAreaBoundingBox<PolygonImpl, Unit, Ratio>(poly);
+        double area = double(bb.area());
+        
+        bool succ = std::abs(arearef - area) < err_epsilon;
+        std::cout << idx << " " << (succ? "ok" : "failed") << " ref: " 
+                  << arearef << " actual: " << area << std::endl;
+       
+        idx++;
+        
+        ASSERT_TRUE(succ);
+    }
 }
 
 int main(int argc, char **argv) {

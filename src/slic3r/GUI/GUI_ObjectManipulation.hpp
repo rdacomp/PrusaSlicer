@@ -7,7 +7,8 @@
 #include "GLCanvas3D.hpp"
 
 class wxStaticText;
-class PrusaLockButton;
+class LockButton;
+class wxStaticBitmap;
 
 namespace Slic3r {
 namespace GUI {
@@ -76,7 +77,10 @@ class ObjectManipulation : public OG_Settings
     Vec3d           m_new_size;
     bool            m_new_enabled;
     bool            m_uniform_scale {true};
-    PrusaLockButton* m_lock_bnt{ nullptr };
+    LockButton*     m_lock_bnt{ nullptr };
+
+    ScalableBitmap  m_manifold_warning_bmp;
+    wxStaticBitmap* m_fix_throught_netfab_bitmap;
 
 #ifndef __APPLE__
     // Currently focused option name (empty if none)
@@ -106,6 +110,9 @@ public:
     // bound to this class when changing selection in the objects list
     void emulate_kill_focus();
 #endif // __APPLE__
+
+    void update_warning_icon_state(const wxString& tooltip);
+    void msw_rescale();
 
 private:
     void reset_settings_value();

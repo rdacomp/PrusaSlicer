@@ -10,6 +10,7 @@
 #include "Selection.hpp"
 
 #include <boost/algorithm/string.hpp>
+#include "slic3r/Utils/FixModelByWin10.hpp"
 
 namespace Slic3r
 {
@@ -22,8 +23,9 @@ ObjectManipulation::ObjectManipulation(wxWindow* parent) :
     , m_focused_option("")
 #endif // __APPLE__
 {
+    m_manifold_warning_bmp = ScalableBitmap(parent, "exclamation");
     m_og->set_name(_(L("Object Manipulation")));
-    m_og->label_width = 12 * wxGetApp().em_unit();//125;
+    m_og->label_width = 12;//125;
     m_og->set_grid_vgap(5);
     
     m_og->m_on_change = std::bind(&ObjectManipulation::on_change, this, std::placeholders::_1, std::placeholders::_2);
@@ -42,17 +44,50 @@ ObjectManipulation::ObjectManipulation(wxWindow* parent) :
     ConfigOptionDef def;
 
     // Objects(sub-objects) name
-    def.label = L("Name");
+//     def.label = L("Name");
+//     def.gui_type = "legend";
+//     def.tooltip = L("Object name");
+//     def.width = 21 * wxGetApp().em_unit();
+//     def.default_value = new ConfigOptionString{ " " };
+//     m_og->append_single_option_line(Option(def, "object_name"));
+
+    Line line = Line{ "Name", "Object name" };
+
+    auto manifold_warning_icon = [this](wxWindow* parent) {
+        m_fix_throught_netfab_bitmap = new wxStaticBitmap(parent, wxID_ANY, wxNullBitmap);
+        auto sizer = new wxBoxSizer(wxHORIZONTAL);
+        sizer->Add(m_fix_throught_netfab_bitmap);
+
+        if (is_windows10())
+            m_fix_throught_netfab_bitmap->Bind(wxEVT_CONTEXT_MENU, [this](wxCommandEvent &e)
+            {
+                // if object/sub-object has no errors
+                if (m_fix_throught_netfab_bitmap->GetBitmap().GetRefData() == wxNullBitmap.GetRefData())
+                    return;
+
+                wxGetApp().obj_list()->fix_through_netfabb();
+                update_warning_icon_state(wxGetApp().obj_list()->get_mesh_errors_list());
+            });
+
+        return sizer;
+    };
+
+    line.append_widget(manifold_warning_icon);
+    def.label = "";
     def.gui_type = "legend";
     def.tooltip = L("Object name");
-    def.width = 21 * wxGetApp().em_unit();
+    def.width = 21;
+#ifdef __APPLE__
+    def.width = 19;
+#endif
     def.default_value = new ConfigOptionString{ " " };
-    m_og->append_single_option_line(Option(def, "object_name"));
+    line.append_option(Option(def, "object_name"));
+    m_og->append_line(line);
 
-    const int field_width = 5 * wxGetApp().em_unit()/*50*/;
+    const int field_width = 5;
 
     // Legend for object modification
-    auto line = Line{ "", "" };
+    line = Line{ "", "" };
     def.label = "";
     def.type = coString;
     def.width = field_width/*50*/;
@@ -78,7 +113,7 @@ ObjectManipulation::ObjectManipulation(wxWindow* parent) :
         // Add "uniform scaling" button in front of "Scale" option 
         if (option_name == "Scale") {
             line.near_label_widget = [this](wxWindow* parent) {
-                auto btn = new PrusaLockButton(parent, wxID_ANY);
+                auto btn = new LockButton(parent, wxID_ANY);
                 btn->Bind(wxEVT_BUTTON, [btn, this](wxCommandEvent &event){
                     event.Skip();
                     wxTheApp->CallAfter([btn, this]() { set_uniform_scaling(btn->IsLocked()); });
@@ -92,8 +127,7 @@ ObjectManipulation::ObjectManipulation(wxWindow* parent) :
         else if (option_name == "Size") {
             line.near_label_widget = [this](wxWindow* parent) {
                 return new wxStaticBitmap(parent, wxID_ANY, wxNullBitmap, wxDefaultPosition,
-//                                           wxBitmap(from_u8(var("one_layer_lock_on.png")), wxBITMAP_TYPE_PNG).GetSize());
-                                          create_scaled_bitmap("one_layer_lock_on.png").GetSize());
+                                          create_scaled_bitmap(m_parent, "one_layer_lock_on.png").GetSize());
             };
         }
 
@@ -118,15 +152,13 @@ ObjectManipulation::ObjectManipulation(wxWindow* parent) :
     m_og->append_line(add_og_to_object_settings(L("Scale"), "%"), &m_scale_Label);
     m_og->append_line(add_og_to_object_settings(L("Size"), "mm"));
 
-    /* Unused parameter at this time
-    def.label = L("Place on bed");
-    def.type = coBool;
-    def.tooltip = L("Automatic placing of models on printing bed in Y axis");
-    def.gui_type = "";
-    def.sidetext = "";
-    def.default_value = new ConfigOptionBool{ false };
-    m_og->append_single_option_line(Option(def, "place_on_bed"));
-    */
+    // call back for a rescale of button "Set uniform scale"
+    m_og->rescale_near_label_widget = [this](wxWindow* win) {
+        auto *ctrl = dynamic_cast<LockButton*>(win);
+        if (ctrl == nullptr)
+            return;
+        ctrl->msw_rescale();
+    };
 }
 
 void ObjectManipulation::Show(const bool show)
@@ -161,6 +193,8 @@ void ObjectManipulation::update_settings_value(const Selection& selection)
 	m_new_move_label_string   = L("Position");
     m_new_rotate_label_string = L("Rotation");
     m_new_scale_label_string  = L("Scale factors");
+
+    ObjectList* obj_list = wxGetApp().obj_list();
     if (selection.is_single_full_instance())
     {
         // all volumes in the selection belongs to the same instance, any of them contains the needed instance data, so we take the first one
@@ -187,7 +221,7 @@ void ObjectManipulation::update_settings_value(const Selection& selection)
 
         m_new_enabled  = true;
     }
-    else if (selection.is_single_full_object())
+    else if (selection.is_single_full_object() && obj_list->is_selected(itObject))
     {
         m_cache.instance.reset();
 
@@ -212,7 +246,7 @@ void ObjectManipulation::update_settings_value(const Selection& selection)
         m_new_size = (volume->get_volume_transformation().get_matrix(true, true) * volume->bounding_box.size()).cwiseAbs();
         m_new_enabled = true;
     }
-    else if (wxGetApp().obj_list()->multiple_selection())
+    else if (obj_list->multiple_selection() || obj_list->is_selected(itInstanceRoot))
     {
         reset_settings_value();
 		m_new_move_label_string   = L("Translate");
@@ -334,6 +368,12 @@ void ObjectManipulation::emulate_kill_focus()
         on_change(option, 0);
 }
 #endif // __APPLE__
+
+void ObjectManipulation::update_warning_icon_state(const wxString& tooltip)
+{
+    m_fix_throught_netfab_bitmap->SetBitmap(tooltip.IsEmpty() ? wxNullBitmap : m_manifold_warning_bmp.bmp());
+    m_fix_throught_netfab_bitmap->SetToolTip(tooltip);
+}
 
 void ObjectManipulation::reset_settings_value()
 {
@@ -507,33 +547,25 @@ void ObjectManipulation::on_fill_empty_value(const std::string& opt_key)
     std::copy(opt_key.begin(), opt_key.end() - 2, std::back_inserter(param));
 
     double value = 0.0;
-
-    if (param == "position") {
-        int axis = opt_key.back() == 'x' ? 0 :
-            opt_key.back() == 'y' ? 1 : 2;
-
-        value = m_cache.position(axis);
-    }
-    else if (param == "rotation") {
-        int axis = opt_key.back() == 'x' ? 0 :
-            opt_key.back() == 'y' ? 1 : 2;
-
-        value = m_cache.rotation(axis);
-    }
-    else if (param == "scale") {
-        int axis = opt_key.back() == 'x' ? 0 :
-            opt_key.back() == 'y' ? 1 : 2;
-
-        value = m_cache.scale(axis);
-    }
-    else if (param == "size") {
-        int axis = opt_key.back() == 'x' ? 0 :
-            opt_key.back() == 'y' ? 1 : 2;
-
-        value = m_cache.size(axis);
-    }
+	auto opt_key_to_axis = [&opt_key]() { return opt_key.back() == 'x' ? 0 : opt_key.back() == 'y' ? 1 : 2; };
+    if (param == "position")
+        value = m_cache.position(opt_key_to_axis());
+    else if (param == "rotation")
+		value = m_cache.rotation(opt_key_to_axis());
+    else if (param == "scale")
+		value = m_cache.scale(opt_key_to_axis());
+    else if (param == "size")
+		value = m_cache.size(opt_key_to_axis());
 
     m_og->set_value(opt_key, double_to_string(value));
+}
+
+void ObjectManipulation::msw_rescale()
+{
+    m_manifold_warning_bmp.msw_rescale();
+    m_fix_throught_netfab_bitmap->SetBitmap(m_manifold_warning_bmp.bmp());
+
+    get_og()->msw_rescale();
 }
 
 } //namespace GUI

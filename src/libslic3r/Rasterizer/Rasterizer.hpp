@@ -15,34 +15,25 @@ class ExPolygon;
 // Raw byte buffer paired with its size. Suitable for compressed PNG data.
 class RawBytes {
 
-    class MinzDeleter {
-    public:
-        void operator()(std::uint8_t *rawptr);
-    };
-
-    std::unique_ptr<std::uint8_t, MinzDeleter> m_buffer = nullptr;
-    size_t m_size = 0;
-
+    std::vector<std::uint8_t> m_buffer;
 public:
 
     RawBytes() = default;
-    RawBytes(std::uint8_t *rawptr, size_t s): m_buffer(rawptr), m_size(s) {}
-
-    size_t size() const { return m_size; }
-    const uint8_t * data() { return m_buffer.get(); }
+    RawBytes(std::vector<std::uint8_t>&& data): m_buffer(std::move(data)) {}
+    
+    size_t size() const { return m_buffer.size(); }
+    const uint8_t * data() { return m_buffer.data(); }
 
     // /////////////////////////////////////////////////////////////////////////
     // FIXME: the following is needed for MSVC2013 compatibility
     // /////////////////////////////////////////////////////////////////////////
 
     RawBytes(const RawBytes&) = delete;
-    RawBytes(RawBytes&& mv):
-        m_buffer(std::move(mv.m_buffer)), m_size(mv.m_size) {}
+    RawBytes(RawBytes&& mv) : m_buffer(std::move(mv.m_buffer)) {}
 
     RawBytes& operator=(const RawBytes&) = delete;
     RawBytes& operator=(RawBytes&& mv) {
-        m_buffer.swap(mv.m_buffer);
-        m_size = mv.m_size;
+        m_buffer = std::move(mv.m_buffer);
         return *this;
     }
 
@@ -99,8 +90,9 @@ public:
     };
 
     /// Constructor taking the resolution and the pixel dimension.
-    explicit Raster(const Resolution& r, const PixelDim& pd,
-                    Origin o = Origin::BOTTOM_LEFT );
+    Raster(const Resolution& r,  const PixelDim& pd, 
+           Origin o = Origin::BOTTOM_LEFT, double gamma = 1.0);
+    
     Raster();
     Raster(const Raster& cpy) = delete;
     Raster& operator=(const Raster& cpy) = delete;
@@ -108,8 +100,8 @@ public:
     ~Raster();
 
     /// Reallocated everything for the given resolution and pixel dimension.
-    void reset(const Resolution& r, const PixelDim& pd);
-    void reset(const Resolution& r, const PixelDim& pd, Origin o);
+    void reset(const Resolution& r, const PixelDim& pd, double gamma = 1.0);
+    void reset(const Resolution& r, const PixelDim& pd, Origin o, double gamma);
 
     /**
      * Release the allocated resources. Drawing in this state ends in

@@ -273,6 +273,11 @@ void TriangleMesh::translate(float x, float y, float z)
     stl_invalidate_shared_vertices(&this->stl);
 }
 
+void TriangleMesh::translate(const Vec3f &displacement)
+{
+    translate(displacement(0), displacement(1), displacement(2));
+}
+
 void TriangleMesh::rotate(float angle, const Axis &axis)
 {
     if (angle == 0.f)
@@ -602,10 +607,12 @@ void TriangleMesh::require_shared_vertices()
     BOOST_LOG_TRIVIAL(trace) << "TriangleMeshSlicer::require_shared_vertices - end";
 }
 
-void TriangleMeshSlicer::init(TriangleMesh *_mesh, throw_on_cancel_callback_type throw_on_cancel)
+void TriangleMeshSlicer::init(const TriangleMesh *_mesh, throw_on_cancel_callback_type throw_on_cancel)
 {
     mesh = _mesh;
-    _mesh->require_shared_vertices();
+    if (! mesh->has_shared_vertices())
+        throw std::invalid_argument("TriangleMeshSlicer was passed a mesh without shared vertices.");
+
     throw_on_cancel();
     facets_edges.assign(_mesh->stl.stats.number_of_facets * 3, -1);
     v_scaled_shared.assign(_mesh->stl.v_shared, _mesh->stl.v_shared + _mesh->stl.stats.shared_vertices);
@@ -687,6 +694,16 @@ void TriangleMeshSlicer::init(TriangleMesh *_mesh, throw_on_cancel_callback_type
             throw_on_cancel();
     }
 }
+
+
+
+void TriangleMeshSlicer::set_up_direction(const Vec3f& up)
+{
+    m_quaternion.setFromTwoVectors(up, Vec3f::UnitZ());
+    m_use_quaternion = true;
+}
+
+
 
 void TriangleMeshSlicer::slice(const std::vector<float> &z, std::vector<Polygons>* layers, throw_on_cancel_callback_type throw_on_cancel) const
 {
@@ -790,7 +807,7 @@ void TriangleMeshSlicer::slice(const std::vector<float> &z, std::vector<Polygons
 void TriangleMeshSlicer::_slice_do(size_t facet_idx, std::vector<IntersectionLines>* lines, boost::mutex* lines_mutex, 
     const std::vector<float> &z) const
 {
-    const stl_facet &facet = this->mesh->stl.facet_start[facet_idx];
+    const stl_facet &facet = m_use_quaternion ? this->mesh->stl.facet_start[facet_idx].rotated(m_quaternion) : this->mesh->stl.facet_start[facet_idx];
     
     // find facet extents
     const float min_z = fminf(facet.vertex[0](2), fminf(facet.vertex[1](2), facet.vertex[2](2)));
@@ -855,26 +872,43 @@ TriangleMeshSlicer::FacetSliceType TriangleMeshSlicer::slice_facet(
     IntersectionPoint points[3];
     size_t            num_points = 0;
     size_t            point_on_layer = size_t(-1);
-    
+
     // Reorder vertices so that the first one is the one with lowest Z.
     // This is needed to get all intersection lines in a consistent order
     // (external on the right of the line)
     const int *vertices = this->mesh->stl.v_indices[facet_idx].vertex;
     int i = (facet.vertex[1].z() == min_z) ? 1 : ((facet.vertex[2].z() == min_z) ? 2 : 0);
+
+    // These are used only if the cut plane is tilted:
+    stl_vertex rotated_a;
+    stl_vertex rotated_b;
+
     for (int j = i; j - i < 3; ++j) {  // loop through facet edges
         int        edge_id  = this->facets_edges[facet_idx * 3 + (j % 3)];
         int        a_id     = vertices[j % 3];
         int        b_id     = vertices[(j+1) % 3];
-        const stl_vertex *a = &this->v_scaled_shared[a_id];
-        const stl_vertex *b = &this->v_scaled_shared[b_id];
+
+        const stl_vertex *a;
+        const stl_vertex *b;
+        if (m_use_quaternion) {
+            rotated_a = m_quaternion * this->v_scaled_shared[a_id];
+            rotated_b = m_quaternion * this->v_scaled_shared[b_id];
+            a = &rotated_a;
+            b = &rotated_b;
+        }
+        else {
+            a = &this->v_scaled_shared[a_id];
+            b = &this->v_scaled_shared[b_id];
+        }
         
         // Is edge or face aligned with the cutting plane?
         if (a->z() == slice_z && b->z() == slice_z) {
             // Edge is horizontal and belongs to the current layer.
-            const stl_vertex &v0 = this->v_scaled_shared[vertices[0]];
-            const stl_vertex &v1 = this->v_scaled_shared[vertices[1]];
-            const stl_vertex &v2 = this->v_scaled_shared[vertices[2]];
-            const stl_normal &normal = this->mesh->stl.facet_start[facet_idx].normal;
+            // The following rotation of the three vertices may not be efficient, but this branch happens rarely.
+            const stl_vertex &v0 = m_use_quaternion ? stl_vertex(m_quaternion * this->v_scaled_shared[vertices[0]]) : this->v_scaled_shared[vertices[0]];
+            const stl_vertex &v1 = m_use_quaternion ? stl_vertex(m_quaternion * this->v_scaled_shared[vertices[1]]) : this->v_scaled_shared[vertices[1]];
+            const stl_vertex &v2 = m_use_quaternion ? stl_vertex(m_quaternion * this->v_scaled_shared[vertices[2]]) : this->v_scaled_shared[vertices[2]];
+            const stl_normal &normal = facet.normal;
             // We may ignore this edge for slicing purposes, but we may still use it for object cutting.
             FacetSliceType    result = Slicing;
             if (min_z == max_z) {
@@ -990,7 +1024,9 @@ TriangleMeshSlicer::FacetSliceType TriangleMeshSlicer::slice_facet(
             if (i == line_out->a_id || i == line_out->b_id)
                 i = vertices[2];
             assert(i != line_out->a_id && i != line_out->b_id);
-            line_out->edge_type = (this->v_scaled_shared[i].z() < slice_z) ? feTop : feBottom;
+            line_out->edge_type = ((m_use_quaternion ?
+                                    (m_quaternion * this->v_scaled_shared[i]).z()
+                                    : this->v_scaled_shared[i].z()) < slice_z) ? feTop : feBottom;
         }
 #endif
         return Slicing;
@@ -1811,116 +1847,101 @@ TriangleMesh make_cube(double x, double y, double z) {
 // Generate the mesh for a cylinder and return it, using 
 // the generated angle to calculate the top mesh triangles.
 // Default is 360 sides, angle fa is in radians.
-TriangleMesh make_cylinder(double r, double h, double fa) {
-    Pointf3s vertices;
-    std::vector<Vec3crd> facets;
+TriangleMesh make_cylinder(double r, double h, double fa)
+{
+	size_t n_steps    = (size_t)ceil(2. * PI / fa);
+	double angle_step = 2. * PI / n_steps;
+
+	Pointf3s				vertices;
+	std::vector<Vec3crd>	facets;
+	vertices.reserve(2 * n_steps + 2);
+	facets.reserve(4 * n_steps);
 
     // 2 special vertices, top and bottom center, rest are relative to this
     vertices.emplace_back(Vec3d(0.0, 0.0, 0.0));
     vertices.emplace_back(Vec3d(0.0, 0.0, h));
 
-    // adjust via rounding to get an even multiple for any provided angle.
-    double angle = (2*PI / floor(2*PI / fa));
-
     // for each line along the polygon approximating the top/bottom of the
     // circle, generate four points and four facets (2 for the wall, 2 for the
     // top and bottom.
     // Special case: Last line shares 2 vertices with the first line.
-    unsigned id = vertices.size() - 1;
-    vertices.emplace_back(Vec3d(sin(0) * r , cos(0) * r, 0));
-    vertices.emplace_back(Vec3d(sin(0) * r , cos(0) * r, h));
-    for (double i = 0; i < 2*PI; i+=angle) {
-        Vec2d p = Eigen::Rotation2Dd(i) * Eigen::Vector2d(0, r);
+	Vec2d p = Eigen::Rotation2Dd(0.) * Eigen::Vector2d(0, r);
+	vertices.emplace_back(Vec3d(p(0), p(1), 0.));
+	vertices.emplace_back(Vec3d(p(0), p(1), h));
+	for (size_t i = 1; i < n_steps; ++i) {
+        p = Eigen::Rotation2Dd(angle_step * i) * Eigen::Vector2d(0, r);
         vertices.emplace_back(Vec3d(p(0), p(1), 0.));
         vertices.emplace_back(Vec3d(p(0), p(1), h));
-        id = vertices.size() - 1;
+        int id = (int)vertices.size() - 1;
         facets.emplace_back(Vec3crd( 0, id - 1, id - 3)); // top
         facets.emplace_back(Vec3crd(id,      1, id - 2)); // bottom
-        facets.emplace_back(Vec3crd(id, id - 2, id - 3)); // upper-right of side
+		facets.emplace_back(Vec3crd(id, id - 2, id - 3)); // upper-right of side
         facets.emplace_back(Vec3crd(id, id - 3, id - 1)); // bottom-left of side
     }
     // Connect the last set of vertices with the first.
-    facets.emplace_back(Vec3crd( 2, 0, id - 1));
-    facets.emplace_back(Vec3crd( 1, 3,     id));
-    facets.emplace_back(Vec3crd(id, 3,      2));
-    facets.emplace_back(Vec3crd(id, 2, id - 1));
+	int id = (int)vertices.size() - 1;
+    facets.emplace_back(Vec3crd( 0, 2, id - 1));
+    facets.emplace_back(Vec3crd( 3, 1,     id));
+	facets.emplace_back(Vec3crd(id, 2,      3));
+    facets.emplace_back(Vec3crd(id, id - 1, 2));
     
-    TriangleMesh mesh(vertices, facets);
-    return mesh;
+	return TriangleMesh(std::move(vertices), std::move(facets));
 }
 
 // Generates mesh for a sphere centered about the origin, using the generated angle
 // to determine the granularity. 
 // Default angle is 1 degree.
-TriangleMesh make_sphere(double rho, double fa) {
-    Pointf3s vertices;
-    std::vector<Vec3crd> facets;
+//FIXME better to discretize an Icosahedron recursively http://www.songho.ca/opengl/gl_sphere.html
+TriangleMesh make_sphere(double radius, double fa)
+{
+	int   sectorCount = ceil(2. * M_PI / fa);
+	int   stackCount  = ceil(M_PI / fa);
+	float sectorStep  = 2. * M_PI / sectorCount;
+	float stackStep   = M_PI / stackCount;
 
-    // Algorithm: 
-    // Add points one-by-one to the sphere grid and form facets using relative coordinates.
-    // Sphere is composed effectively of a mesh of stacked circles.
+	Pointf3s vertices;
+	vertices.reserve((stackCount - 1) * sectorCount + 2);
+	for (int i = 0; i <= stackCount; ++ i) {
+		// from pi/2 to -pi/2
+		double stackAngle = 0.5 * M_PI - stackStep * i;
+		double xy = radius * cos(stackAngle);
+		double z  = radius * sin(stackAngle);
+		if (i == 0 || i == stackCount)
+			vertices.emplace_back(Vec3d(xy, 0., z));
+		else
+			for (int j = 0; j < sectorCount; ++ j) {
+				// from 0 to 2pi
+				double sectorAngle = sectorStep * j;
+				vertices.emplace_back(Vec3d(xy * cos(sectorAngle), xy * sin(sectorAngle), z));
+			}
+	}
 
-    // adjust via rounding to get an even multiple for any provided angle.
-    double angle = (2*PI / floor(2*PI / fa));
-
-    // Ring to be scaled to generate the steps of the sphere
-    std::vector<double> ring;
-    for (double i = 0; i < 2*PI; i+=angle) {
-        ring.emplace_back(i);
-    }
-    const size_t steps = ring.size(); 
-    const double increment = (double)(1.0 / (double)steps);
-
-    // special case: first ring connects to 0,0,0
-    // insert and form facets.
-    vertices.emplace_back(Vec3d(0.0, 0.0, -rho));
-    size_t id = vertices.size();
-    for (size_t i = 0; i < ring.size(); i++) {
-        // Fixed scaling 
-        const double z = -rho + increment*rho*2.0;
-        // radius of the circle for this step.
-        const double r = sqrt(abs(rho*rho - z*z));
-        Vec2d b = Eigen::Rotation2Dd(ring[i]) * Eigen::Vector2d(0, r);
-        vertices.emplace_back(Vec3d(b(0), b(1), z));
-        facets.emplace_back((i == 0) ? Vec3crd(1, 0, ring.size()) : Vec3crd(id, 0, id - 1));
-        ++ id;
-    }
-
-    // General case: insert and form facets for each step, joining it to the ring below it.
-    for (size_t s = 2; s < steps - 1; s++) {
-        const double z = -rho + increment*(double)s*2.0*rho;
-        const double r = sqrt(abs(rho*rho - z*z));
-
-        for (size_t i = 0; i < ring.size(); i++) {
-            Vec2d b = Eigen::Rotation2Dd(ring[i]) * Eigen::Vector2d(0, r);
-            vertices.emplace_back(Vec3d(b(0), b(1), z));
-            if (i == 0) {
-                // wrap around
-                facets.emplace_back(Vec3crd(id + ring.size() - 1 , id, id - 1)); 
-                facets.emplace_back(Vec3crd(id, id - ring.size(),  id - 1)); 
-            } else {
-                facets.emplace_back(Vec3crd(id , id - ring.size(), (id - 1) - ring.size())); 
-                facets.emplace_back(Vec3crd(id, id - 1 - ring.size() ,  id - 1)); 
-            }
-            id++;
-        } 
-    }
-
-
-    // special case: last ring connects to 0,0,rho*2.0
-    // only form facets.
-    vertices.emplace_back(Vec3d(0.0, 0.0, rho));
-    for (size_t i = 0; i < ring.size(); i++) {
-        if (i == 0) {
-            // third vertex is on the other side of the ring.
-            facets.emplace_back(Vec3crd(id, id - ring.size(),  id - 1));
-        } else {
-            facets.emplace_back(Vec3crd(id, id - ring.size() + i,  id - ring.size() + (i - 1)));
-        }
-    }
-    id++;
-    TriangleMesh mesh(vertices, facets);
-    return mesh;
+	std::vector<Vec3crd> facets;
+	facets.reserve(2 * (stackCount - 1) * sectorCount);
+	for (int i = 0; i < stackCount; ++ i) {
+		// Beginning of current stack.
+		int k1 = (i == 0) ? 0 : (1 + (i - 1) * sectorCount);
+		int k1_first = k1;
+		// Beginning of next stack.
+		int k2 = (i == 0) ? 1 : (k1 + sectorCount);
+		int k2_first = k2;
+		for (int j = 0; j < sectorCount; ++ j) {
+			// 2 triangles per sector excluding first and last stacks
+			int k1_next = k1;
+			int k2_next = k2;
+			if (i != 0) {
+				k1_next = (j + 1 == sectorCount) ? k1_first : (k1 + 1);
+				facets.emplace_back(Vec3crd(k1, k2, k1_next));
+			}
+			if (i + 1 != stackCount) {
+				k2_next = (j + 1 == sectorCount) ? k2_first : (k2 + 1);
+				facets.emplace_back(Vec3crd(k1_next, k2, k2_next));
+			}
+			k1 = k1_next;
+			k2 = k2_next;
+		}
+	}
+	return TriangleMesh(std::move(vertices), std::move(facets));
 }
 
 }

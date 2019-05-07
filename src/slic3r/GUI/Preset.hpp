@@ -15,6 +15,7 @@ class wxBitmapComboBox;
 class wxChoice;
 class wxItemContainer;
 class wxString;
+class wxWindow;
 
 namespace Slic3r {
 
@@ -276,10 +277,10 @@ public:
     bool            delete_current_preset();
 
     // Load default bitmap to be placed at the wxBitmapComboBox of a MainFrame.
-    bool            load_bitmap_default(const std::string &file_name);
+    void            load_bitmap_default(wxWindow *window, const std::string &file_name);
 
     // Load "add new printer" bitmap to be placed at the wxBitmapComboBox of a MainFrame.
-    bool            load_bitmap_add(const std::string &file_name);
+    void            load_bitmap_add(wxWindow *window, const std::string &file_name);
 
     // Compatible & incompatible marks, to be placed at the wxBitmapComboBox items.
     void            set_bitmap_compatible  (const wxBitmap *bmp) { m_bitmap_compatible   = bmp; }
@@ -311,7 +312,7 @@ public:
     const Preset&   get_edited_preset() const   { return m_edited_preset; }
 
 	// used to update preset_choice from Tab
-	const std::deque<Preset>&	get_presets()	{ return m_presets; }
+	const std::deque<Preset>&	get_presets() const	{ return m_presets; }
 	int						get_idx_selected()	{ return m_idx_selected; }
 	static const std::string&	get_suffix_modified();
 
@@ -393,7 +394,7 @@ public:
     // Update the choice UI from the list of presets.
     // If show_incompatible, all presets are shown, otherwise only the compatible presets are shown.
     // If an incompatible preset is selected, it is shown as well.
-    size_t          update_tab_ui(wxBitmapComboBox *ui, bool show_incompatible);
+    size_t          update_tab_ui(wxBitmapComboBox *ui, bool show_incompatible, const int em = 10);
     // Update the choice UI from the list of presets.
     // Only the compatible presets are shown.
     // If an incompatible preset is selected, it is shown as well.
@@ -410,6 +411,8 @@ public:
 
     // Generate a file path from a profile name. Add the ".ini" suffix if it is missing.
     std::string     path_from_name(const std::string &new_name) const;
+
+    void            clear_bitmap_cache();
 
 #ifdef __linux__
 	static const char* separator_head() { return "------- "; }
@@ -500,6 +503,8 @@ public:
     PrinterPresetCollection(Preset::Type type, const std::vector<std::string> &keys, const Slic3r::StaticPrintConfig &defaults, const std::string &default_name = "- default -") :
 		PresetCollection(type, keys, defaults, default_name) {}
     const Preset&   default_preset_for(const DynamicPrintConfig &config) const override;
+
+    const Preset*   find_by_model_id(const std::string &model_id) const;
 };
 
 } // namespace Slic3r
