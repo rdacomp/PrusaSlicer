@@ -101,7 +101,7 @@ public:
     void            init_label_colours();
     void            update_label_colours_from_appconfig();
     void            init_fonts();
-	void            update_fonts(const MainFrame *main_frame = nullptr);
+	void            update_fonts();
     void            set_label_clr_modified(const wxColour& clr);
     void            set_label_clr_sys(const wxColour& clr);
 

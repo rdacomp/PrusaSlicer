@@ -32,7 +32,6 @@ ProgressStatusBar::ProgressStatusBar(wxWindow *parent, int id):
     m_prog->Hide();
     m_cancelbutton->Hide();
 
-	self->SetFont(GUI::wxGetApp().normal_font());
     self->SetFieldsCount(3);
     int w[] = {-1, 150, 155};
     self->SetStatusWidths(3, w);

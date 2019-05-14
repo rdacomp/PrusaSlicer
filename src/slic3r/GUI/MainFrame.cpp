@@ -36,12 +36,6 @@ MainFrame::MainFrame() :
 DPIFrame(NULL, wxID_ANY, wxString(SLIC3R_BUILD_ID) + " " + _(L("based on Slic3r")), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE, "mainframe"),
         m_printhost_queue_dlg(new PrintHostQueueDialog(this))
 {
-    // Fonts were created by the DPIFrame constructor for the monitor, on which the window opened.
-    wxGetApp().update_fonts(this);
-    this->SetFont(this->normal_font());
-    // initialize default width_unit according to the width of the one symbol ("m") of the currently active font of this window.
-    wxGetApp().set_em_unit(std::max<size_t>(10, GetTextExtent("m").x - 1));
-
     // Load the icon either from the exe, or from the ico file.
 #if _WIN32
     {
@@ -59,6 +53,10 @@ DPIFrame(NULL, wxID_ANY, wxString(SLIC3R_BUILD_ID) + " " + _(L("based on Slic3r"
     m_statusbar->set_status_text(_(L("Version")) + " " +
 		SLIC3R_VERSION +
 		_(L(" - Remember to check for updates at http://github.com/prusa3d/PrusaSlicer/releases")));
+
+    // initialize default width_unit according to the width of the one symbol ("x") of the current system font
+    const wxSize size = GetTextExtent("m");
+    wxGetApp().set_em_unit(std::max<size_t>(10, size.x - 1));
 
     /* Load default preset bitmaps before a tabpanel initialization,
      * but after filling of an em_unit value 
@@ -142,7 +140,6 @@ void MainFrame::init_tabpanel()
     // wxNB_NOPAGETHEME: Disable Windows Vista theme for the Notebook background. The theme performance is terrible on Windows 10
     // with multiple high resolution displays connected.
     m_tabpanel = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
-    m_tabpanel->SetFont(Slic3r::GUI::wxGetApp().normal_font());
 
     m_tabpanel->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, [this](wxEvent&) {
         auto panel = m_tabpanel->GetCurrentPage();
@@ -280,9 +277,10 @@ bool MainFrame::can_delete_all() const
 void MainFrame::on_dpi_changed(const wxRect &suggested_rect)
 {
     wxGetApp().update_fonts();
-    this->SetFont(this->normal_font());
-    // initialize default width_unit according to the width of the one symbol ("m") of the currently active font of this window.
-    wxGetApp().set_em_unit(std::max<size_t>(10, GetTextExtent("m").x - 1));
+
+    // _strange_ workaround for correct em_unit calculation
+    const int new_em_unit = scale_factor() * 10;
+    wxGetApp().set_em_unit(std::max<size_t>(10, new_em_unit));
 
     /* Load default preset bitmaps before a tabpanel initialization,
      * but after filling of an em_unit value

@@ -1387,8 +1387,6 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     , view_toolbar(GLToolbar::Radio)
 #endif // ENABLE_SVG_ICONS
 {
-	this->q->SetFont(Slic3r::GUI::wxGetApp().normal_font());
-
     arranging = false;
     rotoptimizing = false;
     background_process.set_fff_print(&fff_print);
