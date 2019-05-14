@@ -1,0 +1,23 @@
+Source: prusa-slicer
+Section: misc
+Priority: optional
+Maintainer: Tamas Meszaros <tamas.meszaros@prusa3d.cz>
+Build-Depends: cmake (>= 3.10), 
+	       debhelper (>= 10),
+               libboost-all-dev,
+               libtbb-dev,
+               libglew-dev,
+               libeigen3-dev,
+	       libcurl4-gnutls-dev | libcurl4-openssl-dev,
+               libnlopt-cxx-dev | libnlopt-dev (<< 2.4.2+dfsg-5~),
+	       libwxgtk3.0-dev | libwxgtk3.0-gtk3-dev
+Standards-Version: 4.1.2
+Homepage: https://www.prusa3d.com/slic3r-prusa-edition/
+Vcs-Git: https://github.com/prusa3d/PrusaSlicer.git
+Vcs-Browser: https://github.com/prusa3d/PrusaSlicer
+
+Package: prusa-slicer
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: G-code generator for 3D printers (RepRap, Makerbot, Ultimaker etc.)
+ PrusaSlicer takes 3D models (STL, OBJ, AMF) and converts them into G-code instructions for FFF printers or PNG layers for SLA 3D printers. It's compatible with any modern printer based on the RepRap toolchain, including all those based on the Marlin, Prusa, Sprinter and Repetier firmware. It also works with Mach3, LinuxCNC and Machinekit controllers.

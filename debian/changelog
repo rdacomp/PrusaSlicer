@@ -1,0 +1,5 @@
+prusa-slicer (2.0-0) stable; urgency=medium
+
+  * Initial release of the new Prusa Slicer
+
+ -- Tamas Meszaros <tamas.meszaros@prusa3d.cz>  Tue, 14 May 2019 15:46:05 +0200
