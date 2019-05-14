@@ -8,7 +8,7 @@ ifneq (,$(filter $(DEB_HOST_ARCH), mips mipsel))
 endif
 
 %:
-	dh $@ --buildsystem=cmake --parallel
+	dh $@ --buildsystem=cmake
 
 override_dh_auto_configure:
 	dh_auto_configure --buildsystem=cmake -- -DSLIC3R_FSH=ON -DCMAKE_BUILD_TYPE=Release -DSLIC3R_WX_STABLE=ON -DLIBNEST2D_UNITTESTS=OFF
