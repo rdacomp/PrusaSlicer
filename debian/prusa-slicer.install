@@ -1,1 +1,2 @@
 debian/prusa-slicer.desktop /usr/share/applications
+debian/prusa-slicer.svg /usr/share/pixmaps

@@ -2,7 +2,7 @@
 Version=2.0
 Type=Application
 Name=Prusa Slicer
-Icon=PrusaSlicer
+Icon=prusa-slicer
 Exec=prusa-slicer %F
 Keywords=slice;3D;printer;convert;gcode;stl;obj;amf;SLA
 StartupNotify=false
