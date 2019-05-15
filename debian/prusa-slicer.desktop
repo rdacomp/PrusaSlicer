@@ -7,5 +7,5 @@ Exec=prusa-slicer %F
 Keywords=slice;3D;printer;convert;gcode;stl;obj;amf;SLA
 StartupNotify=false
 StartupWMClass=prusa-slicer
-MimeType=application/sla;model/x-wavefront-obj;model/x-geomview-off;application/x-amf;
-Categories=Development;Engineering;
+MimeType=application/sla;model/x-wavefront-obj;model/3mf;model/x-geomview-off;application/x-amf;
+Categories=Graphics;Engineering;

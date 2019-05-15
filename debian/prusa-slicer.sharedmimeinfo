@@ -8,6 +8,10 @@
     <comment>Wavefront Object File</comment>
     <glob pattern="*.obj"/>
   </mime-type>
+  <mime-type type="model/3mf">
+    <comment>Model data for a 3D object or scene</comment>
+    <glob pattern="*.3mf"/>
+  </mime-type>
   <mime-type type="model/x-geomview-off">
     <comment>Geomview Object File Format</comment>
     <glob pattern="*.off"/>
