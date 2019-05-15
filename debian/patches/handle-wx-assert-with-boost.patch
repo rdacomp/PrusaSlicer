@@ -1,0 +1,21 @@
+diff --git a/src/slic3r/GUI/GUI_App.cpp b/src/slic3r/GUI/GUI_App.cpp
+index 3880f1d79..907231b76 100644
+--- a/src/slic3r/GUI/GUI_App.cpp
++++ b/src/slic3r/GUI/GUI_App.cpp
+@@ -142,6 +142,16 @@ GUI_App::GUI_App()
+ 
+ bool GUI_App::OnInit()
+ {
++    wxSetAssertHandler([](const wxString &file, 
++                          int line, 
++                          const wxString &func, 
++                          const wxString &cond, 
++                          const wxString &msg) 
++    {
++        BOOST_LOG_TRIVIAL(debug) << file << " line: " << line << ":\n" << func
++                                 << " " << cond << " " << msg;
++    });
++    
+     try {
+         return on_init_inner();
+     } catch (...) {
