@@ -7,8 +7,6 @@ add_subdirectory(boost)
 add_subdirectory(clipper)
 add_subdirectory(miniz)
 add_subdirectory(glu-libtess)
-add_subdirectory(polypartition)
-add_subdirectory(poly2tri)
 add_subdirectory(qhull)
 add_subdirectory(Shiny)
 add_subdirectory(semver)
@@ -16,9 +14,6 @@ add_subdirectory(semver)
 # Adding libnest2d project for bin packing...
 set(LIBNEST2D_UNITTESTS ON CACHE BOOL "Force generating unittests for libnest2d")
 add_subdirectory(libnest2d)
-
-include_directories(${LIBDIR}/qhull/src)
-#message(STATUS ${LIBDIR}/qhull/src)
 
 add_subdirectory(libslic3r)
 

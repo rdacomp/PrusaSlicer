@@ -1,10 +1,11 @@
+#include <qhull/Qhull.h>
+#include <qhull/QhullFacetList.h>
+#include <qhull/QhullVertexSet.h>
+
 #include "TriangleMesh.hpp"
 #include "ClipperUtils.hpp"
 #include "Geometry.hpp"
 #include "Tesselate.hpp"
-#include "qhull/src/libqhullcpp/Qhull.h"
-#include "qhull/src/libqhullcpp/QhullFacetList.h"
-#include "qhull/src/libqhullcpp/QhullVertexSet.h"
 #include <cmath>
 #include <deque>
 #include <queue>

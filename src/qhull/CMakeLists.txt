@@ -8,6 +8,17 @@
 # Created by modification of the original qhull CMakeLists.
 # Lukas Matena (25.7.2018), lukasmatena@seznam.cz
 
+# see bug report: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=925540
+#if(NOT SLIC3R_STATIC)
+#find_package(QHULL 7.2)
+#endif()
+
+if(QHULL_FOUND)
+    message(STATUS "using qhull from system.")
+    set(QHULL_LIBRARIES  ${QHULL_LIBRARIES} PARENT_SCOPE)
+    set(QHULL_INCLUDE_DIRS ${QHULL_INCLUDE_DIRS} PARENT_SCOPE)
+    set(QHULL_DEFINITIONS ${QHULL_DEFINITIONS} PARENT_SCOPE)
+else()
 
 project(qhull)
 cmake_minimum_required(VERSION 2.6)
@@ -124,3 +135,9 @@ endif(UNIX)
 
 # LIBDIR is defined in the main xs CMake file:
 target_include_directories(${qhull_STATIC} PRIVATE ${LIBDIR}/qhull/src)
+
+set(QHULL_LIBRARIES ${qhull_STATIC} PARENT_SCOPE)
+set(QHULL_INCLUDE_DIRS ${LIBDIR}/qhull/src PARENT_SCOPE)
+set(QHULL_DEFINITIONS "" PARENT_SCOPE)
+
+endif()

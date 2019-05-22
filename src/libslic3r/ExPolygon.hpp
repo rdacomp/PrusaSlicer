@@ -63,9 +63,6 @@ public:
     void get_trapezoids2(Polygons* polygons) const;
     void get_trapezoids2(Polygons* polygons, double angle) const;
     void triangulate(Polygons* polygons) const;
-    // Triangulate into triples of points.
-    void triangulate_pp(Points *triangles) const;
-    void triangulate_p2t(Polygons* polygons) const;
     Lines lines() const;
 };
 
