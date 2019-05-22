@@ -1,6 +1,6 @@
-#include <qhull/Qhull.h>
-#include <qhull/QhullFacetList.h>
-#include <qhull/QhullVertexSet.h>
+#include <libqhullcpp/Qhull.h>
+#include <libqhullcpp/QhullFacetList.h>
+#include <libqhullcpp/QhullVertexSet.h>
 
 #include "TriangleMesh.hpp"
 #include "ClipperUtils.hpp"
