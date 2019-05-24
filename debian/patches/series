@@ -1,3 +1,4 @@
 handle-wx-assert-with-boost.patch
 mode-switching-fix.patch
+fix-gizmo-icon-size.patch
 version-name.patch

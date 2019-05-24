@@ -2,11 +2,8 @@ Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Source: https://github.com/prusa3d/PrusaSlicer/
 Upstream-Contact: Vojtech Bubnik <bubnikv@gmail.com>
 Upstream-Name: prusa-slicer
-Files-Excluded: src/eigen
-                src/expat
-                src/glew
-                src/avrdude/windows/*.sys
-                src/avrdude/atmel-docs
+License: AGPL-3
+Copyright: 2019, Prusa Research s.r.o <info@prusa3d.com>
 
 Files: *
 Copyright: 2011-2016, Alessandro Ranellucci <alessandro@unterwelt.it>
@@ -199,22 +196,9 @@ Files: src/Shiny/*
 Copyright: 2007-2010 Albin Abedi
 License: Expat
 
-Files: src/poly2tri/*
-Copyright: 2009-2010, Mason Green <mason.green@gmail.com>
-License: BSD-3-clause
-
 Files: src/admesh/*
 Copyright: 1995, Anthony D. Martin
 License: GPL-2+
-
-Files: src/polypartition.*
-Copyright: 2011, Ivan Fratric
-License: Expat
-
-Files: src/polypartition.cpp
-       src/polypartition.h
-Copyright: 2011, Ivan Fratric
-License: Expat
 
 Files: src/libslic3r/Geometry.cpp
 Copyright: 2010-2012, Andrii Sydorchuk
@@ -231,6 +215,10 @@ Copyright: 2008-2015, Nigel Stewart <nigels@users.sourceforge.net>
            2002-2008, Marcelo E. Magallon <mmagallo@debian org>
            2002, Lev Povalahev
 License: BSL-1.0
+
+Files: src/libnest2d/*
+Copyright: 2019, Tamas Meszaros <meszaros.q@gmail.com>
+Licence: AGPL-3
 
 Files: debian/*
 Copyright: 2013, Nicolas Dandrimont <olasd@debian.org>

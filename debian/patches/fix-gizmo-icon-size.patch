@@ -1,0 +1,59 @@
+diff --git a/src/slic3r/GUI/GLCanvas3D.cpp b/src/slic3r/GUI/GLCanvas3D.cpp
+index 1280fa6d9..ff2295cd7 100644
+--- a/src/slic3r/GUI/GLCanvas3D.cpp
++++ b/src/slic3r/GUI/GLCanvas3D.cpp
+@@ -4098,8 +4098,8 @@ void GLCanvas3D::_render_gizmos_overlay() const
+ #if ENABLE_RETINA_GL
+     m_gizmos.set_overlay_scale(m_retina_helper->get_scale_factor());
+ #else
+-//     m_gizmos.set_overlay_scale(m_canvas->GetContentScaleFactor());
+-    m_gizmos.set_overlay_scale(wxGetApp().em_unit()*0.1f);//! #ys_FIXME_experiment
++    const float size = int(GLGizmosManager::Default_Icons_Size*wxGetApp().toolbar_icon_scale());
++    m_gizmos.set_overlay_icon_size(size);
+ #endif /* __WXMSW__ */
+ 
+     m_gizmos.render_overlay(*this, m_selection);
+diff --git a/src/slic3r/GUI/GUI_App.cpp b/src/slic3r/GUI/GUI_App.cpp
+index 472abd6dc..6773dbd30 100644
+--- a/src/slic3r/GUI/GUI_App.cpp
++++ b/src/slic3r/GUI/GUI_App.cpp
+@@ -390,6 +390,27 @@ void GUI_App::set_label_clr_sys(const wxColour& clr) {
+     app_config->save();
+ }
+ 
++float GUI_App::toolbar_icon_scale(const bool is_limited/* = false*/) const
++{
++#ifdef __APPLE__
++    const float icon_sc = 1.0f; // for Retina display will be used its own scale
++#else
++    const float icon_sc = m_em_unit*0.1f;
++#endif // __APPLE__
++
++    const std::string& use_val  = app_config->get("use_custom_toolbar_size");
++    const std::string& val      = app_config->get("custom_toolbar_size");
++
++    if (val.empty() || use_val.empty() || use_val == "0")
++        return icon_sc;
++
++    int int_val = atoi(val.c_str());
++    if (is_limited && int_val < 50)
++        int_val = 50;
++
++    return 0.01f * int_val * icon_sc;
++}
++
+ void GUI_App::recreate_GUI()
+ {
+     // Weird things happen as the Paint messages are floating around the windows being destructed.
+diff --git a/src/slic3r/GUI/GUI_App.hpp b/src/slic3r/GUI/GUI_App.hpp
+index 1c9a462c6..b70f0dc16 100644
+--- a/src/slic3r/GUI/GUI_App.hpp
++++ b/src/slic3r/GUI/GUI_App.hpp
+@@ -115,6 +115,7 @@ public:
+     const wxFont&   normal_font()           { return m_normal_font; }
+     size_t          em_unit() const         { return m_em_unit; }
+     void            set_em_unit(const size_t em_unit)    { m_em_unit = em_unit; }
++    float           toolbar_icon_scale(const bool is_limited = false) const;
+ 
+     void            recreate_GUI();
+     void            system_info();
