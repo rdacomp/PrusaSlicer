@@ -161,7 +161,7 @@ if(NOT TBB_FOUND)
     endif()
   elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Linux
-    set(TBB_DEFAULT_SEARCH_DIR "/opt/intel/tbb")
+    set(TBB_DEFAULT_SEARCH_DIR "/opt/intel/tbb" "/usr/include" "/usr/local/include" "/opt/local/include")
     
     # TODO: Check compiler version to see the suffix should be <arch>/gcc4.1 or
     #       <arch>/gcc4.1. For now, assume that the compiler is more recent than

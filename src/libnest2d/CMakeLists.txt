@@ -67,8 +67,11 @@ if(TBB_FOUND)
        # Suppress implicit linking of the TBB libraries by the Visual Studio compiler.
        target_compile_definitions(libnest2d INTERFACE -D__TBB_NO_IMPLICIT_LINKAGE)
     endif()
-    # The Intel TBB library will use the std::exception_ptr feature of C++11.
-    target_compile_definitions(libnest2d INTERFACE -DTBB_USE_CAPTURED_EXCEPTION=0)
+    if (NOT DEFINED TBB_USE_CAPTURED_EXCEPTION)
+      # The Intel TBB library will use the std::exception_ptr feature of C++11 by default.
+      set(TBB_USE_CAPTURED_EXCEPTION 0)
+    endif ()
+    target_compile_definitions(libnest2d INTERFACE -DTBB_USE_CAPTURED_EXCEPTION=${TBB_USE_CAPTURED_EXCEPTION})
 
     target_link_libraries(libnest2d INTERFACE tbb)
     # The following breaks compilation on Visual Studio in Debug mode.

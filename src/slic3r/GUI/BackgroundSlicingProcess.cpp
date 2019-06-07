@@ -30,6 +30,8 @@
 #include <boost/nowide/cstdio.hpp>
 #include "I18N.hpp"
 
+#include <tbb/tbb_exception.h>
+
 namespace Slic3r {
 
 BackgroundSlicingProcess::BackgroundSlicingProcess()
@@ -148,9 +150,18 @@ void BackgroundSlicingProcess::thread_proc()
                 case ptSLA: this->process_sla(); break;
 				default: m_print->process(); break;
 			}
-		} catch (CanceledException & /* ex */) {
+		} catch (const CanceledException & /* ex */) {
 			// Canceled, this is all right.
 			assert(m_print->canceled());
+		} catch (const tbb::captured_exception & ex) {
+			// If compiled with TBB_USE_CAPTURED_EXCEPTION, the exception is not passed between threads, 
+			// but an approximate exception tbb::captured_exception is passed instead, wrapping the name of the original exception class name and the "what" string.
+			if (strcmp(typeid(CanceledException).name(), ex.name()) == 0)
+				// Canceled, this is all right.
+				assert(m_print->canceled());
+			else
+				// Report an error.
+				error = ex.what();
 		} catch (std::exception &ex) {
 			error = ex.what();
 		} catch (...) {

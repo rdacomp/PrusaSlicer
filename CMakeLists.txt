@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.2)
 
 include("version.inc")
 include(GNUInstallDirs)
+include(CheckCXXSourceCompiles)
+include(CMakePushCheckState)
 
 set(SLIC3R_RESOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources")
 file(TO_NATIVE_PATH "${SLIC3R_RESOURCES_DIR}" SLIC3R_RESOURCES_DIR_WIN)
@@ -146,9 +148,35 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(Threads REQUIRED)
 endif()
 
+# Intel Thread Building BLocks will rethrow exceptions between threads by default.
+set (TBB_USE_CAPTURED_EXCEPTION 0)
 if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUXX)
-    # Adding -fext-numeric-literals to enable GCC extensions on definitions of quad float literals, which are required by Boost.
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fext-numeric-literals" )
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        # Adding -fext-numeric-literals to enable GCC extensions on definitions of quad float literals, which are required by Boost.
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fext-numeric-literals")
+    endif ()
+
+    # Check if std::exception_ptr is supported. It may happen, that the old C++11 library does not provide std::exception_ptr or due to mixing of GCC/Clang the std::exception_ptr is not supported.
+    cmake_push_check_state(RESET)
+    CHECK_CXX_SOURCE_COMPILES(
+        "#include <string>
+        #include <exception>
+        int main(int argc, char** argv) {
+          std::exception_ptr eptr;
+          try {
+              std::string().at(1);
+          } catch(...) {
+              eptr = std::current_exception();
+          }
+        }" SLIC3R_EXCEPTION_PTR_SUPPORTED)
+
+    if (SLIC3R_EXCEPTION_PTR_SUPPORTED)
+        message (STATUS "std::exception_ptr is supported.")
+    else ()
+        message (STATUS "std::exception_ptr is NOT supported. Using the tbb::captured_exception.")
+        set (TBB_USE_CAPTURED_EXCEPTION 1)
+    endif ()
+    cmake_pop_check_state()
 
     if (SLIC3R_SYNTAXONLY)
         set(CMAKE_CXX_ARCHIVE_CREATE "true")
@@ -266,7 +294,7 @@ if(MSVC)
     add_definitions(-D__TBB_NO_IMPLICIT_LINKAGE)
 endif()
 # The Intel TBB library will use the std::exception_ptr feature of C++11.
-add_definitions(-DTBB_USE_CAPTURED_EXCEPTION=0)
+add_definitions(-DTBB_USE_CAPTURED_EXCEPTION=${TBB_USE_CAPTURED_EXCEPTION})
 
 find_package(CURL REQUIRED)
 include_directories(${CURL_INCLUDE_DIRS})
