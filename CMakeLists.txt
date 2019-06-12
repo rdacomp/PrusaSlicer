@@ -135,7 +135,35 @@ if (APPLE)
     endif ()
 endif ()
 
+# Intel Thread Building BLocks will rethrow exceptions between threads by default.
+set (TBB_USE_CAPTURED_EXCEPTION 0)
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Check if std::exception_ptr is supported. It may happen, that the old C++11 library does not provide std::exception_ptr or due to mixing of GCC/Clang the std::exception_ptr is not supported.
+    cmake_push_check_state(RESET)
+	set(CMAKE_CXX_FLAGS_BACKUP "${CMAKE_CXX_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+    CHECK_CXX_SOURCE_COMPILES(
+        "#include <string>
+        #include <exception>
+        int main(int argc, char** argv) {
+          std::exception_ptr eptr;
+          try {
+              std::string().at(1);
+          } catch(...) {
+              eptr = std::current_exception();
+          }
+        }" SLIC3R_EXCEPTION_PTR_SUPPORTED)
+    if (SLIC3R_EXCEPTION_PTR_SUPPORTED)
+        message (STATUS "std::exception_ptr is supported.")
+    else ()
+        message (STATUS "std::exception_ptr is NOT supported. Using the tbb::captured_exception.")
+        set (TBB_USE_CAPTURED_EXCEPTION 1)
+    endif ()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_BACKUP}")
+	unset(CMAKE_CXX_FLAGS_BACKUP)
+    cmake_pop_check_state()
+
     find_package(PkgConfig REQUIRED)
 
     if (CMAKE_VERSION VERSION_LESS "3.1")
@@ -148,36 +176,11 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(Threads REQUIRED)
 endif()
 
-# Intel Thread Building BLocks will rethrow exceptions between threads by default.
-set (TBB_USE_CAPTURED_EXCEPTION 0)
 if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUXX)
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         # Adding -fext-numeric-literals to enable GCC extensions on definitions of quad float literals, which are required by Boost.
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fext-numeric-literals")
     endif ()
-
-    # Check if std::exception_ptr is supported. It may happen, that the old C++11 library does not provide std::exception_ptr or due to mixing of GCC/Clang the std::exception_ptr is not supported.
-    cmake_push_check_state(RESET)
-    CHECK_CXX_SOURCE_COMPILES(
-        "#include <string>
-        #include <exception>
-        int main(int argc, char** argv) {
-          std::exception_ptr eptr;
-          try {
-              std::string().at(1);
-          } catch(...) {
-              eptr = std::current_exception();
-          }
-        }" SLIC3R_EXCEPTION_PTR_SUPPORTED)
-
-    if (SLIC3R_EXCEPTION_PTR_SUPPORTED)
-        message (STATUS "std::exception_ptr is supported.")
-    else ()
-        message (STATUS "std::exception_ptr is NOT supported. Using the tbb::captured_exception.")
-        set (TBB_USE_CAPTURED_EXCEPTION 1)
-    endif ()
-    cmake_pop_check_state()
-
     if (SLIC3R_SYNTAXONLY)
         set(CMAKE_CXX_ARCHIVE_CREATE "true")
         set(CMAKE_C_ARCHIVE_CREATE "true")
