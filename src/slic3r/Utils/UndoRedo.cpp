@@ -40,11 +40,11 @@ SnapshotData::SnapshotData() : printer_technology(ptUnknown), flags(0), layer_ra
 {
 }
 
-static std::string topmost_snapshot_name = "@@@ Topmost @@@";
-
+static std::string s_topmost_snapshot_name = "@@@ Topmost @@@";
+static std::string s_silent_snapshot_prefix = "@@@ Silent @@@ ";
 bool Snapshot::is_topmost() const
 {
-	return this->name == topmost_snapshot_name;
+	return this->name == s_topmost_snapshot_name;
 }
 
 // Time interval, start is closed, end is open.
@@ -69,6 +69,8 @@ public:
 	void    trim_end(size_t new_end) { m_end = std::min(m_end, new_end); }
 	void 	extend_end(size_t new_end) { assert(new_end >= m_end); m_end = new_end; }
 
+	// A plain interval does not hold its own data, it's empty always match the other plain interval's empty data. Used by the immutable object history.
+	bool    matches_data(const Interval &rhs) const { return true; }
 	size_t 	memsize() const { return sizeof(this); }
 
 private:
@@ -97,8 +99,15 @@ public:
 	// Return the amount of memory released.
 	virtual size_t release_before_timestamp(size_t timestamp) = 0;
 	// Release all data after the given timestamp. For the ImmutableObjectHistory, the shared pointer is NOT released.
+	// If the top remaining snapshot stops at or exceeds timestamp, it will be extended to timestamp_new_top.
 	// Return the amount of memory released.
-	virtual size_t release_after_timestamp(size_t timestamp) = 0;
+	virtual size_t release_after_timestamp(size_t timestamp, size_t timestamp_new_top) = 0;
+	virtual size_t release_after_timestamp(size_t timestamp) { return this->release_after_timestamp(timestamp, timestamp); }
+	// Release all data inside the range, extend the intervals ending with begin_time or crossing begin_time to end_time,
+	// possibly merging distinct intervals crossing begin_time and end_time.
+	// For the ImmutableObjectHistory, the shared pointer is NOT released.
+	// Return the amount of memory released.
+	virtual size_t release_between_timestamps(size_t begin_time, size_t end_time) = 0;
 	// Release all optional data of this history.
 	virtual size_t release_optional() = 0;
 	// Restore optional data possibly released by release_optional.
@@ -154,7 +163,8 @@ public:
 	}
 
 	// Release all data after the given timestamp. The shared pointer is NOT released.
-	size_t release_after_timestamp(size_t timestamp) override {
+	// If the top remaining snapshot stops at or exceeds timestamp, it will be extended to timestamp_new_top.
+	size_t release_after_timestamp(size_t timestamp, size_t timestamp_new_top) override {
 		size_t mem_released = 0;
 		if (! m_history.empty()) {
 			assert(this->valid());
@@ -164,12 +174,51 @@ public:
 				auto it_prev = it;
 				-- it_prev;
 				assert(it_prev->begin() < timestamp);
-				// Trim the last interval with timestamp.
+				// Trim the last interval by timestamp.
 				it_prev->trim_end(timestamp);
+				assert(timestamp <= timestamp_new_top);
+				if (it_prev->end() == timestamp)
+					// If the end of the last interval stops at timestamp, extend it to timestamp_new_top.
+					it_prev->extend_end(timestamp_new_top);
 			}
 			for (auto it2 = it; it2 != m_history.end(); ++ it2)
 				mem_released += it2->memsize();
 			m_history.erase(it, m_history.end());
+			assert(this->valid());
+		}
+		return mem_released;
+	}
+
+	// Release all data inside the range, extend the intervals ending with begin_time or crossing begin_time to end_time,
+	// possibly merging distinct intervals crossing begin_time and end_time.
+	// The shared pointer is NOT released.
+	// Return the amount of memory released.
+	size_t release_between_timestamps(size_t begin_time, size_t end_time) override {
+		size_t mem_released = 0;
+		if (! m_history.empty()) {
+			assert(this->valid());
+			// it points to an interval which either starts with begin_time, or follows begin_time.
+			auto it = std::lower_bound(m_history.begin(), m_history.end(), T(begin_time, begin_time));
+			assert(it != m_history.begin());
+			-- it;
+			assert(it->begin() < begin_time);
+			// Extend the previous interval to end_time if it is not crossing end_time yet.
+			if (it->end() < end_time)
+				it->extend_end(end_time);
+			auto it2 = ++ it;
+			// Release all intervals solely between begin_time and end_time.
+			for (; it2 != m_history.end() && it2->end() <= end_time; ++ it2)
+				mem_released += it2->memsize();
+			if (it2 != m_history.end() && it2->begin() <= end_time) {
+				assert(it2->end() > end_time);
+				it2->trim_begin(end_time);
+				if (it->matches_data(*it2)) {
+					mem_released += it2->memsize();
+					it->extend_end(it2->end());
+					++ it2;
+				}
+			}
+			m_history.erase(it, it2);
 			assert(this->valid());
 		}
 		return mem_released;
@@ -308,6 +357,7 @@ private:
 		char 		data[1];
 
 		bool 		matches(const std::string& rhs) { return this->size == rhs.size() && memcmp(this->data, rhs.data(), this->size) == 0; }
+		bool 		matches(const char *rhs_data, size_t rhs_size) { return this->data == rhs_data || (this->size == rhs_size && memcmp(this->data, rhs_data, this->size) == 0); }
 	};
 
 	Interval    m_interval;
@@ -349,7 +399,8 @@ public:
 	const char* data() const { return m_data->data; }
 	size_t  	size() const { return m_data->size; }
 	size_t		refcnt() const { return m_data->refcnt; }
-	bool		matches(const std::string& data) { return m_data->matches(data); }
+	bool		matches_data(const std::string &data) { return m_data->matches(data); }
+	bool 		matches_data(const MutableHistoryInterval &rhs) { return m_data->matches(rhs.data(), rhs.size()); }
 	size_t 		memsize() const { 
 		return m_data->refcnt == 1 ?
 			// Count just the size of the snapshot data.
@@ -399,7 +450,7 @@ public:
 	void save(size_t active_snapshot_time, size_t current_time, const std::string &data) {
 		assert(m_history.empty() || m_history.back().end() <= active_snapshot_time);
 		if (m_history.empty() || m_history.back().end() < active_snapshot_time) {
-			if (! m_history.empty() && m_history.back().matches(data))
+			if (! m_history.empty() && m_history.back().matches_data(data))
 				// Share the previous data by reference counting.
 				m_history.emplace_back(Interval(current_time, current_time + 1), m_history.back());
 			else
@@ -408,7 +459,7 @@ public:
 		} else {
 			assert(! m_history.empty());
 			assert(m_history.back().end() == active_snapshot_time);
-			if (m_history.back().matches(data))
+			if (m_history.back().matches_data(data))
 				// Just extend the last interval using the old data.
 				m_history.back().extend_end(current_time + 1);
 			else
@@ -488,20 +539,22 @@ class StackImpl
 public:
 	// Stack needs to be initialized. An empty stack is not valid, there must be a "New Project" status stored at the beginning.
 	// Initially enable Undo / Redo stack to occupy maximum 10% of the total system physical memory.
-	StackImpl() : m_memory_limit(std::min(Slic3r::total_physical_memory() / 10, size_t(1 * 16384 * 65536 / UNDO_REDO_DEBUG_LOW_MEM_FACTOR))), m_active_snapshot_time(0), m_current_time(0) {}
+	StackImpl() : m_memory_limit(std::min(Slic3r::total_physical_memory() / 10, size_t(1 * 16384 * 65536 / UNDO_REDO_DEBUG_LOW_MEM_FACTOR))), m_active_snapshot_time(0), m_active_snapshot_closed(false), m_current_time(0), m_temp_closing_snapshot_time(0) {}
 
 	void clear() {
 		m_objects.clear();
 		m_shared_ptr_to_object_id.clear();
 		m_snapshots.clear();
 		m_active_snapshot_time = 0;
+		m_active_snapshot_closed = false;
 		m_current_time = 0;
+		m_temp_closing_snapshot_time = 0;
 		m_selection.clear();
 	}
 
 	bool empty() const {
 		assert(m_objects.empty() == m_snapshots.empty());
-		assert(! m_objects.empty() || (m_current_time == 0 && m_active_snapshot_time == 0));
+		assert(! m_objects.empty() || (m_current_time == 0 && m_active_snapshot_time == 0 && ! m_active_snapshot_closed));
 		return m_snapshots.empty();
 	}
 
@@ -517,12 +570,12 @@ public:
 
     // Store the current application state onto the Undo / Redo stack, remove all snapshots after m_active_snapshot_time.
     void take_snapshot(const std::string& snapshot_name, const Slic3r::Model& model, const Slic3r::GUI::Selection& selection, const Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data);
-    void load_snapshot(size_t timestamp, Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos);
+    void load_snapshot(std::vector<Snapshot>::const_iterator jump_to_snapshot, Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, bool going_forward);
 
 	bool has_undo_snapshot() const;
 	bool has_redo_snapshot() const;
-    bool undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selection, Slic3r::GUI::GLGizmosManager &gizmos, const SnapshotData &snapshot_data, size_t jump_to_time);
-    bool redo(Slic3r::Model &model, Slic3r::GUI::GLGizmosManager &gizmos, size_t jump_to_time);
+    bool undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selection, Slic3r::GUI::GLGizmosManager &gizmos, const SnapshotData &snapshot_data, std::vector<Snapshot>::const_iterator jump_to_snapshot);
+    bool redo(Slic3r::Model &model, Slic3r::GUI::GLGizmosManager &gizmos, std::vector<Snapshot>::const_iterator jump_to_snapshot);
 	void release_least_recently_used();
 
 	// Snapshot history (names with timestamps).
@@ -567,11 +620,29 @@ public:
 
 #ifndef NDEBUG
 	bool valid() const {
-		assert(! m_snapshots.empty());
+		// Snapshot stack must never be empty, there must be at least an initial and topmost snapshot stored.
+		assert(m_snapshots.size() >= 2);
+		// The top most snapshot must be marked as such by a special name. The top most snapshot's name is internal, it will never be shown to the user.
 		assert(m_snapshots.back().is_topmost());
+		// m_active_snapshot_time must be set to the starting time of some snapshot.
 		auto it = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(m_active_snapshot_time));
 		assert(it != m_snapshots.begin() && it != m_snapshots.end() && it->timestamp == m_active_snapshot_time);
 		assert(m_active_snapshot_time <= m_snapshots.back().timestamp);
+		// There may be a temporary closing snapshot taken at the top of the timelines of the captured objects, however
+		// this temporary snapshot itself is not referenced by any Snapshot, but by m_temp_closing_snapshot_time.
+		if (m_temp_closing_snapshot_time != 0) {
+			assert(m_active_snapshot_closed);
+			assert(m_snapshots.back().timestamp == m_temp_closing_snapshot_time);
+			assert(m_temp_closing_snapshot_time + 1 == m_current_time);
+		} else {
+			if (m_active_snapshot_closed) {
+				// If the active snapshot is marked as closed, then the preceding snapshot must have a non-zero closing time.
+				auto it_prev = it;
+				-- it_prev;
+				assert(it_prev->timestamp_closed != 0);
+			}
+			assert(m_snapshots.back().timestamp == m_current_time);
+		}
 		for (auto it = m_objects.begin(); it != m_objects.end(); ++ it)
 			assert(it->second->valid());
 		return true;
@@ -605,8 +676,13 @@ private:
 	std::vector<Snapshot>									m_snapshots;
 	// Timestamp of the active snapshot.
 	size_t 													m_active_snapshot_time;
+	// If the active snapshot is closed, then there was a silent snapshot taken closing the active operation.
+	bool 													m_active_snapshot_closed;
 	// Logical time counter. m_current_time is being incremented with each snapshot taken.
 	size_t 													m_current_time;
+	// Timestamp of the last taken silent snapshot in case the Redo stack is empty.
+	// This closing snapshot is temporary to not clear the Redo stack.
+	size_t 													m_temp_closing_snapshot_time;
 	// Last selection serialized or deserialized.
 	Selection 												m_selection;
 };
@@ -806,17 +882,64 @@ template<typename T> void StackImpl::load_mutable_object(const Slic3r::ObjectID 
 }
 
 // Store the current application state onto the Undo / Redo stack, remove all snapshots after m_active_snapshot_time.
-void StackImpl::take_snapshot(const std::string& snapshot_name, const Slic3r::Model& model, const Slic3r::GUI::Selection& selection, const Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data)
+void StackImpl::take_snapshot(const std::string &snapshot_name, const Slic3r::Model &model, const Slic3r::GUI::Selection &selection, const Slic3r::GUI::GLGizmosManager &gizmos, const SnapshotData &snapshot_data)
 {
-	// Release old snapshot data.
-	assert(m_active_snapshot_time <= m_current_time);
-	for (auto &kvp : m_objects)
-		kvp.second->release_after_timestamp(m_active_snapshot_time);
-	{
+	// Silent snapshot closes a preceding operation without being presented on the Undo / Redo list to the user.
+	bool silent_snapshot = boost::starts_with(snapshot_name, s_silent_snapshot_prefix);
+	if (silent_snapshot && m_active_snapshot_closed)
+		// The active snapshot was already closed, therefore this silent action is ignored.
+		return;
+
+	// A temporary silent snapshot is taken if the Redo stack is currently non-empty.
+	bool silent_snapshot_temporary = silent_snapshot && m_active_snapshot_time < m_snapshots.back().timestamp;
+	size_t active_snapshot_time_backup = m_active_snapshot_time;
+
+	if (silent_snapshot_temporary) {
+		// Take a temporary snapshot without erasing anything.
+		assert(m_temp_closing_snapshot_time == 0);
+		m_temp_closing_snapshot_time = m_current_time;
+		m_active_snapshot_time = m_current_time;
+	} else if (! this->empty()) {
+		// Release old snapshot data starting at m_active_snapshot_time or at the closing snapshot immediately before m_active_snapshot_time.
 		auto it = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(m_active_snapshot_time));
+		assert(it != m_snapshots.begin() && it != m_snapshots.end());
+		assert(it->timestamp == m_active_snapshot_time);
+		auto it_prev = it;
+		-- it_prev;
+		size_t release_time = m_active_snapshot_time;
+		if (silent_snapshot) {
+			// Taking a silent snapshot while at the top of the Undo / Redo stack.
+			assert(m_temp_closing_snapshot_time == 0);
+			assert(m_active_snapshot_time == m_snapshots.back().timestamp);
+			if (it_prev->timestamp_closed != 0)
+				release_time = it_prev->timestamp_closed;
+			it_prev->timestamp_closed = m_active_snapshot_time;
+			for (auto &kvp : m_objects)
+				kvp.second->release_after_timestamp(release_time, m_active_snapshot_time);
+		} else if (m_temp_closing_snapshot_time == 0) {
+			// Taking a normal (non-silent) snapshot while having no silent snapshot in the cache.
+			// Release the closing snapshot if it exists.
+			if (! m_active_snapshot_closed && it_prev->timestamp_closed != 0) {
+				release_time = it_prev->timestamp_closed;
+				it_prev->timestamp_closed = 0;
+			}
+			for (auto &kvp : m_objects)
+				kvp.second->release_after_timestamp(release_time, m_active_snapshot_time);
+		} else {
+			// Taking a non-silent snapshot while having a silent snapshot in the cache.
+			if (it_prev->timestamp_closed != 0)
+				release_time = it_prev->timestamp_closed;
+			// Release intervals from release_time to m_temp_closing_snapshot_time, extend intervals before release_time to m_temp_closing_snapshot_time.
+			for (auto &kvp : m_objects)
+				kvp.second->release_between_timestamps(release_time, m_temp_closing_snapshot_time);
+			it_prev->timestamp_closed = m_temp_closing_snapshot_time;
+			m_active_snapshot_time = m_current_time;
+			m_temp_closing_snapshot_time = 0;
+		}
 		m_snapshots.erase(it, m_snapshots.end());
 	}
-	// Take new snapshots.
+
+	// Take new snapshots over an interval <m_active_snapshot_time, m_current_time)
 	this->save_mutable_object<Slic3r::Model>(model);
 	m_selection.volumes_and_instances.clear();
 	m_selection.volumes_and_instances.reserve(selection.get_volume_idxs().size());
@@ -825,14 +948,26 @@ void StackImpl::take_snapshot(const std::string& snapshot_name, const Slic3r::Mo
 		m_selection.volumes_and_instances.emplace_back(selection.get_volume(volume_idx)->geometry_id);
 	this->save_mutable_object<Selection>(m_selection);
     this->save_mutable_object<Slic3r::GUI::GLGizmosManager>(gizmos);
-    // Save the snapshot info.
-	m_snapshots.emplace_back(snapshot_name, m_current_time ++, model.id().id, snapshot_data);
-	m_active_snapshot_time = m_current_time;
-	// Save snapshot info of the last "current" aka "top most" state, that is only being serialized
-	// if undoing an action. Such a snapshot has an invalid Model ID assigned if it was not taken yet.
-	m_snapshots.emplace_back(topmost_snapshot_name, m_active_snapshot_time, 0, snapshot_data);
-	// Release empty objects from the history.
-	this->collect_garbage();
+
+    if (silent_snapshot_temporary) {
+    	m_active_snapshot_time = active_snapshot_time_backup;
+    } else {
+		// Save the snapshot info.
+	    if (! silent_snapshot)
+	    	m_snapshots.emplace_back(snapshot_name, m_current_time, model.id().id, snapshot_data);
+		if (! boost::starts_with(snapshot_name, s_topmost_snapshot_name)) {
+			++ m_current_time;
+			m_active_snapshot_time = m_current_time;
+			// Save snapshot info of the last "current" aka "top most" state, that is only being serialized
+			// if undoing an action. Such a snapshot has an invalid Model ID assigned if it was not taken yet.
+			m_snapshots.emplace_back(s_topmost_snapshot_name, m_active_snapshot_time, 0, snapshot_data);
+		}
+		// Release empty objects from the history.
+		this->collect_garbage();
+	}
+
+	m_active_snapshot_closed = silent_snapshot;
+
 	assert(this->valid());
 #ifdef SLIC3R_UNDOREDO_DEBUG
 	std::cout << "After snapshot" << std::endl;
@@ -840,17 +975,39 @@ void StackImpl::take_snapshot(const std::string& snapshot_name, const Slic3r::Mo
 #endif /* SLIC3R_UNDOREDO_DEBUG */
 }
 
-void StackImpl::load_snapshot(size_t timestamp, Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos)
+void StackImpl::load_snapshot(std::vector<Snapshot>::const_iterator jump_to_snapshot, Slic3r::Model &model, Slic3r::GUI::GLGizmosManager &gizmos, bool going_forward)
 {
-	// Find the snapshot by time. It must exist.
-	const auto it_snapshot = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(timestamp));
-	if (it_snapshot == m_snapshots.end() || it_snapshot->timestamp != timestamp)
-		throw std::runtime_error((boost::format("Snapshot with timestamp %1% does not exist") % timestamp).str());
+	assert(this->valid());
 
-	m_active_snapshot_time = timestamp;
+	if (m_temp_closing_snapshot_time != 0) {
+		// Loading a snapshot while having a temporary closing snapshot stored at the top of the Undo / Redo stack.
+		// The temporary closing snapshot is being referenced by no Snapshot structure.
+		// Revert the temporary closing snapshot.
+		for (auto &kvp : m_objects)
+			kvp.second->release_after_timestamp(m_temp_closing_snapshot_time);
+		m_current_time = m_temp_closing_snapshot_time;
+		m_temp_closing_snapshot_time = 0;
+	}
+
+	// m_active_snapshot_time is used by the deserialization framework as a pointer into the timelines of the captured objects.
+	m_active_snapshot_time   = jump_to_snapshot->timestamp;
+	m_active_snapshot_closed = false;
+	{
+		// If going forward and there is a snapshot closing an operation, deserialize the closing snapshot,
+		// not the snapshot captured after the operation was closed.
+		auto it_prev = jump_to_snapshot;
+		-- it_prev;
+		if (it_prev->timestamp_closed != 0) {
+			if (going_forward)
+				// Load the snapshot before the operation was closed.
+				m_active_snapshot_time = it_prev->timestamp_closed;
+			// Current snapshot is closed if one jumped backward and the current operation was closed.
+			m_active_snapshot_closed = ! going_forward;
+		}
+	}
 	model.clear_objects();
 	model.clear_materials();
-	this->load_mutable_object<Slic3r::Model>(ObjectID(it_snapshot->model_id), model);
+	this->load_mutable_object<Slic3r::Model>(ObjectID(jump_to_snapshot->model_id), model);
 	model.update_links_bottom_up_recursive();
 	m_selection.volumes_and_instances.clear();
 	this->load_mutable_object<Selection>(m_selection.id(), m_selection);
@@ -858,7 +1015,8 @@ void StackImpl::load_snapshot(size_t timestamp, Slic3r::Model& model, Slic3r::GU
     this->load_mutable_object<Slic3r::GUI::GLGizmosManager>(gizmos.id(), gizmos);
     // Sort the volumes so that we may use binary search.
 	std::sort(m_selection.volumes_and_instances.begin(), m_selection.volumes_and_instances.end());
-	this->m_active_snapshot_time = timestamp;
+	// Set the active snapshot time to be always the start time of a snapshot, never the closing time.
+	m_active_snapshot_time = jump_to_snapshot->timestamp;
 	assert(this->valid());
 }
 
@@ -876,33 +1034,29 @@ bool StackImpl::has_redo_snapshot() const
 	return ++ it != m_snapshots.end();
 }
 
-bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selection, Slic3r::GUI::GLGizmosManager &gizmos, const SnapshotData &snapshot_data, size_t time_to_load)
+bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selection, Slic3r::GUI::GLGizmosManager &gizmos, const SnapshotData &snapshot_data, std::vector<Snapshot>::const_iterator jump_to_snapshot)
 {
 	assert(this->valid());
-	if (time_to_load == SIZE_MAX) {
-		auto it_current = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(m_active_snapshot_time));
-		if (-- it_current == m_snapshots.begin())
-			return false;
-		time_to_load = it_current->timestamp;
-	}
-	assert(time_to_load < m_active_snapshot_time);
-	assert(std::binary_search(m_snapshots.begin(), m_snapshots.end(), Snapshot(time_to_load)));
+	assert(jump_to_snapshot->timestamp < m_active_snapshot_time);
 	bool new_snapshot_taken = false;
 	if (m_active_snapshot_time == m_snapshots.back().timestamp && ! m_snapshots.back().is_topmost_captured()) {
+		// Iterators may get invalidated by the following code. Convert the iterator to an index.
+		size_t jump_to_snapshot_idx = jump_to_snapshot - m_snapshots.begin();
 		// The current state is temporary. The current state needs to be captured to be redoable.
-        this->take_snapshot(topmost_snapshot_name, model, selection, gizmos, snapshot_data);
-        // The line above entered another topmost_snapshot_name.
-		assert(m_snapshots.back().is_topmost());
-		assert(! m_snapshots.back().is_topmost_captured());
-		// Pop it back, it is not needed as there is now a captured topmost state.
-		m_snapshots.pop_back();
-		// current_time was extended, but it should not cause any harm. Resetting it back may complicate the logic unnecessarily.
-		//-- m_current_time;
-		assert(m_snapshots.back().is_topmost());
+		// First roll back the temporary closing snapshot.
+		if (m_temp_closing_snapshot_time != 0) {
+			m_current_time = m_temp_closing_snapshot_time;
+			m_temp_closing_snapshot_time = 0;
+		}
+		// Now take new top snapshot. If there was a closing snapshot stored in some of the object histories, it is now released.
+		assert(this->valid());
+		this->take_snapshot(s_topmost_snapshot_name, model, selection, gizmos, snapshot_data);
 		assert(m_snapshots.back().is_topmost_captured());
 		new_snapshot_taken = true;
+		// Convert the index back to an iterator after m_snapshots was possibly reallocated.
+		jump_to_snapshot = m_snapshots.cbegin() + jump_to_snapshot_idx;
 	}
-    this->load_snapshot(time_to_load, model, gizmos);
+    this->load_snapshot(jump_to_snapshot, model, gizmos, false);
 	if (new_snapshot_taken) {
 		// Release old snapshots if the memory allocated due to capturing the top most state is excessive.
 		// Don't release the snapshots here, release them first after the scene and background processing gets updated, as this will release some references
@@ -916,18 +1070,11 @@ bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selecti
 	return true;
 }
 
-bool StackImpl::redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, size_t time_to_load)
+bool StackImpl::redo(Slic3r::Model &model, Slic3r::GUI::GLGizmosManager &gizmos, std::vector<Snapshot>::const_iterator jump_to_snapshot)
 {
 	assert(this->valid());
-	if (time_to_load == SIZE_MAX) {
-		auto it_current = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(m_active_snapshot_time));
-		if (++ it_current == m_snapshots.end())
-			return false;
-		time_to_load = it_current->timestamp;
-	}
-	assert(time_to_load > m_active_snapshot_time);
-	assert(std::binary_search(m_snapshots.begin(), m_snapshots.end(), Snapshot(time_to_load)));
-    this->load_snapshot(time_to_load, model, gizmos);
+	assert(jump_to_snapshot->timestamp > m_active_snapshot_time);
+    this->load_snapshot(jump_to_snapshot, model, gizmos, true);
 #ifdef SLIC3R_UNDOREDO_DEBUG
 	std::cout << "After redo" << std::endl;
  	this->print();
@@ -994,7 +1141,7 @@ void StackImpl::release_least_recently_used()
 					++ it;
 			}
 			m_snapshots.pop_back();
-			m_snapshots.back().name = topmost_snapshot_name;
+			m_snapshots.back().name = s_topmost_snapshot_name;
 #else
 			// Rather don't release the last snapshot as it will be very confusing to the user
 			// as of why he cannot jump to the top most state. The Undo / Redo stack maximum size
@@ -1043,12 +1190,14 @@ size_t Stack::get_memory_limit() const { return pimpl->get_memory_limit(); }
 size_t Stack::memsize() const { return pimpl->memsize(); }
 void Stack::release_least_recently_used() { pimpl->release_least_recently_used(); }
 void Stack::take_snapshot(const std::string& snapshot_name, const Slic3r::Model& model, const Slic3r::GUI::Selection& selection, const Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data)
-	{ pimpl->take_snapshot(snapshot_name, model, selection, gizmos, snapshot_data); }
+	{ assert(pimpl->empty() || pimpl->valid()); pimpl->take_snapshot(snapshot_name, model, selection, gizmos, snapshot_data); }
+const std::string& Stack::silent_snapshot_prefix() { return UndoRedo::s_silent_snapshot_prefix; }
 bool Stack::has_undo_snapshot() const { return pimpl->has_undo_snapshot(); }
 bool Stack::has_redo_snapshot() const { return pimpl->has_redo_snapshot(); }
-bool Stack::undo(Slic3r::Model& model, const Slic3r::GUI::Selection& selection, Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data, size_t time_to_load)
-	{ return pimpl->undo(model, selection, gizmos, snapshot_data, time_to_load); }
-bool Stack::redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, size_t time_to_load) { return pimpl->redo(model, gizmos, time_to_load); }
+bool Stack::undo(Slic3r::Model& model, const Slic3r::GUI::Selection& selection, Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data, std::vector<Snapshot>::const_iterator jump_to_snapshot)
+	{ return pimpl->undo(model, selection, gizmos, snapshot_data, jump_to_snapshot); }
+bool Stack::redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, std::vector<Snapshot>::const_iterator jump_to_snapshot) 
+	{ return pimpl->redo(model, gizmos, jump_to_snapshot); }
 const Selection& Stack::selection_deserialized() const { return pimpl->selection_deserialized(); }
 
 const std::vector<Snapshot>& Stack::snapshots() const { return pimpl->snapshots(); }

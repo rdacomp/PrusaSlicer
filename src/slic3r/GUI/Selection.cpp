@@ -8,6 +8,7 @@
 #include "Gizmos/GLGizmoBase.hpp"
 #include "3DScene.hpp"
 #include "Camera.hpp"
+#include "../Utils/UndoRedo.hpp"
 
 #include <GL/glew.h>
 
@@ -404,7 +405,7 @@ void Selection::remove_all()
         return;
     
     if (!wxGetApp().plater()->can_redo())
-        wxGetApp().plater()->take_snapshot(_(L("Selection-Remove All")));
+        wxGetApp().plater()->take_snapshot(UndoRedo::Stack::silent_snapshot_prefix() + _(L("Selection-Remove All")));
 
     m_mode = Instance;
     clear();

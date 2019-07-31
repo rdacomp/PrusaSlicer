@@ -55,7 +55,11 @@ struct Snapshot
 		name(name), timestamp(timestamp), model_id(model_id), snapshot_data(snapshot_data) {}
 	
 	std::string 		name;
+	// Timestamp of the snapshot taken before the operation.
 	size_t 				timestamp;
+	// Timestamp of the snapshot taken after the operation, but before the next operation starts.
+	// The timestamp_closed is not mandatory. If set to zero, then the timestmap of the next snapshot is used instead.
+	size_t 				timestamp_closed = 0;
 	size_t 				model_id;
 	SnapshotData  		snapshot_data;
 
@@ -102,17 +106,20 @@ public:
 
 	// Store the current application state onto the Undo / Redo stack, remove all snapshots after m_active_snapshot_time.
     void take_snapshot(const std::string& snapshot_name, const Slic3r::Model& model, const Slic3r::GUI::Selection& selection, const Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data);
+    // When taking a snapshot with a silent prefix, a snapshot is taken to finalize the current operation, but that snapshot is not being listed on the Undo / Redo list to the user.
+    // The silent snapshot is deserialized when redoing an action it finalizes.
+    // If a closing snapshot was already captured for the current operation, another silent snapshot will be ignored.
+    static const std::string& silent_snapshot_prefix();
 
 	// To be queried to enable / disable the Undo / Redo buttons at the UI.
 	bool has_undo_snapshot() const;
 	bool has_redo_snapshot() const;
 
-	// Roll back the time. If time_to_load is SIZE_MAX, the previous snapshot is activated.
-	// Undoing an action may need to take a snapshot of the current application state, so that redo to the current state is possible.
-    bool undo(Slic3r::Model& model, const Slic3r::GUI::Selection& selection, Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data, size_t time_to_load = SIZE_MAX);
+	// Roll back the time. Undoing an action may need to take a snapshot of the current application state, so that redo to the current state is possible.
+    bool undo(Slic3r::Model& model, const Slic3r::GUI::Selection& selection, Slic3r::GUI::GLGizmosManager& gizmos, const SnapshotData &snapshot_data, std::vector<Snapshot>::const_iterator jump_to_snapshot);
 
-	// Jump forward in time. If time_to_load is SIZE_MAX, the next snapshot is activated.
-    bool redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, size_t time_to_load = SIZE_MAX);
+	// Jump forward in time.
+    bool redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, std::vector<Snapshot>::const_iterator jump_to_snapshot);
 
 	// Snapshot history (names with timestamps).
 	// Each snapshot indicates start of an interval in which this operation is performed.
