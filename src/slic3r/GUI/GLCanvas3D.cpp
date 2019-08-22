@@ -3405,6 +3405,7 @@ void GLCanvas3D::msw_rescale()
 
 bool GLCanvas3D::has_toolpaths_to_export() const
 {
+	printf("GLCanvas3D::has_toolpaths_to_export\n");
     return m_volumes.has_toolpaths_to_export();
 }
 
