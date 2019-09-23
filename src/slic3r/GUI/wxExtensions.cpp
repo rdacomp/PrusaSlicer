@@ -1969,6 +1969,24 @@ bool BitmapTextRenderer::GetValueFromEditorCtrl(wxWindow* ctrl, wxVariant& value
 // ----------------------------------------------------------------------------
 // DoubleSlider
 // ----------------------------------------------------------------------------
+
+/* For this class is used code from stackoverflow:
+ * https://stackoverflow.com/questions/257288/is-it-possible-to-write-a-template-to-check-for-a-functions-existence
+ * Using this code we can to inspect of an existence of IsWheelInverted() function in class T
+ */
+template <typename T>
+class has_invert_wheel
+{
+    typedef char one;
+    struct two { char x[2]; };
+
+    template <typename C> static one test(decltype(&C::IsWheelInverted));
+    template <typename C> static two test(...);
+
+public:
+    bool value = sizeof(test<T>(0)) == sizeof(char);
+};
+
 DoubleSlider::DoubleSlider( wxWindow *parent,
                             wxWindowID id,
                             int lowerValue, 
@@ -2036,6 +2054,8 @@ DoubleSlider::DoubleSlider( wxWindow *parent,
     DARK_GREY_PEN     = wxPen(wxColour(128, 128, 128));
     GREY_PEN          = wxPen(wxColour(164, 164, 164));
     LIGHT_GREY_PEN    = wxPen(wxColour(204, 204, 204));
+
+    HAS_INVERT_WHEEL_FUNC = &has_invert_wheel<wxMouseEvent>::value;
 
     m_line_pens = { &DARK_GREY_PEN, &GREY_PEN, &LIGHT_GREY_PEN };
     m_segm_pens = { &DARK_ORANGE_PEN, &ORANGE_PEN, &LIGHT_ORANGE_PEN };
@@ -2853,8 +2873,13 @@ void DoubleSlider::OnWheel(wxMouseEvent& event)
                           abs(pt.y - m_rect_higher_thumb.GetBottom()) ? 
                           ssLower : ssHigher;
     }
+    bool invert_wheel = false;
 
-    move_current_thumb(event.GetWheelRotation() > 0);
+#if HAS_INVERT_WHEEL_FUNC
+    invert_wheel = event.IsWheelInverted();
+#endif
+
+    move_current_thumb(invert_wheel ? event.GetWheelRotation() < 0 : event.GetWheelRotation() > 0);
 }
 
 void DoubleSlider::OnKeyDown(wxKeyEvent &event)

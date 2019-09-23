@@ -864,6 +864,8 @@ private:
     wxPen   GREY_PEN;
     wxPen   LIGHT_GREY_PEN;
 
+    bool    HAS_INVERT_WHEEL_FUNC {false};
+
     std::vector<wxPen*> m_line_pens;
     std::vector<wxPen*> m_segm_pens;
     std::set<int>       m_ticks;
