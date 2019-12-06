@@ -304,7 +304,11 @@ else()
     target_link_libraries(boost_libs INTERFACE boost_headeronly ${Boost_LIBRARIES})
 endif()
 
-
+if(MSVC)
+    set(GMP_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/src/gmp/include")
+    set(GMP_LIBS "${CMAKE_CURRENT_SOURCE_DIR}/src/gmp/lib/win64/libgmp-10.lib" "${CMAKE_CURRENT_SOURCE_DIR}/src/gmp/lib/win64/libmpfr-4.lib")
+    set(CGAL_INCLUDES "C:/local/CGAL-5.0/include")
+endif()
 
 # Find and configure intel-tbb
 if(SLIC3R_STATIC)

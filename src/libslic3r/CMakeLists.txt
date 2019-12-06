@@ -167,6 +167,8 @@ add_library(libslic3r STATIC
     Tesselate.hpp
     TriangleMesh.cpp
     TriangleMesh.hpp
+    MeshBoolean.cpp
+    MeshBoolean.hpp
     utils.cpp
     Utils.hpp
     Time.cpp
@@ -209,7 +211,7 @@ if (SLIC3R_PCH AND NOT SLIC3R_SYNTAXONLY)
 endif ()
 
 target_compile_definitions(libslic3r PUBLIC -DUSE_TBB -DTBB_USE_CAPTURED_EXCEPTION=0)
-target_include_directories(libslic3r PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${LIBNEST2D_INCLUDES} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(libslic3r PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${LIBNEST2D_INCLUDES} ${GMP_INCLUDES} ${CGAL_INCLUDES} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(libslic3r
     libnest2d
     admesh
@@ -228,6 +230,7 @@ target_link_libraries(libslic3r
     TBB::tbb
     # OpenVDB::openvdb
     ${CMAKE_DL_LIBS}
+    ${GMP_LIBS}
     )
 
 if(WIN32)

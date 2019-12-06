@@ -29,6 +29,7 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/I18N.hpp"
+#include "libslic3r/MeshBoolean.hpp"
 
 #include "GUI.hpp"
 #include "GUI_Utils.hpp"
@@ -180,6 +181,8 @@ bool GUI_App::OnInit()
 
 bool GUI_App::on_init_inner()
 {
+	Slic3r::mesh_boolean_test();
+
     // Verify resources path
     const wxString resources_dir = from_u8(Slic3r::resources_dir());
     wxCHECK_MSG(wxDirExists(resources_dir), false,

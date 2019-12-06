@@ -1,0 +1,5 @@
+Copied from the CGAL-5.0 Windows installer into PrusaSlicer source directory.
+
+It is quite difficult to compile GMP and MPFR libraries on Windows using Microsoft tools, as most of the library
+has been written in fine tuned hand assembly to be compiled by GNU compilers. To not have to install
+the GNU toolchain on Windows, the precompiled libraries are provided here together with their headers.
