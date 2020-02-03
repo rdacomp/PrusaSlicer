@@ -207,11 +207,9 @@ const float GLVolume::SLA_SUPPORT_COLOR[4] = { 0.75f, 0.75f, 0.75f, 1.0f };
 const float GLVolume::SLA_PAD_COLOR[4] = { 0.0f, 0.2f, 0.0f, 1.0f };
 
 GLVolume::GLVolume(float r, float g, float b, float a)
-    : m_transformed_bounding_box_dirty(true)
-    , m_sla_shift_z(0.0)
-    , m_transformed_convex_hull_bounding_box_dirty(true)
+    : 
     // geometry_id == 0 -> invalid
-    , geometry_id(std::pair<size_t, size_t>(0, 0))
+      geometry_id(std::pair<size_t, size_t>(0, 0))
     , extruder_id(0)
     , selected(false)
     , disabled(false)
@@ -226,8 +224,6 @@ GLVolume::GLVolume(float r, float g, float b, float a)
     , is_extrusion_path(false)
     , force_transparent(false)
     , force_native_color(false)
-    , tverts_range(0, size_t(-1))
-    , qverts_range(0, size_t(-1))
 {
     color[0] = r;
     color[1] = g;
@@ -284,7 +280,7 @@ void GLVolume::set_render_color()
         render_color[3] = color[3];
 }
 
-void GLVolume::set_color_from_model_volume(const ModelVolume *model_volume)
+void GLVolumeComponent::set_color_from_model_volume(const ModelVolume *model_volume)
 {
     if (model_volume->is_modifier()) {
         color[0] = 0.2f;
@@ -304,21 +300,21 @@ void GLVolume::set_color_from_model_volume(const ModelVolume *model_volume)
     color[3] = model_volume->is_model_part() ? 1.f : 0.5f;
 }
 
-Transform3d GLVolume::world_matrix() const
+Transform3d GLVolumeComponent::world_matrix() const
 {
     Transform3d m = m_instance_transformation.get_matrix() * m_volume_transformation.get_matrix();
     m.translation()(2) += m_sla_shift_z;
     return m;
 }
 
-bool GLVolume::is_left_handed() const
+bool GLVolumeComponent::is_left_handed() const
 {
     const Vec3d &m1 = m_instance_transformation.get_mirror();
     const Vec3d &m2 = m_volume_transformation.get_mirror();
     return m1.x() * m1.y() * m1.z() * m2.x() * m2.y() * m2.z() < 0.;
 }
 
-const BoundingBoxf3& GLVolume::transformed_bounding_box() const
+const BoundingBoxf3& GLVolumeComponent::transformed_bounding_box() const
 {
     const BoundingBoxf3& box = bounding_box();
     assert(box.defined || box.min(0) >= box.max(0) || box.min(1) >= box.max(1) || box.min(2) >= box.max(2));
@@ -332,14 +328,14 @@ const BoundingBoxf3& GLVolume::transformed_bounding_box() const
     return m_transformed_bounding_box;
 }
 
-const BoundingBoxf3& GLVolume::transformed_convex_hull_bounding_box() const
+const BoundingBoxf3& GLVolumeComponent::transformed_convex_hull_bounding_box() const
 {
 	if (m_transformed_convex_hull_bounding_box_dirty)
 		m_transformed_convex_hull_bounding_box = this->transformed_convex_hull_bounding_box(world_matrix());
     return m_transformed_convex_hull_bounding_box;
 }
 
-BoundingBoxf3 GLVolume::transformed_convex_hull_bounding_box(const Transform3d &trafo) const
+BoundingBoxf3 GLVolumeComponent::transformed_convex_hull_bounding_box(const Transform3d &trafo) const
 {
 	return (m_convex_hull && m_convex_hull->stl.stats.number_of_facets > 0) ? 
 		m_convex_hull->transformed_bounding_box(trafo) :
@@ -347,7 +343,7 @@ BoundingBoxf3 GLVolume::transformed_convex_hull_bounding_box(const Transform3d &
 }
 
 
-void GLVolume::set_range(double min_z, double max_z)
+void GLVolumePrintPath::set_range(double min_z, double max_z)
 {
     this->qverts_range.first = 0;
     this->qverts_range.second = this->indexed_vertex_array.quad_indices_size;
@@ -458,8 +454,8 @@ int GLVolumeCollection::load_object_volume(
         }
         color[3] = model_volume->is_model_part() ? 1.f : 0.5f; */
     color[3] = model_volume->is_model_part() ? 1.f : 0.5f;
-    this->volumes.emplace_back(new GLVolume(color));
-    GLVolume& v = *this->volumes.back();
+    GLVolumeComponent &v = *new GLVolumeComponent(color);
+    this->volumes.emplace_back(&v);
     v.set_color_from_model_volume(model_volume);
     v.indexed_vertex_array.load_mesh(mesh);
     v.indexed_vertex_array.finalize_geometry(opengl_initialized);
@@ -501,8 +497,8 @@ void GLVolumeCollection::load_object_auxiliary(
     TriangleMesh convex_hull = mesh.convex_hull_3d();
     for (const std::pair<size_t, size_t>& instance_idx : instances) {
         const ModelInstance& model_instance = *print_object->model_object()->instances[instance_idx.first];
-        this->volumes.emplace_back(new GLVolume((milestone == slaposPad) ? GLVolume::SLA_PAD_COLOR : GLVolume::SLA_SUPPORT_COLOR));
-        GLVolume& v = *this->volumes.back();
+        GLVolumeComponent& v = *new GLVolumeComponent((milestone == slaposPad) ? GLVolume::SLA_PAD_COLOR : GLVolume::SLA_SUPPORT_COLOR);
+        this->volumes.emplace_back(&v);
         v.indexed_vertex_array.load_mesh(mesh);
 	    v.indexed_vertex_array.finalize_geometry(opengl_initialized);
         v.composite_id = GLVolume::CompositeID(obj_idx, -int(milestone), (int)instance_idx.first);
@@ -571,8 +567,8 @@ int GLVolumeCollection::load_wipe_tower_preview(
     brim_mesh.translate(-brim_width, -brim_width, 0.f);
     mesh.merge(brim_mesh);
 
-    this->volumes.emplace_back(new GLVolume(color));
-    GLVolume& v = *this->volumes.back();
+    GLVolumeComponent& v = *new GLVolumeComponent(color);
+    this->volumes.emplace_back(&v);
     v.indexed_vertex_array.load_mesh(mesh);
     v.indexed_vertex_array.finalize_geometry(opengl_initialized);
     v.set_volume_offset(Vec3d(pos_x, pos_y, 0.0));
@@ -585,16 +581,16 @@ int GLVolumeCollection::load_wipe_tower_preview(
     return int(this->volumes.size() - 1);
 }
 
-GLVolume* GLVolumeCollection::new_toolpath_volume(const float *rgba, size_t reserve_vbo_floats)
+GLVolumePrintPath* GLVolumeCollection::new_toolpath_volume(const float *rgba, size_t reserve_vbo_floats)
 {
-	GLVolume *out = new_nontoolpath_volume(rgba, reserve_vbo_floats);
+	GLVolumePrintPath *out = new_nontoolpath_volume(rgba, reserve_vbo_floats);
 	out->is_extrusion_path = true;
 	return out;
 }
 
-GLVolume* GLVolumeCollection::new_nontoolpath_volume(const float *rgba, size_t reserve_vbo_floats)
+GLVolumePrintPath* GLVolumeCollection::new_nontoolpath_volume(const float *rgba, size_t reserve_vbo_floats)
 {
-	GLVolume *out = new GLVolume(rgba);
+	GLVolumePrintPath *out = new GLVolumePrintPath(rgba);
 	out->is_extrusion_path = false;
 	// Reserving number of vertices (3x position + 3x color)
 	out->indexed_vertex_array.reserve(reserve_vbo_floats / 6);
@@ -715,7 +711,7 @@ bool GLVolumeCollection::check_outside_state(const DynamicPrintConfig* config, M
         if ((volume == nullptr) || volume->is_modifier || (volume->is_wipe_tower && !volume->shader_outside_printer_detection_enabled) || ((volume->composite_id.volume_id < 0) && !volume->shader_outside_printer_detection_enabled))
             continue;
 
-        const BoundingBoxf3& bb = volume->transformed_convex_hull_bounding_box();
+        const BoundingBoxf3& bb = static_cast<const GLVolumeComponent*>(volume)->transformed_convex_hull_bounding_box();
         bool contained = print_volume.contains(bb);
 
         volume->is_outside = !contained;
@@ -828,10 +824,10 @@ std::vector<double> GLVolumeCollection::get_current_print_zs(bool active_only) c
 {
     // Collect layer top positions of all volumes.
     std::vector<double> print_zs;
-    for (GLVolume *vol : this->volumes)
+    for (const GLVolume *vol : this->volumes)
     {
         if (!active_only || vol->is_active)
-            append(print_zs, vol->print_zs);
+            append(print_zs, static_cast<const GLVolumePrintPath*>(vol)->print_zs);
     }
     std::sort(print_zs.begin(), print_zs.end());
 
