@@ -24,3 +24,27 @@ TEST_CASE("CGAL and TriangleMesh conversions", "[MeshBoolean]") {
     
     REQUIRE(! MeshBoolean::cgal::does_self_intersect(M));
 }
+
+TEST_CASE("Self boolean for two spheres", "[MeshBoolean], [NotWorking]")
+{
+    TriangleMesh s1 = make_sphere(1.);
+    TriangleMesh s2 = make_sphere(1.);
+    
+    s1.translate(-0.25, 0., 0.);
+    s2.translate(0.25, 0., 0.);
+    
+    TriangleMesh twospheres(s1);
+    twospheres.merge(s2);
+    twospheres.require_shared_vertices();
+    
+    REQUIRE(MeshBoolean::cgal::does_self_intersect(twospheres));
+    
+    try {
+        MeshBoolean::self_union(twospheres);
+        twospheres.WriteOBJFile("twospheres_igl.obj");
+    } catch (...) {
+        REQUIRE(false);
+    }
+    
+    REQUIRE(! MeshBoolean::cgal::does_self_intersect(twospheres));
+}
