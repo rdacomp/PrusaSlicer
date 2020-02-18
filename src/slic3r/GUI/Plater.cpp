@@ -1796,7 +1796,6 @@ struct Plater::priv
     std::string get_config(const std::string &key) const;
     BoundingBoxf bed_shape_bb() const;
     BoundingBox scaled_bed_shape_bb() const;
-    arrangement::BedShapeHint get_bed_shape_hint() const;
 
     void find_new_position(const ModelInstancePtrs  &instances, coord_t min_d);
     std::vector<size_t> load_files(const std::vector<fs::path>& input_files, bool load_model, bool load_config);
@@ -2746,20 +2745,6 @@ void Plater::priv::sla_optimize_rotation() {
     m_ui_jobs.start(Jobs::Rotoptimize);
 }
 
-arrangement::BedShapeHint Plater::priv::get_bed_shape_hint() const {
-
-    const auto *bed_shape_opt = config->opt<ConfigOptionPoints>("bed_shape");
-    assert(bed_shape_opt);
-
-    if (!bed_shape_opt) return {};
-
-    auto &bedpoints = bed_shape_opt->values;
-    Polyline bedpoly; bedpoly.points.reserve(bedpoints.size());
-    for (auto &v : bedpoints) bedpoly.append(scaled(v));
-
-    return arrangement::BedShapeHint(bedpoly);
-}
-
 void Plater::priv::find_new_position(const ModelInstancePtrs &instances,
                                      coord_t min_d)
 {
@@ -2779,7 +2764,8 @@ void Plater::priv::find_new_position(const ModelInstancePtrs &instances,
     if (updated_wipe_tower())
         fixed.emplace_back(wipetower.get_arrange_polygon());
 
-    arrangement::arrange(movable, fixed, min_d, get_bed_shape_hint());
+    arrangement::arrange(movable, fixed, get_bed_shape(*config),
+                         arrangement::ArrangeParams{min_d});
 
     for (size_t i = 0; i < instances.size(); ++i)
         if (movable[i].bed_idx == 0)
@@ -2792,17 +2778,20 @@ void Plater::priv::ArrangeJob::process() {
 
     double dist = min_object_distance(*plater().config);
     
-    coord_t min_d = scaled(dist);
+    arrangement::ArrangeParams params;
+    params.min_obj_distance = scaled(dist);
     auto count = unsigned(m_selected.size());
-    arrangement::BedShapeHint bedshape = plater().get_bed_shape_hint();
-
+    Points bedpts = get_bed_shape(*plater().config);
+    
+    params.progressind = [this, count](unsigned st) {
+        if (st > 0) // will not finalize after last one
+            update_status(int(count - st), arrangestr);
+    };
+    
+    params.stopcondition = [this]() { return was_canceled(); };
+    
     try {
-        arrangement::arrange(m_selected, m_unselected, min_d, bedshape,
-                             [this, count](unsigned st) {
-                                 if (st > 0) // will not finalize after last one
-                                    update_status(int(count - st), arrangestr);
-                             },
-                             [this]() { return was_canceled(); });
+        arrangement::arrange(m_selected, m_unselected, bedpts, params);
     } catch (std::exception & /*e*/) {
         GUI::show_error(plater().q,
                         _(L("Could not arrange model objects! "

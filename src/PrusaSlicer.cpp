@@ -34,6 +34,7 @@
 #include "libslic3r/Config.hpp"
 #include "libslic3r/Geometry.hpp"
 #include "libslic3r/Model.hpp"
+#include "libslic3r/ModelArrange.hpp"
 #include "libslic3r/Print.hpp"
 #include "libslic3r/SLAPrint.hpp"
 #include "libslic3r/TriangleMesh.hpp"
@@ -183,10 +184,13 @@ int CLI::run(int argc, char **argv)
         m_print_config.apply(sla_print_config, true);
     }
     
-    double min_obj_dist = min_object_distance(m_print_config);
-        
+    
     // Loop through transform options.
     bool user_center_specified = false;
+    Points bed = get_bed_shape(m_print_config);
+    ArrangeParams arrange_cfg;
+    arrange_cfg.min_obj_distance = scaled(min_object_distance(m_print_config));
+    
     for (auto const &opt_key : m_transforms) {
         if (opt_key == "merge") {
             Model m;
@@ -196,29 +200,32 @@ int CLI::run(int argc, char **argv)
             // Rearrange instances unless --dont-arrange is supplied
             if (! m_config.opt_bool("dont_arrange")) {
                 m.add_default_instances();
-                const BoundingBoxf &bb = fff_print_config.bed_shape.values;
-                m.arrange_objects(
-                    min_obj_dist,
-                    // If we are going to use the merged model for printing, honor
-                    // the configured print bed for arranging, otherwise do it freely.
-                    this->has_print_action() ? &bb : nullptr
-                );
+                if (this->has_print_action())
+                    arrange_objects(m, bed, arrange_cfg);
+                else
+                    arrange_objects(m, InfiniteBed{}, arrange_cfg);
             }
             m_models.clear();
             m_models.emplace_back(std::move(m));
         } else if (opt_key == "duplicate") {
-            const BoundingBoxf &bb = fff_print_config.bed_shape.values;
             for (auto &model : m_models) {
                 const bool all_objects_have_instances = std::none_of(
                     model.objects.begin(), model.objects.end(),
                     [](ModelObject* o){ return o->instances.empty(); }
                 );
-                if (all_objects_have_instances) {
-                    // if all input objects have defined position(s) apply duplication to the whole model
-                    model.duplicate(m_config.opt_int("duplicate"), min_obj_dist, &bb);
-                } else {
-                    model.add_default_instances();
-                    model.duplicate_objects(m_config.opt_int("duplicate"), min_obj_dist, &bb);
+                
+                int dups = m_config.opt_int("duplicate");
+                try {
+                    if (all_objects_have_instances && dups >= 1) {
+                        // if all input objects have defined position(s) apply duplication to the whole model
+                        duplicate(model, size_t(dups), bed, arrange_cfg);
+                    } else {
+                        model.add_default_instances();
+                        duplicate_objects(model, size_t(dups), bed, arrange_cfg);
+                    }
+                } catch (std::exception &ex) {
+                    boost::nowide::cerr << "error: " << ex.what() << std::endl;
+                    return 1;
                 }
             }
         } else if (opt_key == "duplicate_grid") {
@@ -422,11 +429,11 @@ int CLI::run(int argc, char **argv)
 
                 PrintBase  *print = (printer_technology == ptFFF) ? static_cast<PrintBase*>(&fff_print) : static_cast<PrintBase*>(&sla_print);
                 if (! m_config.opt_bool("dont_arrange")) {
-                    //FIXME make the min_object_distance configurable.
-                    model.arrange_objects(min_obj_dist);
-                    model.center_instances_around_point((! user_center_specified && m_print_config.has("bed_shape")) ? 
-                    	BoundingBoxf(m_print_config.opt<ConfigOptionPoints>("bed_shape")->values).center() : 
-                    	m_config.option<ConfigOptionPoint>("center")->value);
+                    if (user_center_specified) {
+                        Vec2d c = m_config.option<ConfigOptionPoint>("center")->value;
+                        arrange_objects(model, InfiniteBed{scaled(c)}, arrange_cfg);
+                    } else
+                        arrange_objects(model, bed, arrange_cfg);
                 }
                 if (printer_technology == ptFFF) {
                     for (auto* mo : model.objects)

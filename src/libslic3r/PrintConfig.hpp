@@ -1296,6 +1296,10 @@ private:
     static PrintAndCLIConfigDef s_def;
 };
 
+Points get_bed_shape(const DynamicPrintConfig &cfg);
+Points get_bed_shape(const PrintConfig &cfg);
+Points get_bed_shape(const SLAPrinterConfig &cfg);
+
 } // namespace Slic3r
 
 // Serialization through the Cereal library
