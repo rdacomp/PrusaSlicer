@@ -184,6 +184,11 @@ int CLI::run(int argc, char **argv)
         m_print_config.apply(sla_print_config, true);
     }
     
+    std::string validity = m_print_config.validate();
+    if (!validity.empty()) {
+        boost::nowide::cerr << "error: " << validity << std::endl;
+        return 1;
+    }
     
     // Loop through transform options.
     bool user_center_specified = false;
@@ -215,13 +220,14 @@ int CLI::run(int argc, char **argv)
                 );
                 
                 int dups = m_config.opt_int("duplicate");
+                if (!all_objects_have_instances) model.add_default_instances();
+                
                 try {
-                    if (all_objects_have_instances && dups >= 1) {
+                    if (dups > 1) {
                         // if all input objects have defined position(s) apply duplication to the whole model
                         duplicate(model, size_t(dups), bed, arrange_cfg);
                     } else {
-                        model.add_default_instances();
-                        duplicate_objects(model, size_t(dups), bed, arrange_cfg);
+                        arrange_objects(model, bed, arrange_cfg);
                     }
                 } catch (std::exception &ex) {
                     boost::nowide::cerr << "error: " << ex.what() << std::endl;
@@ -620,6 +626,12 @@ bool CLI::setup(int argc, char **argv)
             m_config.option(optdef.first, true);
 
     set_data_dir(m_config.opt_string("datadir"));
+    
+    std::string validity = m_config.validate();
+    if (!validity.empty()) {
+        boost::nowide::cerr << "error: " << validity << std::endl;
+        return false;
+    }
 
     return true;
 }

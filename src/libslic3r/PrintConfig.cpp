@@ -3121,18 +3121,69 @@ std::string DynamicPrintConfig::validate()
     // Full print config is initialized from the defaults.
     const ConfigOption *opt = this->option("printer_technology", false);
     auto printer_technology = (opt == nullptr) ? ptFFF : static_cast<PrinterTechnology>(dynamic_cast<const ConfigOptionEnumGeneric*>(opt)->value);
+    
+    std::string ret;
+    
     switch (printer_technology) {
     case ptFFF:
     {
         FullPrintConfig fpc;
         fpc.apply(*this, true);
         // Verify this print options through the FullPrintConfig.
-        return fpc.validate();
+        ret = fpc.validate();
+        break;
     }
     default:
         //FIXME no validation on SLA data?
-        return std::string();
+        ret = std::string();
     }
+    
+    if (!ret.empty()) return ret;
+    
+    // Out of range validation of numeric values.
+    for (const std::string &opt_key : this->keys()) {
+        const ConfigOption      *opt    = this->optptr(opt_key);
+        assert(opt != nullptr);
+        const ConfigOptionDef   *optdef = print_config_def.get(opt_key);
+        assert(optdef != nullptr);
+        bool out_of_range = false;
+        switch (opt->type()) {
+        case coFloat:
+        case coPercent:
+        case coFloatOrPercent:
+        {
+            auto *fopt = static_cast<const ConfigOptionFloat*>(opt);
+            out_of_range = fopt->value < optdef->min || fopt->value > optdef->max;
+            break;
+        }
+        case coFloats:
+        case coPercents:
+            for (double v : static_cast<const ConfigOptionVector<double>*>(opt)->values)
+                if (v < optdef->min || v > optdef->max) {
+                    out_of_range = true;
+                    break;
+                }
+            break;
+        case coInt:
+        {
+            auto *iopt = static_cast<const ConfigOptionInt*>(opt);
+            out_of_range = iopt->value < optdef->min || iopt->value > optdef->max;
+            break;
+        }
+        case coInts:
+            for (int v : static_cast<const ConfigOptionVector<int>*>(opt)->values)
+                if (v < optdef->min || v > optdef->max) {
+                    out_of_range = true;
+                    break;
+                }
+            break;
+        default:;
+        }
+        if (out_of_range)
+            return std::string("Value out of range: " + opt_key);
+    }
+    
+    return ret;
 }
 
 //FIXME localize this function.
@@ -3258,49 +3309,6 @@ std::string FullPrintConfig::validate()
             if (this->get_abs_value(key, max_nozzle_diameter) > 10. * max_nozzle_diameter)
                 return std::string("Invalid extrusion width (too large): ") + key;
         }
-    }
-
-    // Out of range validation of numeric values.
-    for (const std::string &opt_key : this->keys()) {
-        const ConfigOption      *opt    = this->optptr(opt_key);
-        assert(opt != nullptr);
-        const ConfigOptionDef   *optdef = print_config_def.get(opt_key);
-        assert(optdef != nullptr);
-        bool out_of_range = false;
-        switch (opt->type()) {
-        case coFloat:
-        case coPercent:
-        case coFloatOrPercent:
-        {
-            auto *fopt = static_cast<const ConfigOptionFloat*>(opt);
-            out_of_range = fopt->value < optdef->min || fopt->value > optdef->max;
-            break;
-        }
-        case coFloats:
-        case coPercents:
-            for (double v : static_cast<const ConfigOptionVector<double>*>(opt)->values)
-                if (v < optdef->min || v > optdef->max) {
-                    out_of_range = true;
-                    break;
-                }
-            break;
-        case coInt:
-        {
-            auto *iopt = static_cast<const ConfigOptionInt*>(opt);
-            out_of_range = iopt->value < optdef->min || iopt->value > optdef->max;
-            break;
-        }
-        case coInts:
-            for (int v : static_cast<const ConfigOptionVector<int>*>(opt)->values)
-                if (v < optdef->min || v > optdef->max) {
-                    out_of_range = true;
-                    break;
-                }
-            break;
-        default:;
-        }
-        if (out_of_range)
-            return std::string("Value out of range: " + opt_key);
     }
 
     // The configuration is valid.
