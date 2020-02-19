@@ -3031,10 +3031,9 @@ DynamicPrintConfig* DynamicPrintConfig::new_from_defaults_keys(const std::vector
 
 double min_object_distance(const ConfigBase &cfg)
 {   
-    double ret = 0.;
+    double ret = 6.;
     
-    if (printer_technology(cfg) == ptSLA) ret = 6.;
-    else {
+    if (printer_technology(cfg) == ptFFF) {
         auto ecr_opt = cfg.option<ConfigOptionFloat>("extruder_clearance_radius");
         auto dd_opt  = cfg.option<ConfigOptionFloat>("duplicate_distance");
         auto co_opt  = cfg.option<ConfigOptionBool>("complete_objects");
@@ -3144,7 +3143,7 @@ std::string DynamicPrintConfig::validate()
     for (const std::string &opt_key : this->keys()) {
         const ConfigOption      *opt    = this->optptr(opt_key);
         assert(opt != nullptr);
-        const ConfigOptionDef   *optdef = print_config_def.get(opt_key);
+        const ConfigOptionDef   *optdef = def()->get(opt_key);
         assert(optdef != nullptr);
         bool out_of_range = false;
         switch (opt->type()) {
@@ -3563,7 +3562,15 @@ static Points to_points(const std::vector<Vec2d> &dpts)
 Points get_bed_shape(const DynamicPrintConfig &config)
 {
     const auto *bed_shape_opt = config.opt<ConfigOptionPoints>("bed_shape");
-    if (!bed_shape_opt) return {};
+    if (!bed_shape_opt) {
+        
+        // Here, it is certain that the bed shape is missing, so an infinite one
+        // has to be used, but still, the center of bed can be queried
+        if (auto center_opt = config.opt<ConfigOptionPoint>("center"))
+            return { scaled(center_opt->value) };
+        
+        return {};
+    }
     
     return to_points(bed_shape_opt->values);
 }

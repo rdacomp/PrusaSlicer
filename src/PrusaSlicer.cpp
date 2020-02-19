@@ -54,12 +54,6 @@
 
 using namespace Slic3r;
 
-PrinterTechnology get_printer_technology(const DynamicConfig &config)
-{
-    const ConfigOptionEnum<PrinterTechnology> *opt = config.option<ConfigOptionEnum<PrinterTechnology>>("printer_technology");
-    return (opt == nullptr) ? ptUnknown : opt->value;
-}
-
 int CLI::run(int argc, char **argv)
 {
 	// Switch boost::filesystem to utf8.
@@ -87,13 +81,15 @@ int CLI::run(int argc, char **argv)
 
     m_extra_config.apply(m_config, true);
     m_extra_config.normalize();
+    
+    PrinterTechnology printer_technology = Slic3r::printer_technology(m_config);
 
     bool							start_gui			= m_actions.empty() &&
         // cutting transformations are setting an "export" action.
         std::find(m_transforms.begin(), m_transforms.end(), "cut") == m_transforms.end() &&
         std::find(m_transforms.begin(), m_transforms.end(), "cut_x") == m_transforms.end() &&
         std::find(m_transforms.begin(), m_transforms.end(), "cut_y") == m_transforms.end();
-    PrinterTechnology				printer_technology	= get_printer_technology(m_extra_config);
+    
     const std::vector<std::string> &load_configs		= m_config.option<ConfigOptionStrings>("load", true)->values;
 
     // load config files supplied via --load
@@ -114,7 +110,7 @@ int CLI::run(int argc, char **argv)
             return 1;
         }
         config.normalize();
-        PrinterTechnology other_printer_technology = get_printer_technology(config);
+        PrinterTechnology other_printer_technology = Slic3r::printer_technology(config);
         if (printer_technology == ptUnknown) {
             printer_technology = other_printer_technology;
         } else if (printer_technology != other_printer_technology && other_printer_technology != ptUnknown) {
@@ -134,7 +130,7 @@ int CLI::run(int argc, char **argv)
         try {
             // When loading an AMF or 3MF, config is imported as well, including the printer technology.
             model = Model::read_from_file(file, &m_print_config, true);
-            PrinterTechnology other_printer_technology = get_printer_technology(m_print_config);
+            PrinterTechnology other_printer_technology = Slic3r::printer_technology(m_print_config);
             if (printer_technology == ptUnknown) {
                 printer_technology = other_printer_technology;
             } else if (printer_technology != other_printer_technology && other_printer_technology != ptUnknown) {
@@ -157,9 +153,6 @@ int CLI::run(int argc, char **argv)
     m_print_config.apply(m_extra_config, true);
     // Normalizing after importing the 3MFs / AMFs
     m_print_config.normalize();
-
-    if (printer_technology == ptUnknown)
-        printer_technology = std::find(m_actions.begin(), m_actions.end(), "export_sla") == m_actions.end() ? ptFFF : ptSLA;
 
     // Initialize full print configs for both the FFF and SLA technologies.
     FullPrintConfig    fff_print_config;
@@ -619,6 +612,8 @@ bool CLI::setup(int argc, char **argv)
         if (opt_loglevel != 0)
             set_logging_level(opt_loglevel->value);
     }
+    
+    std::string validity = m_config.validate();
 
     // Initialize with defaults.
     for (const t_optiondef_map *options : { &cli_actions_config_def.options, &cli_transform_config_def.options, &cli_misc_config_def.options })
@@ -627,7 +622,6 @@ bool CLI::setup(int argc, char **argv)
 
     set_data_dir(m_config.opt_string("datadir"));
     
-    std::string validity = m_config.validate();
     if (!validity.empty()) {
         boost::nowide::cerr << "error: " << validity << std::endl;
         return false;

@@ -47,9 +47,7 @@ void duplicate(Model &              model,
                const ArrangeParams &params,
                VirtualBedFn         vfn = throw_if_out_of_bed)
 {
-    ArrangePolygon ap = get_arrange_poly(model);
-    ArrangePolygons copies; copies.reserve(copies_num);
-    for (size_t i = 0; i < copies_num; ++i) copies.emplace_back(ap);
+    ArrangePolygons copies(copies_num, get_arrange_poly(model));
     arrangement::arrange(copies, bed, params);
     duplicate(model, copies, vfn);
 }

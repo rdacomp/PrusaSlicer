@@ -558,16 +558,22 @@ void arrange(ArrangePolygons &      items,
              const Points &         bed,
              const ArrangeParams &  params)
 {
-    auto      bb    = BoundingBox(bed);
-    CircleBed circ  = to_circle(bb.center(), bed);
-    auto      parea = poly_area(bed);
-
-    if ((1.0 - parea / area(bb)) < 1e-3)
-        arrange(items, excludes, bb, params);
-    else if (!std::isnan(circ.radius()))
-        arrange(items, excludes, circ, params);
-    else
-        arrange(items, excludes, Polygon(bed), params);
+    if (bed.empty())
+        arrange(items, excludes, InfiniteBed{}, params);
+    else if (bed.size() == 1)
+        arrange(items, excludes, InfiniteBed{bed.front()}, params);
+    else {
+        auto      bb    = BoundingBox(bed);
+        CircleBed circ  = to_circle(bb.center(), bed);
+        auto      parea = poly_area(bed);
+        
+        if ((1.0 - parea / area(bb)) < 1e-3)
+            arrange(items, excludes, bb, params);
+        else if (!std::isnan(circ.radius()))
+            arrange(items, excludes, circ, params);
+        else
+            arrange(items, excludes, Polygon(bed), params);   
+    }
 }
 
 template<class BedT>
