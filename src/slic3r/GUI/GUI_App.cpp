@@ -1066,12 +1066,14 @@ void GUI_App::open_web_page_localized(const std::string &http_address)
     wxGetEnv("XDG_DATA_DIRS", &xdd);
     std::cout << "$XDG_DATA_DIRS=" << xdd << std::endl;
 
-    std::cout << "Setting  to \"\"...";
-    wxSetEnv("XDG_DATA_DIRS", "");
+    wxGetEnv("LD_LIBRARY_PATH", &xdd);
+    std::cout << "$LD_LIBRARY_PATH=" << xdd << std::endl;
+
+    std::cout << "Unsetting LD_LIBRARY_PATH...";
+    wxUnsetEnv("LD_LIBRARY_PATH");
     std::cout << "DONE" << std::endl;
 
-    wxGetEnv("XDG_DATA_DIRS", &xdd);
-    std::cout << "$XDG_DATA_DIRS=" << xdd << std::endl;
+
 
     wxString url = http_address + "&lng=" + this->current_language_code_safe();
     wxLaunchDefaultBrowser(url);
