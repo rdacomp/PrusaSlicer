@@ -1062,7 +1062,19 @@ wxString GUI_App::current_language_code_safe() const
 
 void GUI_App::open_web_page_localized(const std::string &http_address)
 {
-    wxLaunchDefaultBrowser(http_address + "&lng=" + this->current_language_code_safe());
+    wxString xdd;
+    wxGetEnv("XDG_DATA_DIRS", &xdd);
+    std::cout << "$XDG_DATA_DIRS=" << xdd << std::endl;
+
+    std::cout << "Setting  to \"\"...";
+    wxSetEnv("XDG_DATA_DIRS", "");
+    std::cout << "DONE" << std::endl;
+
+    wxGetEnv("XDG_DATA_DIRS", &xdd);
+    std::cout << "$XDG_DATA_DIRS=" << xdd << std::endl;
+
+    wxString url = http_address + "&lng=" + this->current_language_code_safe();
+    wxLaunchDefaultBrowser(url);
 }
 
 bool GUI_App::run_wizard(ConfigWizard::RunReason reason, ConfigWizard::StartPage start_page)
