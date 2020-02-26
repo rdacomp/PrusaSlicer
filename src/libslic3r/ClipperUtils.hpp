@@ -3,6 +3,7 @@
 
 #include "libslic3r.h"
 #include "clipper.hpp"
+#include "BoundingBox.hpp"
 #include "ExPolygon.hpp"
 #include "Polygon.hpp"
 #include "Surface.hpp"
@@ -26,20 +27,33 @@ using ClipperLib::jtSquare;
 
 namespace Slic3r {
 
+static constexpr float CLIPPER_OFFSET_SHORTEST_EDGE_FACTOR = 0.005f;
+
 //-----------------------------------------------------------
 // legacy code from Clipper documentation
 void AddOuterPolyNodeToExPolygons(ClipperLib::PolyNode& polynode, Slic3r::ExPolygons *expolygons);
 Slic3r::ExPolygons PolyTreeToExPolygons(ClipperLib::PolyTree& polytree);
 //-----------------------------------------------------------
 
+void scaleClipperPolygon(ClipperLib::Path &polygon);
+void scaleClipperPolygons(ClipperLib::Paths &polygons);
+void unscaleClipperPolygon(ClipperLib::Path &polygon);
+void unscaleClipperPolygons(ClipperLib::Paths &polygons);
 ClipperLib::Path   Slic3rMultiPoint_to_ClipperPath(const Slic3r::MultiPoint &input);
+ClipperLib::Path   Slic3rMultiPoint_to_ClipperPath_reversed(const Slic3r::MultiPoint &input);
+ClipperLib::Path   Slic3rMultiPoint_to_ClipperPath_scaled(const Slic3r::MultiPoint &input);
+ClipperLib::Path   Slic3rMultiPoint_to_ClipperPath_scaled_reversed(const Slic3r::MultiPoint &input);
 ClipperLib::Paths  Slic3rMultiPoints_to_ClipperPaths(const Polygons &input);
 ClipperLib::Paths  Slic3rMultiPoints_to_ClipperPaths(const ExPolygons &input);
 ClipperLib::Paths  Slic3rMultiPoints_to_ClipperPaths(const Polylines &input);
 Slic3r::Polygon    ClipperPath_to_Slic3rPolygon(const ClipperLib::Path &input);
+Slic3r::Polygon    ClipperPath_to_Slic3rPolygon_unscale(const ClipperLib::Path &input);
 Slic3r::Polyline   ClipperPath_to_Slic3rPolyline(const ClipperLib::Path &input);
+Slic3r::Polyline   ClipperPath_to_Slic3rPolyline_unscale(const ClipperLib::Path &input);
 Slic3r::Polygons   ClipperPaths_to_Slic3rPolygons(const ClipperLib::Paths &input);
+Slic3r::Polygons   ClipperPaths_to_Slic3rPolygons_unscale(const ClipperLib::Paths &input);
 Slic3r::Polylines  ClipperPaths_to_Slic3rPolylines(const ClipperLib::Paths &input);
+Slic3r::Polylines  ClipperPaths_to_Slic3rPolylines_unscale(const ClipperLib::Paths &input);
 Slic3r::ExPolygons ClipperPaths_to_Slic3rExPolygons(const ClipperLib::Paths &input);
 
 // offset Polygons
@@ -311,7 +325,7 @@ void traverse_pt(const ClipperLib::PolyNodes &nodes, ExOrJustPolygons *retval)
 }
 
 
-/* OTHER */
+// OTHER
 Slic3r::Polygons simplify_polygons(const Slic3r::Polygons &subject, bool preserve_collinear = false);
 Slic3r::ExPolygons simplify_polygons_ex(const Slic3r::Polygons &subject, bool preserve_collinear = false);
 
@@ -323,6 +337,13 @@ Polygons  variable_offset_inner(const ExPolygon &expoly, const std::vector<std::
 Polygons  variable_offset_outer(const ExPolygon &expoly, const std::vector<std::vector<float>> &deltas, double miter_limit = 2.);
 ExPolygons variable_offset_outer_ex(const ExPolygon &expoly, const std::vector<std::vector<float>> &deltas, double miter_limit = 2.);
 ExPolygons variable_offset_inner_ex(const ExPolygon &expoly, const std::vector<std::vector<float>> &deltas, double miter_limit = 2.);
+
+// Extents for the native ClipperLib Path / PolyTree types.
+using ClipperBoundingBox = BoundingBoxBase<Vec2i64>;
+ClipperBoundingBox get_extents(const ClipperLib::Path &path);
+ClipperBoundingBox get_extents(const ClipperLib::Paths &paths);
+ClipperBoundingBox get_extents(const ClipperLib::PolyNode &polynode);
+ClipperBoundingBox get_extents(const ClipperLib::PolyTree &polytree);
 
 }
 
