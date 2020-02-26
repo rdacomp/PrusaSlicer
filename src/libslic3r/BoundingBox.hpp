@@ -102,17 +102,21 @@ public:
 
 // Will prevent warnings caused by non existing definition of template in hpp
 extern template void     BoundingBoxBase<Point>::scale(double factor);
+extern template void     BoundingBoxBase<Vec2i64>::scale(double factor);
 extern template void     BoundingBoxBase<Vec2d>::scale(double factor);
 extern template void     BoundingBoxBase<Vec3d>::scale(double factor);
 extern template void     BoundingBoxBase<Point>::offset(coordf_t delta);
 extern template void     BoundingBoxBase<Vec2d>::offset(coordf_t delta);
 extern template void     BoundingBoxBase<Point>::merge(const Point &point);
+extern template void     BoundingBoxBase<Vec2i64>::merge(const Vec2i64 &point);
 extern template void     BoundingBoxBase<Vec2d>::merge(const Vec2d &point);
 extern template void     BoundingBoxBase<Point>::merge(const Points &points);
 extern template void     BoundingBoxBase<Vec2d>::merge(const Pointfs &points);
 extern template void     BoundingBoxBase<Point>::merge(const BoundingBoxBase<Point> &bb);
+extern template void     BoundingBoxBase<Vec2i64>::merge(const BoundingBoxBase<Vec2i64> &bb);
 extern template void     BoundingBoxBase<Vec2d>::merge(const BoundingBoxBase<Vec2d> &bb);
 extern template Point    BoundingBoxBase<Point>::size() const;
+extern template Vec2i64  BoundingBoxBase<Vec2i64>::size() const;
 extern template Vec2d    BoundingBoxBase<Vec2d>::size() const;
 extern template double   BoundingBoxBase<Point>::radius() const;
 extern template double   BoundingBoxBase<Vec2d>::radius() const;

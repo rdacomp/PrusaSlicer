@@ -126,10 +126,79 @@ public:
     // External perimeter. It may be CCW or CW oriented (outer contour or hole contour).
     bool is_external() const { return this->depth == 0; }
     // An island, which may have holes, but it does not have another internal island.
-    bool is_internal_contour() const;
+    bool is_internal_contour() const {
+	    // An internal contour is a contour containing no other contours
+	    if (! this->is_contour)
+	        return false;
+	    for (const PerimeterGeneratorLoop &loop : this->children)
+	        if (loop.is_contour)
+	            return false;
+	    return true;
+	}
 };
 
 typedef std::vector<PerimeterGeneratorLoop> PerimeterGeneratorLoops;
+
+// Nest contours and holes in the order from outmost to the inner most.
+static inline PerimeterGeneratorLoops nest_loops(std::vector<PerimeterGeneratorLoops> &&contours, std::vector<PerimeterGeneratorLoops> &&holes, const int num_loops)
+{
+	PerimeterGeneratorLoops out;
+
+	if (! contours.empty()) 
+	{
+	    // nest loops: holes first
+	    for (int depth = 0; depth < num_loops; ++ depth) {
+	        PerimeterGeneratorLoops &holes_d = holes[depth];
+	        // loop through all holes having depth == depth
+	        for (int i = 0; i < (int)holes_d.size(); ++ i) {
+	            PerimeterGeneratorLoop &loop = holes_d[i];
+	            // find the hole loop that contains this one, if any
+	            for (int t = depth + 1; t < num_loops; ++ t)
+	                for (PerimeterGeneratorLoop &candidate_parent : holes[t])
+	                    if (candidate_parent.polygon.contains(loop.polygon.first_point())) {
+	                        candidate_parent.children.emplace_back(std::move(loop));
+	                        holes_d[i] = std::move(holes_d.back());
+	                        holes_d.pop_back();
+	                        -- i;
+	                        goto end_loop;
+	                    }
+	            // if no hole contains this hole, find the contour loop that contains it
+	            for (int t = num_loops - 1; t >= 0; -- t)
+	                for (PerimeterGeneratorLoop &candidate_parent : contours[t])
+	                    if (candidate_parent.polygon.contains(loop.polygon.first_point())) {
+	                        candidate_parent.children.emplace_back(std::move(loop));
+	                        holes_d.pop_back();
+	                        -- i;
+	                        goto end_loop;
+	                    }
+	        end_loop:
+	        	;
+	        }
+	    }
+	    // nest contour loops
+	    for (int depth = num_loops - 1; depth >= 1; -- depth) {
+	        PerimeterGeneratorLoops &contours_d = contours[depth];
+	        // loop through all contours having depth == depth
+	        for (int i = 0; i < (int)contours_d.size(); ++ i) {
+	            const PerimeterGeneratorLoop &loop = contours_d[i];
+	            // find the contour loop that contains it
+	            for (int t = depth - 1; t >= 0; -- t)
+	                for (PerimeterGeneratorLoop &candidate_parent : contours[t])
+	                    if (candidate_parent.polygon.contains(loop.polygon.first_point())) {
+	                        candidate_parent.children.emplace_back(std::move(loop));
+	                        contours_d.pop_back();
+	                        -- i;
+	                        goto end_loop2;
+	                    }
+	        end_loop2:
+	        	;
+	        }
+	    }
+    	out = std::move(contours.front());
+    }
+
+    return out;
+}
 
 static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perimeter_generator, const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls)
 {
@@ -230,6 +299,593 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
     return out;
 }
 
+#if 1
+static ClipperLib::Paths offset_contour_miter(const ClipperLib::Path &input, const double delta, const double miter_limit)
+{
+    ClipperLib::ClipperOffset co;
+    co.MiterLimit = miter_limit;
+    co.ShortestEdgeLength = double(std::abs(delta * CLIPPER_OFFSET_SHORTEST_EDGE_FACTOR));
+    co.AddPath(input, jtMiter, ClipperLib::etClosedPolygon);
+    ClipperLib::Paths out;
+    co.Execute(out, delta);
+    return out;
+}
+
+static ClipperLib::Paths offset_contours_miter(const ClipperLib::Paths &input_paths, const double delta, const double miter_limit)
+{
+    ClipperLib::Paths out;
+    for (const ClipperLib::Path& input_path : input_paths)
+        append(out, offset_contour_miter(input_path, delta, miter_limit));
+    return out;
+}
+
+static ClipperLib::Paths unite_contours(ClipperLib::Paths &&input)
+{
+    if (input.size() > 1) {
+    	// Trim the holes one by the other.
+        ClipperLib::Clipper clipper;
+        clipper.AddPaths(input, ClipperLib::ptSubject, true);
+        ClipperLib::Paths out;
+        clipper.Execute(ClipperLib::ctUnion, out, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
+        input = std::move(out);
+    }
+    return input;
+}
+
+static ClipperLib::Paths subtract_holes(ClipperLib::Paths &&input_contours, ClipperLib::Paths &input_holes)
+{
+    if (input_holes.size() > 1) {
+    	// Trim the holes one by the other.
+        ClipperLib::Clipper clipper;
+        clipper.AddPaths(input_contours, ClipperLib::ptSubject, true);
+        clipper.AddPaths(input_holes, ClipperLib::ptClip, true);
+        ClipperLib::Paths out;
+        clipper.Execute(ClipperLib::ctDifference, out, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
+        input_contours = std::move(out);
+    }
+    return input_contours;
+}
+
+static ClipperLib::Paths subtract_holes(const ClipperLib::Paths &input_contours, ClipperLib::Paths &input_holes)
+{
+    ClipperLib::Paths out = input_contours;
+    return subtract_holes(std::move(out), input_holes);
+}
+
+ClipperLib::PolyTree clip_holes(const ClipperLib::Paths &input_contours, const ClipperLib::Paths &input_holes)
+{
+    ClipperLib::Clipper clipper;
+    clipper.AddPaths(input_holes, 	 ClipperLib::ptSubject, true);
+    clipper.AddPaths(input_contours, ClipperLib::ptClip,    true);
+    ClipperLib::PolyTree retval;
+    clipper.Execute(ClipperLib::ctDifference, retval, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
+    return retval;
+}
+
+// Perimeter tree.
+// Outmost Perimeter contains the source contours (non-printable) and possibly the gaps between the 1st perimeter and the source contours
+// (aka thin walls, if the thin walls are enabled).
+struct PerimeterNesting
+{
+	// Outer contour of this region. It may be an extrusion centerline or a region (extrusion) separator.
+	// Both the contours and holes are CCW oriented, but the holes are marked with is_hole.
+	ClipperLib::Path 				contour;
+	// Depth of this contour. Even - separation contours & gap fills, odd: perimeters and open lines.
+	unsigned int 					depth = 0;
+	// Is this contour an outer contour or a hole? Both contours and holes are CCW oriented.
+	bool 							is_hole = false;
+	// Childrens of this region, that is both children contours and holes.
+	std::vector<PerimeterNesting> 	children;
+	// Open lines created as centerlines of holes trimmed by the inner boundary of the outer contour extrusion.
+	ClipperLib::Paths 				open_lines;
+	// Gap fill between the parent perimeters and this perimeters.
+	// Gap fill shall only be filled in for even depth.
+	ThickPolylines 					gap_fill;
+
+    // External perimeter. Both the outer contours and holes are CCW oriented.
+    bool is_external_perimeter() const {
+    	// Call it on centerline contours (aka perimeters) only, not on contours separating regions.
+    	assert(this->depth & 1);
+    	return this->depth == 1;
+    }
+    // A contour, which may have holes, but it does not have another internal island.
+    bool is_innermost_perimeter() const {
+    	assert(this->depth & 1);
+	    // An internal contour is a contour containing no other contours
+	    if (this->is_hole)
+	        return false;
+	    for (const PerimeterNesting &child : this->children)
+	        if (!child.is_hole)
+	            return false;
+	    return true;
+	}
+
+#ifndef NDEBUG
+	bool validate();
+#endif /* NDEBUG */
+private:
+	bool validate_recursive_even(const PerimeterNesting* const parent);
+};
+
+#ifndef NDEBUG
+bool PerimeterNesting::validate()
+{
+	assert(this->depth == 0);
+	assert(this->validate_recursive_even(nullptr));
+	// Everything is fine.
+	return true;
+}
+bool PerimeterNesting::validate_recursive_even(const PerimeterNesting* const parent)
+{
+	// The contour separating perimeter regions is non-empty.
+	assert(! this->contour.empty());
+	if (parent != nullptr) {
+		if (parent->is_hole) {
+			assert(this->is_hole);
+		} else {
+			// This contour is a contour or a hole, parent is not a hole.
+//			assert(parent->);
+		}
+	}
+	// Everything is fine.
+	return true;
+}
+#endif /* NDEBUG */
+
+using PerimetersNesting = std::vector<PerimeterNesting>;
+
+// Convert the expolygons into the outmost Perimeters.
+PerimetersNesting expolygons_to_perimeters(const ExPolygons &expolygons)
+{
+	PerimetersNesting out;
+	out.reserve(expolygons.size());
+	for (const ExPolygon &expoly : expolygons) {
+		out.emplace_back(PerimeterNesting{ Slic3rMultiPoint_to_ClipperPath_scaled(expoly.contour), 0, false });
+        PerimeterNesting &p = out.back();
+        p.children.reserve(expoly.holes.size());
+        for (const Polygon &hole_src : expoly.holes)
+            p.children.emplace_back(PerimeterNesting{ Slic3rMultiPoint_to_ClipperPath_scaled_reversed(hole_src), 0, true});
+    }
+    return out;
+}
+
+template<class InputIt, class OutputIt, class UnaryPredicate>
+inline OutputIt move_if_clear(InputIt first, InputIt last, OutputIt d_first, UnaryPredicate pred)
+{
+    while (first != last) {
+        if (pred(*first)) {
+            *d_first++ = std::move(*first);
+            first->clear();
+        }
+        first++;
+    }
+    return d_first;
+}
+
+ThickPolylines gap_fill(ClipperLib::Paths in, const double perimeter_width, const double perimeter_spacing)
+{
+    double min = 0.2 * perimeter_width * (1 - INSET_OVERLAP_TOLERANCE);
+    double max = 2. * perimeter_spacing;
+#if 0
+    // collapse 
+    ExPolygons gaps_ex = diff_ex(
+        //FIXME offset2 would be enough and cheaper.
+        offset2_ex(gaps, - float(min / 2.), float(min / 2.)),
+        offset2_ex(gaps, - float(max / 2.), float(max / 2.)),
+        true);
+#endif
+
+    ThickPolylines out;
+#if 0
+    unscaleClipperPolygons(in);
+    for (const ExPolygon &ex : ClipperPaths_to_Slic3rExPolygons(in))
+        ex.medial_axis(max, min, &out);
+#endif
+   	return out;
+}
+
+// Offsetting an input region inside by step1 (centerline) and step2 (line thickness).
+// Returns the inner contours (regions) with the extruded paths removed.
+void single_perimeter_step(PerimeterNesting &parent, float step1, float step2)
+{
+	double miter_limit = 3.;
+    // Offset the outer contour by step1. This offset contour will be the outer perimeter.
+    const float step1_scaled = step1 * float(CLIPPER_OFFSET_SCALE);
+    ClipperLib::Paths contours = offset_contour_miter(parent.contour, - step1_scaled, miter_limit);
+    // Offset the holes one by one by step1, unite the holes. These holes will be the candidates for new perimeters, 
+    // but they need to be clipped yet by outer contours.
+    ClipperLib::Paths holes;
+    ClipperLib::Paths centerlines_outer;
+    {
+	    ClipperLib::Paths holes_initial;
+        holes.reserve(parent.children.size());
+        for (const PerimeterNesting &hole_src : parent.children)
+        	if (hole_src.is_hole && hole_src.depth == parent.depth) {
+	            append(holes, 		  offset_contour_miter(hole_src.contour, step1_scaled,		  miter_limit));
+//	            append(holes_initial, offset_contour_miter(hole_src.contour, step1_scaled / 10.f, miter_limit));
+	            holes_initial.emplace_back(hole_src.contour);
+        	}
+		holes = unite_contours(std::move(holes));
+	    // Clip the outer centerlines by the holes offsetted
+		centerlines_outer = subtract_holes(contours, std::move(holes_initial));
+	    // Calculate outer gap fill areas.
+	    parent.gap_fill = gap_fill(subtract_holes(contours, offset_contour_miter(parent.contour, step1_scaled + 10, miter_limit)), 2. * step1, 2. * step1);
+	    append(parent.gap_fill, gap_fill(subtract_holes(offset_contour_miter(parent.contour, - step1_scaled - 10, miter_limit), holes_initial), 2. * step1, 2. * step1));
+    }
+
+    // Offset the contours one by one by step2.
+    const float step2_scaled = step2 * float(CLIPPER_OFFSET_SCALE);
+    ClipperLib::Paths contours2 = offset_contours_miter(contours, - step2_scaled, miter_limit);
+    // Offset the holes one by one by step2.
+    ClipperLib::Paths holes2 = offset_contours_miter(holes, step2_scaled, miter_limit);
+
+    // Clip the holes with contours2. This may create some open contours.
+    ClipperLib::PolyTree centerlines_inner = clip_holes(contours2, holes);
+
+    // Subtract final holes from the final contours. This is the area covered by the extrusions.
+    ClipperLib::Paths final_boundaries_contours = subtract_holes(std::move(contours2), std::move(holes2));
+    // Partition final_boundaries_contours to final_boundaries_contours / final_boundaries_holes based on the contour orientation.
+    ClipperLib::Paths final_boundaries_holes;
+    final_boundaries_holes.reserve(final_boundaries_contours.size());
+	move_if_clear(final_boundaries_contours.begin(), final_boundaries_contours.end(),
+	    std::back_inserter(final_boundaries_holes), [](const ClipperLib::Path &path){ return ClipperLib::Area(path) < 0.; });
+	final_boundaries_contours.erase(
+		std::remove_if(final_boundaries_contours.begin(), final_boundaries_contours.end(), [](const ClipperLib::Path &path){ return path.empty(); }),
+        final_boundaries_contours.end());
+	for (ClipperLib::Path &hole : final_boundaries_holes)
+		// Orient the holes CCW.
+		std::reverse(hole.begin(), hole.end());
+
+    // Sort out the centerlines_outer / final_boundaries / centerlines_inner into a nested graph.
+    PerimetersNesting src_perimeters_holes = std::move(parent.children);
+    parent.children.clear();
+    parent.children.reserve(centerlines_outer.size());
+    for (ClipperLib::Path &centerline_outer_src : centerlines_outer)
+    	if (! centerline_outer_src.empty()) {
+    		// Add the centerline to the output.
+    		parent.children.emplace_back(PerimeterNesting{ std::move(centerline_outer_src), parent.depth + 1, false });
+    		// Distribute the final extrusion boundary contours among the centerlines.
+    		PerimeterNesting	&centerline_outer      = parent.children.back();
+	    	ClipperBoundingBox   centerline_outer_bbox = get_extents(centerline_outer.contour);
+	    	auto                 inside_centerline     = [&centerline_outer, &centerline_outer_bbox](const ClipperLib::Path &path) {
+    			return ! path.empty() && centerline_outer_bbox.contains(Vec2i64(path.front().X, path.front().Y)) && ClipperLib::PointInPolygon(path.front(), centerline_outer.contour);
+	    	};
+	    	for (ClipperLib::Path &final_boundary_contour_src : final_boundaries_contours)
+    			if (inside_centerline(final_boundary_contour_src)) {
+    				centerline_outer.children.emplace_back(PerimeterNesting{ std::move(final_boundary_contour_src), parent.depth + 2, false });
+    				final_boundary_contour_src.clear();
+    				// Distribute the final_boundary_holes accross the final_boundaries_contours.
+                    PerimeterNesting    &final_boundary_contour        = centerline_outer.children.back();
+			    	ClipperBoundingBox   final_boundary_contour_bbox   = get_extents(final_boundary_contour.contour);
+			    	auto                 inside_final_boundary_contour = [&final_boundary_contour, &final_boundary_contour_bbox](const ClipperLib::Path &path) {
+		    			return ! path.empty() && final_boundary_contour_bbox.contains(Vec2i64(path.front().X, path.front().Y)) && ClipperLib::PointInPolygon(path.front(), final_boundary_contour.contour);
+			    	};
+			    	for (ClipperLib::Path &final_boundary_hole_src : final_boundaries_holes)
+		    			if (inside_final_boundary_contour(final_boundary_hole_src)) {
+		    				final_boundary_contour.children.emplace_back(PerimeterNesting{ std::move(final_boundary_hole_src), parent.depth + 2, true });
+		    				final_boundary_hole_src.clear();
+		    				// Distribute the final_boundary_holes accross the final_boundaries_contours.
+                            PerimeterNesting    &final_boundary_hole        = final_boundary_contour.children.back();
+					    	ClipperBoundingBox   final_boundary_hole_bbox   = get_extents(final_boundary_contour.contour);
+					    	auto                 inside_final_boundary_hole = [&final_boundary_hole, &final_boundary_hole_bbox](const ClipperLib::Path &path) {
+				    			return ! path.empty() && final_boundary_hole_bbox.contains(Vec2i64(path.front().X, path.front().Y)) && ClipperLib::PointInPolygon(path.front(), final_boundary_hole.contour);
+					    	};
+					    	for (size_t i = 0; i < centerlines_inner.Childs.size(); ++ i) {
+				    			ClipperLib::Path &hole = centerlines_inner.Childs[i]->Contour;
+				    			if (! hole.empty() && ! centerlines_inner.Childs[i]->IsOpen() && inside_final_boundary_hole(hole)) {
+				    				final_boundary_hole.children.emplace_back(PerimeterNesting{ std::move(hole), parent.depth + 1, true });
+				    				hole.clear();
+				    				// Distribute the source holes accross the final_boundaries_contours.
+                                    PerimeterNesting    &centerline_inner        = final_boundary_hole.children.back();
+							    	ClipperBoundingBox   centerline_inner_bbox   = get_extents(centerline_inner.contour);
+							    	auto                 inside_centerline_inner = [&centerline_inner, &centerline_inner_bbox](const ClipperLib::Path &path) {
+						    			return ! path.empty() && centerline_inner_bbox.contains(Vec2i64(path.front().X, path.front().Y)) && ClipperLib::PointInPolygon(path.front(), centerline_inner.contour);
+							    	};
+    						    	for (PerimeterNesting &src_perimeter_hole : src_perimeters_holes)
+    						    		if (inside_centerline_inner(src_perimeter_hole.contour)) {
+						    				centerline_inner.children.emplace_back(std::move(src_perimeter_hole));
+						    				centerline_inner.contour.clear();
+    						    		}
+				    			}
+				    		}
+		    			}
+    			}
+	    	for (PerimeterNesting &src_perimeter_hole : src_perimeters_holes)
+	    		if (inside_centerline(src_perimeter_hole.contour)) {
+    				centerline_outer.children.emplace_back(std::move(src_perimeter_hole));
+    				src_perimeter_hole.contour.clear();
+	    		}
+    	}
+	for (size_t i = 0; i < centerlines_inner.Childs.size(); ++ i) {
+		ClipperLib::Path &open_line = centerlines_inner.Childs[i]->Contour;
+		if (! open_line.empty() && centerlines_inner.Childs[i]->IsOpen()) {
+			parent.open_lines.emplace_back(std::move(open_line));
+            open_line.clear();
+		}
+	}
+	for (PerimeterNesting &src_perimeter_hole : src_perimeters_holes)
+		if (! src_perimeter_hole.contour.empty()) {
+			parent.children.emplace_back(std::move(src_perimeter_hole));
+			src_perimeter_hole.contour.clear();
+		}
+
+    // Unscale the output.
+//    unscaleClipperPolygons(final);
+//    return ClipperPaths_to_Slic3rExPolygons(final);
+}
+
+void single_perimeter_step_recursive(PerimeterNesting &parent, float perimeter_spacing, size_t depth)
+{
+	single_perimeter_step(parent, perimeter_spacing * 0.5f, perimeter_spacing * 0.5f);
+	if (-- depth == 0)
+		return;
+	for (PerimeterNesting &nested : parent.children)
+		if (! nested.is_hole)
+			for (PerimeterNesting &nested2 : nested.children)
+				if (! nested2.is_hole)
+					single_perimeter_step_recursive(nested2, perimeter_spacing, depth);
+}
+
+PerimetersNesting create_perimeters(const ExPolygons &expolygons, 
+	const float external_perimeter_width, 
+	const float external_perimeter_spacing, 
+	const float perimeter_width,
+	const float perimeter_spacing,
+	const size_t num_perimeters)
+{
+	PerimetersNesting topmost = expolygons_to_perimeters(expolygons);
+	if (num_perimeters > 0) {
+		for (PerimeterNesting &parent : topmost) {
+			single_perimeter_step(parent, external_perimeter_width * 0.5f, external_perimeter_spacing * 0.5f);
+			if (num_perimeters > 1) {
+				for (PerimeterNesting &nested : parent.children)
+					if (! nested.is_hole)
+						for (PerimeterNesting &nested2 : nested.children)
+							if (! nested2.is_hole)
+								single_perimeter_step_recursive(nested2, perimeter_spacing, num_perimeters - 1);
+			}
+		}
+	}
+	return topmost;
+}
+
+void collect_infill_areas_recursive(const PerimeterNesting &parent, ExPolygons &out)
+{
+	assert(! parent.is_hole);
+	if (parent.open_lines.empty() && parent.gap_fill.empty() && ! parent.contour.empty()) {
+		bool all_holes = true;
+		for (const PerimeterNesting &child : parent.children)
+			if (! child.is_hole || child.depth != parent.depth) {
+				all_holes = false;
+				break;
+			}
+		if (all_holes) {
+			ExPolygon expoly;
+			ClipperLib::Path p = parent.contour;
+			unscaleClipperPolygon(p);
+			expoly.contour = ClipperPath_to_Slic3rPolygon(p);
+			expoly.holes.reserve(parent.children.size());
+			for (const PerimeterNesting &child : parent.children) {
+				ClipperLib::Path p = child.contour;
+				std::reverse(p.begin(), p.end());
+				unscaleClipperPolygon(p);
+				expoly.holes.emplace_back(ClipperPath_to_Slic3rPolygon(p));
+			}
+			return;
+		}
+	}
+	for (const PerimeterNesting &child : parent.children)
+		if (! child.is_hole)
+			for (const PerimeterNesting &child2 : child.children)
+				if (! child2.is_hole)
+					collect_infill_areas_recursive(child2, out);
+}
+
+ExPolygons collect_infill_areas(const PerimetersNesting &outmost)
+{
+	ExPolygons out;
+	for (const PerimeterNesting &parent : outmost) {
+		assert(! parent.is_hole);
+		collect_infill_areas_recursive(parent, out);
+	}
+	return out;
+}
+
+static ExtrusionEntityCollection collect_extrusions(const PerimeterGenerator &perimeter_generator, const PerimetersNesting &input_regions)
+{
+    ExtrusionEntityCollection 			 extrusion_entity_collection;
+    std::vector<const PerimeterNesting*> extrusion_entity_collection_source;
+
+    auto extrude_perimeter = [&extrusion_entity_collection, &extrusion_entity_collection_source, &perimeter_generator](const PerimeterNesting &child)
+    {
+        bool 				is_external = child.is_external_perimeter();
+        ExtrusionRole 		role        = is_external ? erExternalPerimeter : erPerimeter;
+        ExtrusionLoopRole 	loop_role   = child.is_innermost_perimeter() ? 
+            // Note that we set loop role to ContourInternalPerimeter
+            // also when loop is both internal and external (i.e.
+            // there's only one contour loop).
+            elrContourInternalPerimeter :
+			elrDefault;
+	    Polygon perimeter = ClipperPath_to_Slic3rPolygon_unscale(child.contour);
+	    // detect overhanging/bridging perimeters
+        ExtrusionPaths paths;
+        if (perimeter_generator.config->overhangs && perimeter_generator.layer_id > 0
+            && !(perimeter_generator.object_config->support_material && perimeter_generator.object_config->support_material_contact_distance.value == 0)) {
+            // get non-overhang paths by intersecting this loop with the grown lower slices
+            extrusion_paths_append(
+                paths,
+                intersection_pl(perimeter, perimeter_generator.lower_slices_polygons()),
+                role,
+                is_external ? perimeter_generator.ext_mm3_per_mm()          : perimeter_generator.mm3_per_mm(),
+                is_external ? perimeter_generator.ext_perimeter_flow.width  : perimeter_generator.perimeter_flow.width,
+                (float)perimeter_generator.layer_height);
+            
+            // get overhang paths by checking what parts of this loop fall 
+            // outside the grown lower slices (thus where the distance between
+            // the loop centerline and original lower slices is >= half nozzle diameter
+            extrusion_paths_append(
+                paths,
+                diff_pl(perimeter, perimeter_generator.lower_slices_polygons()),
+                erOverhangPerimeter,
+                perimeter_generator.mm3_per_mm_overhang(),
+                perimeter_generator.overhang_flow.width,
+                perimeter_generator.overhang_flow.height);
+            
+            // Reapply the nearest point search for starting point.
+            // We allow polyline reversal because Clipper may have randomly reversed polylines during clipping.
+            chain_and_reorder_extrusion_paths(paths, &paths.front().first_point());
+        } else {
+            ExtrusionPath path(role);
+            path.polyline   = perimeter.split_at_first_point();
+            path.mm3_per_mm = is_external ? perimeter_generator.ext_mm3_per_mm()          : perimeter_generator.mm3_per_mm();
+            path.width      = is_external ? perimeter_generator.ext_perimeter_flow.width  : perimeter_generator.perimeter_flow.width;
+            path.height     = (float)perimeter_generator.layer_height;
+            paths.push_back(path);
+        }
+        
+        extrusion_entity_collection.append(ExtrusionLoop(std::move(paths), loop_role));
+        extrusion_entity_collection_source.emplace_back(&child);
+    };
+
+    auto extrude_open_lines = [&extrusion_entity_collection, &extrusion_entity_collection_source, &perimeter_generator](const PerimeterNesting &parent)
+    {
+        bool detect_overhangs = perimeter_generator.config->overhangs && perimeter_generator.layer_id > 0 && 
+            !(perimeter_generator.object_config->support_material && perimeter_generator.object_config->support_material_contact_distance.value == 0);
+        for (Polyline &open_line : ClipperPaths_to_Slic3rPolylines_unscale(parent.open_lines)) {
+	        // detect overhanging/bridging perimeters
+            ExtrusionPaths paths;
+            if (detect_overhangs) {
+                // get non-overhang paths by intersecting this loop with the grown lower slices
+                extrusion_paths_append(
+                    paths,
+                    intersection_pl(open_line, perimeter_generator.lower_slices_polygons()),
+                    erPerimeter,
+                    perimeter_generator.mm3_per_mm(),
+                    perimeter_generator.perimeter_flow.width,
+                    (float)perimeter_generator.layer_height);
+            
+                // get overhang paths by checking what parts of this loop fall 
+                // outside the grown lower slices (thus where the distance between
+                // the loop centerline and original lower slices is >= half nozzle diameter
+                extrusion_paths_append(
+                    paths,
+                    diff_pl(open_line, perimeter_generator.lower_slices_polygons()),
+                    erOverhangPerimeter,
+                    perimeter_generator.mm3_per_mm_overhang(),
+                    perimeter_generator.overhang_flow.width,
+                    perimeter_generator.overhang_flow.height);
+            
+                // Reapply the nearest point search for starting point.
+                // We allow polyline reversal because Clipper may have randomly reversed polylines during clipping.
+                chain_and_reorder_extrusion_paths(paths, &paths.front().first_point());
+            } else {
+                ExtrusionPath path(erPerimeter);
+                path.polyline   = std::move(open_line);
+                path.mm3_per_mm = perimeter_generator.mm3_per_mm();
+                path.width      = perimeter_generator.perimeter_flow.width;
+                path.height     = (float)perimeter_generator.layer_height;
+                paths.emplace_back(std::move(path));
+            }
+            if (paths.size() == 1)
+                extrusion_entity_collection.append(ExtrusionPath(std::move(paths.front())));
+            else
+                extrusion_entity_collection.append(ExtrusionMultiPath(std::move(paths)));
+            extrusion_entity_collection_source.emplace_back(nullptr);
+        }
+    };
+
+    for (const PerimeterNesting &parent : input_regions) {
+	    if (parent.is_hole) {
+	    	// Hole may only contain holes, never outer contours.
+		    for (const PerimeterNesting &child : parent.children) {
+		    	assert(child.is_hole);
+	    		assert(! child.contour.empty());
+		    	assert((parent.depth & 1) == 0);
+		    	assert(parent.depth > 0);
+		    	// Child has depth one lower than its parent.
+		    	assert(parent.depth + 1 == child.depth);
+	    		// This must be a separation contour.
+	    		assert((child.depth & 1) == 0);
+	    		assert(child.depth < parent.depth);
+			    // Append thin walls between the hole perimetes and this area to the nearest-neighbor search.
+			    if (! child.gap_fill.empty()) {
+			        variable_width(child.gap_fill, erPerimeter, perimeter_generator.perimeter_flow, extrusion_entity_collection.entities);
+			        extrusion_entity_collection_source.resize(extrusion_entity_collection.entities.size(), nullptr);
+			    }
+	    		for (const PerimeterNesting &child2 : child.children) {
+		    		assert(child2.depth & 1);
+		    		assert(child2.depth + 1 == child.depth);
+	    		    extrude_perimeter(child);
+                }
+		    }
+	    } else {
+	    	// An outer contour may contain outer perimeters and hole boundaries.
+		    for (const PerimeterNesting &child : parent.children) {
+		    	assert((parent.depth & 1) == 0);
+		    	if (child.is_hole) {
+		    		assert(! child.contour.empty());
+		    		// This must be a separation contour.
+		    		assert((child.depth & 1) == 0);
+		    		assert(child.depth <= parent.depth);
+				    // Append thin walls between the hole perimetes and this area to the nearest-neighbor search.
+				    if (! child.gap_fill.empty()) {
+				        variable_width(child.gap_fill, erPerimeter, perimeter_generator.perimeter_flow, extrusion_entity_collection.entities);
+				        extrusion_entity_collection_source.resize(extrusion_entity_collection.entities.size(), nullptr);
+				    }
+		    		for (const PerimeterNesting &child2 : child.children) {
+			    		assert(child2.depth & 1);
+			    		assert(child2.depth + 1 == child.depth);
+		    			extrude_perimeter(child2);
+		    		}
+		    	} else {
+		    		// This must be a perimeter contour.
+		    		assert(child.depth & 1);
+		    		assert(child.depth == parent.depth + 1);
+		    		extrude_perimeter(child);
+		    	}
+		    }
+	    }
+	    // Append thin walls to the nearest-neighbor search.
+	    if (! parent.gap_fill.empty()) {
+	        variable_width(parent.gap_fill, erExternalPerimeter, perimeter_generator.ext_perimeter_flow, extrusion_entity_collection.entities);
+	        extrusion_entity_collection_source.resize(extrusion_entity_collection.entities.size(), nullptr);
+	    }
+        extrude_open_lines(parent);
+    }
+
+    // Traverse children and build the final collection.
+	Point zero_point(0, 0);
+	std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(extrusion_entity_collection.entities, &zero_point);
+    ExtrusionEntityCollection out;
+    for (const std::pair<size_t, bool> &idx : chain) {
+		assert(extrusion_entity_collection.entities[idx.first] != nullptr);
+        const PerimeterNesting *perimeter = extrusion_entity_collection_source[idx.first];
+        if (perimeter == nullptr) {
+            // This is a thin wall.
+			out.entities.reserve(out.entities.size() + 1);
+            out.entities.emplace_back(extrusion_entity_collection.entities[idx.first]);
+			extrusion_entity_collection.entities[idx.first] = nullptr;
+            if (idx.second)
+				out.entities.back()->reverse();
+        } else {
+            ExtrusionEntityCollection children = collect_extrusions(perimeter_generator, perimeter->children);
+            out.entities.reserve(out.entities.size() + children.entities.size() + 1);
+            ExtrusionLoop *eloop = static_cast<ExtrusionLoop*>(extrusion_entity_collection.entities[idx.first]);
+            extrusion_entity_collection.entities[idx.first] = nullptr;
+            if (perimeter->is_hole) {
+                out.entities.emplace_back(eloop);
+                out.append(std::move(children.entities));
+            } else {
+                out.append(std::move(children.entities));
+                out.entities.emplace_back(eloop);
+            }
+            children.entities.clear();
+        }
+    }
+    return out;
+}
+#endif
+
 void PerimeterGenerator::process()
 {
     // other perimeters
@@ -278,6 +934,8 @@ void PerimeterGenerator::process()
         // detect how many perimeters must be generated for this island
         int        loop_number = this->config->perimeters + surface.extra_perimeters - 1;  // 0-indexed loops
         ExPolygons last        = union_ex(surface.expolygon.simplify_p(SCALED_RESOLUTION));
+
+#if 0
         ExPolygons gaps;
         if (loop_number >= 0) {
             // In case no perimeters are to be generated, loop_number will equal to -1.
@@ -372,63 +1030,7 @@ void PerimeterGenerator::process()
                 	break;
                 }
             }
-
-            // nest loops: holes first
-            for (int d = 0; d <= loop_number; ++ d) {
-                PerimeterGeneratorLoops &holes_d = holes[d];
-                // loop through all holes having depth == d
-                for (int i = 0; i < (int)holes_d.size(); ++ i) {
-                    const PerimeterGeneratorLoop &loop = holes_d[i];
-                    // find the hole loop that contains this one, if any
-                    for (int t = d + 1; t <= loop_number; ++ t) {
-                        for (int j = 0; j < (int)holes[t].size(); ++ j) {
-                            PerimeterGeneratorLoop &candidate_parent = holes[t][j];
-                            if (candidate_parent.polygon.contains(loop.polygon.first_point())) {
-                                candidate_parent.children.push_back(loop);
-                                holes_d.erase(holes_d.begin() + i);
-                                -- i;
-                                goto NEXT_LOOP;
-                            }
-                        }
-                    }
-                    // if no hole contains this hole, find the contour loop that contains it
-                    for (int t = loop_number; t >= 0; -- t) {
-                        for (int j = 0; j < (int)contours[t].size(); ++ j) {
-                            PerimeterGeneratorLoop &candidate_parent = contours[t][j];
-                            if (candidate_parent.polygon.contains(loop.polygon.first_point())) {
-                                candidate_parent.children.push_back(loop);
-                                holes_d.erase(holes_d.begin() + i);
-                                -- i;
-                                goto NEXT_LOOP;
-                            }
-                        }
-                    }
-                    NEXT_LOOP: ;
-                }
-            }
-            // nest contour loops
-            for (int d = loop_number; d >= 1; -- d) {
-                PerimeterGeneratorLoops &contours_d = contours[d];
-                // loop through all contours having depth == d
-                for (int i = 0; i < (int)contours_d.size(); ++ i) {
-                    const PerimeterGeneratorLoop &loop = contours_d[i];
-                    // find the contour loop that contains it
-                    for (int t = d - 1; t >= 0; -- t) {
-                        for (size_t j = 0; j < contours[t].size(); ++ j) {
-                            PerimeterGeneratorLoop &candidate_parent = contours[t][j];
-                            if (candidate_parent.polygon.contains(loop.polygon.first_point())) {
-                                candidate_parent.children.push_back(loop);
-                                contours_d.erase(contours_d.begin() + i);
-                                -- i;
-                                goto NEXT_CONTOUR;
-                            }
-                        }
-                    }
-                    NEXT_CONTOUR: ;
-                }
-            }
-            // at this point, all loops should be in contours[0]
-            ExtrusionEntityCollection entities = traverse_loops(*this, contours.front(), thin_walls);
+            ExtrusionEntityCollection entities = traverse_loops(*this, nest_loops(std::move(contours), std::move(holes), loop_number + 1), thin_walls);
             // if brim will be printed, reverse the order of perimeters so that
             // we continue inwards after having finished the brim
             // TODO: add test for perimeter order
@@ -496,18 +1098,53 @@ void PerimeterGenerator::process()
                 float(- inset - min_perimeter_infill_spacing / 2.),
                 float(min_perimeter_infill_spacing / 2.)),
             stInternal);
-    } // for each island
-}
+#else
+        PerimetersNesting perimeters = create_perimeters(
+        	last, float(ext_perimeter_width), float(ext_perimeter_spacing), float(perimeter_width), float(perimeter_spacing), loop_number + 1);
 
-bool PerimeterGeneratorLoop::is_internal_contour() const
-{
-    // An internal contour is a contour containing no other contours
-    if (! this->is_contour)
-        return false;
-    for (const PerimeterGeneratorLoop &loop : this->children)
-        if (loop.is_contour)
-            return false;
-    return true;
+        // Collect the infill regions at depth loop_number + 1.
+		last = collect_infill_areas(perimeters);
+
+        // create one more offset to be used as boundary for fill
+        // we offset by half the perimeter spacing (to get to the actual infill boundary)
+        // and then we offset back and forth by half the infill spacing to only consider the
+        // non-collapsing regions
+        coord_t inset = 
+            (loop_number < 0) ? 0 :
+            (loop_number == 0) ?
+                // one loop
+                ext_perimeter_spacing / 2 :
+                // two or more loops?
+                perimeter_spacing / 2;
+        // only apply infill overlap if we actually have one perimeter
+        if (inset > 0)
+            inset -= coord_t(scale_(this->config->get_abs_value("infill_overlap", unscale<double>(inset + solid_infill_spacing / 2))));
+        // simplify infill contours according to resolution
+        Polygons pp;
+        for (ExPolygon &ex : last)
+            ex.simplify_p(SCALED_RESOLUTION, &pp);
+        // collapse too narrow infill areas
+        coord_t min_perimeter_infill_spacing = coord_t(solid_infill_spacing * (1. - INSET_OVERLAP_TOLERANCE));
+        // append infill areas to fill_surfaces
+        this->fill_surfaces->append(
+            offset2_ex(
+                union_ex(pp),
+                float(- inset - min_perimeter_infill_spacing / 2.),
+                float(min_perimeter_infill_spacing / 2.)),
+            stInternal);
+		
+		ExtrusionEntityCollection extrusion_entities = collect_extrusions(*this, perimeters);
+        // if brim will be printed, reverse the order of perimeters so that
+        // we continue inwards after having finished the brim
+        // TODO: add test for perimeter order
+        if (this->config->external_perimeters_first || 
+            (this->layer_id == 0 && this->print_config->brim_width.value > 0))
+            extrusion_entities.reverse();
+        // append perimeters for this slice as a collection
+        if (! extrusion_entities.empty())
+            this->loops->append(extrusion_entities);
+#endif
+    } // for each island
 }
 
 }

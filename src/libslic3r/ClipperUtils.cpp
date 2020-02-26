@@ -10,8 +10,6 @@
 
 #include <Shiny/Shiny.h>
 
-#define CLIPPER_OFFSET_SHORTEST_EDGE_FACTOR (0.005f)
-
 namespace Slic3r {
 
 #ifdef CLIPPER_UTILS_DEBUG
@@ -60,34 +58,30 @@ void scaleClipperPolygon(ClipperLib::Path &polygon)
 void scaleClipperPolygons(ClipperLib::Paths &polygons)
 {
     PROFILE_FUNC();
-    for (ClipperLib::Paths::iterator it = polygons.begin(); it != polygons.end(); ++it)
-        for (ClipperLib::Path::iterator pit = (*it).begin(); pit != (*it).end(); ++pit) {
-            pit->X <<= CLIPPER_OFFSET_POWER_OF_2;
-            pit->Y <<= CLIPPER_OFFSET_POWER_OF_2;
-        }
+    for (ClipperLib::Path &polygon : polygons)
+    	scaleClipperPolygon(polygon);
+}
+
+static inline void unscale_IntPoint(ClipperLib::IntPoint &pt)
+{
+    pt.X += CLIPPER_OFFSET_SCALE_ROUNDING_DELTA;
+    pt.Y += CLIPPER_OFFSET_SCALE_ROUNDING_DELTA;
+    pt.X >>= CLIPPER_OFFSET_POWER_OF_2;
+    pt.Y >>= CLIPPER_OFFSET_POWER_OF_2;
 }
 
 void unscaleClipperPolygon(ClipperLib::Path &polygon)
 {
     PROFILE_FUNC();
-    for (ClipperLib::Path::iterator pit = polygon.begin(); pit != polygon.end(); ++pit) {
-        pit->X += CLIPPER_OFFSET_SCALE_ROUNDING_DELTA;
-        pit->Y += CLIPPER_OFFSET_SCALE_ROUNDING_DELTA;
-        pit->X >>= CLIPPER_OFFSET_POWER_OF_2;
-        pit->Y >>= CLIPPER_OFFSET_POWER_OF_2;
-    }
+    for (ClipperLib::IntPoint &pt : polygon)
+    	unscale_IntPoint(pt);
 }
 
 void unscaleClipperPolygons(ClipperLib::Paths &polygons)
 {
     PROFILE_FUNC();
-    for (ClipperLib::Paths::iterator it = polygons.begin(); it != polygons.end(); ++it)
-        for (ClipperLib::Path::iterator pit = (*it).begin(); pit != (*it).end(); ++pit) {
-            pit->X += CLIPPER_OFFSET_SCALE_ROUNDING_DELTA;
-            pit->Y += CLIPPER_OFFSET_SCALE_ROUNDING_DELTA;
-            pit->X >>= CLIPPER_OFFSET_POWER_OF_2;
-            pit->Y >>= CLIPPER_OFFSET_POWER_OF_2;
-        }
+    for (ClipperLib::Path &path : polygons)
+    	unscaleClipperPolygon(path);
 }
 
 //-----------------------------------------------------------
@@ -119,16 +113,40 @@ ExPolygons PolyTreeToExPolygons(ClipperLib::PolyTree& polytree)
 Slic3r::Polygon ClipperPath_to_Slic3rPolygon(const ClipperLib::Path &input)
 {
     Polygon retval;
-    for (ClipperLib::Path::const_iterator pit = input.begin(); pit != input.end(); ++pit)
-        retval.points.emplace_back(pit->X, pit->Y);
+    retval.points.reserve(input.size());
+    for (const ClipperLib::IntPoint &pt : input)
+        retval.points.emplace_back(pt.X, pt.Y);
+    return retval;
+}
+
+Slic3r::Polygon ClipperPath_to_Slic3rPolygon_unscale(const ClipperLib::Path &input)
+{
+    Polygon retval;
+    retval.points.reserve(input.size());
+    for (ClipperLib::IntPoint pt : input) {
+		unscale_IntPoint(pt);
+     	retval.points.emplace_back(pt.X, pt.Y);
+    }
     return retval;
 }
 
 Slic3r::Polyline ClipperPath_to_Slic3rPolyline(const ClipperLib::Path &input)
 {
     Polyline retval;
-    for (ClipperLib::Path::const_iterator pit = input.begin(); pit != input.end(); ++pit)
-        retval.points.emplace_back(pit->X, pit->Y);
+    retval.points.reserve(input.size());
+    for (const ClipperLib::IntPoint &pt : input)
+        retval.points.emplace_back(pt.X, pt.Y);
+    return retval;
+}
+
+Slic3r::Polyline ClipperPath_to_Slic3rPolyline_unscale(const ClipperLib::Path &input)
+{
+    Polyline retval;
+    retval.points.reserve(input.size());
+    for (ClipperLib::IntPoint pt : input) {
+		unscale_IntPoint(pt);
+        retval.points.emplace_back(pt.X, pt.Y);
+    }
     return retval;
 }
 
@@ -136,8 +154,17 @@ Slic3r::Polygons ClipperPaths_to_Slic3rPolygons(const ClipperLib::Paths &input)
 {
     Slic3r::Polygons retval;
     retval.reserve(input.size());
-    for (ClipperLib::Paths::const_iterator it = input.begin(); it != input.end(); ++it)
-        retval.emplace_back(ClipperPath_to_Slic3rPolygon(*it));
+    for (const ClipperLib::Path &path : input)
+    	retval.emplace_back(ClipperPath_to_Slic3rPolygon(path));
+    return retval;
+}
+
+Slic3r::Polygons ClipperPaths_to_Slic3rPolygons_unscale(const ClipperLib::Paths &input)
+{
+    Slic3r::Polygons retval;
+    retval.reserve(input.size());
+    for (const ClipperLib::Path &path : input)
+    	retval.emplace_back(ClipperPath_to_Slic3rPolygon_unscale(path));
     return retval;
 }
 
@@ -145,8 +172,17 @@ Slic3r::Polylines ClipperPaths_to_Slic3rPolylines(const ClipperLib::Paths &input
 {
     Slic3r::Polylines retval;
     retval.reserve(input.size());
-    for (ClipperLib::Paths::const_iterator it = input.begin(); it != input.end(); ++it)
-        retval.emplace_back(ClipperPath_to_Slic3rPolyline(*it));
+    for (const ClipperLib::Path &path : input)
+        retval.emplace_back(ClipperPath_to_Slic3rPolyline(path));
+    return retval;
+}
+
+Slic3r::Polylines ClipperPaths_to_Slic3rPolylines_unscale(const ClipperLib::Paths &input)
+{
+    Slic3r::Polylines retval;
+    retval.reserve(input.size());
+    for (const ClipperLib::Path &path : input)
+        retval.emplace_back(ClipperPath_to_Slic3rPolyline_unscale(path));
     return retval;
 }
 
@@ -168,46 +204,59 @@ ExPolygons ClipperPaths_to_Slic3rExPolygons(const ClipperLib::Paths &input)
 ClipperLib::Path Slic3rMultiPoint_to_ClipperPath(const MultiPoint &input)
 {
     ClipperLib::Path retval;
-    for (Points::const_iterator pit = input.points.begin(); pit != input.points.end(); ++pit)
-        retval.emplace_back((*pit)(0), (*pit)(1));
+    retval.reserve(input.points.size());
+    for (const Point &pt : input.points)
+        retval.emplace_back(pt.x(), pt.y());
     return retval;
 }
 
+ClipperLib::Path Slic3rMultiPoint_to_ClipperPath_scaled(const MultiPoint &input)
+{
+    ClipperLib::Path retval = Slic3rMultiPoint_to_ClipperPath(input);
+    scaleClipperPolygon(retval);    
+    return retval;
+}
 ClipperLib::Path Slic3rMultiPoint_to_ClipperPath_reversed(const Slic3r::MultiPoint &input)
 {
     ClipperLib::Path output;
     output.reserve(input.points.size());
     for (Slic3r::Points::const_reverse_iterator pit = input.points.rbegin(); pit != input.points.rend(); ++pit)
-        output.emplace_back((*pit)(0), (*pit)(1));
+        output.emplace_back(pit->x(), pit->y());
     return output;
+}
+
+ClipperLib::Path Slic3rMultiPoint_to_ClipperPath_scaled_reversed(const Slic3r::MultiPoint &input)
+{
+    ClipperLib::Path retval = Slic3rMultiPoint_to_ClipperPath_reversed(input);
+    scaleClipperPolygon(retval);    
+    return retval;	
 }
 
 ClipperLib::Paths Slic3rMultiPoints_to_ClipperPaths(const Polygons &input)
 {
     ClipperLib::Paths retval;
-    for (Polygons::const_iterator it = input.begin(); it != input.end(); ++it)
-        retval.emplace_back(Slic3rMultiPoint_to_ClipperPath(*it));
+    for (const Polygon &poly : input)
+    	retval.emplace_back(Slic3rMultiPoint_to_ClipperPath(poly));
     return retval;
 }
 
-ClipperLib::Paths  Slic3rMultiPoints_to_ClipperPaths(const ExPolygons &input)
+ClipperLib::Paths Slic3rMultiPoints_to_ClipperPaths(const ExPolygons &input)
 {
     ClipperLib::Paths retval;
     for (auto &ep : input) {
         retval.emplace_back(Slic3rMultiPoint_to_ClipperPath(ep.contour));
-        
         for (auto &h : ep.holes)
             retval.emplace_back(Slic3rMultiPoint_to_ClipperPath(h));
     }
-        
     return retval;
 }
 
 ClipperLib::Paths Slic3rMultiPoints_to_ClipperPaths(const Polylines &input)
 {
     ClipperLib::Paths retval;
-    for (Polylines::const_iterator it = input.begin(); it != input.end(); ++it)
-        retval.emplace_back(Slic3rMultiPoint_to_ClipperPath(*it));
+    retval.reserve(input.size());
+    for (const Polyline &pl : input)
+    	retval.emplace_back(Slic3rMultiPoint_to_ClipperPath(pl));
     return retval;
 }
 
@@ -251,8 +300,7 @@ ClipperLib::Paths _offset(const Slic3r::ExPolygon &expolygon, const float delta,
     const float delta_scaled = delta * float(CLIPPER_OFFSET_SCALE);
     ClipperLib::Paths contours;
     {
-        ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath(expolygon.contour);
-        scaleClipperPolygon(input);
+        ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath_scaled(expolygon.contour);
         ClipperLib::ClipperOffset co;
         if (joinType == jtRound)
             co.ArcTolerance = miterLimit * double(CLIPPER_OFFSET_SCALE);
@@ -268,8 +316,7 @@ ClipperLib::Paths _offset(const Slic3r::ExPolygon &expolygon, const float delta,
     {
         holes.reserve(expolygon.holes.size());
         for (Polygons::const_iterator it_hole = expolygon.holes.begin(); it_hole != expolygon.holes.end(); ++ it_hole) {
-            ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath_reversed(*it_hole);
-            scaleClipperPolygon(input);
+            ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath_scaled_reversed(*it_hole);
             ClipperLib::ClipperOffset co;
             if (joinType == jtRound)
                 co.ArcTolerance = miterLimit * double(CLIPPER_OFFSET_SCALE);
@@ -317,8 +364,7 @@ ClipperLib::Paths _offset(const Slic3r::ExPolygons &expolygons, const float delt
         // 1) Offset the outer contour.
         ClipperLib::Paths contours;
         {
-            ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath(it_expoly->contour);
-            scaleClipperPolygon(input);
+            ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath_scaled(it_expoly->contour);
             ClipperLib::ClipperOffset co;
             if (joinType == jtRound)
                 co.ArcTolerance = miterLimit * double(CLIPPER_OFFSET_SCALE);
@@ -341,8 +387,7 @@ ClipperLib::Paths _offset(const Slic3r::ExPolygons &expolygons, const float delt
             ClipperLib::Paths holes;
             {
                 for (Polygons::const_iterator it_hole = it_expoly->holes.begin(); it_hole != it_expoly->holes.end(); ++ it_hole) {
-                    ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath_reversed(*it_hole);
-                    scaleClipperPolygon(input);
+                    ClipperLib::Path input = Slic3rMultiPoint_to_ClipperPath_scaled_reversed(*it_hole);
                     ClipperLib::ClipperOffset co;
                     if (joinType == jtRound)
                         co.ArcTolerance = miterLimit * double(CLIPPER_OFFSET_SCALE);
@@ -1079,8 +1124,7 @@ Polygons variable_offset_inner(const ExPolygon &expoly, const std::vector<std::v
 	}
 
 	// 4) Unscale the output.
-	unscaleClipperPolygons(output);
-	return ClipperPaths_to_Slic3rPolygons(output);
+	return ClipperPaths_to_Slic3rPolygons_unscale(output);
 }
 
 Polygons variable_offset_outer(const ExPolygon &expoly, const std::vector<std::vector<float>> &deltas, double miter_limit)
@@ -1123,8 +1167,7 @@ for (const std::vector<float>& ds : deltas)
 	}
 
 	// 4) Unscale the output.
-	unscaleClipperPolygons(output);
-	return ClipperPaths_to_Slic3rPolygons(output);
+	return ClipperPaths_to_Slic3rPolygons_unscale(output);
 }
 
 ExPolygons variable_offset_outer_ex(const ExPolygon &expoly, const std::vector<std::vector<float>> &deltas, double miter_limit)
@@ -1222,4 +1265,43 @@ ExPolygons variable_offset_inner_ex(const ExPolygon &expoly, const std::vector<s
 	return output;
 }
 
+ClipperBoundingBox get_extents(const ClipperLib::Path &path)
+{
+	ClipperBoundingBox bbox;
+	if (! path.empty()) {
+	    bbox.min.x() = path.front().X;
+	    bbox.min.y() = path.front().Y;
+	    bbox.max = bbox.min;
+		for (const ClipperLib::IntPoint &pt : path) {
+            bbox.min.x() = std::min(bbox.min.x(), pt.X);
+            bbox.min.y() = std::min(bbox.min.y(), pt.Y);
+            bbox.max.x() = std::max(bbox.max.x(), pt.X);
+            bbox.max.y() = std::max(bbox.max.y(), pt.Y);
+	    }
+        bbox.defined = bbox.min.x() < bbox.max.x() && bbox.min.y() < bbox.max.y();
+	}
+	return bbox;
 }
+
+ClipperBoundingBox get_extents(const ClipperLib::Paths &paths)
+{
+    ClipperBoundingBox bbox;
+	for (const ClipperLib::Path &path : paths)
+		bbox.merge(get_extents(path));
+	return bbox;
+}
+
+ClipperBoundingBox get_extents(const ClipperLib::PolyNode &polynode)
+{
+    ClipperBoundingBox bbox = get_extents(polynode.Contour);
+    for (const ClipperLib::PolyNode* child : polynode.Childs)
+    	bbox.merge(get_extents(*child));
+    return bbox;
+}
+
+ClipperBoundingBox get_extents(const ClipperLib::PolyTree &polytree)
+{
+	return get_extents(static_cast<const ClipperLib::PolyNode&>(polytree));
+}
+
+} // namespace Slic3r

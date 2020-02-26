@@ -7,6 +7,7 @@
 namespace Slic3r {
 
 template BoundingBoxBase<Point>::BoundingBoxBase(const std::vector<Point> &points);
+template BoundingBoxBase<Vec2i64>::BoundingBoxBase(const std::vector<Vec2i64> &points);
 template BoundingBoxBase<Vec2d>::BoundingBoxBase(const std::vector<Vec2d> &points);
 
 template BoundingBox3Base<Vec3d>::BoundingBox3Base(const std::vector<Vec3d> &points);
@@ -70,6 +71,7 @@ BoundingBoxBase<PointClass>::scale(double factor)
     this->max *= factor;
 }
 template void BoundingBoxBase<Point>::scale(double factor);
+template void BoundingBoxBase<Vec2i64>::scale(double factor);
 template void BoundingBoxBase<Vec2d>::scale(double factor);
 template void BoundingBoxBase<Vec3d>::scale(double factor);
 
@@ -86,6 +88,7 @@ BoundingBoxBase<PointClass>::merge(const PointClass &point)
     }
 }
 template void BoundingBoxBase<Point>::merge(const Point &point);
+template void BoundingBoxBase<Vec2i64>::merge(const Vec2i64 &point);
 template void BoundingBoxBase<Vec2d>::merge(const Vec2d &point);
 
 template <class PointClass> void
@@ -112,6 +115,7 @@ BoundingBoxBase<PointClass>::merge(const BoundingBoxBase<PointClass> &bb)
     }
 }
 template void BoundingBoxBase<Point>::merge(const BoundingBoxBase<Point> &bb);
+template void BoundingBoxBase<Vec2i64>::merge(const BoundingBoxBase<Vec2i64> &bb);
 template void BoundingBoxBase<Vec2d>::merge(const BoundingBoxBase<Vec2d> &bb);
 
 template <class PointClass> void
@@ -158,6 +162,7 @@ BoundingBoxBase<PointClass>::size() const
     return PointClass(this->max(0) - this->min(0), this->max(1) - this->min(1));
 }
 template Point BoundingBoxBase<Point>::size() const;
+template Vec2i64 BoundingBoxBase<Vec2i64>::size() const;
 template Vec2d BoundingBoxBase<Vec2d>::size() const;
 
 template <class PointClass> PointClass
