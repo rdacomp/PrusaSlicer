@@ -371,8 +371,10 @@ std::ostream& ConfigDef::print_cli_help(std::ostream& out, bool show_defaults, s
 
 void ConfigBase::apply_only(const ConfigBase &other, const t_config_option_keys &keys, bool ignore_nonexistent)
 {
+	printf("******* ConfigBase::apply_only()\n");
     // loop through options and apply them
     for (const t_config_option_key &opt_key : keys) {
+		printf("\tConfigBase::apply_only() - key: %s\n", opt_key.c_str());
         // Create a new option with default value for the key.
         // If the key is not in the parameter definition, or this ConfigBase is a static type and it does not support the parameter,
         // an exception is thrown if not ignore_nonexistent.
@@ -388,8 +390,11 @@ void ConfigBase::apply_only(const ConfigBase &other, const t_config_option_keys 
 		if (other_opt == nullptr) {
             // The key was not found in the source config, therefore it will not be initialized!
 //			printf("Not found, therefore not initialized: %s\n", opt_key.c_str());
-		} else
+		} else {
+			printf("\tConfigBase::apply_only() - set key: %s\n", opt_key.c_str());
+			printf("\t\ttype src: %s, type target: %s\n", typeid(*other_opt).name(), typeid(*my_opt).name());
             my_opt->set(other_opt);
+		}
     }
 }
 
