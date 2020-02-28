@@ -168,8 +168,10 @@ public:
 
     typedef std::array<double, 6> DataPacketAxis;
     void handle_input_axis(const DataPacketAxis& packet);
+
+	void update_hid_devices(void* event_data);
 private:
-    bool connect_device();
+	bool connect_device(hid_device_info* devices);
     void disconnect_device();
     void start();
     void stop() { m_running = false; }

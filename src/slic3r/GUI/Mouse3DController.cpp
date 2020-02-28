@@ -6,6 +6,7 @@
 #include "PresetBundle.hpp"
 #include "AppConfig.hpp"
 #include "GLCanvas3D.hpp"
+#include "BackgroundUpdater.hpp"
 
 #include <wx/glcanvas.h>
 
@@ -243,8 +244,9 @@ bool Mouse3DController::apply(Camera& camera)
     }
 
     // check if the user plugged the device
-    if (connect_device())
-        start();
+    //if (connect_device())
+	//if (is_device_connected())
+	//	start();
 
     return is_device_connected() ? m_state.apply(camera) : false;
 }
@@ -379,287 +381,292 @@ void Mouse3DController::render_settings_dialog(GLCanvas3D& canvas) const
     imgui.end();
 }
 
-bool Mouse3DController::connect_device()
+void Mouse3DController::update_hid_devices(void* event_data)
 {
-#ifdef __APPLE__
-    return false;
-#endif//__APPLE__
-    static const long long DETECTION_TIME_MS = 2000; // two seconds
+	hid_device_info* devices = (hid_device_info*)event_data;
+	if (connect_device(devices)){
+		start();
+		//end enumeration
+		wxGetApp().background_updater->mouse3d_set_has_mouse(true);
+	}
+}
+bool Mouse3DController::connect_device(hid_device_info* devices)
+{
+	if (is_device_connected())
+		return false;
+		
 
-    if (is_device_connected())
-        return false;
+	if (devices == nullptr)
+	{
+		BOOST_LOG_TRIVIAL(error) << "Unable to enumerate HID devices";
+		return false;
+	}
 
-    // check time since last detection took place
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - m_last_time).count() < DETECTION_TIME_MS)
-        return false;
-    
-    m_last_time = std::chrono::high_resolution_clock::now();
+	// Searches for 1st connected 3Dconnexion device
+	struct DeviceData
+	{
+		std::string path;
+		unsigned short usage_page;
+		unsigned short usage;
 
-    // Enumerates devices
-    hid_device_info* devices = hid_enumerate(0, 0);
-    if (devices == nullptr)
-    {
-        BOOST_LOG_TRIVIAL(error) << "Unable to enumerate HID devices";
-        return false;
-    }
+		DeviceData()
+			: path(""), usage_page(0), usage(0)
+		{}
+		DeviceData(const std::string& path, unsigned short usage_page, unsigned short usage)
+			: path(path), usage_page(usage_page), usage(usage)
+		{}
 
-    // Searches for 1st connected 3Dconnexion device
-    struct DeviceData
-    {
-        std::string path;
-        unsigned short usage_page;
-        unsigned short usage;
-
-        DeviceData()
-            : path(""), usage_page(0), usage(0)
-        {}
-        DeviceData(const std::string& path, unsigned short usage_page, unsigned short usage)
-            : path(path), usage_page(usage_page), usage(usage)
-        {}
-
-        bool has_valid_usage() const { return (usage_page == 1) && (usage == 8); }
-    };
+		bool has_valid_usage() const { return (usage_page == 1) && (usage == 8); }
+	};
 
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-    hid_device_info* cur = devices;
-    std::cout << std::endl << "======================================================================================================================================" << std::endl;
-    std::cout << "Detected devices:" << std::endl;
-    while (cur != nullptr)
-    {
-        std::cout << "\"";
-        std::wcout << ((cur->manufacturer_string != nullptr) ? cur->manufacturer_string : L"Unknown");
-        std::cout << "/";
-        std::wcout << ((cur->product_string != nullptr) ? cur->product_string : L"Unknown");
-        std::cout << "\" code: " << cur->vendor_id << "/" << cur->product_id << " (" << std::hex << cur->vendor_id << "/" << cur->product_id << std::dec << ")";
-        std::cout << " serial number: '";
-        std::wcout << ((cur->serial_number != nullptr) ? cur->serial_number : L"Unknown");
-        std::cout << "' usage page: " << cur->usage_page << " usage: " << cur->usage << " interface number: " << cur->interface_number << std::endl;
+	hid_device_info* cur = devices;
+	std::cout << std::endl << "======================================================================================================================================" << std::endl;
+	std::cout << "Detected devices:" << std::endl;
+	while (cur != nullptr)
+	{
+		std::cout << "\"";
+		std::wcout << ((cur->manufacturer_string != nullptr) ? cur->manufacturer_string : L"Unknown");
+		std::cout << "/";
+		std::wcout << ((cur->product_string != nullptr) ? cur->product_string : L"Unknown");
+		std::cout << "\" code: " << cur->vendor_id << "/" << cur->product_id << " (" << std::hex << cur->vendor_id << "/" << cur->product_id << std::dec << ")";
+		std::cout << " serial number: '";
+		std::wcout << ((cur->serial_number != nullptr) ? cur->serial_number : L"Unknown");
+		std::cout << "' usage page: " << cur->usage_page << " usage: " << cur->usage << " interface number: " << cur->interface_number << std::endl;
 
-        cur = cur->next;
-    }
+		cur = cur->next;
+	}
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
 
-    // When using 3Dconnexion universal receiver, multiple devices are detected sharing the same vendor_id and product_id.
-    // To choose from them the right one we use:
-    // On Windows and Mac: usage_page == 1 and usage == 8
-    // On Linux: as usage_page and usage are not defined (see hidapi.h) we try all detected devices until one is succesfully open
-    // When only a single device is detected, as for wired connections, vendor_id and product_id are enough
+	// When using 3Dconnexion universal receiver, multiple devices are detected sharing the same vendor_id and product_id.
+	// To choose from them the right one we use:
+	// On Windows and Mac: usage_page == 1 and usage == 8
+	// On Linux: as usage_page and usage are not defined (see hidapi.h) we try all detected devices until one is succesfully open
+	// When only a single device is detected, as for wired connections, vendor_id and product_id are enough
 
-    // First we count all the valid devices from the enumerated list,
+	// First we count all the valid devices from the enumerated list,
 
-    hid_device_info* current = devices;
-    typedef std::pair<unsigned short, unsigned short> DeviceIds;
-    typedef std::vector<DeviceData> DeviceDataList;
-    typedef std::map<DeviceIds, DeviceDataList> DetectedDevices;
-    DetectedDevices detected_devices;
+	hid_device_info* current = devices;
+	typedef std::pair<unsigned short, unsigned short> DeviceIds;
+	typedef std::vector<DeviceData> DeviceDataList;
+	typedef std::map<DeviceIds, DeviceDataList> DetectedDevices;
+	DetectedDevices detected_devices;
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-    std::cout << std::endl << "Detected 3D connexion devices:" << std::endl;
+	std::cout << std::endl << "Detected 3D connexion devices:" << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-    while (current != nullptr)
-    {
-        unsigned short vendor_id = 0;
-        unsigned short product_id = 0;
+	while (current != nullptr)
+	{
+		unsigned short vendor_id = 0;
+		unsigned short product_id = 0;
 
-        for (size_t i = 0; i < _3DCONNEXION_VENDORS.size(); ++i)
-        {
-            if (_3DCONNEXION_VENDORS[i] == current->vendor_id)
-            {
-                vendor_id = current->vendor_id;
-                break;
-            }
-        }
+		for (size_t i = 0; i < _3DCONNEXION_VENDORS.size(); ++i)
+		{
+			if (_3DCONNEXION_VENDORS[i] == current->vendor_id)
+			{
+				vendor_id = current->vendor_id;
+				break;
+			}
+		}
 
-        if (vendor_id != 0)
-        {
-            for (size_t i = 0; i < _3DCONNEXION_DEVICES.size(); ++i)
-            {
-                if (_3DCONNEXION_DEVICES[i] == current->product_id)
-                {
-                    product_id = current->product_id;
-                    DeviceIds detected_device(vendor_id, product_id);
-                    DetectedDevices::iterator it = detected_devices.find(detected_device);
-                    if (it == detected_devices.end())
-                        it = detected_devices.insert(DetectedDevices::value_type(detected_device, DeviceDataList())).first;
+		if (vendor_id != 0)
+		{
+			for (size_t i = 0; i < _3DCONNEXION_DEVICES.size(); ++i)
+			{
+				if (_3DCONNEXION_DEVICES[i] == current->product_id)
+				{
+					product_id = current->product_id;
+					DeviceIds detected_device(vendor_id, product_id);
+					DetectedDevices::iterator it = detected_devices.find(detected_device);
+					if (it == detected_devices.end())
+						it = detected_devices.insert(DetectedDevices::value_type(detected_device, DeviceDataList())).first;
 
-                    it->second.emplace_back(current->path, current->usage_page, current->usage);
+					it->second.emplace_back(current->path, current->usage_page, current->usage);
 
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                    std::wcout << "\"" << ((current->manufacturer_string != nullptr) ? current->manufacturer_string : L"Unknown");
-                    std::cout << "/";
-                    std::wcout << ((current->product_string != nullptr) ? current->product_string : L"Unknown");
-                    std::cout << "\" code: " << current->vendor_id << "/" << current->product_id << " (" << std::hex << current->vendor_id << "/" << current->product_id << std::dec << ")";
-                    std::cout << " serial number: '";
-                    std::wcout << ((current->serial_number != nullptr) ? current->serial_number : L"Unknown");
-                    std::cout << "' usage page: " << current->usage_page << " usage: " << current->usage << std::endl;
+					std::wcout << "\"" << ((current->manufacturer_string != nullptr) ? current->manufacturer_string : L"Unknown");
+					std::cout << "/";
+					std::wcout << ((current->product_string != nullptr) ? current->product_string : L"Unknown");
+					std::cout << "\" code: " << current->vendor_id << "/" << current->product_id << " (" << std::hex << current->vendor_id << "/" << current->product_id << std::dec << ")";
+					std::cout << " serial number: '";
+					std::wcout << ((current->serial_number != nullptr) ? current->serial_number : L"Unknown");
+					std::cout << "' usage page: " << current->usage_page << " usage: " << current->usage << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                }
-            }
-        }
+				}
+			}
+		}
 
-        current = current->next;
-    }
+		current = current->next;
+	}
 
-    // Free enumerated devices
-    hid_free_enumeration(devices);
+	// Free enumerated devices
+	hid_free_enumeration(devices);
 
-    if (detected_devices.empty())
-        return false;
+	if (detected_devices.empty())
+		return false;
 
-    std::string path = "";
-    unsigned short vendor_id = 0;
-    unsigned short product_id = 0;
+	std::string path = "";
+	unsigned short vendor_id = 0;
+	unsigned short product_id = 0;
 
-    // Then we'll decide the choosing logic to apply in dependence of the device count and operating system
+	// Then we'll decide the choosing logic to apply in dependence of the device count and operating system
 
-    for (const DetectedDevices::value_type& device : detected_devices)
-    {
-        if (device.second.size() == 1)
-        {
+	for (const DetectedDevices::value_type& device : detected_devices)
+	{
+		if (device.second.size() == 1)
+		{
 #if defined(__linux__)
-            hid_device* test_device = hid_open(device.first.first, device.first.second, nullptr);
-            if (test_device != nullptr)
-            {
-                hid_close(test_device);
+			hid_device* test_device = hid_open(device.first.first, device.first.second, nullptr);
+			if (test_device != nullptr)
+			{
+				hid_close(test_device);
 #else
-            if (device.second.front().has_valid_usage())
-            {
+			if (device.second.front().has_valid_usage())
+			{
 #endif // __linux__ 
-                vendor_id = device.first.first;
-                product_id = device.first.second;
-                break;
-            }
-        }
-        else
-        {
-            bool found = false;
+				vendor_id = device.first.first;
+				product_id = device.first.second;
+				break;
+			}
+			}
+		else
+		{
+			bool found = false;
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-            std::cout << std::endl;
+			std::cout << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-            for (const DeviceData& data : device.second)
-            {
+			for (const DeviceData& data : device.second)
+			{
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                std::cout << "Test device: " << std::hex << device.first.first << std::dec << "/" << std::hex << device.first.second << std::dec << " \"" << data.path << "\"";
+				std::cout << "Test device: " << std::hex << device.first.first << std::dec << "/" << std::hex << device.first.second << std::dec << " \"" << data.path << "\"";
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
 
 #ifdef __linux__
-                hid_device* test_device = hid_open_path(data.path.c_str());
-                if (test_device != nullptr)
-                {
-                    path = data.path;
-                    vendor_id = device.first.first;
-                    product_id = device.first.second;
-                    found = true;
+				hid_device* test_device = hid_open_path(data.path.c_str());
+				if (test_device != nullptr)
+				{
+					path = data.path;
+					vendor_id = device.first.first;
+					product_id = device.first.second;
+					found = true;
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                    std::cout << "-> PASSED" << std::endl;
+					std::cout << "-> PASSED" << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                    hid_close(test_device);
-                    break;
-                }
+					hid_close(test_device);
+					break;
+		}
 #else // !__linux__
-                if (data.has_valid_usage())
-                {
-                    path = data.path;
-                    vendor_id = device.first.first;
-                    product_id = device.first.second;
-                    found = true;
+				if (data.has_valid_usage())
+				{
+					path = data.path;
+					vendor_id = device.first.first;
+					product_id = device.first.second;
+					found = true;
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                    std::cout << "-> PASSED" << std::endl;
+					std::cout << "-> PASSED" << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                    break;
-                }
+					break;
+			}
 #endif // __linux__
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                else
-                    std::cout << "-> NOT PASSED" << std::endl;
+				else
+					std::cout << "-> NOT PASSED" << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-            }
+		}
 
-            if (found)
-                break;
-        }
-    }
-
-    if (path.empty())
-    {
-        if ((vendor_id != 0) && (product_id != 0))
-        {
-            // Open the 3Dconnexion device using vendor_id and product_id
-#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-            std::cout << std::endl << "Opening device: " << std::hex << vendor_id << std::dec << "/" << std::hex << product_id << std::dec << " using hid_open()" << std::endl;
-#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-            m_device = hid_open(vendor_id, product_id, nullptr);
-        }
-        else
-            return false;
-    }
-    else
-    {
-        // Open the 3Dconnexion device using the device path
-#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-        std::cout << std::endl << "Opening device: " << std::hex << vendor_id << std::dec << "/" << std::hex << product_id << std::dec << "\"" << path << "\" using hid_open_path()" << std::endl;
-#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-        m_device = hid_open_path(path.c_str());
-    }
-
-    if (m_device != nullptr)
-    {
-        wchar_t buffer[1024];
-        hid_get_manufacturer_string(m_device, buffer, 1024);
-        m_device_str = boost::nowide::narrow(buffer);
-        // #3479 seems to show that sometimes an extra whitespace is added, so we remove it
-        boost::algorithm::trim(m_device_str);
-
-        hid_get_product_string(m_device, buffer, 1024);
-        m_device_str += "/" + boost::nowide::narrow(buffer);
-        // #3479 seems to show that sometimes an extra whitespace is added, so we remove it
-        boost::algorithm::trim(m_device_str);
-
-        BOOST_LOG_TRIVIAL(info) << "Connected 3DConnexion device:";
-        BOOST_LOG_TRIVIAL(info) << "Manufacturer/product: " << m_device_str;
-        BOOST_LOG_TRIVIAL(info) << "Manufacturer id.....: " << vendor_id << " (" << std::hex << vendor_id << std::dec << ")";
-        BOOST_LOG_TRIVIAL(info) << "Product id..........: " << product_id << " (" << std::hex << product_id << std::dec << ")";
-        if (!path.empty())
-            BOOST_LOG_TRIVIAL(info) << "Path................: '" << path << "'";
-#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-        std::cout << "Opened device." << std::endl;
-#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-        // get device parameters from the config, if present
-        double translation_speed = 4.0;
-        float rotation_speed = 4.0;
-        double translation_deadzone = State::DefaultTranslationDeadzone;
-        float rotation_deadzone = State::DefaultRotationDeadzone;
-        double zoom_speed = 2.0;
-        wxGetApp().app_config->get_mouse_device_translation_speed(m_device_str, translation_speed);
-        wxGetApp().app_config->get_mouse_device_translation_deadzone(m_device_str, translation_deadzone);
-        wxGetApp().app_config->get_mouse_device_rotation_speed(m_device_str, rotation_speed);
-        wxGetApp().app_config->get_mouse_device_rotation_deadzone(m_device_str, rotation_deadzone);
-        wxGetApp().app_config->get_mouse_device_zoom_speed(m_device_str, zoom_speed);
-        // clamp to valid values
-        m_state.set_translation_scale(State::DefaultTranslationScale * std::clamp(translation_speed, 0.1, 10.0));
-        m_state.set_translation_deadzone(std::clamp(translation_deadzone, 0.0, State::MaxTranslationDeadzone));
-        m_state.set_rotation_scale(State::DefaultRotationScale * std::clamp(rotation_speed, 0.1f, 10.0f));
-        m_state.set_rotation_deadzone(std::clamp(rotation_deadzone, 0.0f, State::MaxRotationDeadzone));
-        m_state.set_zoom_scale(State::DefaultZoomScale * std::clamp(zoom_speed, 0.1, 10.0));
-    }
-#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-    else
-    {
-        std::cout << std::endl << "Unable to connect to device:" << std::endl;
-        std::cout << "Manufacturer/product: " << m_device_str << std::endl;
-        std::cout << "Manufacturer id.....: " << vendor_id << " (" << std::hex << vendor_id << std::dec << ")" << std::endl;
-        std::cout << "Product id..........: " << product_id << " (" << std::hex << product_id << std::dec << ")" << std::endl;
-        std::cout << "Path................: '" << path << "'" << std::endl;
-    }
-#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-
-    return (m_device != nullptr);
+			if (found)
+				break;
 }
+		}
+
+	if (path.empty())
+	{
+		if ((vendor_id != 0) && (product_id != 0))
+		{
+			// Open the 3Dconnexion device using vendor_id and product_id
+#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+			std::cout << std::endl << "Opening device: " << std::hex << vendor_id << std::dec << "/" << std::hex << product_id << std::dec << " using hid_open()" << std::endl;
+#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+			m_device = hid_open(vendor_id, product_id, nullptr);
+		}
+		else
+			return false;
+	}
+	else
+	{
+		// Open the 3Dconnexion device using the device path
+#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+		std::cout << std::endl << "Opening device: " << std::hex << vendor_id << std::dec << "/" << std::hex << product_id << std::dec << "\"" << path << "\" using hid_open_path()" << std::endl;
+#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+		m_device = hid_open_path(path.c_str());
+	}
+
+	if (m_device != nullptr)
+	{
+		wchar_t buffer[1024];
+		hid_get_manufacturer_string(m_device, buffer, 1024);
+		m_device_str = boost::nowide::narrow(buffer);
+		// #3479 seems to show that sometimes an extra whitespace is added, so we remove it
+		boost::algorithm::trim(m_device_str);
+
+		hid_get_product_string(m_device, buffer, 1024);
+		m_device_str += "/" + boost::nowide::narrow(buffer);
+		// #3479 seems to show that sometimes an extra whitespace is added, so we remove it
+		boost::algorithm::trim(m_device_str);
+
+		BOOST_LOG_TRIVIAL(info) << "Connected 3DConnexion device:";
+		BOOST_LOG_TRIVIAL(info) << "Manufacturer/product: " << m_device_str;
+		BOOST_LOG_TRIVIAL(info) << "Manufacturer id.....: " << vendor_id << " (" << std::hex << vendor_id << std::dec << ")";
+		BOOST_LOG_TRIVIAL(info) << "Product id..........: " << product_id << " (" << std::hex << product_id << std::dec << ")";
+		if (!path.empty())
+			BOOST_LOG_TRIVIAL(info) << "Path................: '" << path << "'";
+#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+		std::cout << "Opened device." << std::endl;
+#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+		// get device parameters from the config, if present
+		double translation_speed = 4.0;
+		float rotation_speed = 4.0;
+		double translation_deadzone = State::DefaultTranslationDeadzone;
+		float rotation_deadzone = State::DefaultRotationDeadzone;
+		double zoom_speed = 2.0;
+		wxGetApp().app_config->get_mouse_device_translation_speed(m_device_str, translation_speed);
+		wxGetApp().app_config->get_mouse_device_translation_deadzone(m_device_str, translation_deadzone);
+		wxGetApp().app_config->get_mouse_device_rotation_speed(m_device_str, rotation_speed);
+		wxGetApp().app_config->get_mouse_device_rotation_deadzone(m_device_str, rotation_deadzone);
+		wxGetApp().app_config->get_mouse_device_zoom_speed(m_device_str, zoom_speed);
+		// clamp to valid values
+		m_state.set_translation_scale(State::DefaultTranslationScale * std::clamp(translation_speed, 0.1, 10.0));
+		m_state.set_translation_deadzone(std::clamp(translation_deadzone, 0.0, State::MaxTranslationDeadzone));
+		m_state.set_rotation_scale(State::DefaultRotationScale * std::clamp(rotation_speed, 0.1f, 10.0f));
+		m_state.set_rotation_deadzone(std::clamp(rotation_deadzone, 0.0f, State::MaxRotationDeadzone));
+		m_state.set_zoom_scale(State::DefaultZoomScale * std::clamp(zoom_speed, 0.1, 10.0));
+	}
+#if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+	else
+	{
+		std::cout << std::endl << "Unable to connect to device:" << std::endl;
+		std::cout << "Manufacturer/product: " << m_device_str << std::endl;
+		std::cout << "Manufacturer id.....: " << vendor_id << " (" << std::hex << vendor_id << std::dec << ")" << std::endl;
+		std::cout << "Product id..........: " << product_id << " (" << std::hex << product_id << std::dec << ")" << std::endl;
+		std::cout << "Path................: '" << path << "'" << std::endl;
+	}
+#endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+
+	if (m_device != nullptr) {
+		wxGetApp().background_updater->mouse3d_set_has_mouse(true);
+		return true;
+	}
+	return false;
+}
+
 
 void Mouse3DController::disconnect_device()
 {
     if (!is_device_connected())
         return;
     
+	//start enumeration
+	wxGetApp().background_updater->mouse3d_set_has_mouse(false);
+
     // Stop the secondary thread, if running
     if (m_thread.joinable())
         m_thread.join();

@@ -47,6 +47,7 @@
 #include "KBShortcutsDialog.hpp"
 #include "UpdateDialogs.hpp"
 #include "RemovableDriveManager.hpp"
+#include "BackgroundUpdater.hpp"
 
 #ifdef __WXMSW__
 #include <Shlobj.h>
@@ -261,6 +262,9 @@ bool GUI_App::on_init_inner()
     SetTopWindow(mainframe);
 
     m_printhost_job_queue.reset(new PrintHostJobQueue(mainframe->printhost_queue_dlg()));
+
+	background_updater = new BackgroundUpdater();
+	background_updater->start();
 
 	RemovableDriveManager::get_instance().init();
 

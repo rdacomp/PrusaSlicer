@@ -16,6 +16,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/AppConfig.hpp
     GUI/BackgroundSlicingProcess.cpp
     GUI/BackgroundSlicingProcess.hpp
+    GUI/BackgroundUpdater.cpp
+    GUI/BackgroundUpdater.hpp
     GUI/BitmapCache.cpp
     GUI/BitmapCache.hpp
     GUI/ConfigSnapshotDialog.cpp

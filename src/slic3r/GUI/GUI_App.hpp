@@ -31,7 +31,7 @@ class PrintHostJobQueue;
 
 namespace GUI
 {
-
+class BackgroundUpdater;
 enum FileType
 {
     FT_STL,
@@ -168,11 +168,12 @@ public:
     Plater*             plater();
     Model&      		model();
 
-    AppConfig*      app_config{ nullptr };
-    PresetBundle*   preset_bundle{ nullptr };
-    PresetUpdater*  preset_updater{ nullptr };
-    MainFrame*      mainframe{ nullptr };
-    Plater*         plater_{ nullptr };
+    AppConfig*          app_config{ nullptr };
+    PresetBundle*       preset_bundle{ nullptr };
+    PresetUpdater*      preset_updater{ nullptr };
+    MainFrame*          mainframe{ nullptr };
+    Plater*             plater_{ nullptr };
+	BackgroundUpdater*  background_updater{ nullptr };
 
     wxNotebook*     tab_panel() const ;
     int             extruders_cnt() const;

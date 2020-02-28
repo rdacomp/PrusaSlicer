@@ -82,6 +82,7 @@
 #include "../Utils/UndoRedo.hpp"
 #include "../Utils/Thread.hpp"
 #include "RemovableDriveManager.hpp"
+#include "BackgroundUpdater.hpp"
 
 #include <wx/glcanvas.h>    // Needs to be last because reasons :-/
 #include "WipeTowerDialog.hpp"
@@ -2117,6 +2118,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
                 config->option<ConfigOptionString>("bed_custom_model")->value);
         });
 
+
     // Preview events:
     preview->get_wxglcanvas()->Bind(EVT_GLCANVAS_QUESTION_MARK, [this](SimpleEvent&) { wxGetApp().keyboard_shortcuts(); });
     preview->get_wxglcanvas()->Bind(EVT_GLCANVAS_UPDATE_BED_SHAPE, [this](SimpleEvent&)
@@ -2133,6 +2135,9 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     q->Bind(EVT_PROCESS_COMPLETED, &priv::on_process_completed, this);
     q->Bind(EVT_GLVIEWTOOLBAR_3D, [q](SimpleEvent&) { q->select_view_3D("3D"); });
     q->Bind(EVT_GLVIEWTOOLBAR_PREVIEW, [q](SimpleEvent&) { q->select_view_3D("Preview"); });
+
+	// Background updater events:
+	q->Bind(EVT_BACKGROUND_UPDATER_MOUSE3D_NEW_DATA, [q](Event<void*>& evt) { q->get_mouse3d_controller().update_hid_devices(evt.data); });
 
     // Drop target:
     q->SetDropTarget(new PlaterDropTarget(q));   // if my understanding is right, wxWindow takes the owenership
