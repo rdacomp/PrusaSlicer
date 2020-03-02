@@ -155,6 +155,7 @@ GUI_App::GUI_App()
     , m_em_unit(10)
     , m_imgui(new ImGuiWrapper())
     , m_wizard(nullptr)
+	, m_removable_drive_manager(std::make_unique<RemovableDriveManager>())
 {}
 
 GUI_App::~GUI_App()
@@ -209,6 +210,8 @@ bool GUI_App::on_init_inner()
     app_config = new AppConfig();
     preset_bundle = new PresetBundle();
 
+	m_removable_drive_manager->init();
+
     // just checking for existence of Slic3r::data_dir is not enough : it may be an empty directory
     // supplied as argument to --datadir; in that case we should still run the wizard
     preset_bundle->setup_directories();
@@ -262,7 +265,6 @@ bool GUI_App::on_init_inner()
 
     m_printhost_job_queue.reset(new PrintHostJobQueue(mainframe->printhost_queue_dlg()));
 
-	RemovableDriveManager::get_instance().init();
 
     Bind(wxEVT_IDLE, [this](wxIdleEvent& event)
     {
@@ -275,7 +277,7 @@ bool GUI_App::on_init_inner()
         this->obj_manipul()->update_if_dirty();
 
 #if !__APPLE__
-		RemovableDriveManager::get_instance().update(wxGetLocalTime(), true);
+		m_removable_drive_manager->update(wxGetLocalTime(), true);
 #endif
 
 		// Preset updating & Configwizard are done after the above initializations,

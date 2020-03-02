@@ -1,5 +1,6 @@
 #import "RemovableDriveManager.hpp"
 #import "RemovableDriveManagerMM.h"
+#import "GUI_App.hpp"
 #import <AppKit/AppKit.h> 
 #import <DiskArbitration/DiskArbitration.h>
 
@@ -10,15 +11,13 @@
 -(instancetype) init
 {
 	self = [super init];
-	if(self)
-	{        
-	}
+	//if(self){}
 	return self;
 }
 -(void) on_device_unmount: (NSNotification*) notification
 {
     NSLog(@"on device change");
-    Slic3r::GUI::RemovableDriveManager::get_instance().update(0,true);
+    Slic3r::GUI::wxGetApp().removable_drive_manager()->update(0,true);
 }
 -(void) add_unmount_observer
 {
@@ -131,7 +130,7 @@ void  RDMMMWrapper::list_devices()
     	for (NSString* volumePath in devices)
     	{
         	NSLog(@"%@", volumePath);
-        	Slic3r::GUI::RemovableDriveManager::get_instance().inspect_file(std::string([volumePath UTF8String]), "/Volumes");
+        	Slic3r::GUI::wxGetApp().removable_drive_manager()->inspect_file(std::string([volumePath UTF8String]), "/Volumes");
 		}
     }
 }

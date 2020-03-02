@@ -2151,7 +2151,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     this->take_snapshot(_(L("New Project")));
 
 	//void Plater::priv::show_action_buttons(const bool is_ready_to_slice) const
-	RemovableDriveManager::get_instance().set_drive_count_changed_callback(std::bind(&Plater::priv::show_action_buttons, this, std::placeholders::_1));
+	wxGetApp().removable_drive_manager()->set_drive_count_changed_callback(std::bind(&Plater::priv::show_action_buttons, this, std::placeholders::_1));
 }
 
 Plater::priv::~priv()
@@ -3698,9 +3698,9 @@ void Plater::priv::on_process_completed(wxCommandEvent &evt)
     else if (wxGetApp().get_mode() == comSimple)
         show_action_buttons(false);
 
-	if(!canceled && RemovableDriveManager::get_instance().get_is_writing())
+	if(!canceled && wxGetApp().removable_drive_manager()->get_is_writing())
 	{	
-		RemovableDriveManager::get_instance().set_is_writing(false);
+		wxGetApp().removable_drive_manager()->set_is_writing(false);
 		show_action_buttons(false);	
 	}
 }
@@ -4264,13 +4264,13 @@ void Plater::priv::update_object_menu()
 
 void Plater::priv::show_action_buttons(const bool is_ready_to_slice) const
 {
-	RemovableDriveManager::get_instance().set_plater_ready_to_slice(is_ready_to_slice);
+	wxGetApp().removable_drive_manager()->set_plater_ready_to_slice(is_ready_to_slice);
     wxWindowUpdateLocker noUpdater(sidebar);
     const auto prin_host_opt = config->option<ConfigOptionString>("print_host");
     const bool send_gcode_shown = prin_host_opt != nullptr && !prin_host_opt->value.empty();
     
-    bool disconnect_shown = !RemovableDriveManager::get_instance().is_last_drive_removed();
-	bool export_removable_shown = RemovableDriveManager::get_instance().get_drives_count() > 0;
+    bool disconnect_shown = !wxGetApp().removable_drive_manager()->is_last_drive_removed();
+	bool export_removable_shown = wxGetApp().removable_drive_manager()->get_drives_count() > 0;
     // when a background processing is ON, export_btn and/or send_btn are showing
     if (wxGetApp().app_config->get("background_processing") == "1")
     {
@@ -4821,18 +4821,18 @@ void Plater::export_gcode(bool prefer_removable)
     }
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
     auto start_dir = wxGetApp().app_config->get_last_output_dir(default_output_file.parent_path().string());
-	bool removable_drives_connected = GUI::RemovableDriveManager::get_instance().update();
+	bool removable_drives_connected = wxGetApp().removable_drive_manager()->update();
 	if(prefer_removable)
 	{
 		if(removable_drives_connected)
 		{
 			auto start_dir_removable = wxGetApp().app_config->get_last_output_dir(default_output_file.parent_path().string(), true);
-			if (RemovableDriveManager::get_instance().is_path_on_removable_drive(start_dir_removable))
+			if (wxGetApp().removable_drive_manager()->is_path_on_removable_drive(start_dir_removable))
 			{
 				start_dir = start_dir_removable;
 			}else
 			{
-				start_dir = RemovableDriveManager::get_instance().get_drive_path();
+				start_dir = wxGetApp().removable_drive_manager()->get_drive_path();
 			}
 		}
 	}
@@ -4846,7 +4846,7 @@ void Plater::export_gcode(bool prefer_removable)
     fs::path output_path;
     if (dlg.ShowModal() == wxID_OK) {
         fs::path path = into_path(dlg.GetPath());
-        wxGetApp().app_config->update_last_output_dir(path.parent_path().string(), RemovableDriveManager::get_instance().is_path_on_removable_drive(path.parent_path().string()));
+        wxGetApp().app_config->update_last_output_dir(path.parent_path().string(), wxGetApp().removable_drive_manager()->is_path_on_removable_drive(path.parent_path().string()));
         output_path = std::move(path);
     }
     if (! output_path.empty())
@@ -4854,15 +4854,15 @@ void Plater::export_gcode(bool prefer_removable)
 		std::string path = output_path.string();
         p->export_gcode(std::move(output_path), PrintHostJob());
 
-		RemovableDriveManager::get_instance().update(0, false);
-		RemovableDriveManager::get_instance().set_last_save_path(path);
-		RemovableDriveManager::get_instance().verify_last_save_path();
+		wxGetApp().removable_drive_manager()->update(0, false);
+		wxGetApp().removable_drive_manager()->set_last_save_path(path);
+		wxGetApp().removable_drive_manager()->verify_last_save_path();
 		
-		if(!RemovableDriveManager::get_instance().is_last_drive_removed())
+		if(!wxGetApp().removable_drive_manager()->is_last_drive_removed())
 		{
-			RemovableDriveManager::get_instance().set_is_writing(true);
-			RemovableDriveManager::get_instance().erase_callbacks();
-			RemovableDriveManager::get_instance().add_remove_callback(std::bind(&Plater::drive_ejected_callback, this));
+			wxGetApp().removable_drive_manager()->set_is_writing(true);
+			wxGetApp().removable_drive_manager()->erase_callbacks();
+			wxGetApp().removable_drive_manager()->add_remove_callback(std::bind(&Plater::drive_ejected_callback, this));
 		}
 		
 	}
@@ -5188,21 +5188,21 @@ void Plater::send_gcode()
 
 void Plater::eject_drive()
 {
-	RemovableDriveManager::get_instance().update(0, true);
-	RemovableDriveManager::get_instance().erase_callbacks();
-	RemovableDriveManager::get_instance().add_remove_callback(std::bind(&Plater::drive_ejected_callback, this));
-	RemovableDriveManager::get_instance().eject_drive(RemovableDriveManager::get_instance().get_last_save_path());
+	wxGetApp().removable_drive_manager()->update(0, true);
+	wxGetApp().removable_drive_manager()->erase_callbacks();
+	wxGetApp().removable_drive_manager()->add_remove_callback(std::bind(&Plater::drive_ejected_callback, this));
+	wxGetApp().removable_drive_manager()->eject_drive(wxGetApp().removable_drive_manager()->get_last_save_path());
 		
 }
 void Plater::drive_ejected_callback()
 {
-	if (RemovableDriveManager::get_instance().get_did_eject())
+	if (wxGetApp().removable_drive_manager()->get_did_eject())
 	{
-        RemovableDriveManager::get_instance().set_did_eject(false);
+		wxGetApp().removable_drive_manager()->set_did_eject(false);
         show_info(this,
         	(boost::format(_utf8(L("Unmounting successful. The device %s(%s) can now be safely removed from the computer."))) 
-            	% RemovableDriveManager::get_instance().get_ejected_name()
-            	% RemovableDriveManager::get_instance().get_ejected_path()).str());
+            	% wxGetApp().removable_drive_manager()->get_ejected_name()
+            	% wxGetApp().removable_drive_manager()->get_ejected_path()).str());
 	}
 	p->show_action_buttons(false);
 }

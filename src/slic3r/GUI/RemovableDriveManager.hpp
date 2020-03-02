@@ -22,7 +22,9 @@ class RemovableDriveManager
 #if __APPLE__
 friend class RDMMMWrapper;
 #endif
+
 public:
+	/*
 	static RemovableDriveManager& get_instance()
 	{
 		static RemovableDriveManager instance; 
@@ -30,8 +32,10 @@ public:
 	}
 	RemovableDriveManager(RemovableDriveManager const&) = delete;
 	void operator=(RemovableDriveManager const&) = delete;
+	*/
+	RemovableDriveManager();
 	~RemovableDriveManager();
-	//call only once. on apple register for unmnount callbacks. on windows register for device notification is prepared but not called (eject usb drive on widnows doesnt trigger the callback, sdc ard does), also enumerates devices for first time so init shoud be called on linux too.
+	//call only once. on apple register for unmnount callbacks. Enumerates devices for first time so init shoud be called on linux too.
 	void init();
 	//update() searches for removable devices, returns false if empty. /time = 0 is forced update, time expects wxGetLocalTime()
 	bool update(const long time = 0,const bool check = false);  
@@ -67,7 +71,7 @@ public:
 	std::string get_ejected_path() const;
 	std::string get_ejected_name() const;
 private:
-    RemovableDriveManager();
+
 	void search_for_drives();
 	//triggers callbacks if last used drive was removed
 	void check_and_notify();

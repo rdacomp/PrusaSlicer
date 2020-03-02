@@ -403,7 +403,8 @@ RemovableDriveManager::RemovableDriveManager():
 #if __APPLE__
 	, m_rdmmm(new RDMMMWrapper())
 #endif
-{}
+{
+}
 RemovableDriveManager::~RemovableDriveManager()
 {
 #if __APPLE__

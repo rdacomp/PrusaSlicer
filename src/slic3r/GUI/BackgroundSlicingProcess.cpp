@@ -100,8 +100,8 @@ void BackgroundSlicingProcess::process_fff()
 	    	//FIXME localize the messages
 	    	// Perform the final post-processing of the export path by applying the print statistics over the file name.
 	    	std::string export_path = m_fff_print->print_statistics().finalize_output_path(m_export_path);
-			GUI::RemovableDriveManager::get_instance().update();
-			bool with_check = GUI::RemovableDriveManager::get_instance().is_path_on_removable_drive(export_path);
+			GUI::wxGetApp().removable_drive_manager()->update();
+			bool with_check = GUI::wxGetApp().removable_drive_manager()->is_path_on_removable_drive(export_path);
 			int copy_ret_val = copy_file(m_temp_output_path, export_path, with_check);
 			switch (copy_ret_val){
 			case SUCCESS: break; // no error
