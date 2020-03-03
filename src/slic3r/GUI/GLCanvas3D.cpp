@@ -3084,8 +3084,8 @@ void GLCanvas3D::on_mouse_wheel(wxMouseEvent& evt)
 {
     // try to filter out events coming from mouse 3d 
     Mouse3DController& controller = wxGetApp().plater()->get_mouse3d_controller();
-    if (controller.process_mouse_wheel())
-        return;
+//    if (controller.process_mouse_wheel())
+//        return;
 
     if (!m_initialized)
         return;
