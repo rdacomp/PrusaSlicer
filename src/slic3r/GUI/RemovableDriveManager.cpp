@@ -32,7 +32,9 @@ INT_PTR WINAPI WinProcCallback(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 */
 void RemovableDriveManager::search_for_drives()
 {
+	m_drives_mutex.lock();
 	m_current_drives.clear();
+	m_drives_mutex.unlock();
 	//get logical drives flags by letter in alphabetical order
 	DWORD drives_mask = GetLogicalDrives();
 	for (size_t i = 0; i < 26; i++)
@@ -63,18 +65,25 @@ void RemovableDriveManager::search_for_drives()
 						if (free_space.QuadPart > 0)
 						{
 							path += "\\";
+							m_drives_mutex.lock();
 							m_current_drives.push_back(DriveData(boost::nowide::narrow(volume_name), path));
+							m_drives_mutex.unlock();
 						}
 					}
 				}
 			}
 		}
 	}
+	
 }
 void RemovableDriveManager::eject_drive(const std::string &path)
 {
-	if(m_current_drives.empty())
+	m_drives_mutex.lock();
+	bool drives_empty = m_current_drives.empty();
+	m_drives_mutex.unlock();
+	if(drives_empty)
 		return;
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		if ((*it).path == path)
@@ -86,6 +95,7 @@ void RemovableDriveManager::eject_drive(const std::string &path)
 			if (handle == INVALID_HANDLE_VALUE)
 			{
 				std::cerr << "Ejecting " << mpath << " failed " << GetLastError() << " \n";
+				m_drives_mutex.unlock();
 				return;
 			}
 			DWORD deviceControlRetVal(0);
@@ -110,20 +120,28 @@ void RemovableDriveManager::eject_drive(const std::string &path)
 			break;
 		}
 	}
+	m_drives_mutex.unlock();
 }
 bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path)
 {
-	if (m_current_drives.empty())
+	m_drives_mutex.lock();
+	bool drives_empty = m_current_drives.empty();
+	m_drives_mutex.unlock();
+	if (drives_empty)
 		return false;
 	std::size_t found = path.find_last_of("\\");
 	std::string new_path = path.substr(0, found);
 	int letter = PathGetDriveNumberA(new_path.c_str());
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		char drive = (*it).path[0];
-		if (drive == ('A' + letter))
+		if (drive == ('A' + letter)){
+			m_drives_mutex.unlock();
 			return true;
+		}
 	}
+	m_drives_mutex.unlock();
 	return false;
 }
 std::string RemovableDriveManager::get_drive_from_path(const std::string& path)
@@ -131,12 +149,17 @@ std::string RemovableDriveManager::get_drive_from_path(const std::string& path)
 	std::size_t found = path.find_last_of("\\");
 	std::string new_path = path.substr(0, found);
 	int letter = PathGetDriveNumberA(new_path.c_str());
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		char drive = (*it).path[0];
 		if (drive == ('A' + letter))
+		{
+			m_drives_mutex.unlock();
 			return (*it).path;
+		}
 	}
+	m_drives_mutex.unlock();
 	return "";
 }
 void RemovableDriveManager::register_window()
@@ -226,14 +249,15 @@ INT_PTR WINAPI WinProcCallback(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 #else
 void RemovableDriveManager::search_for_drives()
 {
-    
+	m_drives_mutex.lock();
     m_current_drives.clear();
-    
+	m_drives_mutex.unlock();
 #if __APPLE__
 	// if on macos obj-c class will enumerate
+
 	if(m_rdmmm)
 	{
-		m_rdmmm->list_devices();
+		m_rdmmm->list_devices(*this);
 	}
 #else
 
@@ -258,6 +282,7 @@ void RemovableDriveManager::search_for_drives()
 
 	}
 #endif
+	
 }
 void RemovableDriveManager::search_path(const std::string &path,const std::string &parent_path)
 {
@@ -296,9 +321,12 @@ void RemovableDriveManager::inspect_file(const std::string &path, const std::str
 			std::string username(std::getenv("USER"));
 			struct passwd *pw = getpwuid(uid);
 			if (pw != 0 && pw->pw_name == username)
+			{				
+				m_drives_mutex.lock();				
 	       		m_current_drives.push_back(DriveData(boost::filesystem::basename(boost::filesystem::path(path)), path));
+				m_drives_mutex.unlock();
+			}
 		}
-		
 	}
 }
 bool RemovableDriveManager::compare_filesystem_id(const std::string &path_a, const std::string &path_b)
@@ -312,9 +340,12 @@ bool RemovableDriveManager::compare_filesystem_id(const std::string &path_a, con
 }
 void RemovableDriveManager::eject_drive(const std::string &path)
 {
-	if (m_current_drives.empty())
+	m_drives_mutex.lock();
+	bool drives_empty = m_current_drives.empty();
+	m_drives_mutex.unlock();
+	if (drives_empty)
 		return;
-
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		if((*it).path == path)
@@ -344,6 +375,7 @@ void RemovableDriveManager::eject_drive(const std::string &path)
             if(err)
             {
                 std::cerr<<"Ejecting failed\n";
+				m_drives_mutex.unlock();
                 return;
             }
 
@@ -355,19 +387,27 @@ void RemovableDriveManager::eject_drive(const std::string &path)
 		}
 
 	}
-
+	m_drives_mutex.unlock();
 }
 bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path)
 {
-	if (m_current_drives.empty())
+	m_drives_mutex.lock();
+	bool drives_empty = m_current_drives.empty();
+	m_drives_mutex.unlock();
+	if (drives_empty)
 		return false;
 	std::size_t found = path.find_last_of("/");
 	std::string new_path = found == path.size() - 1 ? path.substr(0, found) : path;
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		if(compare_filesystem_id(new_path, (*it).path))
+		{
+			m_drives_mutex.unlock();
 			return true;
+		}
 	}
+	m_drives_mutex.unlock();
 	return false;
 }
 std::string RemovableDriveManager::get_drive_from_path(const std::string& path) 
@@ -380,17 +420,23 @@ std::string RemovableDriveManager::get_drive_from_path(const std::string& path)
     new_path = new_path.substr(0, found);
     
 	//check if same filesystem
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		if (compare_filesystem_id(new_path, (*it).path))
+		{
+			m_drives_mutex.unlock();
 			return (*it).path;
+		}	
 	}
+	m_drives_mutex.unlock();
 	return "";
 }
 #endif
 
 RemovableDriveManager::RemovableDriveManager():
-    m_drives_count(0),
+    m_initialized(false),
+	m_drives_count(0),
     m_last_update(0),
     m_last_save_path(""),
 	m_last_save_name(""),
@@ -399,29 +445,36 @@ RemovableDriveManager::RemovableDriveManager():
 	m_did_eject(false),
 	m_plater_ready_to_slice(true),
 	m_ejected_path(""),
-	m_ejected_name("")
+	m_ejected_name(""),
+	m_thread_enumerate_start(false),
+	m_thread_enumerate_finnished(false)
 #if __APPLE__
-	, m_rdmmm(new RDMMMWrapper())
+	, m_rdmmm(std::make_unique<RDMMMWrapper>())
 #endif
 {
 }
 RemovableDriveManager::~RemovableDriveManager()
 {
-#if __APPLE__
-	delete m_rdmmm;
-#endif
+	if (m_initialized)
+	{
+		m_thread.join();
+	}
 }
 void RemovableDriveManager::init()
 {
+	if (m_initialized)
+		return;
+	m_initialized = true;
 	//add_callback([](void) { RemovableDriveManager::get_instance().print(); });
 #if _WIN32
 	//register_window();
 #elif __APPLE__
     m_rdmmm->register_window();
 #endif
-	update(0, true);
+	m_thread = boost::thread((boost::bind(&RemovableDriveManager::thread_proc, this)));
+	//update(0, true);
 }
-bool RemovableDriveManager::update(const long time,const bool check)
+void RemovableDriveManager::update(const long time)
 {
 	if(time != 0) //time = 0 is forced update
 	{
@@ -431,42 +484,70 @@ bool RemovableDriveManager::update(const long time,const bool check)
 			m_last_update = time;
 		}else
 		{
-			return false; // return value shouldnt matter if update didnt run
-		}
-	}
-	search_for_drives();
-	if (m_drives_count != m_current_drives.size())
-	{
-		if (check)
-		{
 			check_and_notify();
+			return;
 		}
-		m_drives_count = m_current_drives.size();
 	}
-	return !m_current_drives.empty();
+	check_and_notify();
+	m_thread_enumerate_start = true;
 }
 
-bool  RemovableDriveManager::is_drive_mounted(const std::string &path) const
+void RemovableDriveManager::check_and_notify()
 {
+	if (m_thread_enumerate_finnished)
+	{
+		m_thread_enumerate_finnished = false;
+		m_drives_mutex.lock();
+		size_t drives_count = m_current_drives.size();
+		m_drives_mutex.unlock();
+		if (m_drives_count != drives_count)
+		{
+			if (m_drive_count_changed_callback)
+			{
+				m_drive_count_changed_callback(m_plater_ready_to_slice);
+			}
+			if (m_callbacks.size() != 0 && m_drives_count > drives_count && !is_drive_mounted(m_last_save_path))
+			{
+				for (auto it = m_callbacks.begin(); it != m_callbacks.end(); ++it)
+				{
+					(*it)();
+				}
+			}
+			m_drives_count = drives_count;
+		}
+	}
+}
+
+bool RemovableDriveManager::is_drive_mounted(const std::string &path) 
+{
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		if ((*it).path == path)
 		{
+			m_drives_mutex.unlock();
 			return true;
 		}
 	}
+	m_drives_mutex.unlock();
 	return false;
 }
 std::string RemovableDriveManager::get_drive_path() 
 {
-	if (m_current_drives.size() == 0)
+	m_drives_mutex.lock();
+	size_t drives_count = m_current_drives.size();
+	m_drives_mutex.unlock();
+	if (drives_count == 0)
 	{
 		reset_last_save_path();
 		return "";
 	}
 	if (m_last_save_path_verified)
 		return m_last_save_path;
-	return m_current_drives.back().path;
+	m_drives_mutex.lock();
+	std::string r = m_current_drives.back().path;
+	m_drives_mutex.unlock();
+	return std::move(r);
 }
 std::string RemovableDriveManager::get_last_save_path() const
 {
@@ -478,24 +559,8 @@ std::string RemovableDriveManager::get_last_save_name() const
 {
 	return m_last_save_name;
 }
-std::vector<DriveData> RemovableDriveManager::get_all_drives() const
-{
-	return m_current_drives;
-}
-void RemovableDriveManager::check_and_notify()
-{
-	if(m_drive_count_changed_callback)
-	{
-		m_drive_count_changed_callback(m_plater_ready_to_slice);
-	}
-	if(m_callbacks.size() != 0 && m_drives_count > m_current_drives.size() && !is_drive_mounted(m_last_save_path))
-	{
-		for (auto it = m_callbacks.begin(); it != m_callbacks.end(); ++it)
-		{
-			(*it)();
-		}
-	}
-}
+
+
 void RemovableDriveManager::add_remove_callback(std::function<void()> callback)
 {
 	m_callbacks.push_back(callback);
@@ -539,17 +604,24 @@ void RemovableDriveManager::verify_last_save_path()
 		reset_last_save_path();
 	}
 }
-std::string RemovableDriveManager::get_drive_name(const std::string& path) const
-{
-	if (m_current_drives.size() == 0)
+std::string RemovableDriveManager::get_drive_name(const std::string& path) {
+	m_drives_mutex.lock();
+	size_t drives_count = m_current_drives.size();
+	m_drives_mutex.unlock();
+	if (drives_count == 0)
+	{
 		return "";
+	}
+	m_drives_mutex.lock();
 	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
 		if ((*it).path == path)
 		{
+			m_drives_mutex.unlock();
 			return (*it).name;
 		}
 	}
+	m_drives_mutex.unlock();
 	return "";
 }
 bool RemovableDriveManager::is_last_drive_removed() 
@@ -565,11 +637,7 @@ bool RemovableDriveManager::is_last_drive_removed()
 	}
 	return r;
 }
-bool RemovableDriveManager::is_last_drive_removed_with_update(const long time)
-{
-	update(time, false);
-	return is_last_drive_removed();
-}
+
 void RemovableDriveManager::reset_last_save_path()
 {
 	m_last_save_path_verified = false;
@@ -596,9 +664,12 @@ void RemovableDriveManager::set_did_eject(const bool b)
 {
 	m_did_eject = b;
 }
-size_t RemovableDriveManager::get_drives_count() const   
+size_t RemovableDriveManager::get_drives_count() 
 {
-	return m_current_drives.size();
+	m_drives_mutex.lock();
+	size_t ret = m_current_drives.size();
+	m_drives_mutex.unlock();
+	return ret;
 }
 std::string RemovableDriveManager::get_ejected_path() const
 {
@@ -607,5 +678,25 @@ std::string RemovableDriveManager::get_ejected_path() const
 std::string RemovableDriveManager::get_ejected_name() const
 {
 	return m_ejected_name;
+}
+
+void RemovableDriveManager::thread_proc()
+{
+	//try {
+		while (true)
+		{
+			if (m_thread_enumerate_start)
+			{
+				m_thread_enumerate_start = false;
+				search_for_drives();
+				m_thread_enumerate_finnished = true;
+			}
+			boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+		}
+	//}
+	//catch (...) {
+	//	wxTheApp->OnUnhandledException();
+	//}
+	
 }
 }}//namespace Slicer::Gui

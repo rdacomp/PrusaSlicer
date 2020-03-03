@@ -277,7 +277,9 @@ bool GUI_App::on_init_inner()
         this->obj_manipul()->update_if_dirty();
 
 #if !__APPLE__
-		m_removable_drive_manager->update(wxGetLocalTime(), true);
+		m_removable_drive_manager->update(wxGetLocalTime());
+#else
+		m_removable_drive_manager->check_and_notify();
 #endif
 
 		// Preset updating & Configwizard are done after the above initializations,

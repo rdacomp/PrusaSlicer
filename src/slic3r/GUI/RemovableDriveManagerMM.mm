@@ -16,12 +16,12 @@
 }
 -(void) on_device_unmount: (NSNotification*) notification
 {
-    NSLog(@"on device change");
-    Slic3r::GUI::wxGetApp().removable_drive_manager()->update(0,true);
+    //NSLog(@"on device change");
+    Slic3r::GUI::wxGetApp().removable_drive_manager()->update(0);
 }
 -(void) add_unmount_observer
 {
-    NSLog(@"add unmount observer");
+    //NSLog(@"add unmount observer");
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector: @selector(on_device_unmount:) name:NSWorkspaceDidUnmountNotification object:nil];
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector: @selector(on_device_unmount:) name:NSWorkspaceDidMountNotification object:nil];
 }
@@ -78,6 +78,8 @@
     }
     return result;
 }
+
+//this eject drive is not used now
 -(void)eject_drive:(NSString *)path
 {
     DADiskRef disk;
@@ -103,6 +105,9 @@
         CFRelease(session);
     }
 }
+
+@end
+
 namespace Slic3r {
 namespace GUI {
 RDMMMWrapper::RDMMMWrapper():m_imp(nullptr){
@@ -122,15 +127,15 @@ void  RDMMMWrapper::register_window()
 		[m_imp add_unmount_observer];
 	}
 }
-void  RDMMMWrapper::list_devices()
+void  RDMMMWrapper::list_devices(RemovableDriveManager& parent)
 {
     if(m_imp)
     {
     	NSArray* devices = [m_imp list_dev];
     	for (NSString* volumePath in devices)
     	{
-        	NSLog(@"%@", volumePath);
-        	Slic3r::GUI::wxGetApp().removable_drive_manager()->inspect_file(std::string([volumePath UTF8String]), "/Volumes");
+        	//NSLog(@"%@", volumePath);
+        	parent.inspect_file(std::string([volumePath UTF8String]), "/Volumes");
 		}
     }
 }
@@ -149,8 +154,3 @@ void RDMMMWrapper::eject_device(const std::string &path)
 }
 }}//namespace Slicer::GUI
 
-/*
-
-*/
-
-@end

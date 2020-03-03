@@ -4821,7 +4821,7 @@ void Plater::export_gcode(bool prefer_removable)
     }
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
     auto start_dir = wxGetApp().app_config->get_last_output_dir(default_output_file.parent_path().string());
-	bool removable_drives_connected = wxGetApp().removable_drive_manager()->update();
+	bool removable_drives_connected = wxGetApp().removable_drive_manager()->get_drives_count();
 	if(prefer_removable)
 	{
 		if(removable_drives_connected)
@@ -4854,7 +4854,7 @@ void Plater::export_gcode(bool prefer_removable)
 		std::string path = output_path.string();
         p->export_gcode(std::move(output_path), PrintHostJob());
 
-		wxGetApp().removable_drive_manager()->update(0, false);
+		wxGetApp().removable_drive_manager()->update(0);
 		wxGetApp().removable_drive_manager()->set_last_save_path(path);
 		wxGetApp().removable_drive_manager()->verify_last_save_path();
 		
@@ -5188,7 +5188,7 @@ void Plater::send_gcode()
 
 void Plater::eject_drive()
 {
-	wxGetApp().removable_drive_manager()->update(0, true);
+	wxGetApp().removable_drive_manager()->update(0);
 	wxGetApp().removable_drive_manager()->erase_callbacks();
 	wxGetApp().removable_drive_manager()->add_remove_callback(std::bind(&Plater::drive_ejected_callback, this));
 	wxGetApp().removable_drive_manager()->eject_drive(wxGetApp().removable_drive_manager()->get_last_save_path());
