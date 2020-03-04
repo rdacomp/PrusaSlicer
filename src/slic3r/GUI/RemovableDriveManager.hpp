@@ -7,6 +7,7 @@
 
 #include <boost/thread.hpp>
 #include <tbb/mutex.h>
+#include <condition_variable>
 
 namespace Slic3r {
 namespace GUI {
@@ -76,11 +77,14 @@ private:
 	// threaded part
 	void thread_proc();
 	boost::thread m_thread;
-	std::atomic_bool m_thread_enumerate_start;
+	std::condition_variable m_thread_enumerate_cv;
+	bool  m_thread_enumerate_start;
+	std::mutex m_enumerate_mutex;
 	std::atomic_bool m_thread_enumerate_finnished;
 	tbb::mutex m_drives_mutex;
-
+	std::atomic_bool m_initialized;
 	std::vector<DriveData> m_current_drives;
+	bool m_thread_finnished;
 	//----------
 
 	void search_for_drives();
@@ -89,7 +93,7 @@ private:
 	std::string get_drive_from_path(const std::string& path);
 	void reset_last_save_path();
 
-	bool m_initialized;
+	
 	std::vector<std::function<void()>> m_callbacks;
 	std::function<void(const bool)> m_drive_count_changed_callback;
 	size_t m_drives_count;

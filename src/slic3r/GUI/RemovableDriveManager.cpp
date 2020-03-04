@@ -447,7 +447,8 @@ RemovableDriveManager::RemovableDriveManager():
 	m_ejected_path(""),
 	m_ejected_name(""),
 	m_thread_enumerate_start(false),
-	m_thread_enumerate_finnished(false)
+	m_thread_enumerate_finnished(false),
+	m_thread_finnished(false)
 #if __APPLE__
 	, m_rdmmm(std::make_unique<RDMMMWrapper>())
 #endif
@@ -457,6 +458,16 @@ RemovableDriveManager::~RemovableDriveManager()
 {
 	if (m_initialized)
 	{
+		m_initialized = false;
+		{
+			std::lock_guard<std::mutex> lock(m_enumerate_mutex);
+			m_thread_enumerate_start = true;
+		}
+		m_thread_enumerate_cv.notify_one();
+		{
+			std::unique_lock<std::mutex> lock(m_enumerate_mutex);
+			m_thread_enumerate_cv.wait(lock, [this] {return m_thread_finnished; });
+		}
 		m_thread.join();
 	}
 }
@@ -489,7 +500,11 @@ void RemovableDriveManager::update(const long time)
 		}
 	}
 	check_and_notify();
+	{
+	std::lock_guard<std::mutex> lock(m_enumerate_mutex);
 	m_thread_enumerate_start = true;
+	}
+	m_thread_enumerate_cv.notify_one();
 }
 
 void RemovableDriveManager::check_and_notify()
@@ -682,21 +697,24 @@ std::string RemovableDriveManager::get_ejected_name() const
 
 void RemovableDriveManager::thread_proc()
 {
-	//try {
-		while (true)
+	while (true)
+	{
+		// Wait until update needs enumeration
+		std::unique_lock<std::mutex> lock(m_enumerate_mutex);
+		m_thread_enumerate_cv.wait(lock, [this] {return m_thread_enumerate_start; });
+		if (!m_initialized)
 		{
-			if (m_thread_enumerate_start)
-			{
-				m_thread_enumerate_start = false;
-				search_for_drives();
-				m_thread_enumerate_finnished = true;
-			}
-			boost::this_thread::sleep_for(boost::chrono::milliseconds(100));
+			lock.unlock();
+			break;
 		}
-	//}
-	//catch (...) {
-	//	wxTheApp->OnUnhandledException();
-	//}
+		m_thread_enumerate_start = false;
+		search_for_drives();
+		m_thread_enumerate_finnished = true;
+		lock.unlock();
+	}
 	
+	m_thread_finnished = true;
+	m_thread_enumerate_cv.notify_one();
+
 }
 }}//namespace Slicer::Gui
