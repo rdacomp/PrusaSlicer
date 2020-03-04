@@ -32,9 +32,10 @@ INT_PTR WINAPI WinProcCallback(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 */
 void RemovableDriveManager::search_for_drives()
 {
-	m_drives_mutex.lock();
-	m_current_drives.clear();
-	m_drives_mutex.unlock();
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		m_current_drives.clear();
+	}
 	//get logical drives flags by letter in alphabetical order
 	DWORD drives_mask = GetLogicalDrives();
 	for (size_t i = 0; i < 26; i++)
@@ -65,9 +66,10 @@ void RemovableDriveManager::search_for_drives()
 						if (free_space.QuadPart > 0)
 						{
 							path += "\\";
-							m_drives_mutex.lock();
-							m_current_drives.push_back(DriveData(boost::nowide::narrow(volume_name), path));
-							m_drives_mutex.unlock();
+							{
+								tbb::mutex::scoped_lock lock(m_drives_mutex);
+								m_current_drives.push_back(DriveData(boost::nowide::narrow(volume_name), path));
+							}
 						}
 					}
 				}
@@ -78,70 +80,75 @@ void RemovableDriveManager::search_for_drives()
 }
 void RemovableDriveManager::eject_drive(const std::string &path)
 {
-	m_drives_mutex.lock();
-	bool drives_empty = m_current_drives.empty();
-	m_drives_mutex.unlock();
+	bool drives_empty = true;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		drives_empty = m_current_drives.empty();
+	}
+
 	if(drives_empty)
 		return;
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		if ((*it).path == path)
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
-			// get handle to device
-			std::string mpath = "\\\\.\\" + path;
-			mpath = mpath.substr(0, mpath.size() - 1);
-			HANDLE handle = CreateFileA(mpath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-			if (handle == INVALID_HANDLE_VALUE)
+			if ((*it).path == path)
 			{
-				std::cerr << "Ejecting " << mpath << " failed " << GetLastError() << " \n";
-				m_drives_mutex.unlock();
-				return;
-			}
-			DWORD deviceControlRetVal(0);
-			//these 3 commands should eject device safely but they dont, the device does disappear from file explorer but the "device was safely remove" notification doesnt trigger.
-			//sd cards does  trigger WM_DEVICECHANGE messege, usb drives dont
-			
-			DeviceIoControl(handle, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
-			DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
-			// some implemenatations also calls IOCTL_STORAGE_MEDIA_REMOVAL here but it returns error to me
-			BOOL error = DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
-			if (error == 0)
-			{
+				// get handle to device
+				std::string mpath = "\\\\.\\" + path;
+				mpath = mpath.substr(0, mpath.size() - 1);
+				HANDLE handle = CreateFileA(mpath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+				if (handle == INVALID_HANDLE_VALUE)
+				{
+					std::cerr << "Ejecting " << mpath << " failed " << GetLastError() << " \n";
+					return;
+				}
+				DWORD deviceControlRetVal(0);
+				//these 3 commands should eject device safely but they dont, the device does disappear from file explorer but the "device was safely remove" notification doesnt trigger.
+				//sd cards does  trigger WM_DEVICECHANGE messege, usb drives dont
+
+				DeviceIoControl(handle, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
+				DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
+				// some implemenatations also calls IOCTL_STORAGE_MEDIA_REMOVAL here but it returns error to me
+				BOOL error = DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
+				if (error == 0)
+				{
+					CloseHandle(handle);
+					std::cerr << "Ejecting " << mpath << " failed " << deviceControlRetVal << " " << GetLastError() << " \n";
+					return;
+				}
 				CloseHandle(handle);
-				std::cerr << "Ejecting " << mpath << " failed " << deviceControlRetVal << " " << GetLastError() << " \n";
-				return;
+				m_did_eject = true;
+				m_current_drives.erase(it);
+				m_ejected_path = m_last_save_path;
+				m_ejected_name = m_last_save_name;
+				break;
 			}
-			CloseHandle(handle);
-			m_did_eject = true;
-			m_current_drives.erase(it);
-			m_ejected_path = m_last_save_path;
-			m_ejected_name = m_last_save_name;
-			break;
 		}
 	}
-	m_drives_mutex.unlock();
 }
 bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path)
 {
-	m_drives_mutex.lock();
-	bool drives_empty = m_current_drives.empty();
-	m_drives_mutex.unlock();
+	bool drives_empty = true;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		drives_empty = m_current_drives.empty();
+	}
 	if (drives_empty)
 		return false;
 	std::size_t found = path.find_last_of("\\");
 	std::string new_path = path.substr(0, found);
 	int letter = PathGetDriveNumberA(new_path.c_str());
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		char drive = (*it).path[0];
-		if (drive == ('A' + letter)){
-			m_drives_mutex.unlock();
-			return true;
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
+		{
+			char drive = (*it).path[0];
+			if (drive == ('A' + letter)){
+				return true;
+			}
 		}
 	}
-	m_drives_mutex.unlock();
 	return false;
 }
 std::string RemovableDriveManager::get_drive_from_path(const std::string& path)
@@ -149,17 +156,17 @@ std::string RemovableDriveManager::get_drive_from_path(const std::string& path)
 	std::size_t found = path.find_last_of("\\");
 	std::string new_path = path.substr(0, found);
 	int letter = PathGetDriveNumberA(new_path.c_str());
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		char drive = (*it).path[0];
-		if (drive == ('A' + letter))
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
-			m_drives_mutex.unlock();
-			return (*it).path;
+			char drive = (*it).path[0];
+			if (drive == ('A' + letter))
+			{
+				return (*it).path;
+			}
 		}
 	}
-	m_drives_mutex.unlock();
 	return "";
 }
 void RemovableDriveManager::register_window()
@@ -249,9 +256,10 @@ INT_PTR WINAPI WinProcCallback(HWND hWnd, UINT message, WPARAM wParam, LPARAM lP
 #else
 void RemovableDriveManager::search_for_drives()
 {
-	m_drives_mutex.lock();
-    m_current_drives.clear();
-	m_drives_mutex.unlock();
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		m_current_drives.clear();
+	}
 #if __APPLE__
 	// if on macos obj-c class will enumerate
 
@@ -322,9 +330,10 @@ void RemovableDriveManager::inspect_file(const std::string &path, const std::str
 			struct passwd *pw = getpwuid(uid);
 			if (pw != 0 && pw->pw_name == username)
 			{				
-				m_drives_mutex.lock();				
-	       		m_current_drives.push_back(DriveData(boost::filesystem::basename(boost::filesystem::path(path)), path));
-				m_drives_mutex.unlock();
+				{
+					tbb::mutex::scoped_lock lock(m_drives_mutex);
+					m_current_drives.push_back(DriveData(boost::filesystem::basename(boost::filesystem::path(path)), path));
+				}
 			}
 		}
 	}
@@ -340,74 +349,78 @@ bool RemovableDriveManager::compare_filesystem_id(const std::string &path_a, con
 }
 void RemovableDriveManager::eject_drive(const std::string &path)
 {
-	m_drives_mutex.lock();
-	bool drives_empty = m_current_drives.empty();
-	m_drives_mutex.unlock();
+	bool drives_empty = true;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		drives_empty = m_current_drives.empty();
+	}
 	if (drives_empty)
 		return;
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		if((*it).path == path)
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
+			if((*it).path == path)
+			{
             
-            std::string correct_path(path);
-            for (size_t i = 0; i < correct_path.size(); ++i)
-            {
-            	if(correct_path[i]==' ')
-            	{
-            		correct_path = correct_path.insert(i,1,'\\');
-            		i++;
-            	}
-            }
-            //std::cout<<"Ejecting "<<(*it).name<<" from "<< correct_path<<"\n";
-// there is no usable command in c++ so terminal command is used instead
-// but neither triggers "succesful safe removal messege"
-            std::string command = "";
+				std::string correct_path(path);
+				for (size_t i = 0; i < correct_path.size(); ++i)
+				{
+            		if(correct_path[i]==' ')
+            		{
+            			correct_path = correct_path.insert(i,1,'\\');
+            			i++;
+            		}
+				}
+				//std::cout<<"Ejecting "<<(*it).name<<" from "<< correct_path<<"\n";
+	// there is no usable command in c++ so terminal command is used instead
+	// but neither triggers "succesful safe removal messege"
+				std::string command = "";
 #if __APPLE__
-            //m_rdmmm->eject_device(path);
-            command = "diskutil unmount ";
+				//m_rdmmm->eject_device(path);
+				command = "diskutil unmount ";
 #else
-            command = "umount ";
+				command = "umount ";
 #endif
-            command += correct_path;
-            int err = system(command.c_str());
-            if(err)
-            {
-                std::cerr<<"Ejecting failed\n";
-				m_drives_mutex.unlock();
-                return;
-            }
+				command += correct_path;
+				int err = system(command.c_str());
+				if(err)
+				{
+					std::cerr<<"Ejecting failed\n";
+					return;
+				}
 
-			m_did_eject = true;
-            m_current_drives.erase(it);
-			m_ejected_path = m_last_save_path;
-			m_ejected_name = m_last_save_name;
-            break;
+				m_did_eject = true;
+				m_current_drives.erase(it);
+				m_ejected_path = m_last_save_path;
+				m_ejected_name = m_last_save_name;
+				break;
+			}
+
 		}
-
 	}
-	m_drives_mutex.unlock();
 }
 bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path)
 {
-	m_drives_mutex.lock();
-	bool drives_empty = m_current_drives.empty();
-	m_drives_mutex.unlock();
+	bool drives_empty = true;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		drives_empty = m_current_drives.empty();
+	}
 	if (drives_empty)
 		return false;
 	std::size_t found = path.find_last_of("/");
 	std::string new_path = found == path.size() - 1 ? path.substr(0, found) : path;
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		if(compare_filesystem_id(new_path, (*it).path))
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
-			m_drives_mutex.unlock();
-			return true;
+			if(compare_filesystem_id(new_path, (*it).path))
+			{
+				return true;
+			}
 		}
 	}
-	m_drives_mutex.unlock();
 	return false;
 }
 std::string RemovableDriveManager::get_drive_from_path(const std::string& path) 
@@ -420,16 +433,16 @@ std::string RemovableDriveManager::get_drive_from_path(const std::string& path)
     new_path = new_path.substr(0, found);
     
 	//check if same filesystem
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		if (compare_filesystem_id(new_path, (*it).path))
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
-			m_drives_mutex.unlock();
-			return (*it).path;
-		}	
+			if (compare_filesystem_id(new_path, (*it).path))
+			{
+				return (*it).path;
+			}	
+		}
 	}
-	m_drives_mutex.unlock();
 	return "";
 }
 #endif
@@ -511,9 +524,11 @@ void RemovableDriveManager::check_and_notify()
 	if (m_thread_enumerate_finnished)
 	{
 		m_thread_enumerate_finnished = false;
-		m_drives_mutex.lock();
-		size_t drives_count = m_current_drives.size();
-		m_drives_mutex.unlock();
+		size_t drives_count = 0;
+		{
+			tbb::mutex::scoped_lock lock(m_drives_mutex);
+			drives_count = m_current_drives.size();
+		}
 		if (m_drives_count != drives_count)
 		{
 			if (m_drive_count_changed_callback)
@@ -534,23 +549,25 @@ void RemovableDriveManager::check_and_notify()
 
 bool RemovableDriveManager::is_drive_mounted(const std::string &path) 
 {
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		if ((*it).path == path)
+		tbb::mutex::scoped_lock lock(m_drives_mutex);	
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
-			m_drives_mutex.unlock();
-			return true;
+			if ((*it).path == path)
+			{
+				return true;
+			}
 		}
 	}
-	m_drives_mutex.unlock();
 	return false;
 }
 std::string RemovableDriveManager::get_drive_path() 
 {
-	m_drives_mutex.lock();
-	size_t drives_count = m_current_drives.size();
-	m_drives_mutex.unlock();
+	size_t drives_count = 0;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		drives_count = m_current_drives.size();
+	}
 	if (drives_count == 0)
 	{
 		reset_last_save_path();
@@ -558,9 +575,11 @@ std::string RemovableDriveManager::get_drive_path()
 	}
 	if (m_last_save_path_verified)
 		return m_last_save_path;
-	m_drives_mutex.lock();
-	std::string r = m_current_drives.back().path;
-	m_drives_mutex.unlock();
+	std::string r = "";
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		std::string r = m_current_drives.back().path;
+	}
 	return std::move(r);
 }
 std::string RemovableDriveManager::get_last_save_path() const
@@ -619,23 +638,25 @@ void RemovableDriveManager::verify_last_save_path()
 	}
 }
 std::string RemovableDriveManager::get_drive_name(const std::string& path) {
-	m_drives_mutex.lock();
-	size_t drives_count = m_current_drives.size();
-	m_drives_mutex.unlock();
+	size_t drives_count = 0;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		drives_count = m_current_drives.size();
+	}
 	if (drives_count == 0)
 	{
 		return "";
 	}
-	m_drives_mutex.lock();
-	for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 	{
-		if ((*it).path == path)
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		for (auto it = m_current_drives.begin(); it != m_current_drives.end(); ++it)
 		{
-			m_drives_mutex.unlock();
-			return (*it).name;
+			if ((*it).path == path)
+			{
+				return (*it).name;
+			}
 		}
 	}
-	m_drives_mutex.unlock();
 	return "";
 }
 bool RemovableDriveManager::is_last_drive_removed() 
@@ -680,10 +701,10 @@ void RemovableDriveManager::set_did_eject(const bool b)
 }
 size_t RemovableDriveManager::get_drives_count() 
 {
-	m_drives_mutex.lock();
-	size_t ret = m_current_drives.size();
-	m_drives_mutex.unlock();
-	return ret;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		return m_current_drives.size();
+	}
 }
 std::string RemovableDriveManager::get_ejected_path() const
 {
@@ -703,7 +724,6 @@ void RemovableDriveManager::thread_proc()
 		m_thread_enumerate_cv.wait(lck, [this] {return m_thread_enumerate_start || !m_initialized; });
 		if (!m_initialized) // call from destructor to end the loop
 		{
-			
 			m_thread_finnished = true;
 			lck.unlock();
 			m_thread_enumerate_cv.notify_one();//tell destructor loop is over
