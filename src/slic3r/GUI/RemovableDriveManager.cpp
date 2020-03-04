@@ -458,10 +458,9 @@ RemovableDriveManager::~RemovableDriveManager()
 {
 	if (m_initialized)
 	{
-		m_initialized = false;
 		{
 			std::lock_guard<std::mutex> lck(m_enumerate_mutex);
-			m_thread_enumerate_start = true;
+			m_initialized = false;
 		}
 		m_thread_enumerate_cv.notify_one();
 		{
@@ -701,7 +700,7 @@ void RemovableDriveManager::thread_proc()
 	{
 		// Wait until update needs enumeration
 		std::unique_lock<std::mutex> lck(m_enumerate_mutex);
-		m_thread_enumerate_cv.wait(lck, [this] {return m_thread_enumerate_start; });
+		m_thread_enumerate_cv.wait(lck, [this] {return m_thread_enumerate_start || !m_initialized; });
 		if (!m_initialized) // call from destructor to end the loop
 		{
 			
@@ -709,11 +708,13 @@ void RemovableDriveManager::thread_proc()
 			lck.unlock();
 			m_thread_enumerate_cv.notify_one();//tell destructor loop is over
 			break;
+		}else // enumerate drives
+		{
+			m_thread_enumerate_start = false;
+			search_for_drives();
+			m_thread_enumerate_finnished = true; //atomic to let main thread proceed with check_and_notify()
+			lck.unlock();
 		}
-		m_thread_enumerate_start = false;
-		search_for_drives();
-		m_thread_enumerate_finnished = true; //atomic to let main thread proceed with check_and_notify()
-		lck.unlock();
 	}
 	
 	
