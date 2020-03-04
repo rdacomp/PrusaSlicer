@@ -460,13 +460,13 @@ RemovableDriveManager::~RemovableDriveManager()
 	{
 		m_initialized = false;
 		{
-			std::lock_guard<std::mutex> lock(m_enumerate_mutex);
+			std::lock_guard<std::mutex> lck(m_enumerate_mutex);
 			m_thread_enumerate_start = true;
 		}
 		m_thread_enumerate_cv.notify_one();
 		{
-			std::unique_lock<std::mutex> lock(m_enumerate_mutex);
-			m_thread_enumerate_cv.wait(lock, [this] {return m_thread_finnished; });
+			std::unique_lock<std::mutex> lck(m_enumerate_mutex);
+			m_thread_enumerate_cv.wait(lck, [this] {return m_thread_finnished; });
 		}
 		m_thread.join();
 	}
@@ -501,7 +501,7 @@ void RemovableDriveManager::update(const long time)
 	}
 	check_and_notify();
 	{
-	std::lock_guard<std::mutex> lock(m_enumerate_mutex);
+	std::lock_guard<std::mutex> lck(m_enumerate_mutex);
 	m_thread_enumerate_start = true;
 	}
 	m_thread_enumerate_cv.notify_one();
@@ -700,21 +700,23 @@ void RemovableDriveManager::thread_proc()
 	while (true)
 	{
 		// Wait until update needs enumeration
-		std::unique_lock<std::mutex> lock(m_enumerate_mutex);
-		m_thread_enumerate_cv.wait(lock, [this] {return m_thread_enumerate_start; });
-		if (!m_initialized)
+		std::unique_lock<std::mutex> lck(m_enumerate_mutex);
+		m_thread_enumerate_cv.wait(lck, [this] {return m_thread_enumerate_start; });
+		if (!m_initialized) // call from destructor to end the loop
 		{
-			lock.unlock();
+			
+			m_thread_finnished = true;
+			lck.unlock();
+			m_thread_enumerate_cv.notify_one();//tell destructor loop is over
 			break;
 		}
 		m_thread_enumerate_start = false;
 		search_for_drives();
-		m_thread_enumerate_finnished = true;
-		lock.unlock();
+		m_thread_enumerate_finnished = true; //atomic to let main thread proceed with check_and_notify()
+		lck.unlock();
 	}
 	
-	m_thread_finnished = true;
-	m_thread_enumerate_cv.notify_one();
+	
 
 }
 }}//namespace Slicer::Gui
