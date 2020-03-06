@@ -130,7 +130,7 @@ namespace search_for_drives_internal
     void inspect_file(const std::string &path, const std::string &parent_path, std::vector<DriveData> &out);
 }
 
-void RemovableDriveManager::list_devices(RemovableDriveManager& parent, std::vector<DriveData> &out) const
+void RemovableDriveManager::list_devices(std::vector<DriveData> &out) const
 {
     assert(m_impl_osx != nullptr);
     if (m_impl_osx) {

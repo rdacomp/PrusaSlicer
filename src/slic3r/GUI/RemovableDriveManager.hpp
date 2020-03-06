@@ -3,8 +3,6 @@
 
 #include <vector>
 #include <string>
-#include <functional>
-#include <optional>
 
 #include <boost/thread.hpp>
 #include <tbb/mutex.h>
@@ -48,26 +46,27 @@ public:
 	void operator=(RemovableDriveManager const&) = delete;
 	~RemovableDriveManager() { assert(! m_initialized); }
 
-	//call only once. on apple register for unmnount callbacks. Enumerates devices for first time so init shoud be called on linux too.
+	// Start the background thread and register this window as a target for update events.
+	// Register for OSX notifications.
 	void 		init(wxEvtHandler *callback_evt_handler);
+	// Stop the background thread of the removable drive manager, so that no new updates will be sent out.
+	// Deregister OSX notifications.
 	void 		shutdown();
 
+	// Returns path to a removable media if it exists, prefering the input path.
+	std::string get_removable_drive_path(const std::string &path);
+	bool        is_path_on_removable_drive(const std::string &path) { return this->get_removable_drive_path(path) == path; }
+
+	// Verify whether the path provided is on removable media. If so, save the path for further eject and return true, otherwise return false.
+	bool 		set_and_verify_last_save_path(const std::string &path);
 	// Eject drive of a file set by set_and_verify_last_save_path().
-	void 		eject_drive(bool update_removable_drives_before);
-
-	// returns path to last drive which was used, if none was used, returns empty string
-	std::string get_drive_path(bool update_removable_drives_before);
-	bool 		is_path_on_removable_drive(const std::string &path, bool update_removable_drives_before);
-
-	// marks one of the eveices in vector as last used
-	void 		set_and_verify_last_save_path(const std::string &path, bool update_removable_drives_before);
+	void 		eject_drive();
 
 	struct Status {
 		bool 	has_removable_drives { false };
 		bool 	has_eject { false };
 	};
-	bool 		is_last_drive_removed(bool update_removable_drives_before);
-	size_t 		get_drives_count() { tbb::mutex::scoped_lock lock(m_drives_mutex); return m_current_drives.size(); }
+	Status 		status();
 
 private:
 	// Worker thread, worker thread synchronization and callbacks to the UI thread.
@@ -93,18 +92,12 @@ private:
 	DriveData 				m_drive_data_last_eject;
 	mutable tbb::mutex 		m_drives_mutex;
 
-	// State machine for last save name / path.	
 	// Returns drive path (same as path in DriveData) if exists otherwise empty string.
-	// Called by set_last_save_path(), verify_last_save_path()
-	std::optional<DriveData> get_drive_from_path(const std::string& path);
-	void 					reset_last_save_path() {
-		m_last_save_path_verified = false;
-		m_last_save_path.clear();
-		m_last_save_name.clear();
-	}
+	std::string 			get_removable_drive_from_path(const std::string& path);
+	// Returns iterator to a drive in m_current_drives with path equal to m_last_save_path or end().
+	std::vector<DriveData>::const_iterator find_last_save_path_drive_data() const;
+	// Set with set_and_verify_last_save_path() to a removable drive path to be ejected.
 	std::string 			m_last_save_path;
-	std::string 			m_last_save_name;
-	bool 					m_last_save_path_verified { false };
 
 #if _WIN32
 	//registers for notifications by creating invisible window
@@ -112,7 +105,7 @@ private:
 #else
     void register_window_osx();
     void unregister_window_osx();
-    void list_devices(RemovableDriveManager& parent, std::vector<DriveData> &out) const;
+    void list_devices(std::vector<DriveData> &out) const;
     // not used as of now
     void eject_device(const std::string &path);
     // Opaque pointer to RemovableDriveManagerMM

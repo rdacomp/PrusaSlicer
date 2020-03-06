@@ -1,4 +1,5 @@
 #include "RemovableDriveManager.hpp"
+#include <libslic3r/libslic3r.h>
 
 #include <boost/nowide/convert.hpp>
 #include <boost/log/trivial.hpp>
@@ -58,7 +59,7 @@ std::vector<DriveData> RemovableDriveManager::search_for_removable_drives() cons
 						::GetDiskFreeSpaceExA(path.c_str(), &free_space, nullptr, nullptr);
 						if (free_space.QuadPart > 0) {
 							path += "\\";
-							current_drives.push_back(DriveData{ boost::nowide::narrow(volume_name), path });
+							current_drives.emplace_back(DriveData{ boost::nowide::narrow(volume_name), path });
 						}
 					}
 				}
@@ -70,63 +71,61 @@ std::vector<DriveData> RemovableDriveManager::search_for_removable_drives() cons
 // Called from UI therefore it blocks the UI thread.
 // It also blocks updates at the worker thread.
 // Win32 implementation.
-void RemovableDriveManager::eject_drive(bool update_removable_drives_before)
+void RemovableDriveManager::eject_drive()
 {
-	if (! m_last_save_path_verified || m_last_save_path.empty())
+	if (m_last_save_path.empty())
 		return;
 
-	if (update_removable_drives_before)
-		this->update();
+	this->update();
 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
-	for (const DriveData &drive_data : m_current_drives)
-		if (drive_data.path == m_last_save_path) {
-			// get handle to device
-			std::string mpath = "\\\\.\\" + m_last_save_path;
-			mpath = mpath.substr(0, mpath.size() - 1);
-			HANDLE handle = CreateFileA(mpath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-			if (handle == INVALID_HANDLE_VALUE) {
-				std::cerr << "Ejecting " << mpath << " failed " << GetLastError() << " \n";
-				return;
-			}
-			DWORD deviceControlRetVal(0);
-			//these 3 commands should eject device safely but they dont, the device does disappear from file explorer but the "device was safely remove" notification doesnt trigger.
-			//sd cards does  trigger WM_DEVICECHANGE messege, usb drives dont
-			DeviceIoControl(handle, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
-			DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
-			// some implemenatations also calls IOCTL_STORAGE_MEDIA_REMOVAL here but it returns error to me
-			BOOL error = DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
-			if (error == 0) {
-				CloseHandle(handle);
-				BOOST_LOG_TRIVIAL(error) << "Ejecting " << mpath << " failed " << deviceControlRetVal << " " << GetLastError() << " \n";
-				return;
-			}
-			CloseHandle(handle);
-			m_drive_data_last_eject = drive_data;
-			break;
+	auto it_drive_data = this->find_last_save_path_drive_data();
+	if (it_drive_data != m_current_drives.end()) {
+		const DriveData &drive_data = *it_drive_data;
+		// get handle to device
+		std::string mpath = "\\\\.\\" + m_last_save_path;
+		mpath = mpath.substr(0, mpath.size() - 1);
+		HANDLE handle = CreateFileA(mpath.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+		if (handle == INVALID_HANDLE_VALUE) {
+			std::cerr << "Ejecting " << mpath << " failed " << GetLastError() << " \n";
+			return;
 		}
+		DWORD deviceControlRetVal(0);
+		//these 3 commands should eject device safely but they dont, the device does disappear from file explorer but the "device was safely remove" notification doesnt trigger.
+		//sd cards does  trigger WM_DEVICECHANGE messege, usb drives dont
+		DeviceIoControl(handle, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
+		DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
+		// some implemenatations also calls IOCTL_STORAGE_MEDIA_REMOVAL here but it returns error to me
+		BOOL error = DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, nullptr, 0, nullptr, 0, &deviceControlRetVal, nullptr);
+		if (error == 0) {
+			CloseHandle(handle);
+			BOOST_LOG_TRIVIAL(error) << "Ejecting " << mpath << " failed " << deviceControlRetVal << " " << GetLastError() << " \n";
+			return;
+		}
+		CloseHandle(handle);
+		m_drive_data_last_eject = drive_data;
+	}
 }
 
-bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path, bool update_removable_drives_before)
+std::string RemovableDriveManager::get_removable_drive_path(const std::string &path)
 {
-	if (update_removable_drives_before)
-		this->update();
+	this->update();
 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	if (m_current_drives.empty())
-		return false;
+		return std::string();
 	std::size_t found = path.find_last_of("\\");
 	std::string new_path = path.substr(0, found);
 	int letter = PathGetDriveNumberA(new_path.c_str());
 	for (const DriveData &drive_data : m_current_drives) {
 		char drive = drive_data.path[0];
 		if (drive == 'A' + letter)
-			return true;	
+			return path;	
 	}
-	return false;
+	return m_current_drives.front().path;
 }
 
-std::optional<DriveData> RemovableDriveManager::get_drive_from_path(const std::string& path)
+std::string RemovableDriveManager::get_removable_drive_from_path(const std::string& path)
 {
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	std::size_t found = path.find_last_of("\\");
@@ -135,9 +134,9 @@ std::optional<DriveData> RemovableDriveManager::get_drive_from_path(const std::s
 	for (const DriveData &drive_data : m_current_drives) {
 		assert(! drive_data.path.empty());
 		if (drive_data.path.front() == 'A' + letter)
-			return std::optional<DriveData>(drive_data);
+			return drive_data.path;
 	}
-	return std::optional<DriveData>(std::nullopt);
+	return std::string();
 }
 
 #if 0
@@ -284,7 +283,7 @@ std::vector<DriveData> RemovableDriveManager::search_for_removable_drives() cons
 
 #if __APPLE__
 
-	this->list_devices(*this, current_drives);
+	this->list_devices(current_drives);
 
 #else
 
@@ -312,49 +311,46 @@ std::vector<DriveData> RemovableDriveManager::search_for_removable_drives() cons
 // Called from UI therefore it blocks the UI thread.
 // It also blocks updates at the worker thread.
 // Unix & OSX implementation.
-void RemovableDriveManager::eject_drive(bool update_removable_drives_before)
+void RemovableDriveManager::eject_drive()
 {
-	if (! m_last_save_path_verified || m_last_save_path.empty())
+	if (m_last_save_path.empty())
 		return;
 
-	if (update_removable_drives_before)
-		this->update();
+	this->update();
 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
-	for (const DriveData &drive_data : m_current_drives)
-		if (drive_data.path == m_last_save_path) {            
-			std::string correct_path(m_last_save_path);
-			for (size_t i = 0; i < correct_path.size(); ++i)
-            	if (correct_path[i]==' ') {
-					correct_path = correct_path.insert(i,1,'\\');
-            		++ i;
-            	}
-			//std::cout<<"Ejecting "<<(*it).name<<" from "<< correct_path<<"\n";
-			// there is no usable command in c++ so terminal command is used instead
-			// but neither triggers "succesful safe removal messege"
-			std::string command = 
+	auto it_drive_data = this->find_last_save_path_drive_data();
+	if (it_drive_data != m_current_drives.end()) {
+		std::string correct_path(m_last_save_path);
+		for (size_t i = 0; i < correct_path.size(); ++i)
+        	if (correct_path[i]==' ') {
+				correct_path = correct_path.insert(i,1,'\\');
+        		++ i;
+        	}
+		//std::cout<<"Ejecting "<<(*it).name<<" from "<< correct_path<<"\n";
+		// there is no usable command in c++ so terminal command is used instead
+		// but neither triggers "succesful safe removal messege"
+		std::string command = 
 #if __APPLE__
-			//this->eject_device(m_last_save_path);
-				"diskutil unmount ";
+		//this->eject_device(m_last_save_path);
+			"diskutil unmount ";
 #else
-				"umount ";
+			"umount ";
 #endif
-			command += correct_path;
-			int err = system(command.c_str());
-			if (err) {
-				BOOST_LOG_TRIVIAL(error) << "Ejecting " << m_last_save_path << " failed";
-				return;
-			}
-
-			m_drive_data_last_eject = drive_data;
-			break;
+		command += correct_path;
+		int err = system(command.c_str());
+		if (err) {
+			BOOST_LOG_TRIVIAL(error) << "Ejecting " << m_last_save_path << " failed";
+			return;
 		}
+
+		m_drive_data_last_eject = drive_data;
+	}
 }
 
-bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path, bool update_removable_drives_before)
+std::string RemovableDriveManager::get_removable_drive_path(const std::string &path)
 {
-	if (update_removable_drives_before)
-		this->update();
+	this->update();
 
 	std::size_t found = path.find_last_of("/");
 	std::string new_path = found == path.size() - 1 ? path.substr(0, found) : path;
@@ -362,11 +358,11 @@ bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path, 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	for (const DriveData &data : m_current_drives)
 		if (search_for_drives_internal::compare_filesystem_id(new_path, data.path))
-			return true;
-	return false;
+			return path;
+	return m_current_drives.empty() ? std::string() : m_current_drives.front().path;
 }
 
-std::optional<DriveData> RemovableDriveManager::get_drive_from_path(const std::string& path)
+std::string RemovableDriveManager::get_removable_drive_from_path(const std::string& path)
 {
 	std::size_t found = path.find_last_of("/");
 	std::string new_path = found == path.size() - 1 ? path.substr(0, found) : path;
@@ -376,10 +372,10 @@ std::optional<DriveData> RemovableDriveManager::get_drive_from_path(const std::s
     
 	// check if same filesystem
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
-	for (const DriveData &data : m_current_drives)
-		if (search_for_drives_internal::compare_filesystem_id(new_path, data.path))
-			return std::optional<DriveData>(drive_data);
-	return std::optional<DriveData>(std::nullopt);
+	for (const DriveData &drive_data : m_current_drives)
+		if (search_for_drives_internal::compare_filesystem_id(new_path, drive_data.path))
+			return drive_data.path;
+	return std::string();
 }
 #endif
 
@@ -469,65 +465,34 @@ void RemovableDriveManager::thread_proc()
 	}
 }
 
-std::string RemovableDriveManager::get_drive_path(bool update_removable_drives_before) 
+bool RemovableDriveManager::set_and_verify_last_save_path(const std::string &path)
 {
-	if (update_removable_drives_before)
-		this->update();
-	tbb::mutex::scoped_lock lock(m_drives_mutex);
-	if (m_current_drives.empty()) {
-		this->reset_last_save_path();
-		return std::string();
-	}
-	return m_last_save_path_verified ? m_last_save_path : m_current_drives.front().path;
+	this->update();
+
+	m_last_save_path = this->get_removable_drive_from_path(path);
+	return ! m_last_save_path.empty();
 }
 
-void RemovableDriveManager::set_and_verify_last_save_path(const std::string &path, bool update_removable_drives_before)
+RemovableDriveManager::Status RemovableDriveManager::status()
 {
-	if (update_removable_drives_before)
-		this->update();
+	this->update();
 
-	std::optional<DriveData> last_drive;
-	if (m_last_save_path_verified) { 
-		// If old path is on drive
-		last_drive = get_drive_from_path(path);
-		if (last_drive) {
-			// and new is too, rewrite the path
-			m_last_save_path_verified = false;
-			m_last_save_path = path;
-		} else
-			// else do nothing
-			return;
-	} else {
-		last_drive = get_drive_from_path(path);
-		m_last_save_path = path;
-	}
-
-	if (last_drive) {
-		m_last_save_path_verified = true;
-		m_last_save_path = last_drive->path;
-		m_last_save_name = last_drive->name;
-	} else
-		this->reset_last_save_path();
-}
-
-bool RemovableDriveManager::is_last_drive_removed(bool update_removable_drives_before) 
-{
-	if (! m_last_save_path_verified)
-		return true;
-
-	if (update_removable_drives_before)
-		this->update();
-
-	bool is_drive_mounted = false;
+	RemovableDriveManager::Status out;
 	{
 		tbb::mutex::scoped_lock lock(m_drives_mutex);
-		is_drive_mounted = std::find_if(m_current_drives.begin(), m_current_drives.end(), [this](const DriveData &data){ return data.path == m_last_save_path; }) != m_current_drives.end();
+		out.has_eject = this->find_last_save_path_drive_data() != m_current_drives.end();
+		out.has_removable_drives = ! m_current_drives.empty();
 	}
-
-	if (! is_drive_mounted) 
-		this->reset_last_save_path();
-
-	return ! is_drive_mounted;
+	if (! out.has_eject) 
+		m_last_save_path.clear();
+	return out;
 }
 
-}}//namespace Slicer::Gui
+std::vector<DriveData>::const_iterator RemovableDriveManager::find_last_save_path_drive_data() const
+{
+	return Slic3r::binary_find_by_predicate(m_current_drives.begin(), m_current_drives.end(),
+		[this](const DriveData &data){ return data.path < m_last_save_path; }, 
+		[this](const DriveData &data){ return data.path == m_last_save_path; });
+}
+
+}} // namespace Slic3r::GUI
