@@ -82,6 +82,7 @@ public:
 
 private:
 	bool 			 		m_initialized { false };
+	wxEvtHandler*			m_callback_evt_handler { nullptr };
 
 #ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 	// Worker thread, worker thread synchronization and callbacks to the UI thread.
@@ -89,7 +90,6 @@ private:
 	boost::thread 			m_thread;
 	std::condition_variable m_thread_stop_condition;
 	mutable std::mutex 		m_thread_stop_mutex;
-	wxEvtHandler*			m_callback_evt_handler { nullptr };
 	bool 					m_stop { false };
 #endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
