@@ -42,42 +42,33 @@
         DADiskRef           disk;
         DASessionRef        session;
         CFDictionaryRef     descDict;
-        session = DASessionCreate(NULL);
-        if (session == NULL) {
+        session = DASessionCreate(nullptr);
+        if (session == nullptr)
             err = EINVAL;
-        }
         if (err == 0) {
-            disk = DADiskCreateFromVolumePath(NULL,session,(CFURLRef)volURL);
-            if (session == NULL) {
+            disk = DADiskCreateFromVolumePath(nullptr,session,(CFURLRef)volURL);
+            if (session == nullptr)
                 err = EINVAL;
-            }
         }
         if (err == 0) {
             descDict = DADiskCopyDescription(disk);
-            if (descDict == NULL) {
+            if (descDict == nullptr)
                 err = EINVAL;
-            }
         }
         if (err == 0) {
             CFTypeRef mediaEjectableKey = CFDictionaryGetValue(descDict,kDADiskDescriptionMediaEjectableKey);
             BOOL ejectable = [mediaEjectableKey boolValue];
             CFTypeRef deviceProtocolName = CFDictionaryGetValue(descDict,kDADiskDescriptionDeviceProtocolKey);
             CFTypeRef deviceModelKey = CFDictionaryGetValue(descDict, kDADiskDescriptionDeviceModelKey);
-            if (mediaEjectableKey != NULL)
-            {
+            if (mediaEjectableKey != nullptr) {
                 BOOL op = ejectable && (CFEqual(deviceProtocolName, CFSTR("USB")) || CFEqual(deviceModelKey, CFSTR("SD Card Reader")));
                 //!CFEqual(deviceModelKey, CFSTR("Disk Image"));
-                //
-                if (op) {
+                if (op)
                     [result addObject:volURL.path];
-                }
             }
         }
-        if (descDict != NULL) {
+        if (descDict != nullptr)
             CFRelease(descDict);
-        }
-        
-        
     }
     return result;
 }
@@ -89,24 +80,17 @@
     DASessionRef session;
     NSURL *url = [[NSURL alloc] initFileURLWithPath:path];
     int err = 0;
-    session = DASessionCreate(NULL);
-    if (session == NULL) {
+    session = DASessionCreate(nullptr);
+    if (session == nullptr)
         err = EINVAL;
-    }
-    if (err == 0) {
-        disk = DADiskCreateFromVolumePath(NULL,session,(CFURLRef)url);
-    }
+    if (err == 0)
+        disk = DADiskCreateFromVolumePath(nullptr,session,(CFURLRef)url);
     if( err == 0)
-    {
-        DADiskUnmount(disk, kDADiskUnmountOptionDefault,
-                      NULL, NULL);
-    }
-    if (disk != NULL) {
+        DADiskUnmount(disk, kDADiskUnmountOptionDefault, nullptr, nullptr);
+    if (disk != nullptr)
         CFRelease(disk);
-    }
-    if (session != NULL) {
+    if (session != nullptr)
         CFRelease(session);
-    }
 }
 
 @end
@@ -148,8 +132,7 @@ void RemovableDriveManager::eject_device(const std::string &path)
 {
     assert(m_impl_osx != nullptr);
     if (m_impl_osx) {
-        NSString * pth = [NSString stringWithCString:path.c_str()
-                                            encoding:[NSString defaultCStringEncoding]];
+        NSString * pth = [NSString stringWithCString:path.c_str() encoding:[NSString defaultCStringEncoding]];
         [m_impl_osx eject_drive:pth];
     }
 }
