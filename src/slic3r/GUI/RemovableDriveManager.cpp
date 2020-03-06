@@ -284,9 +284,7 @@ std::vector<DriveData> RemovableDriveManager::search_for_removable_drives() cons
 
 #if __APPLE__
 
-	// if on macos obj-c class will enumerate
-	if (m_rdmmm)
-		m_rdmmm->list_devices(*this, current_drives);
+	this->list_devices(*this, current_drives);
 
 #else
 
@@ -336,7 +334,7 @@ void RemovableDriveManager::eject_drive(bool update_removable_drives_before)
 			// but neither triggers "succesful safe removal messege"
 			std::string command = 
 #if __APPLE__
-			//m_rdmmm->eject_device(m_last_save_path);
+			//this->eject_device(m_last_save_path);
 				"diskutil unmount ";
 #else
 				"umount ";
@@ -348,7 +346,7 @@ void RemovableDriveManager::eject_drive(bool update_removable_drives_before)
 				return;
 			}
 
-			m_drives_at_eject = m_current_drives;
+			m_drive_data_last_eject = drive_data;
 			break;
 		}
 }
@@ -368,11 +366,8 @@ bool RemovableDriveManager::is_path_on_removable_drive(const std::string &path, 
 	return false;
 }
 
-std::optional<DriveData> RemovableDriveManager::get_drive_from_path(const std::string& path, bool update_removable_drives_before)
+std::optional<DriveData> RemovableDriveManager::get_drive_from_path(const std::string& path)
 {
-	if (update_removable_drives_before)
-		this->update();
-
 	std::size_t found = path.find_last_of("/");
 	std::string new_path = found == path.size() - 1 ? path.substr(0, found) : path;
     // trim the filename
@@ -398,11 +393,13 @@ void RemovableDriveManager::init(wxEvtHandler *callback_evt_handler)
 
 	m_initialized = true;
 	m_callback_evt_handler = callback_evt_handler;
+
 #if _WIN32
-	//register_window();
+	//this->register_window_msw();
 #elif __APPLE__
-    m_rdmmm->register_window();
+    this->register_window_osx();
 #endif
+
 	m_thread = boost::thread((boost::bind(&RemovableDriveManager::thread_proc, this)));
 	//FIXME do we want to send out events before the Plater is constructed?
 //	this->update();
@@ -422,6 +419,12 @@ void RemovableDriveManager::shutdown()
 		m_thread.join();
 		m_stop = false;
 	}
+
+#if _WIN32
+	//this->unregister_window_msw();
+#elif __APPLE__
+    this->unregister_window_osx();
+#endif
 
 	m_initialized = false;
 }

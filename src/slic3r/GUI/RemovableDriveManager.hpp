@@ -61,6 +61,11 @@ public:
 
 	// marks one of the eveices in vector as last used
 	void 		set_and_verify_last_save_path(const std::string &path, bool update_removable_drives_before);
+
+	struct Status {
+		bool 	has_removable_drives { false };
+		bool 	has_eject { false };
+	};
 	bool 		is_last_drive_removed(bool update_removable_drives_before);
 	size_t 		get_drives_count() { tbb::mutex::scoped_lock lock(m_drives_mutex); return m_current_drives.size(); }
 
@@ -103,7 +108,7 @@ private:
 
 #if _WIN32
 	//registers for notifications by creating invisible window
-	//void register_window();
+	//void register_window_msw();
 #else
     void register_window_osx();
     void unregister_window_osx();
