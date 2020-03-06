@@ -4,136 +4,117 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <optional>
 
 #include <boost/thread.hpp>
 #include <tbb/mutex.h>
 #include <condition_variable>
 
+// Custom wxWidget events
+#include "Event.hpp"
+
 namespace Slic3r {
 namespace GUI {
-#if __APPLE__
-class RDMMMWrapper;
-#endif
-    
+
 struct DriveData
 {
 	std::string name;
 	std::string path;
-	DriveData(std::string n, std::string p):name(n),path(p){}
+
+	void clear() {
+		name.clear();
+		path.clear();
+	}
+	bool empty() const {
+		return path.empty();
+	}
 };
+
+inline bool operator< (const DriveData &lhs, const DriveData &rhs) { return lhs.path < rhs.path; }
+inline bool operator> (const DriveData &lhs, const DriveData &rhs) { return lhs.path > rhs.path; }
+inline bool operator==(const DriveData &lhs, const DriveData &rhs) { return lhs.path == rhs.path; }
+
+using RemovableDriveEjectEvent = Event<DriveData>;
+wxDECLARE_EVENT(EVT_REMOVABLE_DRIVE_EJECTED, RemovableDriveEjectEvent);
+
+using RemovableDrivesChangedEvent = SimpleEvent;
+wxDECLARE_EVENT(EVT_REMOVABLE_DRIVES_CHANGED, RemovableDrivesChangedEvent);
+
 class RemovableDriveManager
 {
-#if __APPLE__
-friend class RDMMMWrapper;
-#endif
-
 public:
-	/*
-	static RemovableDriveManager& get_instance()
-	{
-		static RemovableDriveManager instance; 
-		return instance;
-	}
+	RemovableDriveManager() = default;
 	RemovableDriveManager(RemovableDriveManager const&) = delete;
 	void operator=(RemovableDriveManager const&) = delete;
-	*/
-	RemovableDriveManager();
-	~RemovableDriveManager();
+	~RemovableDriveManager() { assert(! m_initialized); }
+
 	//call only once. on apple register for unmnount callbacks. Enumerates devices for first time so init shoud be called on linux too.
-	void init();
-	//update() searches for removable devices, returns false if empty. /time = 0 is forced update, time expects wxGetLocalTime()
-	void update(const long time = 0);  
-	//triggers callbacks if last used drive was removed
-	void check_and_notify();
-	bool is_drive_mounted(const std::string &path);
-	void eject_drive(const std::string &path);
-	//returns path to last drive which was used, if none was used, returns device that was enumerated last
-	std::string get_last_save_path() const;
-	std::string get_last_save_name() const;
-	//returns path to last drive which was used, if none was used, returns empty string
-	std::string get_drive_path();
-	bool is_path_on_removable_drive(const std::string &path);
-	// callback will notify only if device with last save path was removed
-	void add_remove_callback(std::function<void()> callback);
-	// erases all remove callbacks added by add_remove_callback()
-	void erase_callbacks(); 
-	//drive_count_changed callback is called on every added or removed device
-	void set_drive_count_changed_callback(std::function<void(const bool)> callback);
-	//thi serves to set correct value for drive_count_changed callback
-	void set_plater_ready_to_slice(bool b);
+	void 		init(wxEvtHandler *callback_evt_handler);
+	void 		shutdown();
+
+	// Eject drive of a file set by set_and_verify_last_save_path().
+	void 		eject_drive(bool update_removable_drives_before);
+
+	// returns path to last drive which was used, if none was used, returns empty string
+	std::string get_drive_path(bool update_removable_drives_before);
+	bool 		is_path_on_removable_drive(const std::string &path, bool update_removable_drives_before);
+
 	// marks one of the eveices in vector as last used
-	void set_last_save_path(const std::string &path);
-	void verify_last_save_path();
-	bool is_last_drive_removed();
-	void set_is_writing(const bool b);
-	bool get_is_writing() const;
-	bool get_did_eject() const;
-	void set_did_eject(const bool b);
-	std::string get_drive_name(const std::string& path);
-	size_t get_drives_count();
-	std::string get_ejected_path() const;
-	std::string get_ejected_name() const;
+	void 		set_and_verify_last_save_path(const std::string &path, bool update_removable_drives_before);
+	bool 		is_last_drive_removed(bool update_removable_drives_before);
+	size_t 		get_drives_count() { tbb::mutex::scoped_lock lock(m_drives_mutex); return m_current_drives.size(); }
+
 private:
-	// threaded part
-	void thread_proc();
-	boost::thread m_thread;
-	std::condition_variable m_thread_enumerate_cv;
-	bool  m_thread_enumerate_start;
-	std::mutex m_enumerate_mutex;
-	std::atomic_bool m_thread_enumerate_finnished;
-	tbb::mutex m_drives_mutex;
-	std::atomic_bool m_initialized;
-	std::vector<DriveData> m_current_drives;
-	bool m_thread_finnished;
-	//----------
+	// Worker thread, worker thread synchronization and callbacks to the UI thread.
+	void 					thread_proc();
+	boost::thread 			m_thread;
+	std::condition_variable m_thread_stop_condition;
+	mutable std::mutex 		m_thread_stop_mutex;
+	wxEvtHandler*			m_callback_evt_handler { nullptr };
+	bool 			 		m_initialized { false };
+	bool 					m_stop { false };
 
-	void search_for_drives();
-	
-	//returns drive path (same as path in DriveData) if exists otherwise empty string ""
-	std::string get_drive_from_path(const std::string& path);
-	void reset_last_save_path();
+	// Enumerates current drives and sends out wxWidget events on change or eject.
+	void 					update();
+	// Called from update() to enumerate removable drives.
+	std::vector<DriveData> 	search_for_removable_drives() const;
 
-	
-	std::vector<std::function<void()>> m_callbacks;
-	std::function<void(const bool)> m_drive_count_changed_callback;
-	size_t m_drives_count;
-	long m_last_update;
-	std::string m_last_save_path;
-	bool m_last_save_path_verified;
-	std::string m_last_save_name;
-	bool m_is_writing;//on device
-	bool m_did_eject;
-	bool m_plater_ready_to_slice;
-	std::string m_ejected_path;
-	std::string m_ejected_name;
+	// m_current_drives is guarded by m_drives_mutex
+	// sorted ascending by path
+	std::vector<DriveData> 	m_current_drives;
+	// When user requested an eject, the drive to be forcefuly ejected is stored here, so the next update will
+	// recognize that the eject was finished with success and an eject event is sent out.
+	// guarded with m_drives_mutex
+	DriveData 				m_drive_data_last_eject;
+	mutable tbb::mutex 		m_drives_mutex;
+
+	// State machine for last save name / path.	
+	// Returns drive path (same as path in DriveData) if exists otherwise empty string.
+	// Called by set_last_save_path(), verify_last_save_path()
+	std::optional<DriveData> get_drive_from_path(const std::string& path);
+	void 					reset_last_save_path() {
+		m_last_save_path_verified = false;
+		m_last_save_path.clear();
+		m_last_save_name.clear();
+	}
+	std::string 			m_last_save_path;
+	std::string 			m_last_save_name;
+	bool 					m_last_save_path_verified { false };
+
 #if _WIN32
 	//registers for notifications by creating invisible window
-	void register_window();
+	//void register_window();
 #else
-#if __APPLE__
-	std::unique_ptr <RDMMMWrapper> m_rdmmm;
- #endif
-    void search_path(const std::string &path, const std::string &parent_path);
-    bool compare_filesystem_id(const std::string &path_a, const std::string &path_b);
-    void inspect_file(const std::string &path, const std::string &parent_path);
-#endif
-};
-// apple wrapper for RemovableDriveManagerMM which searches for drives and/or ejects them    
-#if __APPLE__
-class RDMMMWrapper
-{
-public:
-    RDMMMWrapper();
-    ~RDMMMWrapper();
-    void register_window();
-    void list_devices(RemovableDriveManager& parent);
+    void register_window_osx();
+    void unregister_window_osx();
+    void list_devices(RemovableDriveManager& parent, std::vector<DriveData> &out) const;
+    // not used as of now
     void eject_device(const std::string &path);
-    void log(const std::string &msg);
-protected:
-    void *m_imp;
-    //friend void RemovableDriveManager::inspect_file(const std::string &path, const std::string &parent_path);
+    // Opaque pointer to RemovableDriveManagerMM
+    void *m_impl_osx;
+#endif
 };
-#endif
-}}
-#endif
 
+}}
+
+#endif // slic3r_GUI_RemovableDriveManager_hpp_

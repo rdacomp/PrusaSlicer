@@ -110,47 +110,45 @@
 
 namespace Slic3r {
 namespace GUI {
-RDMMMWrapper::RDMMMWrapper():m_imp(nullptr){
-	m_imp = [[RemovableDriveManagerMM alloc] init];
-}
-RDMMMWrapper::~RDMMMWrapper()
+
+void RemovableDriveManager::register_window_osx()
 {
-	if(m_imp)
-	{
-		[m_imp release];
-	}
+    assert(m_impl_osx == nullptr);
+    m_impl_osx = [[RemovableDriveManagerMM alloc] init];
+	if (m_impl_osx)
+		[m_impl_osx add_unmount_observer];
 }
-void  RDMMMWrapper::register_window()
+
+void RemovableDriveManager::unregister_window_osx()
 {
-	if(m_imp)
-	{
-		[m_imp add_unmount_observer];
-	}
+    if (m_impl_osx)
+        [m_impl_osx release];
 }
-void  RDMMMWrapper::list_devices(RemovableDriveManager& parent)
+
+namespace search_for_drives_internal 
 {
-    if(m_imp)
-    {
-    	NSArray* devices = [m_imp list_dev];
+    void inspect_file(const std::string &path, const std::string &parent_path, std::vector<DriveData> &out);
+}
+
+void RemovableDriveManager::list_devices(RemovableDriveManager& parent, std::vector<DriveData> &out) const
+{
+    assert(m_impl_osx != nullptr);
+    if (m_impl_osx) {
+    	NSArray* devices = [m_impl_osx list_dev];
     	for (NSString* volumePath in devices)
-    	{
-        	//NSLog(@"%@", volumePath);
-        	parent.inspect_file(std::string([volumePath UTF8String]), "/Volumes");
-		}
+        	search_for_drives_internal::inspect_file(std::string([volumePath UTF8String]), "/Volumes", out);
     }
 }
-void RDMMMWrapper::log(const std::string &msg)
+
+// not used as of now
+void RemovableDriveManager::eject_device(const std::string &path)
 {
-    NSLog(@"%s", msg.c_str());
-}
-void RDMMMWrapper::eject_device(const std::string &path)
-{
-    if(m_imp)
-    {
+    assert(m_impl_osx != nullptr);
+    if (m_impl_osx) {
         NSString * pth = [NSString stringWithCString:path.c_str()
                                             encoding:[NSString defaultCStringEncoding]];
-        [m_imp eject_drive:pth];
+        [m_impl_osx eject_drive:pth];
     }
 }
-}}//namespace Slicer::GUI
 
+}}//namespace Slicer::GUI

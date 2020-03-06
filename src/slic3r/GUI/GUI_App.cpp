@@ -210,8 +210,6 @@ bool GUI_App::on_init_inner()
     app_config = new AppConfig();
     preset_bundle = new PresetBundle();
 
-	m_removable_drive_manager->init();
-
     // just checking for existence of Slic3r::data_dir is not enough : it may be an empty directory
     // supplied as argument to --datadir; in that case we should still run the wizard
     preset_bundle->setup_directories();
@@ -275,12 +273,6 @@ bool GUI_App::on_init_inner()
             app_config->save();
 
         this->obj_manipul()->update_if_dirty();
-
-#if !__APPLE__
-		m_removable_drive_manager->update(wxGetLocalTime());
-#else
-		m_removable_drive_manager->check_and_notify();
-#endif
 
 		// Preset updating & Configwizard are done after the above initializations,
 	    // and after MainFrame is created & shown.
