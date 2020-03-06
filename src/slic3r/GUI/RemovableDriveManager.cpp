@@ -258,7 +258,6 @@ namespace search_for_drives_internal
 				struct passwd *pw = getpwuid(uid);
 				if (pw != 0 && pw->pw_name == username)
 					out.emplace_back(DriveData{ boost::filesystem::basename(boost::filesystem::path(path)), path });
-				}
 			}
 		}
 	}
@@ -268,16 +267,13 @@ namespace search_for_drives_internal
 	    glob_t globbuf;
 		globbuf.gl_offs = 2;
 		int error = glob(path.c_str(), GLOB_TILDE, NULL, &globbuf);
-		if (error == 0) 
-		{
+		if (error == 0) {
 			for (size_t i = 0; i < globbuf.gl_pathc; ++ i)
 				inspect_file(globbuf.gl_pathv[i], parent_path, out);
-		} else
-		{
+		} else {
 			//if error - path probably doesnt exists so function just exits
 			//std::cout<<"glob error "<< error<< "\n";
 		}
-		
 		globfree(&globbuf);
 	}
 }
