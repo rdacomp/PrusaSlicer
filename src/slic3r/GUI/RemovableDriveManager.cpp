@@ -81,7 +81,6 @@ void RemovableDriveManager::eject_drive()
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	auto it_drive_data = this->find_last_save_path_drive_data();
 	if (it_drive_data != m_current_drives.end()) {
-		const DriveData &drive_data = *it_drive_data;
 		// get handle to device
 		std::string mpath = "\\\\.\\" + m_last_save_path;
 		mpath = mpath.substr(0, mpath.size() - 1);
@@ -103,7 +102,7 @@ void RemovableDriveManager::eject_drive()
 			return;
 		}
 		CloseHandle(handle);
-		m_drive_data_last_eject = drive_data;
+		m_drive_data_last_eject = *it_drive_data;
 	}
 }
 
@@ -344,7 +343,7 @@ void RemovableDriveManager::eject_drive()
 			return;
 		}
 
-		m_drive_data_last_eject = drive_data;
+		m_drive_data_last_eject = *it_drive_data;
 	}
 }
 
