@@ -38,7 +38,7 @@ wxDECLARE_EVENT(EVT_REMOVABLE_DRIVE_EJECTED, RemovableDriveEjectEvent);
 using RemovableDrivesChangedEvent = SimpleEvent;
 wxDECLARE_EVENT(EVT_REMOVABLE_DRIVES_CHANGED, RemovableDrivesChangedEvent);
 
-#if __APPLE __
+#if __APPLE__
 	// Callbacks on device plug / unplug work reliably on OSX.
 	#define REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 #endif // __APPLE__
