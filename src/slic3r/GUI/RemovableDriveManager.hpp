@@ -38,6 +38,11 @@ wxDECLARE_EVENT(EVT_REMOVABLE_DRIVE_EJECTED, RemovableDriveEjectEvent);
 using RemovableDrivesChangedEvent = SimpleEvent;
 wxDECLARE_EVENT(EVT_REMOVABLE_DRIVES_CHANGED, RemovableDrivesChangedEvent);
 
+#if __APPLE __
+	// Callbacks on device plug / unplug work reliably on OSX.
+	#define REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+#endif // __APPLE__
+
 class RemovableDriveManager
 {
 public:
@@ -62,11 +67,11 @@ public:
 	// Eject drive of a file set by set_and_verify_last_save_path().
 	void 		eject_drive();
 
-	struct Status {
+	struct RemovableDrivesStatus {
 		bool 	has_removable_drives { false };
 		bool 	has_eject { false };
 	};
-	Status 		status();
+	RemovableDrivesStatus status();
 
 	// Enumerates current drives and sends out wxWidget events on change or eject.
 	// Called by each public method, by the background thread and from RemovableDriveManagerMM::on_device_unmount OSX notification handler.
@@ -76,14 +81,17 @@ public:
 	void 		update();
 
 private:
+	bool 			 		m_initialized { false };
+
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 	// Worker thread, worker thread synchronization and callbacks to the UI thread.
 	void 					thread_proc();
 	boost::thread 			m_thread;
 	std::condition_variable m_thread_stop_condition;
 	mutable std::mutex 		m_thread_stop_mutex;
 	wxEvtHandler*			m_callback_evt_handler { nullptr };
-	bool 			 		m_initialized { false };
 	bool 					m_stop { false };
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 	// Called from update() to enumerate removable drives.
 	std::vector<DriveData> 	search_for_removable_drives() const;
@@ -107,7 +115,7 @@ private:
 #if _WIN32
 	//registers for notifications by creating invisible window
 	//void register_window_msw();
-#else
+#elif __APPLE__
     void register_window_osx();
     void unregister_window_osx();
     void list_devices(std::vector<DriveData> &out) const;

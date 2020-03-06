@@ -76,7 +76,9 @@ void RemovableDriveManager::eject_drive()
 	if (m_last_save_path.empty())
 		return;
 
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	auto it_drive_data = this->find_last_save_path_drive_data();
@@ -108,7 +110,9 @@ void RemovableDriveManager::eject_drive()
 
 std::string RemovableDriveManager::get_removable_drive_path(const std::string &path)
 {
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	if (m_current_drives.empty())
@@ -315,7 +319,9 @@ void RemovableDriveManager::eject_drive()
 	if (m_last_save_path.empty())
 		return;
 
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 	tbb::mutex::scoped_lock lock(m_drives_mutex);
 	auto it_drive_data = this->find_last_save_path_drive_data();
@@ -349,7 +355,9 @@ void RemovableDriveManager::eject_drive()
 
 std::string RemovableDriveManager::get_removable_drive_path(const std::string &path)
 {
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 	std::size_t found = path.find_last_of("/");
 	std::string new_path = found == path.size() - 1 ? path.substr(0, found) : path;
@@ -395,13 +403,17 @@ void RemovableDriveManager::init(wxEvtHandler *callback_evt_handler)
     this->register_window_osx();
 #endif
 
+#ifdef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+	this->update();
+#else // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+	// Don't call update() manually, as the UI triggered APIs call this->update() anyways.
 	m_thread = boost::thread((boost::bind(&RemovableDriveManager::thread_proc, this)));
-	//FIXME do we want to send out events before the Plater is constructed?
-//	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 }
 
 void RemovableDriveManager::shutdown()
 {
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
     if (m_thread.joinable()) {
     	// Stop the worker thread, if running.
 		{
@@ -414,6 +426,7 @@ void RemovableDriveManager::shutdown()
 		m_thread.join();
 		m_stop = false;
 	}
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 #if _WIN32
 	//this->unregister_window_msw();
@@ -422,6 +435,33 @@ void RemovableDriveManager::shutdown()
 #endif
 
 	m_initialized = false;
+}
+
+bool RemovableDriveManager::set_and_verify_last_save_path(const std::string &path)
+{
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+
+	m_last_save_path = this->get_removable_drive_from_path(path);
+	return ! m_last_save_path.empty();
+}
+
+RemovableDriveManager::RemovableDrivesStatus RemovableDriveManager::status()
+{
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+	this->update();
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
+
+	RemovableDriveManager::RemovableDrivesStatus out;
+	{
+		tbb::mutex::scoped_lock lock(m_drives_mutex);
+		out.has_eject = this->find_last_save_path_drive_data() != m_current_drives.end();
+		out.has_removable_drives = ! m_current_drives.empty();
+	}
+	if (! out.has_eject) 
+		m_last_save_path.clear();
+	return out;
 }
 
 // Update is called from thread_proc() and from most of the public methods on demand.
@@ -447,6 +487,7 @@ void RemovableDriveManager::update()
 	m_current_drives = std::move(current_drives);
 }
 
+#ifndef REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 void RemovableDriveManager::thread_proc()
 {
 	for (;;) {
@@ -463,29 +504,7 @@ void RemovableDriveManager::thread_proc()
 		this->update();
 	}
 }
-
-bool RemovableDriveManager::set_and_verify_last_save_path(const std::string &path)
-{
-	this->update();
-
-	m_last_save_path = this->get_removable_drive_from_path(path);
-	return ! m_last_save_path.empty();
-}
-
-RemovableDriveManager::Status RemovableDriveManager::status()
-{
-	this->update();
-
-	RemovableDriveManager::Status out;
-	{
-		tbb::mutex::scoped_lock lock(m_drives_mutex);
-		out.has_eject = this->find_last_save_path_drive_data() != m_current_drives.end();
-		out.has_removable_drives = ! m_current_drives.empty();
-	}
-	if (! out.has_eject) 
-		m_last_save_path.clear();
-	return out;
-}
+#endif // REMOVABLE_DRIVE_MANAGER_OS_CALLBACKS
 
 std::vector<DriveData>::const_iterator RemovableDriveManager::find_last_save_path_drive_data() const
 {

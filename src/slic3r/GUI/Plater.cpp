@@ -4282,7 +4282,7 @@ void Plater::priv::show_action_buttons(const bool ready_to_slice) const
     // when a background processing is ON, export_btn and/or send_btn are showing
     if (wxGetApp().app_config->get("background_processing") == "1")
     {
-	    RemovableDriveManager::Status removable_media_status = wxGetApp().removable_drive_manager()->status();
+	    RemovableDriveManager::RemovableDrivesStatus removable_media_status = wxGetApp().removable_drive_manager()->status();
 		if (sidebar->show_reslice(false) |
 			sidebar->show_export(true) |
 			sidebar->show_send(send_gcode_shown) |
@@ -4292,7 +4292,7 @@ void Plater::priv::show_action_buttons(const bool ready_to_slice) const
     }
     else
     {
-	    RemovableDriveManager::Status removable_media_status;
+	    RemovableDriveManager::RemovableDrivesStatus removable_media_status;
 	    if (! ready_to_slice) 
 	    	removable_media_status = wxGetApp().removable_drive_manager()->status();
         if (sidebar->show_reslice(ready_to_slice) |
