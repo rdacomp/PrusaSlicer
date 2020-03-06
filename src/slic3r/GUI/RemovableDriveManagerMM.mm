@@ -14,17 +14,20 @@
 	//if(self){}
 	return self;
 }
+
 -(void) on_device_unmount: (NSNotification*) notification
 {
     //NSLog(@"on device change");
-    Slic3r::GUI::wxGetApp().removable_drive_manager()->update(0);
+    Slic3r::GUI::wxGetApp().removable_drive_manager()->update();
 }
+
 -(void) add_unmount_observer
 {
     //NSLog(@"add unmount observer");
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector: @selector(on_device_unmount:) name:NSWorkspaceDidUnmountNotification object:nil];
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver:self selector: @selector(on_device_unmount:) name:NSWorkspaceDidMountNotification object:nil];
 }
+
 -(NSArray*) list_dev
 {
     // DEPRICATED:
