@@ -68,6 +68,13 @@ public:
 	};
 	Status 		status();
 
+	// Enumerates current drives and sends out wxWidget events on change or eject.
+	// Called by each public method, by the background thread and from RemovableDriveManagerMM::on_device_unmount OSX notification handler.
+	// Not to be called manually.
+	// Public to be accessible from RemovableDriveManagerMM::on_device_unmount OSX notification handler.
+	// It would be better to make this method private and friend to RemovableDriveManagerMM, but RemovableDriveManagerMM is an ObjectiveC class.
+	void 		update();
+
 private:
 	// Worker thread, worker thread synchronization and callbacks to the UI thread.
 	void 					thread_proc();
@@ -78,8 +85,6 @@ private:
 	bool 			 		m_initialized { false };
 	bool 					m_stop { false };
 
-	// Enumerates current drives and sends out wxWidget events on change or eject.
-	void 					update();
 	// Called from update() to enumerate removable drives.
 	std::vector<DriveData> 	search_for_removable_drives() const;
 
