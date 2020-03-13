@@ -809,10 +809,12 @@ void ObjectList::OnContextMenu(wxDataViewEvent& evt)
     list_manipulation(mouse_pos, evt_context_menu);
 }
 
-void ObjectList::list_manipulation(const wxPoint& mouse_pos, bool evt_context_menu/* = false*/)
+void ObjectList::list_manipulation(wxPoint mouse_pos, bool evt_context_menu/* = false*/)
 {
     wxDataViewItem item;
     wxDataViewColumn* col = nullptr;
+
+    mouse_pos = get_mouse_position_in_control();
     HitTest(mouse_pos, item, col);
 
     if (m_extruder_editor)
