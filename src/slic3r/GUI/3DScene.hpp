@@ -12,6 +12,8 @@
 #include <functional>
 #include <memory>
 
+#define HAS_GLSAFE
+
 #ifndef NDEBUG
 #define HAS_GLSAFE
 #endif
