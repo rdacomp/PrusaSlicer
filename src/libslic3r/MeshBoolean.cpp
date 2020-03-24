@@ -29,7 +29,7 @@ TriangleMesh eigen_to_triangle_mesh(const EigenMesh &emesh)
     auto &VC = emesh.first; auto &FC = emesh.second;
     
     Pointf3s points(size_t(VC.rows())); 
-    std::vector<Vec3crd> facets(size_t(FC.rows()));
+    std::vector<Vec3i> facets(size_t(FC.rows()));
     
     for (Eigen::Index i = 0; i < VC.rows(); ++i)
         points[size_t(i)] = VC.row(i);

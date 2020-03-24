@@ -42,7 +42,9 @@
 
 namespace Slic3r {
 
-TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3crd>& facets) : repaired(false)
+template<typename FaceIndexType> 
+TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<FaceIndexType> &facets) : 
+    repaired(false)
 {
     stl_file &stl = this->stl;
     stl.stats.type = inmemory;
@@ -69,6 +71,9 @@ TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3crd>& f
     }
     stl_get_size(&stl);
 }
+
+template TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3i32> &facets);
+template TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3i64> &facets);
 
 TriangleMesh::TriangleMesh(const indexed_triangle_set &M)
 {

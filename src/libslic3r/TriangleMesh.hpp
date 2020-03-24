@@ -22,7 +22,7 @@ class TriangleMesh
 {
 public:
     TriangleMesh() : repaired(false) {}
-    TriangleMesh(const Pointf3s &points, const std::vector<Vec3crd> &facets);
+    template<typename FaceIndexType> TriangleMesh(const Pointf3s &points, const std::vector<FaceIndexType> &facets);
     explicit TriangleMesh(const indexed_triangle_set &M);
 	void clear() { this->stl.clear(); this->its.clear(); this->repaired = false; }
     bool ReadSTLFile(const char* input_file) { return stl_open(&stl, input_file); }
