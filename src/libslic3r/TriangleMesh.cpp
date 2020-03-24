@@ -70,6 +70,9 @@ TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3i> &fac
     stl_get_size(&stl);
 }
 
+template TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3i32> &facets);
+template TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3i64> &facets);
+
 TriangleMesh::TriangleMesh(const indexed_triangle_set &M)
 {
     stl.stats.type = inmemory;
