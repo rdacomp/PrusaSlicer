@@ -29,7 +29,9 @@ set(SLIC3R_GUI_SOURCES
     GUI/GLCanvas3DManager.hpp
     GUI/GLCanvas3DManager.cpp
     GUI/Selection.hpp
-    GUI/Selection.cpp    
+    GUI/Selection.cpp
+    GUI/Sidebar.hpp
+    GUI/Sidebar.cpp
     GUI/Gizmos/GLGizmos.hpp
     GUI/Gizmos/GLGizmosManager.cpp
     GUI/Gizmos/GLGizmosManager.hpp
