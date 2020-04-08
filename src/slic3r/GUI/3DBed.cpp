@@ -468,8 +468,13 @@ void Bed3D::render_texture(bool bottom, GLCanvas3D& canvas) const
 
     if (m_triangles.get_vertices_count() > 0)
     {
+#if ENABLE_TOOLPATHS_SHADERS
+        if (!m_shader.is_initialized())
+            m_shader.init("printbed", "printbed.vs", "printbed.fs");
+#else
         if (m_shader.get_shader_program_id() == 0)
             m_shader.init("printbed.vs", "printbed.fs");
+#endif // ENABLE_TOOLPATHS_SHADERS
 
         if (m_shader.is_initialized())
         {

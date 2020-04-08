@@ -210,8 +210,12 @@ private:
         LayersEditing();
         ~LayersEditing();
 
+#if ENABLE_TOOLPATHS_SHADERS
+        bool init();
+#else
         bool init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename);
-		void set_config(const DynamicPrintConfig* config);
+#endif // ENABLE_TOOLPATHS_SHADERS
+        void set_config(const DynamicPrintConfig* config);
         void select_object(const Model &model, int object_id);
 
         bool is_allowed() const;
@@ -450,7 +454,11 @@ private:
     GLToolbar& m_view_toolbar;
 #endif // !ENABLE_NON_STATIC_CANVAS_MANAGER
     LayersEditing m_layers_editing;
+#if ENABLE_TOOLPATHS_SHADERS
+    mutable Shader m_shader;
+#else
     Shader m_shader;
+#endif // ENABLE_TOOLPATHS_SHADERS
     Mouse m_mouse;
     mutable GLGizmosManager m_gizmos;
     mutable GLToolbar m_main_toolbar;

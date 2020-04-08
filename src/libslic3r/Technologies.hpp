@@ -56,5 +56,7 @@
 // Moves GLCanvas3DManager from being a static member of _3DScene to be a normal member of GUI_App
 #define ENABLE_NON_STATIC_CANVAS_MANAGER (1 && ENABLE_2_3_0_ALPHA1)
 
+// Enable use of different shaders for toolpaths rendering
+#define ENABLE_TOOLPATHS_SHADERS (1 && ENABLE_2_3_0_ALPHA1)
 
 #endif // _prusaslicer_technologies_h_

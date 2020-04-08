@@ -278,7 +278,11 @@ Shader::~Shader()
     reset();
 }
 
+#if ENABLE_TOOLPATHS_SHADERS
+bool Shader::init(const std::string& name, const std::string& vertex_shader_filename, const std::string& fragment_shader_filename)
+#else
 bool Shader::init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename)
+#endif // ENABLE_TOOLPATHS_SHADERS
 {
     if (is_initialized())
         return true;
@@ -293,6 +297,9 @@ bool Shader::init(const std::string& vertex_shader_filename, const std::string& 
             reset();
             return false;
         }
+#if ENABLE_TOOLPATHS_SHADERS
+        m_shader->name = name;
+#endif // ENABLE_TOOLPATHS_SHADERS
     }
 
     return true;

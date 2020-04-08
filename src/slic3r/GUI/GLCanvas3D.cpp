@@ -162,10 +162,22 @@ GLCanvas3D::LayersEditing::~LayersEditing()
 
 const float GLCanvas3D::LayersEditing::THICKNESS_BAR_WIDTH = 70.0f;
 
+#if ENABLE_TOOLPATHS_SHADERS
+bool GLCanvas3D::LayersEditing::init()
+#else
 bool GLCanvas3D::LayersEditing::init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename)
+#endif // ENABLE_TOOLPATHS_SHADERS
 {
+#if ENABLE_TOOLPATHS_SHADERS
+    if (!m_shader.init("variable_layer_height", "variable_layer_height.vs", "variable_layer_height.fs"))
+    {
+        BOOST_LOG_TRIVIAL(error) << "Unable to initialize variable_layer_height shader: please, check that the files variable_layer_height.vs and variable_layer_height.fs are available";
+        return false;
+    }
+#else
     if (!m_shader.init(vertex_shader_filename, fragment_shader_filename))
         return false;
+#endif // ENABLE_TOOLPATHS_SHADERS
 
     glsafe(::glGenTextures(1, (GLuint*)&m_z_texture_id));
     glsafe(::glBindTexture(GL_TEXTURE_2D, m_z_texture_id));
@@ -1662,10 +1674,11 @@ bool GLCanvas3D::init()
     if (m_multisample_allowed)
         glsafe(::glEnable(GL_MULTISAMPLE));
 
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-    if (!m_shader.init("phong.vs", "phong.fs"))
-//    if (!m_shader.init("gouraud.vs", "gouraud.fs"))
-//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+#if ENABLE_TOOLPATHS_SHADERS
+    if (m_main_toolbar.is_enabled() && !m_layers_editing.init())
+        return false;
+#else
+    if (!m_shader.init("gouraud.vs", "gouraud.fs"))
     {
         std::cout << "Unable to initialize gouraud shader: please, check that the files gouraud.vs and gouraud.fs are available" << std::endl;
         return false;
@@ -1676,6 +1689,7 @@ bool GLCanvas3D::init()
         std::cout << "Unable to initialize variable_layer_height shader: please, check that the files variable_layer_height.vs and variable_layer_height.fs are available" << std::endl;
         return false;
     }
+#endif // ENABLE_TOOLPATHS_SHADERS
 
     // on linux the gl context is not valid until the canvas is not shown on screen
     // we defer the geometry finalization of volumes until the first call to render()
@@ -5383,6 +5397,30 @@ void GLCanvas3D::_render_objects() const
         m_volumes.set_z_range(-FLT_MAX, FLT_MAX);
 
     m_volumes.set_clipping_plane(m_camera_clipping_plane.get_data());
+
+#if ENABLE_TOOLPATHS_SHADERS
+    std::string shader_name = (m_main_toolbar.is_enabled() || wxGetApp().preset_bundle->printers.get_edited_preset().printer_technology() == ptSLA) ? "gouraud" : "phong";
+    if (!m_shader.is_initialized() || shader_name != m_shader.get_shader()->name)
+    {
+        m_shader.reset();
+        if (shader_name == "gouraud")
+        {
+            if (!m_shader.init("gouraud", "gouraud.vs", "gouraud.fs"))
+            {
+                BOOST_LOG_TRIVIAL(error) << "Unable to initialize gouraud shader: please, check that the files gouraud.vs and gouraud.fs are available";
+                return;
+            }
+        }
+        else
+        {
+            if (!m_shader.init("phong", "phong.vs", "phong.fs"))
+            {
+                BOOST_LOG_TRIVIAL(error) << "Unable to initialize phong shader: please, check that the files phong.vs and phong.fs are available";
+                return;
+            }
+        }
+    }
+#endif // ENABLE_TOOLPATHS_SHADERS
 
     m_shader.start_using();
     if (m_picking_enabled && !m_gizmos.is_dragging() && m_layers_editing.is_enabled() && (m_layers_editing.last_object_id != -1) && (m_layers_editing.object_max_z() > 0.0f)) {

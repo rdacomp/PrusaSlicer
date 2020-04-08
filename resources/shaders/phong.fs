@@ -33,13 +33,11 @@ void main()
     intensity.x = INTENSITY_AMBIENT + NdotL * LIGHT_TOP_DIFFUSE;
     intensity.y = 0.0;
 
-    if (NdotL > 0.0)
-        intensity.y += LIGHT_TOP_SPECULAR * pow(max(dot(-normalize(eye_position), reflect(-LIGHT_TOP_DIR, normal)), 0.0), LIGHT_TOP_SHININESS);
+    intensity.y += LIGHT_TOP_SPECULAR * pow(max(dot(-normalize(eye_position), reflect(-LIGHT_TOP_DIR, normal)), 0.0), LIGHT_TOP_SHININESS);
 
     // Perform the same lighting calculation for the 2nd light source (no specular applied).
     NdotL = max(dot(normal, LIGHT_FRONT_DIR), 0.0);
-    if (NdotL > 0.0)
-        intensity.x += NdotL * LIGHT_FRONT_DIFFUSE;    
+    intensity.x += NdotL * LIGHT_FRONT_DIFFUSE;    
 
     // darkens fragments whose normal points downward
     if (world_normal_z < 0.0)

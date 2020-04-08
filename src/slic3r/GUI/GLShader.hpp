@@ -31,6 +31,9 @@ public:
     void enable() const;
     void disable() const;
 
+#if ENABLE_TOOLPATHS_SHADERS
+    std::string name;
+#endif // ENABLE_TOOLPATHS_SHADERS
     unsigned int    fragment_program_id;
     unsigned int    vertex_program_id;
     unsigned int    shader_program_id;
@@ -45,7 +48,11 @@ public:
     Shader();
     ~Shader();
 
+#if ENABLE_TOOLPATHS_SHADERS
+    bool init(const std::string& name, const std::string& vertex_shader_filename, const std::string& fragment_shader_filename);
+#else
     bool init(const std::string& vertex_shader_filename, const std::string& fragment_shader_filename);
+#endif // ENABLE_TOOLPATHS_SHADERS
 
     bool is_initialized() const;
 
@@ -62,7 +69,9 @@ public:
     const GLShader* get_shader() const { return m_shader; }
     unsigned int get_shader_program_id() const;
 
+#if !ENABLE_TOOLPATHS_SHADERS
 private:
+#endif // !ENABLE_TOOLPATHS_SHADERS
     void reset();
 };
 
