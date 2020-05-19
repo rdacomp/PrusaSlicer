@@ -11,7 +11,7 @@ namespace Slic3r {
 
 namespace MeshBoolean {
 
-using EigenMesh = std::pair<Eigen::MatrixXd, Eigen::MatrixXi>;
+using EigenMesh = std::pair<Eigen::MatrixXf, Eigen::MatrixXi>;
 
 TriangleMesh eigen_to_triangle_mesh(const EigenMesh &emesh);
 EigenMesh triangle_mesh_to_eigen(const TriangleMesh &mesh);

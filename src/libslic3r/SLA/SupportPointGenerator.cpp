@@ -95,8 +95,8 @@ void SupportPointGenerator::project_onto_mesh(std::vector<sla::SupportPoint>& po
                     m_throw_on_cancel();
                 Vec3f& p = points[point_id].pos;
                 // Project the point upward and downward and choose the closer intersection with the mesh.
-                sla::EigenMesh3D::hit_result hit_up   = m_emesh.query_ray_hit(p.cast<double>(), Vec3d(0., 0., 1.));
-                sla::EigenMesh3D::hit_result hit_down = m_emesh.query_ray_hit(p.cast<double>(), Vec3d(0., 0., -1.));
+                sla::EigenMesh3D::hit_result hit_up   = m_emesh.query_ray_hit(p, Vec3f(0.f, 0.f, 1.f));
+                sla::EigenMesh3D::hit_result hit_down = m_emesh.query_ray_hit(p, Vec3f(0.f, 0.f, -1.f));
 
                 bool up   = hit_up.is_hit();
                 bool down = hit_down.is_hit();

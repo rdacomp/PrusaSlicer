@@ -281,7 +281,7 @@ EigenMesh3D::hit_result SupportTreeBuildsteps::pinhead_mesh_intersect(
        // predicate).       
     
        Vec3d n = (p - ps).normalized();
-       auto  q = m.query_ray_hit(ps + sd * n, n);
+       auto  q = m.query_ray_hit((ps + sd * n).cast<float>(), n.cast<float>());
     
        if (q.is_inside()) { // the hit is inside the model
            if (q.distance() > rings.rpin) {
@@ -301,7 +301,7 @@ EigenMesh3D::hit_result SupportTreeBuildsteps::pinhead_mesh_intersect(
                // object. The starting point has an offset
                // of 2*safety_distance because the
                // original ray has also had an offset
-               auto q2 = m.query_ray_hit(ps + (q.distance() + 2 * sd) * n, n);
+               auto q2 = m.query_ray_hit((ps + (q.distance() + 2 * sd) * n).cast<float>(), n.cast<float>());
                hit = q2;
            }
        } else
@@ -330,13 +330,13 @@ EigenMesh3D::hit_result SupportTreeBuildsteps::bridge_mesh_intersect(
         // Point on the circle on the pin sphere
         Vec3d p = ring.get(i, src, r + sd);
         
-        auto hr = m_mesh.query_ray_hit(p + sd * dir, dir);
+        auto hr = m_mesh.query_ray_hit((p + sd * dir).cast<float>(), dir.cast<float>());
         
         if(ins_check && hr.is_inside()) {
             if(hr.distance() > 2 * r + sd) hit = Hit(0.0);
             else {
                 // re-cast the ray from the outside of the object
-                hit = m_mesh.query_ray_hit(p + (hr.distance() + 2 * sd) * dir, dir);
+                hit = m_mesh.query_ray_hit((p + (hr.distance() + 2 * sd) * dir).cast<float>(), dir.cast<float>());
             }
         } else hit = hr;
     });
@@ -576,7 +576,7 @@ void SupportTreeBuildsteps::create_ground_pillar(const Vec3d &jp,
     // To solve this, a corrector bridge is inserted between the starting point
     // (jp) and the new pillar.
     if (m_cfg.object_elevation_mm < EPSILON
-        && (dist = std::sqrt(m_mesh.squared_distance(endp))) < min_dist) {
+        && (dist = std::sqrt(m_mesh.squared_distance(endp.cast<float>()))) < min_dist) {
         // Get the distance from the mesh. This can be later optimized
         // to get the distance in 2D plane because we are dealing with
         // the ground level only.
@@ -605,7 +605,7 @@ void SupportTreeBuildsteps::create_ground_pillar(const Vec3d &jp,
             [this, dir, jp, gndlvl](double mv) {
                 Vec3d endpt = jp + mv * dir;
                 endpt(Z)    = gndlvl;
-                return std::sqrt(m_mesh.squared_distance(endpt));
+                return std::sqrt(m_mesh.squared_distance(endpt.cast<float>()));
             },
             initvals(current_bride_d), 
             bound(0.0, m_cfg.max_bridge_length_mm - current_bride_d));
@@ -709,7 +709,7 @@ void SupportTreeBuildsteps::filter()
         // (Quaternion::FromTwoVectors) and apply the rotation to the
         // arrow head.
         
-        auto [polar, azimuth] = dir_to_spheric(n);
+        auto [polar, azimuth] = dir_to_spheric(n.cast<double>());
         
         // skip if the tilt is not sane
         if(polar >= PI - m_cfg.normal_cutoff_angle) {
@@ -718,7 +718,7 @@ void SupportTreeBuildsteps::filter()
             polar = std::max(polar, 3*PI / 4);
             
             // save the head (pinpoint) position
-            Vec3d hp = m_points.row(fidx);
+            Vec3d hp = m_points.row(fidx).cast<double>();
             
             double w = m_cfg.head_width_mm +
                        m_cfg.head_back_radius_mm +
@@ -774,7 +774,7 @@ void SupportTreeBuildsteps::filter()
             }
             
             // save the verified and corrected normal
-            m_support_nmls.row(fidx) = nn;
+            m_support_nmls.row(fidx) = nn.cast<float>();
             
             if (t.distance() > w) {
                 // Check distance from ground, we might have zero elevation.
@@ -807,7 +807,7 @@ void SupportTreeBuildsteps::add_pinheads()
             m_support_pts[i].head_front_radius,
             m_cfg.head_width_mm,
             m_cfg.head_penetration_mm,
-            m_support_nmls.row(i),         // dir
+            m_support_nmls.row(i).cast<double>(),         // dir
             m_support_pts[i].pos.cast<double>() // displacement
             );
     }
@@ -887,7 +887,7 @@ void SupportTreeBuildsteps::routing_to_ground()
         const auto &points = m_points;
 
         long lcid = cluster_centroid(
-            cl, [&points](size_t idx) { return points.row(long(idx)); },
+            cl, [&points](size_t idx) { return points.row(long(idx)).cast<double>(); },
             [thr](const Vec3d &p1, const Vec3d &p2) {
                 thr();
                 return distance(Vec2d(p1(X), p1(Y)), Vec2d(p2(X), p2(Y)));
@@ -1010,11 +1010,11 @@ bool SupportTreeBuildsteps::connect_to_model_body(Head &head)
     if(h <= 0.) return false;
     
     Vec3d endp{hjp(X), hjp(Y), hjp(Z) - hit.distance() + h};
-    auto center_hit = m_mesh.query_ray_hit(hjp, DOWN);
+    auto center_hit = m_mesh.query_ray_hit(hjp.cast<float>(), DOWN.cast<float>());
 
     double hitdiff = center_hit.distance() - hit.distance();
     Vec3d hitp = std::abs(hitdiff) < 2*head.r_back_mm?
-                     center_hit.position() : hit.position();
+                     center_hit.position().cast<double>() : hit.position().cast<double>();
 
     head.transform();
 
@@ -1225,7 +1225,7 @@ void SupportTreeBuildsteps::interconnect_pillars()
                 
                 // If the path is clear, check for pillar base collisions
                 canplace[n] = std::isinf(hr.distance()) &&
-                              std::sqrt(m_mesh.squared_distance(gndsp)) >
+                              std::sqrt(m_mesh.squared_distance(gndsp.cast<float>())) >
                                   min_dist;
             }
             
@@ -1296,7 +1296,7 @@ void SupportTreeBuildsteps::routing_headless()
         
         // Exact support position
         Vec3d sph = m_support_pts[i].pos.cast<double>();
-        Vec3d n = m_support_nmls.row(i);   // mesh outward normal
+        Vec3d n = m_support_nmls.row(i).cast<double>();   // mesh outward normal
         Vec3d sp = sph - n * HWIDTH_MM;     // stick head start point
         
         Vec3d sj = sp + R * n;              // stick start point

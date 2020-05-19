@@ -11,15 +11,15 @@
 
 namespace Slic3r { namespace sla {
 
-template<class Pt> Vec3d pos(const Pt &p) { return p.pos.template cast<double>(); }
-template<class Pt> void pos(Pt &p, const Vec3d &pp) { p.pos = pp.cast<float>(); }
+template<class Pt> Vec3f pos(const Pt &p) { return p.pos; }
+template<class Pt> void pos(Pt &p, const Vec3f &pp) { p.pos = pp; }
 
 template<class PointType>
 void reproject_support_points(const EigenMesh3D &mesh, std::vector<PointType> &pts)
 {
     tbb::parallel_for(size_t(0), pts.size(), [&mesh, &pts](size_t idx) {
         int junk;
-        Vec3d new_pos;
+        Vec3f new_pos;
         mesh.squared_distance(pos(pts[idx]), junk, new_pos);
         pos(pts[idx], new_pos);
     });

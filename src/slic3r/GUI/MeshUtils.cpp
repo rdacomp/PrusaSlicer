@@ -129,7 +129,7 @@ bool MeshRaycaster::unproject_on_mesh(const Vec2d& mouse_pos, const Transform3d&
     Vec3d direction;
     line_from_mouse_pos(mouse_pos, trafo, camera, point, direction);
 
-    std::vector<sla::EigenMesh3D::hit_result> hits = m_emesh.query_ray_hits(point, direction);
+    std::vector<sla::EigenMesh3D::hit_result> hits = m_emesh.query_ray_hits(point.cast<float>(), direction.cast<float>());
 
     if (hits.empty())
         return false; // no intersection found
@@ -139,7 +139,7 @@ bool MeshRaycaster::unproject_on_mesh(const Vec2d& mouse_pos, const Transform3d&
     // Remove points that are obscured or cut by the clipping plane
     if (clipping_plane) {
         for (i=0; i<hits.size(); ++i)
-            if (! clipping_plane->is_point_clipped(trafo * hits[i].position()))
+            if (! clipping_plane->is_point_clipped(trafo * hits[i].position().cast<double>()))
                 break;
 
         if (i==hits.size() || (hits.size()-i) % 2 != 0) {
@@ -181,19 +181,19 @@ std::vector<unsigned> MeshRaycaster::get_unobscured_idxs(const Geometry::Transfo
         // Cast a ray in the direction of the camera and look for intersection with the mesh:
         std::vector<sla::EigenMesh3D::hit_result> hits;
         // Offset the start of the ray by EPSILON to account for numerical inaccuracies.
-        hits = m_emesh.query_ray_hits((inverse_trafo * pt + direction_to_camera_mesh * EPSILON).cast<double>(),
-                                      direction_to_camera.cast<double>());
+        hits = m_emesh.query_ray_hits((inverse_trafo * pt + direction_to_camera_mesh * EPSILON),
+                                      direction_to_camera);
 
 
         if (! hits.empty()) {
             // If the closest hit facet normal points in the same direction as the ray,
             // we are looking through the mesh and should therefore discard the point:
-            if (hits.front().normal().dot(direction_to_camera_mesh.cast<double>()) > 0)
+            if (hits.front().normal().dot(direction_to_camera_mesh) > 0)
                 is_obscured = true;
 
             // Eradicate all hits that the caller wants to ignore
             for (unsigned j=0; j<hits.size(); ++j) {
-                if (clipping_plane && clipping_plane->is_point_clipped(trafo.get_matrix() * hits[j].position())) {
+                if (clipping_plane && clipping_plane->is_point_clipped(trafo.get_matrix() * hits[j].position().cast<double>())) {
                     hits.erase(hits.begin()+j);
                     --j;
                 }
@@ -214,8 +214,8 @@ std::vector<unsigned> MeshRaycaster::get_unobscured_idxs(const Geometry::Transfo
 Vec3f MeshRaycaster::get_closest_point(const Vec3f& point, Vec3f* normal) const
 {
     int idx = 0;
-    Vec3d closest_point;
-    m_emesh.squared_distance(point.cast<double>(), idx, closest_point);
+    Vec3f closest_point;
+    m_emesh.squared_distance(point, idx, closest_point);
     if (normal)
         *normal = m_normals[idx];
 

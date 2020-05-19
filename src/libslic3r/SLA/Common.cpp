@@ -188,16 +188,16 @@ void BoxIndex::foreach(std::function<void (const BoxIndexEl &)> fn)
  * EigenMesh3D implementation
  * ****************************************************************************/
 
-class EigenMesh3D::AABBImpl: public igl::AABB<Eigen::MatrixXd, 3> {
+class EigenMesh3D::AABBImpl: public igl::AABB<Eigen::MatrixXf, 3> {
 public:
 #ifdef SLIC3R_SLA_NEEDS_WINDTREE
-    igl::WindingNumberAABB<Vec3d, Eigen::MatrixXd, Eigen::MatrixXi> windtree;
+    igl::WindingNumberAABB<Vec3d, Eigen::MatrixXf, Eigen::MatrixXi> windtree;
 #endif /* SLIC3R_SLA_NEEDS_WINDTREE */
 };
 
 static const constexpr double MESH_EPS = 1e-6;
 
-void to_eigen_mesh(const TriangleMesh &tmesh, Eigen::MatrixXd &V, Eigen::MatrixXi &F)
+void to_eigen_mesh(const TriangleMesh &tmesh, Eigen::MatrixXf &V, Eigen::MatrixXi &F)
 {
     const stl_file& stl = tmesh.stl;
     
@@ -205,9 +205,9 @@ void to_eigen_mesh(const TriangleMesh &tmesh, Eigen::MatrixXd &V, Eigen::MatrixX
     F.resize(stl.stats.number_of_facets, 3);
     for (unsigned int i = 0; i < stl.stats.number_of_facets; ++i) {
         const stl_facet &facet = stl.facet_start[i];
-        V.block<1, 3>(3 * i + 0, 0) = facet.vertex[0].cast<double>();
-        V.block<1, 3>(3 * i + 1, 0) = facet.vertex[1].cast<double>();
-        V.block<1, 3>(3 * i + 2, 0) = facet.vertex[2].cast<double>();
+        V.block<1, 3>(3 * i + 0, 0) = facet.vertex[0].cast<float>();
+        V.block<1, 3>(3 * i + 1, 0) = facet.vertex[1].cast<float>();
+        V.block<1, 3>(3 * i + 2, 0) = facet.vertex[2].cast<float>();
         F(i, 0) = int(3*i+0);
         F(i, 1) = int(3*i+1);
         F(i, 2) = int(3*i+2);
@@ -215,7 +215,7 @@ void to_eigen_mesh(const TriangleMesh &tmesh, Eigen::MatrixXd &V, Eigen::MatrixX
     
     if (!tmesh.has_shared_vertices())
     {
-        Eigen::MatrixXd rV;
+        Eigen::MatrixXf rV;
         Eigen::MatrixXi rF;
         // We will convert this to a proper 3d mesh with no duplicate points.
         Eigen::VectorXi SVI, SVJ;
@@ -225,13 +225,13 @@ void to_eigen_mesh(const TriangleMesh &tmesh, Eigen::MatrixXd &V, Eigen::MatrixX
     }
 }
 
-void to_triangle_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, TriangleMesh &out)
+void to_triangle_mesh(const Eigen::MatrixXf &V, const Eigen::MatrixXi &F, TriangleMesh &out)
 {
     Pointf3s points(size_t(V.rows())); 
     std::vector<Vec3i> facets(size_t(F.rows()));
     
     for (Eigen::Index i = 0; i < V.rows(); ++i)
-        points[size_t(i)] = V.row(i);
+        points[size_t(i)] = V.row(i).cast<double>();
     
     for (Eigen::Index i = 0; i < F.rows(); ++i)
         facets[size_t(i)] = F.row(i);
@@ -264,7 +264,7 @@ EigenMesh3D::EigenMesh3D(const Contour3D &other)
     m_F.resize(Eigen::Index(other.faces3.size() + 2 * other.faces4.size()), 3);
     
     for (Eigen::Index i = 0; i < Eigen::Index(other.points.size()); ++i)
-        m_V.row(i) = other.points[size_t(i)];
+        m_V.row(i) = other.points[size_t(i)].cast<float>();
     
     for (Eigen::Index i = 0; i < Eigen::Index(other.faces3.size()); ++i)
         m_F.row(i) = other.faces3[size_t(i)];
@@ -291,9 +291,9 @@ EigenMesh3D &EigenMesh3D::operator=(EigenMesh3D &&other) = default;
 EigenMesh3D::EigenMesh3D(EigenMesh3D &&other) = default;
 
 EigenMesh3D::hit_result
-EigenMesh3D::query_ray_hit(const Vec3d &s, const Vec3d &dir) const
+EigenMesh3D::query_ray_hit(const Vec3f &s, const Vec3f &dir) const
 {
-    assert(is_approx(dir.norm(), 1.));
+    assert(is_approx(dir.norm(), 1.f));
     igl::Hit hit;
     hit.t = std::numeric_limits<float>::infinity();
 
@@ -318,7 +318,7 @@ EigenMesh3D::query_ray_hit(const Vec3d &s, const Vec3d &dir) const
 }
 
 std::vector<EigenMesh3D::hit_result>
-EigenMesh3D::query_ray_hits(const Vec3d &s, const Vec3d &dir) const
+EigenMesh3D::query_ray_hits(const Vec3f &s, const Vec3f &dir) const
 {
     std::vector<EigenMesh3D::hit_result> outs;
     std::vector<igl::Hit> hits;
@@ -352,7 +352,7 @@ EigenMesh3D::query_ray_hits(const Vec3d &s, const Vec3d &dir) const
 }
 
 EigenMesh3D::hit_result EigenMesh3D::filter_hits(
-                     const std::vector<EigenMesh3D::hit_result>& object_hits) const
+        const std::vector<EigenMesh3D::hit_result>& object_hits) const
 {
     assert(! m_holes.empty());
     hit_result out(*this);
@@ -360,15 +360,15 @@ EigenMesh3D::hit_result EigenMesh3D::filter_hits(
     if (object_hits.empty())
         return out;
 
-    const Vec3d& s = object_hits.front().source();
-    const Vec3d& dir = object_hits.front().direction();
+    const Vec3f& s = object_hits.front().source();
+    const Vec3f& dir = object_hits.front().direction();
 
     // A helper struct to save an intersetion with a hole
     struct HoleHit {
-        HoleHit(float t_p, const Vec3d& normal_p, bool entry_p) :
+        HoleHit(float t_p, const Vec3f& normal_p, bool entry_p) :
             t(t_p), normal(normal_p), entry(entry_p) {}
         float t;
-        Vec3d normal;
+        Vec3f normal;
         bool entry;
     };
     std::vector<HoleHit> hole_isects;
@@ -379,7 +379,7 @@ EigenMesh3D::hit_result EigenMesh3D::filter_hits(
 
     // Collect hits on all holes, preserve information about entry/exit
     for (const sla::DrainHole& hole : m_holes) {
-        std::array<std::pair<float, Vec3d>, 2> isects;
+        std::array<std::pair<float, Vec3f>, 2> isects;
         if (hole.get_intersections(sf, dirf, isects)) {
             // Ignore hole hits behind the source
             if (isects[0].first > 0.f) hole_isects.emplace_back(isects[0].first, isects[0].second, true);
@@ -460,10 +460,10 @@ bool EigenMesh3D::inside(const Vec3d &p) const {
 }
 #endif /* SLIC3R_SLA_NEEDS_WINDTREE */
 
-double EigenMesh3D::squared_distance(const Vec3d &p, int& i, Vec3d& c) const {
+double EigenMesh3D::squared_distance(const Vec3f &p, int& i, Vec3f& c) const {
     double sqdst = 0;
-    Eigen::Matrix<double, 1, 3> pp = p;
-    Eigen::Matrix<double, 1, 3> cc;
+    Eigen::Matrix<float, 1, 3> pp = p;
+    Eigen::Matrix<float, 1, 3> cc;
     sqdst = m_aabb->squared_distance(m_V, m_F, pp, i, cc);
     c = cc;
     return sqdst;
@@ -475,13 +475,13 @@ double EigenMesh3D::squared_distance(const Vec3d &p, int& i, Vec3d& c) const {
 
 namespace  {
 
-bool point_on_edge(const Vec3d& p, const Vec3d& e1, const Vec3d& e2,
+bool point_on_edge(const Vec3f& p, const Vec3f& e1, const Vec3f& e2,
                    double eps = 0.05)
 {
-    using Line3D = Eigen::ParametrizedLine<double, 3>;
+    using Line3D = Eigen::ParametrizedLine<float, 3>;
     
     auto line = Line3D::Through(e1, e2);
-    double d = line.distance(p);
+    float d = line.distance(p);
     return std::abs(d) < eps;
 }
 
@@ -516,15 +516,15 @@ PointSet normals(const PointSet& points,
             thr();
             auto  eidx   = Eigen::Index(el);
             int   faceid = 0;
-            Vec3d p;
+            Vec3f p;
 
             mesh.squared_distance(points.row(eidx), faceid, p);
 
             auto trindex = mesh.F().row(faceid);
 
-            const Vec3d &p1 = mesh.V().row(trindex(0));
-            const Vec3d &p2 = mesh.V().row(trindex(1));
-            const Vec3d &p3 = mesh.V().row(trindex(2));
+            const Vec3f &p1 = mesh.V().row(trindex(0));
+            const Vec3f &p2 = mesh.V().row(trindex(1));
+            const Vec3f &p3 = mesh.V().row(trindex(2));
 
             // We should check if the point lies on an edge of the hosting
             // triangle. If it does then all the other triangles using the
@@ -577,14 +577,14 @@ PointSet normals(const PointSet& points,
             }
 
             // Calculate the normals for the neighboring triangles
-            std::vector<Vec3d> neighnorms;
+            std::vector<Vec3f> neighnorms;
             neighnorms.reserve(neigh.size());
             for (const Vec3i &tri : neigh) {
-                const Vec3d &   pt1 = mesh.V().row(tri(0));
-                const Vec3d &   pt2 = mesh.V().row(tri(1));
-                const Vec3d &   pt3 = mesh.V().row(tri(2));
-                Eigen::Vector3d U   = pt2 - pt1;
-                Eigen::Vector3d V   = pt3 - pt1;
+                const Vec3f &   pt1 = mesh.V().row(tri(0));
+                const Vec3f &   pt2 = mesh.V().row(tri(1));
+                const Vec3f &   pt3 = mesh.V().row(tri(2));
+                Eigen::Vector3f U   = pt2 - pt1;
+                Eigen::Vector3f V   = pt3 - pt1;
                 neighnorms.emplace_back(U.cross(V).normalized());
             }
 
@@ -593,15 +593,15 @@ PointSet normals(const PointSet& points,
             // by the coefficient-wise sum of the normals. It should force the
             // same elements to be consecutive.
             std::sort(neighnorms.begin(), neighnorms.end(),
-                      [](const Vec3d &v1, const Vec3d &v2) {
+                      [](const Vec3f &v1, const Vec3f &v2) {
                           return v1.sum() < v2.sum();
                       });
 
             auto lend = std::unique(neighnorms.begin(), neighnorms.end(),
-                                    [](const Vec3d &n1, const Vec3d &n2) {
+                                    [](const Vec3f &n1, const Vec3f &n2) {
                                         // Compare normals for equivalence.
                                         // This is controvers stuff.
-                                        auto deq = [](double a, double b) {
+                                        auto deq = [](float a, float b) {
                                             return std::abs(a - b) < 1e-3;
                                         };
                                         return deq(n1(X), n2(X)) &&
@@ -612,13 +612,13 @@ PointSet normals(const PointSet& points,
             if (!neighnorms.empty()) { // there were neighbors to count with
                 // sum up the normals and then normalize the result again.
                 // This unification seems to be enough.
-                Vec3d sumnorm(0, 0, 0);
+                Vec3f sumnorm(0, 0, 0);
                 sumnorm = std::accumulate(neighnorms.begin(), lend, sumnorm);
                 sumnorm.normalize();
                 ret.row(long(ridx)) = sumnorm;
             } else { // point lies safely within its triangle
-                Eigen::Vector3d U   = p2 - p1;
-                Eigen::Vector3d V   = p3 - p1;
+                Eigen::Vector3f U   = p2 - p1;
+                Eigen::Vector3f V   = p3 - p1;
                 ret.row(long(ridx)) = U.cross(V).normalized();
             }
         });
@@ -760,7 +760,7 @@ ClusteredPoints cluster(const PointSet& pts, double dist, unsigned max_points)
     
     // Build the index
     for(Eigen::Index i = 0; i < pts.rows(); i++)
-        sindex.insert(std::make_pair(Vec3d(pts.row(i)), unsigned(i)));
+        sindex.insert(std::make_pair(Vec3d(pts.row(i).cast<double>()), unsigned(i)));
     
     return cluster(sindex, max_points,
                    [dist, max_points](const Index3D& sidx, const PointIndexEl& p)

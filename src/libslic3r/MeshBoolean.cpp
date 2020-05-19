@@ -32,7 +32,7 @@ TriangleMesh eigen_to_triangle_mesh(const EigenMesh &emesh)
     std::vector<Vec3i> facets(size_t(FC.rows()));
     
     for (Eigen::Index i = 0; i < VC.rows(); ++i)
-        points[size_t(i)] = VC.row(i);
+        points[size_t(i)] = VC.row(i).cast<double>();
     
     for (Eigen::Index i = 0; i < FC.rows(); ++i)
         facets[size_t(i)] = FC.row(i);
@@ -47,7 +47,7 @@ EigenMesh triangle_mesh_to_eigen(const TriangleMesh &mesh)
     EigenMesh emesh;
     emesh.first = MapMatrixXfUnaligned(mesh.its.vertices.front().data(),
                                        Eigen::Index(mesh.its.vertices.size()),
-                                       3).cast<double>();
+                                       3);
 
     emesh.second = MapMatrixXiUnaligned(mesh.its.indices.front().data(),
                                         Eigen::Index(mesh.its.indices.size()),
@@ -60,7 +60,7 @@ void minus(EigenMesh &A, const EigenMesh &B)
     auto &[VA, FA] = A;
     auto &[VB, FB] = B;
     
-    Eigen::MatrixXd VC;
+    Eigen::MatrixXf VC;
     Eigen::MatrixXi FC;
     igl::MeshBooleanType boolean_type(igl::MESH_BOOLEAN_TYPE_MINUS);
     igl::copyleft::cgal::mesh_boolean(VA, FA, VB, FB, boolean_type, VC, FC);
@@ -82,7 +82,7 @@ void self_union(EigenMesh &A)
     auto &[VC, FC] = result;
 
     igl::MeshBooleanType boolean_type(igl::MESH_BOOLEAN_TYPE_UNION);
-    igl::copyleft::cgal::mesh_boolean(V, F, Eigen::MatrixXd(), Eigen::MatrixXi(), boolean_type, VC, FC);
+    igl::copyleft::cgal::mesh_boolean(V, F, Eigen::MatrixXf(), Eigen::MatrixXi(), boolean_type, VC, FC);
     
     A = std::move(result);
 }

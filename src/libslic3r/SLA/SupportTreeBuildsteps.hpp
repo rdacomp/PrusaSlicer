@@ -209,7 +209,7 @@ class SupportTreeBuildsteps {
     inline EigenMesh3D::hit_result ray_mesh_intersect(const Vec3d& s, 
                                                       const Vec3d& dir)
     {
-        return m_mesh.query_ray_hit(s, dir);
+        return m_mesh.query_ray_hit(s.cast<float>(), dir.cast<float>());
     }
 
     // This function will test if a future pinhead would not collide with the

@@ -12,8 +12,8 @@ namespace sla {
 
 struct Contour3D;
 
-void to_eigen_mesh(const TriangleMesh &mesh, Eigen::MatrixXd &V, Eigen::MatrixXi &F);
-void to_triangle_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, TriangleMesh &);
+void to_eigen_mesh(const TriangleMesh &mesh, Eigen::MatrixXf &V, Eigen::MatrixXi &F);
+void to_triangle_mesh(const Eigen::MatrixXf &V, const Eigen::MatrixXi &F, TriangleMesh &);
 
 /// An index-triangle structure for libIGL functions. Also serves as an
 /// alternative (raw) input format for the SLASupportTree.
@@ -21,7 +21,7 @@ void to_triangle_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Triang
 class EigenMesh3D {
     class AABBImpl;
     
-    Eigen::MatrixXd m_V;
+    Eigen::MatrixXf m_V;
     Eigen::MatrixXi m_F;
     double m_ground_level = 0, m_gnd_offset = 0;
     
@@ -48,7 +48,7 @@ public:
     inline void ground_level_offset(double o) { m_gnd_offset = o; }
     inline double ground_level_offset() const { return m_gnd_offset; }
     
-    inline const Eigen::MatrixXd& V() const { return m_V; }
+    inline const Eigen::MatrixXf& V() const { return m_V; }
     inline const Eigen::MatrixXi& F() const { return m_F; }
     
     // Result of a raycast
@@ -57,9 +57,9 @@ public:
         double m_t = infty();
         int m_face_id = -1;
         const EigenMesh3D *m_mesh = nullptr;
-        Vec3d m_dir;
-        Vec3d m_source;
-        Vec3d m_normal;
+        Vec3f m_dir;
+        Vec3f m_source;
+        Vec3f m_normal;
         friend class EigenMesh3D;
         
         // A valid object of this class can only be obtained from
@@ -72,14 +72,14 @@ public:
         explicit inline hit_result(double val = infty()) : m_t(val) {}
         
         inline double distance() const { return m_t; }
-        inline const Vec3d& direction() const { return m_dir; }
-        inline const Vec3d& source() const { return m_source; }
-        inline Vec3d position() const { return m_source + m_dir * m_t; }
+        inline const Vec3f& direction() const { return m_dir; }
+        inline const Vec3f& source() const { return m_source; }
+        inline Vec3f position() const { return m_source + m_dir * m_t; }
         inline int face() const { return m_face_id; }
         inline bool is_valid() const { return m_mesh != nullptr; }
         inline bool is_hit() const { return !std::isinf(m_t); }
 
-        inline const Vec3d& normal() const {
+        inline const Vec3f& normal() const {
             assert(is_valid());
             return m_normal;
         }
@@ -96,10 +96,10 @@ public:
     }
 
     // Casting a ray on the mesh, returns the distance where the hit occures.
-    hit_result query_ray_hit(const Vec3d &s, const Vec3d &dir) const;
+    hit_result query_ray_hit(const Vec3f &s, const Vec3f &dir) const;
     
     // Casts a ray on the mesh and returns all hits
-    std::vector<hit_result> query_ray_hits(const Vec3d &s, const Vec3d &dir) const;
+    std::vector<hit_result> query_ray_hits(const Vec3f &s, const Vec3f &dir) const;
 
     // Iterates over hits and holes and returns the true hit, possibly
     // on the inside of a hole.
@@ -111,8 +111,8 @@ public:
     class si_result {
         double m_value;
         int m_fidx;
-        Vec3d m_p;
-        si_result(double val, int i, const Vec3d& c):
+        Vec3f m_p;
+        si_result(double val, int i, const Vec3f& c):
             m_value(val), m_fidx(i), m_p(c) {}
         friend class EigenMesh3D;
     public:
@@ -121,33 +121,33 @@ public:
         
         double value() const { return m_value; }
         operator double() const { return m_value; }
-        const Vec3d& point_on_mesh() const { return m_p; }
+        const Vec3f& point_on_mesh() const { return m_p; }
         int F_idx() const { return m_fidx; }
     };
 
 #ifdef SLIC3R_SLA_NEEDS_WINDTREE
     // The signed distance from a point to the mesh. Outputs the distance,
     // the index of the triangle and the closest point in mesh coordinate space.
-    si_result signed_distance(const Vec3d& p) const;
+    si_result signed_distance(const Vec3f& p) const;
     
-    bool inside(const Vec3d& p) const;
+    bool inside(const Vec3f& p) const;
 #endif /* SLIC3R_SLA_NEEDS_WINDTREE */
     
-    double squared_distance(const Vec3d& p, int& i, Vec3d& c) const;
-    inline double squared_distance(const Vec3d &p) const
+    double squared_distance(const Vec3f& p, int& i, Vec3f& c) const;
+    inline double squared_distance(const Vec3f &p) const
     {
         int   i;
-        Vec3d c;
+        Vec3f c;
         return squared_distance(p, i, c);
     }
 
-    Vec3d normal_by_face_id(int face_id) const {
+    Vec3f normal_by_face_id(int face_id) const {
         auto trindex    = F().row(face_id);
-        const Vec3d& p1 = V().row(trindex(0));
-        const Vec3d& p2 = V().row(trindex(1));
-        const Vec3d& p3 = V().row(trindex(2));
-        Eigen::Vector3d U = p2 - p1;
-        Eigen::Vector3d V = p3 - p1;
+        const Vec3f& p1 = V().row(trindex(0));
+        const Vec3f& p2 = V().row(trindex(1));
+        const Vec3f& p3 = V().row(trindex(2));
+        Eigen::Vector3f U = p2 - p1;
+        Eigen::Vector3f V = p3 - p1;
         return U.cross(V).normalized();
     }
 };

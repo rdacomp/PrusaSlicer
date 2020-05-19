@@ -23,7 +23,7 @@ typedef Eigen::Matrix<int, 4, 1, Eigen::DontAlign> Vec4i;
 
 namespace sla {
 
-using PointSet = Eigen::MatrixXd;
+using PointSet = Eigen::MatrixXf;
 
 } // namespace sla
 } // namespace Slic3r

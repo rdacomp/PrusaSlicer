@@ -153,14 +153,14 @@ bool DrainHole::is_inside(const Vec3f& pt) const
 // and the normal (points inside the hole). Outputs through out reference,
 // returns true if two intersections were found.
 bool DrainHole::get_intersections(const Vec3f& s, const Vec3f& dir,
-                                  std::array<std::pair<float, Vec3d>, 2>& out)
+                                  std::array<std::pair<float, Vec3f>, 2>& out)
                                   const
 {
     assert(is_approx(normal.norm(), 1.f));
     const Eigen::ParametrizedLine<float, 3> ray(s, dir.normalized());
 
     for (size_t i=0; i<2; ++i)
-        out[i] = std::make_pair(sla::EigenMesh3D::hit_result::infty(), Vec3d::Zero());
+        out[i] = std::make_pair(sla::EigenMesh3D::hit_result::infty(), Vec3f::Zero());
 
     const float sqr_radius = pow(radius, 2.f);
 
@@ -188,7 +188,7 @@ bool DrainHole::get_intersections(const Vec3f& s, const Vec3f& dir,
             // Only accept the point if it is inside the cylinder base.
             if ((cylinder_center-intersection).squaredNorm() < sqr_radius) {
                 out[found].first = ray.intersectionParameter(base);
-                out[found].second = (i==0 ? 1. : -1.) * normal.cast<double>();
+                out[found].second = (i==0 ? 1. : -1.) * normal;
                 ++found;
             }
         }
@@ -221,7 +221,7 @@ bool DrainHole::get_intersections(const Vec3f& s, const Vec3f& dir,
             float par = to_isect.norm() / par_scale;
             if (to_isect.normalized().dot(proj_dir.normalized()) < 0.f)
                 par *= -1.f;
-            Vec3d hit_normal = (pos-isect).normalized().cast<double>();
+            Vec3f hit_normal = (pos-isect).normalized();
             isect = ray.pointAt(par);
             // check that the intersection is between the base planes:
             float vert_dist = base.signedDistance(isect);

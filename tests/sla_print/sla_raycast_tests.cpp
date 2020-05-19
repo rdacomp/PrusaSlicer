@@ -12,7 +12,7 @@ using namespace Slic3r;
 TEST_CASE("Raycaster - find intersections of a line and cylinder")
 {
     sla::DrainHole hole{Vec3f(0,0,0), Vec3f(0,0,1), 5, 10};
-    std::array<std::pair<float, Vec3d>, 2> out;
+    std::array<std::pair<float, Vec3f>, 2> out;
     Vec3f s;
     Vec3f dir;
 
@@ -68,7 +68,7 @@ TEST_CASE("Raycaster with loaded drillholes", "[sla_raycast]")
     sla::EigenMesh3D emesh{cube};
     emesh.load_holes(holes);
     
-    Vec3d s = center.cast<double>();
+    Vec3f s = center;
     // Fire from center, should hit the interior wall
     auto hit = emesh.query_ray_hit(s, {0, 1., 0.});
     REQUIRE(hit.distance() == Approx(boxbb.size().x() / 2 - hcfg.min_thickness));
@@ -86,7 +86,7 @@ TEST_CASE("Raycaster with loaded drillholes", "[sla_raycast]")
     
     // Fire downwards from above the hole cylinder. Has to go through the cyl.
     // as it was not there.
-    s = center.cast<double>();
+    s = center;
     s.z() = boxbb.max.z() - hcfg.min_thickness - 1.;
     hit = emesh.query_ray_hit(s, {0, 0., -1.});
     REQUIRE(hit.distance() == Approx(s.z() - boxbb.min.z() - hcfg.min_thickness));

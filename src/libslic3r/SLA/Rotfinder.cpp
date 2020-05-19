@@ -45,16 +45,16 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
     // the same for subsequent iterations (status goes from 0 to 100 but
     // iterations can be many more)
     auto objfunc = [&emesh, &status, &statuscb, &stopcond, max_tries]
-            (double rx, double ry, double rz)
+            (float rx, float ry, float rz)
     {
         EigenMesh3D& m = emesh;
 
         // prepare the rotation transformation
-        Transform3d rt = Transform3d::Identity();
+        Transform3f rt = Transform3f::Identity();
 
-        rt.rotate(Eigen::AngleAxisd(rz, Vec3d::UnitZ()));
-        rt.rotate(Eigen::AngleAxisd(ry, Vec3d::UnitY()));
-        rt.rotate(Eigen::AngleAxisd(rx, Vec3d::UnitX()));
+        rt.rotate(Eigen::AngleAxisf(rz, Vec3f::UnitZ()));
+        rt.rotate(Eigen::AngleAxisf(ry, Vec3f::UnitY()));
+        rt.rotate(Eigen::AngleAxisf(rx, Vec3f::UnitX()));
 
         double score = 0;
 
@@ -71,12 +71,12 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
         for(int i = 0; i < m.F().rows(); i++) {
             auto idx = m.F().row(i);
 
-            Vec3d p1 = m.V().row(idx(0));
-            Vec3d p2 = m.V().row(idx(1));
-            Vec3d p3 = m.V().row(idx(2));
+            Vec3f p1 = m.V().row(idx(0));
+            Vec3f p2 = m.V().row(idx(1));
+            Vec3f p3 = m.V().row(idx(2));
 
-            Eigen::Vector3d U = p2 - p1;
-            Eigen::Vector3d V = p3 - p1;
+            Eigen::Vector3f U = p2 - p1;
+            Eigen::Vector3f V = p3 - p1;
 
             // So this is the normal
             auto n = U.cross(V).normalized();
@@ -85,9 +85,9 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
             n = rt * n;
 
             // We should score against the alignment with the reference planes
-            score += std::abs(n.dot(Vec3d::UnitX()));
-            score += std::abs(n.dot(Vec3d::UnitY()));
-            score += std::abs(n.dot(Vec3d::UnitZ()));
+            score += std::abs(n.dot(Vec3f::UnitX()));
+            score += std::abs(n.dot(Vec3f::UnitY()));
+            score += std::abs(n.dot(Vec3f::UnitZ()));
         }
 
         // report status
@@ -106,11 +106,11 @@ std::array<double, 3> find_best_rotation(const ModelObject& modelobj,
     // We are searching rotations around the three axes x, y, z. Thus the
     // problem becomes a 3 dimensional optimization task.
     // We can specify the bounds for a dimension in the following way:
-    auto b = bound(-PI/2, PI/2);
+    auto b = bound(float(-PI/2), float(PI/2));
 
     // Now we start the optimization process with initial angles (0, 0, 0)
     auto result = solver.optimize_max(objfunc,
-                                      libnest2d::opt::initvals(0.0, 0.0, 0.0),
+                                      libnest2d::opt::initvals(0.f, 0.f, 0.f),
                                       b, b, b);
 
     // Save the result and fck off
