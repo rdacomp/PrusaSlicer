@@ -18,9 +18,10 @@
 #include <float.h>
 
 #include <algorithm>
+#include <libslic3r/filesystem.hpp>
 #include <limits>
 #include <unordered_set>
-#include <boost/filesystem/path.hpp>
+
 #include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
 
@@ -2208,7 +2209,7 @@ std::string PrintStatistics::finalize_output_path(const std::string &path_in) co
 {
     std::string final_path;
     try {
-        boost::filesystem::path path(path_in);
+        filesystem::path path(path_in);
         DynamicConfig cfg = this->config();
         PlaceholderParser pp;
         std::string new_stem = pp.process(path.stem().string(), 0, &cfg);

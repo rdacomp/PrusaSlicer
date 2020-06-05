@@ -2,7 +2,7 @@
 
 #include <numeric>
 #include <iostream>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/ExPolygon.hpp"

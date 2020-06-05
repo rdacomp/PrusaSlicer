@@ -5,7 +5,7 @@
 #include "libslic3r/ModelArrange.hpp"
 
 #include <boost/nowide/cstdio.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include "test_data.hpp"
 
@@ -49,11 +49,11 @@ SCENARIO("Model construction", "[Model]") {
 				print.set_status_silent();
 				print.apply(model, config);
 				print.process();
-				boost::filesystem::path temp = boost::filesystem::unique_path();
+                filesystem::path temp = gen_temp_file_path("slic3r-test-", ".gcode");
 				print.export_gcode(temp.string(), nullptr);
-				REQUIRE(boost::filesystem::exists(temp));
-				REQUIRE(boost::filesystem::is_regular_file(temp));
-				REQUIRE(boost::filesystem::file_size(temp) > 0);
+				REQUIRE(filesystem::exists(temp));
+				REQUIRE(filesystem::is_regular_file(temp));
+				REQUIRE(filesystem::file_size(temp) > 0);
 				boost::nowide::remove(temp.string().c_str());
 			}
         }

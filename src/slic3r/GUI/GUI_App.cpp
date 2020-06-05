@@ -1317,7 +1317,7 @@ void GUI_App::gcode_thumbnails_debug()
         return;
 
     std::string in_filename = into_u8(dialog.GetPath());
-    std::string out_path = boost::filesystem::path(in_filename).remove_filename().append(L"thumbnail").string();
+    std::string out_path = filesystem::path(in_filename).remove_filename().append(L"thumbnail").string();
 
     boost::nowide::ifstream in_file(in_filename.c_str());
     std::vector<std::string> rows;

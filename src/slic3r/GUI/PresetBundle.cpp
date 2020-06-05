@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <fstream>
 #include <unordered_set>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/algorithm/clamp.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -170,8 +170,8 @@ void PresetBundle::reset(bool delete_files)
 
 void PresetBundle::setup_directories()
 {
-    boost::filesystem::path data_dir = boost::filesystem::path(Slic3r::data_dir());
-    std::initializer_list<boost::filesystem::path> paths = { 
+    filesystem::path data_dir = filesystem::path(Slic3r::data_dir());
+    std::initializer_list<filesystem::path> paths = { 
         data_dir,
 		data_dir / "vendor",
         data_dir / "cache",
@@ -192,11 +192,11 @@ void PresetBundle::setup_directories()
         data_dir / "printer" 
 #endif
     };
-    for (const boost::filesystem::path &path : paths) {
-		boost::filesystem::path subdir = path;
+    for (const filesystem::path &path : paths) {
+		filesystem::path subdir = path;
         subdir.make_preferred();
-        if (! boost::filesystem::is_directory(subdir) && 
-            ! boost::filesystem::create_directory(subdir))
+        if (! filesystem::is_directory(subdir) && 
+            ! filesystem::create_directory(subdir))
             throw std::runtime_error(std::string("Slic3r was unable to create its data directory at ") + subdir.string());
     }
 }
@@ -252,10 +252,10 @@ void PresetBundle::load_presets(AppConfig &config, const std::string &preferred_
 std::string PresetBundle::load_system_presets()
 {
     // Here the vendor specific read only Config Bundles are stored.
-    boost::filesystem::path dir = (boost::filesystem::path(data_dir()) / "vendor").make_preferred();
+    filesystem::path dir = (filesystem::path(data_dir()) / "vendor").make_preferred();
     std::string errors_cummulative;
     bool        first = true;
-    for (auto &dir_entry : boost::filesystem::directory_iterator(dir))
+    for (auto &dir_entry : filesystem::directory_iterator(dir))
         if (Slic3r::is_ini_file(dir_entry)) {
             std::string name = dir_entry.path().filename().string();
             // Remove the .ini suffix.
@@ -788,7 +788,7 @@ void PresetBundle::load_config_file_config(const std::string &name_or_path, bool
 
     // 1) Create a name from the file name.
     // Keep the suffix (.ini, .gcode, .amf, .3mf etc) to differentiate it from the normal profiles.
-    std::string name = is_external ? boost::filesystem::path(name_or_path).filename().string() : name_or_path;
+    std::string name = is_external ? filesystem::path(name_or_path).filename().string() : name_or_path;
 
     // 2) If the loading succeeded, split and load the config into print / filament / printer settings.
     // First load the print and printer presets.
@@ -908,7 +908,7 @@ void PresetBundle::load_config_file_config_bundle(const std::string &path, const
     PresetBundle tmp_bundle;
     // Load the config bundle, don't save the loaded presets to user profile directory.
     tmp_bundle.load_configbundle(path, 0);
-    std::string bundle_name = std::string(" - ") + boost::filesystem::path(path).filename().string();
+    std::string bundle_name = std::string(" - ") + filesystem::path(path).filename().string();
 
     // 2) Extract active configs from the config bundle, copy them and activate them in this bundle.
     auto load_one = [this, &path, &bundle_name](PresetCollection &collection_dst, PresetCollection &collection_src, const std::string &preset_name_src, bool activate) -> std::string {
@@ -1313,7 +1313,7 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
             }
             // Decide a full path to this .ini file.
             auto file_name = boost::algorithm::iends_with(preset_name, ".ini") ? preset_name : preset_name + ".ini";
-            auto file_path = (boost::filesystem::path(data_dir()) 
+            auto file_path = (filesystem::path(data_dir()) 
 #ifdef SLIC3R_PROFILE_USE_PRESETS_SUBDIR
                 // Store the print/filament/printer presets into a "presets" directory.
                 / "presets" 

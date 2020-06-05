@@ -3,7 +3,7 @@
 #include "libslic3r/Time.hpp"
 
 #include <boost/log/trivial.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include "libslic3r/Zipper.hpp"
 #include "libslic3r/SLAPrint.hpp"
@@ -137,7 +137,7 @@ void SL1Archive::export_print(Zipper& zipper,
 {
     std::string project =
         prjname.empty() ?
-            boost::filesystem::path(zipper.get_filename()).stem().string() :
+            filesystem::path(zipper.get_filename()).stem().string() :
             prjname;
     
     ConfMap iniconf, slicerconf;

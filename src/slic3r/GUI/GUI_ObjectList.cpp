@@ -2085,7 +2085,7 @@ void ObjectList::load_part( ModelObject* model_object,
                 volume->translate(delta);
                 auto new_volume = model_object->add_volume(*volume);
                 new_volume->set_type(type);
-                new_volume->name = boost::filesystem::path(input_file).filename().string();
+                new_volume->name = filesystem::path(input_file).filename().string();
 
                 volumes_info.push_back(std::make_pair(from_u8(new_volume->name), new_volume->get_mesh_errors_count()>0));
 

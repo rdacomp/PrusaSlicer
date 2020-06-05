@@ -6,10 +6,10 @@
 #include <ostream>
 #include <utility>
 #include <stdexcept>
+#include <libslic3r/filesystem.hpp>
+#include <fstream>
 #include <boost/format.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/log/trivial.hpp>
 
@@ -31,7 +31,7 @@
 #include "slic3r/Config/Version.hpp"
 #include "slic3r/Config/Snapshot.hpp"
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 using Slic3r::GUI::Config::Index;
 using Slic3r::GUI::Config::Version;
 using Slic3r::GUI::Config::Snapshot;
@@ -55,7 +55,7 @@ static const char *TMP_EXTENSION = ".download";
 
 void copy_file_fix(const fs::path &source, const fs::path &target)
 {
-	static const auto perms = fs::owner_read | fs::owner_write | fs::group_read | fs::others_read;   // aka 644
+	static const auto perms = fs::perms::owner_read | fs::perms::owner_write | fs::perms::group_read | fs::perms::others_read;   // aka 644
 
 	BOOST_LOG_TRIVIAL(debug) << format("PresetUpdater: Copying %1% -> %2%", source, target);
 
@@ -63,7 +63,7 @@ void copy_file_fix(const fs::path &source, const fs::path &target)
 	if (fs::exists(target)) {
 		fs::permissions(target, perms);
 	}
-	fs::copy_file(source, target, fs::copy_option::overwrite_if_exists);
+    fs::copy_file(source, target, fs::copy_options::overwrite_existing);
 	fs::permissions(target, perms);
 }
 
@@ -212,7 +212,7 @@ bool PresetUpdater::priv::get_file(const std::string &url, const fs::path &targe
 				error);
 		})
 		.on_complete([&](std::string body, unsigned /* http_status */) {
-			fs::fstream file(tmp_path, std::ios::out | std::ios::binary | std::ios::trunc);
+            std::fstream file(tmp_path, std::ios::out | std::ios::binary | std::ios::trunc);
 			file.write(body.c_str(), body.size());
 			file.close();
 			fs::rename(tmp_path, target_path);
@@ -226,7 +226,7 @@ bool PresetUpdater::priv::get_file(const std::string &url, const fs::path &targe
 // Remove leftover paritally downloaded files, if any.
 void PresetUpdater::priv::prune_tmps() const
 {
-    for (auto &dir_entry : boost::filesystem::directory_iterator(cache_path))
+    for (auto &dir_entry : filesystem::directory_iterator(cache_path))
 		if (is_plain_file(dir_entry) && dir_entry.path().extension() == TMP_EXTENSION) {
 			BOOST_LOG_TRIVIAL(debug) << "Cache prune: " << dir_entry.path().string();
 			fs::remove(dir_entry.path());
@@ -361,7 +361,7 @@ void PresetUpdater::priv::check_install_indices() const
 {
 	BOOST_LOG_TRIVIAL(info) << "Checking if indices need to be installed from resources...";
 
-    for (auto &dir_entry : boost::filesystem::directory_iterator(rsrc_path))
+    for (auto &dir_entry : filesystem::directory_iterator(rsrc_path))
 		if (is_idx_file(dir_entry)) {
 			const auto &path = dir_entry.path();
 			const auto path_in_cache = cache_path / path.filename();

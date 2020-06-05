@@ -3,8 +3,7 @@
 
 #include <string>
 #include <vector>
-
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include "libslic3r/FileParserError.hpp"
 #include "libslic3r/Semver.hpp"
@@ -57,7 +56,7 @@ public:
     typedef std::vector<Version>::const_iterator const_iterator;
 	// Read a config index file in the simple format described in the Index class comment.
 	// Throws Slic3r::file_parser_error and the standard std file access exceptions.
-	size_t						load(const boost::filesystem::path &path);
+	size_t						load(const filesystem::path &path);
 
 	const std::string&			vendor() const { return m_vendor; }
 	// Returns version of the index as the highest version of all the configs.
@@ -76,7 +75,7 @@ public:
 	const_iterator				recommended(const Semver &slic3r_version) const;
 
 	// Returns the filesystem path from which this index has originally been loaded
-	const boost::filesystem::path& path() const { return m_path; }
+	const filesystem::path& path() const { return m_path; }
 
 	// Load all vendor specific indices.
 	// Throws Slic3r::file_parser_error and the standard std file access exceptions.
@@ -85,7 +84,7 @@ public:
 private:
 	std::string 				m_vendor;
 	std::vector<Version>		m_configs;
-	boost::filesystem::path		m_path;
+	filesystem::path			m_path;
 };
 
 } // namespace Config

@@ -22,13 +22,13 @@
 #include "libslic3r/GCode/PreviewData.hpp"
 #include "libslic3r/Format/SL1.hpp"
 #include "libslic3r/libslic3r.h"
+#include "libslic3r/filesystem.hpp"
 
 #include <cassert>
 #include <stdexcept>
 #include <cctype>
 
 #include <boost/format/format_fwd.hpp>
-#include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/nowide/cstdio.hpp>
 #include "I18N.hpp"
@@ -41,8 +41,8 @@ namespace Slic3r {
 
 BackgroundSlicingProcess::BackgroundSlicingProcess()
 {
-    boost::filesystem::path temp_path(wxStandardPaths::Get().GetTempDir().utf8_str().data());
-    temp_path /= (boost::format(".%1%.gcode") % get_current_pid()).str();
+    filesystem::path temp_path = filesystem::temp_directory_path() / 
+    	(boost::format(".%1%.gcode") % get_current_pid()).str();
 	m_temp_output_path = temp_path.string();
 }
 
@@ -75,7 +75,7 @@ PrinterTechnology BackgroundSlicingProcess::current_printer_technology() const
 	return m_print->technology();
 }
 
-std::string BackgroundSlicingProcess::output_filepath_for_project(const boost::filesystem::path &project_path)
+std::string BackgroundSlicingProcess::output_filepath_for_project(const filesystem::path &project_path)
 {
 	assert(m_print != nullptr);
     if (project_path.empty())
@@ -461,11 +461,8 @@ void BackgroundSlicingProcess::prepare_upload()
 {
 	// A print host upload job has been scheduled, enqueue it to the printhost job queue
 
-	// XXX: is fs::path::string() right?
-
 	// Generate a unique temp path to which the gcode/zip file is copied/exported
-	boost::filesystem::path source_path = boost::filesystem::temp_directory_path()
-		/ boost::filesystem::unique_path("." SLIC3R_APP_KEY ".upload.%%%%-%%%%-%%%%-%%%%");
+    filesystem::path source_path = gen_temp_file_path(SLIC3R_APP_KEY ".upload.", "");
 
 	if (m_print == m_fff_print) {
 		m_print->set_status(95, _utf8(L("Running post-processing scripts")));

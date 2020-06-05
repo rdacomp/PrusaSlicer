@@ -1427,7 +1427,7 @@ void MainFrame::update_ui_from_settings()
 
 std::string MainFrame::get_base_name(const wxString &full_name, const char *extension) const 
 {
-    boost::filesystem::path filename = boost::filesystem::path(full_name.wx_str()).filename();
+    filesystem::path filename = filesystem::path(full_name.wx_str()).filename();
     if (extension != nullptr)
 		filename = filename.replace_extension(extension);
     return filename.string();
@@ -1435,7 +1435,7 @@ std::string MainFrame::get_base_name(const wxString &full_name, const char *exte
 
 std::string MainFrame::get_dir_name(const wxString &full_name) const 
 {
-    return boost::filesystem::path(full_name.wx_str()).parent_path().string();
+    return filesystem::path(full_name.wx_str()).parent_path().string();
 }
 
 

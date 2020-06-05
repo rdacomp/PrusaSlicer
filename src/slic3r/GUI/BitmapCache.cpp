@@ -4,7 +4,7 @@
 #include "../Utils/MacDarkMode.hpp"
 #include "GUI.hpp"
 
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #if ! defined(WIN32) && ! defined(__APPLE__)
 #define BROKEN_ALPHA
@@ -284,8 +284,8 @@ wxBitmap* BitmapCache::load_svg(const std::string &bitmap_name, unsigned target_
         // It's expensive to check if the bitmap exists every time, but otherwise:
         // For the case, when application was started in Light mode and then switched to the Dark,
         // we will never get a white bitmaps, if check m_map.find(bitmap_key) 
-        // before boost::filesystem::exists(var(folder + bitmap_name + ".svg"))
-        if (!boost::filesystem::exists(var(folder + bitmap_name + ".svg"))) {
+        // before filesystem::exists(var(folder + bitmap_name + ".svg"))
+        if (!filesystem::exists(var(folder + bitmap_name + ".svg"))) {
             folder.clear();
         
             it = m_map.find(bitmap_key);

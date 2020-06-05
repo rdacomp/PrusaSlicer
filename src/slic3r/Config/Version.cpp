@@ -1,8 +1,8 @@
 #include "Version.hpp"
 
 #include <cctype>
+#include <libslic3r/filesystem.hpp>
 
-#include <boost/filesystem/operations.hpp>
 #include <boost/nowide/fstream.hpp>
 
 #include "libslic3r/libslic3r.h"
@@ -190,7 +190,7 @@ inline std::string unquote_version_comment(char *value, char *end, const std::st
 	return svalue;
 }
 
-size_t Index::load(const boost::filesystem::path &path)
+size_t Index::load(const filesystem::path &path)
 {
 	m_configs.clear();
 	m_vendor = path.stem().string();
@@ -306,11 +306,11 @@ Index::const_iterator Index::recommended() const
 
 std::vector<Index> Index::load_db()
 {
-    boost::filesystem::path cache_dir = boost::filesystem::path(Slic3r::data_dir()) / "cache";
+    filesystem::path cache_dir = filesystem::path(Slic3r::data_dir()) / "cache";
 
     std::vector<Index> index_db;
     std::string errors_cummulative;
-	for (auto &dir_entry : boost::filesystem::directory_iterator(cache_dir))
+	for (auto &dir_entry : filesystem::directory_iterator(cache_dir))
         if (Slic3r::is_idx_file(dir_entry)) {
         	Index idx;
             try {

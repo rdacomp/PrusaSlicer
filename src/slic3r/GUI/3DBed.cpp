@@ -12,8 +12,9 @@
 
 #include <GL/glew.h>
 
+#include <libslic3r/filesystem.hpp>
+
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem/operations.hpp>
 
 static const float GROUND_Z = -0.02f;
 
@@ -196,11 +197,11 @@ Bed3D::Bed3D()
 bool Bed3D::set_shape(const Pointfs& shape, const std::string& custom_texture, const std::string& custom_model)
 {
     auto check_texture = [](const std::string& texture) {
-        return !texture.empty() && (boost::algorithm::iends_with(texture, ".png") || boost::algorithm::iends_with(texture, ".svg")) && boost::filesystem::exists(texture);
+        return !texture.empty() && (boost::algorithm::iends_with(texture, ".png") || boost::algorithm::iends_with(texture, ".svg")) && filesystem::exists(texture);
     };
 
     auto check_model = [](const std::string& model) {
-        return !model.empty() && boost::algorithm::iends_with(model, ".stl") && boost::filesystem::exists(model);
+        return !model.empty() && boost::algorithm::iends_with(model, ".stl") && filesystem::exists(model);
     };
 
     auto [new_type, system_model, system_texture] = detect_type(shape);

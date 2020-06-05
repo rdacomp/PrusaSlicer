@@ -11,12 +11,12 @@
 
 #include <limits>
 #include <stdexcept>
+#include <libslic3r/filesystem.hpp>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/filesystem/operations.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/cstdio.hpp>
 
@@ -574,7 +574,7 @@ namespace Slic3r {
 
         mz_zip_archive_file_stat stat;
 
-        m_name = boost::filesystem::path(filename).filename().stem().string();
+        m_name = filesystem::path(filename).filename().stem().string();
 
         // we first loop the entries to read from the archive the .model file only, in order to extract the version from it
         for (mz_uint i = 0; i < num_entries; ++i)
@@ -2007,7 +2007,7 @@ namespace Slic3r {
         if (!_add_content_types_file_to_archive(archive))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
@@ -2017,7 +2017,7 @@ namespace Slic3r {
             if (!_add_thumbnail_file_to_archive(archive, *thumbnail_data))
             {
                 close_zip_writer(&archive);
-                boost::filesystem::remove(filename);
+                filesystem::remove(filename);
                 return false;
             }
         }
@@ -2028,7 +2028,7 @@ namespace Slic3r {
         if (!_add_relationships_file_to_archive(archive))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
@@ -2038,7 +2038,7 @@ namespace Slic3r {
         if (!_add_model_file_to_archive(archive, model, objects_data))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
@@ -2048,7 +2048,7 @@ namespace Slic3r {
         if (!_add_layer_height_profile_file_to_archive(archive, model))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
@@ -2058,7 +2058,7 @@ namespace Slic3r {
         if (!_add_layer_config_ranges_file_to_archive(archive, model))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
@@ -2068,14 +2068,14 @@ namespace Slic3r {
         if (!_add_sla_support_points_file_to_archive(archive, model))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
         
         if (!_add_sla_drain_holes_file_to_archive(archive, model))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
         
@@ -2085,7 +2085,7 @@ namespace Slic3r {
         if (!_add_custom_gcode_per_print_z_file_to_archive(archive, model))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
@@ -2096,7 +2096,7 @@ namespace Slic3r {
             if (!_add_print_config_file_to_archive(archive, *config))
             {
                 close_zip_writer(&archive);
-                boost::filesystem::remove(filename);
+                filesystem::remove(filename);
                 return false;
             }
         }
@@ -2108,14 +2108,14 @@ namespace Slic3r {
         if (!_add_model_config_file_to_archive(archive, model, objects_data))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             return false;
         }
 
         if (!mz_zip_writer_finalize_archive(&archive))
         {
             close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
+            filesystem::remove(filename);
             add_error("Unable to finalize the archive");
             return false;
         }
@@ -2665,7 +2665,7 @@ namespace Slic3r {
                             // stores volume's source data
                             if (!volume->source.input_file.empty())
                             {
-                                std::string input_file = xml_escape(m_fullpath_sources ? volume->source.input_file : boost::filesystem::path(volume->source.input_file).filename().string());
+                                std::string input_file = xml_escape(m_fullpath_sources ? volume->source.input_file : filesystem::path(volume->source.input_file).filename().string());
                                 stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << VOLUME_TYPE << "\" " << KEY_ATTR << "=\"" << SOURCE_FILE_KEY << "\" " << VALUE_ATTR << "=\"" << input_file << "\"/>\n";
                                 stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << VOLUME_TYPE << "\" " << KEY_ATTR << "=\"" << SOURCE_OBJECT_ID_KEY << "\" " << VALUE_ATTR << "=\"" << volume->source.object_idx << "\"/>\n";
                                 stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << VOLUME_TYPE << "\" " << KEY_ATTR << "=\"" << SOURCE_VOLUME_ID_KEY << "\" " << VALUE_ATTR << "=\"" << volume->source.volume_idx << "\"/>\n";

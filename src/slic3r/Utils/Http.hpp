@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <functional>
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 
 namespace Slic3r {
@@ -71,14 +71,14 @@ public:
 	// Add a HTTP multipart form field
 	Http& form_add(const std::string &name, const std::string &contents);
 	// Add a HTTP multipart form file data contents, `name` is the name of the part
-	Http& form_add_file(const std::string &name, const boost::filesystem::path &path);
+	Http& form_add_file(const std::string &name, const filesystem::path &path);
 	// Same as above except also override the file's filename with a custom one
-	Http& form_add_file(const std::string &name, const boost::filesystem::path &path, const std::string &filename);
+	Http& form_add_file(const std::string &name, const filesystem::path &path, const std::string &filename);
 
 	// Set the file contents as a POST request body.
 	// The data is used verbatim, it is not additionally encoded in any way.
 	// This can be used for hosts which do not support multipart requests.
-	Http& set_post_body(const boost::filesystem::path &path);
+	Http& set_post_body(const filesystem::path &path);
 
 	// Callback called on HTTP request complete
 	Http& on_complete(CompleteFn fn);

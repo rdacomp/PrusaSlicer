@@ -5,6 +5,8 @@
 #include <ctime>
 #include <cstdarg>
 #include <stdio.h>
+#include <libslic3r/filesystem.hpp>
+#include <system_error>
 
 #include "Time.hpp"
 
@@ -31,8 +33,6 @@
 #include <boost/locale.hpp>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/path.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/convert.hpp>
 #include <boost/nowide/cstdio.hpp>
@@ -131,7 +131,7 @@ const std::string& var_dir()
 
 std::string var(const std::string &file_name)
 {
-    auto file = (boost::filesystem::path(g_var_dir) / file_name).make_preferred();
+    auto file = (filesystem::path(g_var_dir) / file_name).make_preferred();
     return file.string();
 }
 
@@ -419,9 +419,9 @@ std::error_code rename_file(const std::string &from, const std::string &to)
 
 CopyFileResult copy_file_inner(const std::string& from, const std::string& to)
 {
-	const boost::filesystem::path source(from);
-	const boost::filesystem::path target(to);
-	static const auto perms = boost::filesystem::owner_read | boost::filesystem::owner_write | boost::filesystem::group_read | boost::filesystem::others_read;   // aka 644
+	const filesystem::path source(from);
+	const filesystem::path target(to);
+    static const auto perms = filesystem::perms::owner_read | filesystem::perms::owner_write | filesystem::perms::group_read | filesystem::perms::others_read;   // aka 644
 
 	// Make sure the file has correct permission both before and after we copy over it.
 	// NOTE: error_code variants are used here to supress expception throwing.
@@ -429,13 +429,13 @@ CopyFileResult copy_file_inner(const std::string& from, const std::string& to)
 	// the copy_file() function will fail appropriately and we don't want the permission()
 	// calls to cause needless failures on permissionless filesystems (ie. FATs on SD cards etc.)
 	// or when the target file doesn't exist.
-	boost::system::error_code ec;
-	boost::filesystem::permissions(target, perms, ec);
-	boost::filesystem::copy_file(source, target, boost::filesystem::copy_option::overwrite_if_exists, ec);
+    std::error_code ec;
+    filesystem::permissions(target, perms, ec);
+    filesystem::copy_file(source, target, filesystem::copy_options::overwrite_existing, ec);
 	if (ec) {
 		return FAIL_COPY_FILE;
 	}
-	boost::filesystem::permissions(target, perms, ec);
+	filesystem::permissions(target, perms, ec);
 	return SUCCESS;
 }
 
@@ -493,9 +493,9 @@ CopyFileResult check_copy(const std::string &origin, const std::string &copy)
 
 // Ignore system and hidden files, which may be created by the DropBox synchronisation process.
 // https://github.com/prusa3d/PrusaSlicer/issues/1298
-bool is_plain_file(const boost::filesystem::directory_entry &dir_entry)
+bool is_plain_file(const filesystem::directory_entry &dir_entry)
 {
-    if (! boost::filesystem::is_regular_file(dir_entry.status()))
+    if (! filesystem::is_regular_file(dir_entry.status()))
         return false;
 #ifdef _MSC_VER
     DWORD attributes = GetFileAttributesW(boost::nowide::widen(dir_entry.path().string()).c_str());
@@ -505,12 +505,12 @@ bool is_plain_file(const boost::filesystem::directory_entry &dir_entry)
 #endif
 }
 
-bool is_ini_file(const boost::filesystem::directory_entry &dir_entry)
+bool is_ini_file(const filesystem::directory_entry &dir_entry)
 {
     return is_plain_file(dir_entry) && strcasecmp(dir_entry.path().extension().string().c_str(), ".ini") == 0;
 }
 
-bool is_idx_file(const boost::filesystem::directory_entry &dir_entry)
+bool is_idx_file(const filesystem::directory_entry &dir_entry)
 {
 	return is_plain_file(dir_entry) && strcasecmp(dir_entry.path().extension().string().c_str(), ".idx") == 0;
 }
@@ -570,13 +570,13 @@ std::string normalize_utf8_nfc(const char *src)
 
 namespace PerlUtils {
     // Get a file name including the extension.
-    std::string path_to_filename(const char *src)       { return boost::filesystem::path(src).filename().string(); }
+    std::string path_to_filename(const char *src)       { return filesystem::path(src).filename().string(); }
     // Get a file name without the extension.
-    std::string path_to_stem(const char *src)           { return boost::filesystem::path(src).stem().string(); }
+    std::string path_to_stem(const char *src)           { return filesystem::path(src).stem().string(); }
     // Get just the extension.
-    std::string path_to_extension(const char *src)      { return boost::filesystem::path(src).extension().string(); }
+    std::string path_to_extension(const char *src)      { return filesystem::path(src).extension().string(); }
     // Get a directory without the trailing slash.
-    std::string path_to_parent_path(const char *src)    { return boost::filesystem::path(src).parent_path().string(); }
+    std::string path_to_parent_path(const char *src)    { return filesystem::path(src).parent_path().string(); }
 };
 
 

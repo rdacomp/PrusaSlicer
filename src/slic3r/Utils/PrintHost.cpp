@@ -5,7 +5,7 @@
 #include <exception>
 #include <boost/optional.hpp>
 #include <boost/log/trivial.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include <wx/string.h>
 #include <wx/app.h>
@@ -18,7 +18,7 @@
 #include "AstroBox.hpp"
 #include "../GUI/PrintHostDialogs.hpp"
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 using boost::optional;
 using Slic3r::GUI::PrintHostQueueDialog;
 
@@ -230,7 +230,7 @@ void PrintHostJobQueue::priv::progress_fn(Http::Progress progress, bool &cancel)
 void PrintHostJobQueue::priv::remove_source(const fs::path &path)
 {
     if (! path.empty()) {
-        boost::system::error_code ec;
+        std::error_code ec;
         fs::remove(path, ec);
         if (ec) {
             BOOST_LOG_TRIVIAL(error) << boost::format("PrintHostJobQueue: Error removing file `%1%`: %2%") % path % ec;

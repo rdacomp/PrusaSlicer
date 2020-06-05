@@ -30,7 +30,6 @@
 #include <deque>
 #include <Eigen/Dense>
 #include <exception> 
-#include <exception>
 #include <fstream>
 #include <functional>
 #include <future>
@@ -63,11 +62,7 @@
 #include <boost/any.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ip/address.hpp>
-#include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/endian/conversion.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
-#include <boost/filesystem/path.hpp>
 #include <boost/format.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/locale.hpp>
@@ -182,6 +177,7 @@
 #include "libslic3r/Polyline.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/ClipperUtils.hpp"
+#include "libslic3r/filesystem.hpp"
 #include "libslic3r/libslic3r.h"
 
 #ifdef _WIN32

@@ -4,7 +4,7 @@
 #include "libslic3r/Format/3mf.hpp"
 #include "libslic3r/Format/STL.hpp"
 
-#include <boost/filesystem/operations.hpp>
+#include <libslic3r/filesystem.hpp>
 
 using namespace Slic3r;
 
@@ -57,7 +57,7 @@ SCENARIO("Export+Import geometry to/from 3mf file cycle", "[3mf]") {
             Model dst_model;
             DynamicPrintConfig dst_config;
             load_3mf(test_file.c_str(), &dst_config, &dst_model, false);
-            boost::filesystem::remove(test_file);
+            filesystem::remove(test_file);
 
             // compare meshes
             TriangleMesh src_mesh = src_model.mesh();

@@ -6,9 +6,7 @@
 #include <deque>
 #include <sstream>
 #include <exception>
-#include <boost/filesystem/fstream.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
 
@@ -23,7 +21,7 @@
 #include <slic3r/GUI/I18N.hpp>
 #include <slic3r/GUI/format.hpp>
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 
 
 namespace Slic3r {
@@ -51,7 +49,7 @@ struct CurlGlobalInit
             "/etc/ssl/ca-bundle.pem"              // OpenSUSE Tumbleweed              
         };
         
-        namespace fs = boost::filesystem;
+        namespace fs = Slic3r::filesystem;
         // Env var name for the OpenSSL CA bundle (SSL_CERT_FILE nomally)
         const char *const SSL_CA_FILE = X509_get_default_cert_file_env();
         const char * ssl_cafile = ::getenv(SSL_CA_FILE);
@@ -115,7 +113,7 @@ struct Http::priv
 	std::string buffer;
 	// Used for storing file streams added as multipart form parts
 	// Using a deque here because unlike vector it doesn't ivalidate pointers on insertion
-	std::deque<fs::ifstream> form_files;
+	std::deque<std::ifstream> form_files;
 	std::string postfields;
 	std::string error_buffer;    // Used for CURLOPT_ERRORBUFFER
 	size_t limit;
@@ -234,7 +232,7 @@ int Http::priv::xfercb_legacy(void *userp, double dltotal, double dlnow, double 
 
 size_t Http::priv::form_file_read_cb(char *buffer, size_t size, size_t nitems, void *userp)
 {
-	auto stream = reinterpret_cast<fs::ifstream*>(userp);
+	auto stream = reinterpret_cast<std::ifstream*>(userp);
 
 	try {
 		stream->read(buffer, size * nitems);

@@ -2,11 +2,11 @@
 #define slic3r_GUI_hpp_
 
 namespace boost { class any; }
-namespace boost::filesystem { class path; }
 
 #include <wx/string.h>
 
 #include "libslic3r/Config.hpp"
+#include "libslic3r/filesystem.hpp"
 
 class wxWindow;
 class wxMenuBar;
@@ -64,9 +64,9 @@ wxString	from_u8(const std::string &str);
 // std::string in UTF8 from wxString
 std::string	into_u8(const wxString &str);
 // wxString from boost path
-wxString	from_path(const boost::filesystem::path &path);
+wxString	from_path(const filesystem::path &path);
 // boost path from wxString
-boost::filesystem::path	into_path(const wxString &str);
+filesystem::path	into_path(const wxString &str);
 
 // Display an About dialog
 extern void about();

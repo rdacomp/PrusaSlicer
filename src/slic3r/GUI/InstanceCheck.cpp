@@ -233,7 +233,7 @@ namespace instance_check_internal
 
 bool instance_check(int argc, char** argv, bool app_config_single_instance)
 {	
-	std::size_t hashed_path = std::hash<std::string>{}(boost::filesystem::system_complete(argv[0]).string());
+	std::size_t hashed_path = std::hash<std::string>{}(filesystem::system_complete(argv[0]).string());
 	std::string lock_name 	= std::to_string(hashed_path);
 	GUI::wxGetApp().set_instance_hash(hashed_path);
 	BOOST_LOG_TRIVIAL(debug) <<"full path: "<< lock_name;
@@ -345,30 +345,30 @@ void OtherInstanceMessageHandler::print_window_info(HWND hwnd)
 namespace MessageHandlerInternal
 {
    // returns ::path to possible model or empty ::path if input string is not existing path
-	static boost::filesystem::path get_path(std::string possible_path)
+	static filesystem::path get_path(std::string possible_path)
 	{
 		BOOST_LOG_TRIVIAL(debug) << "message part:" << possible_path;
 
 		if (possible_path.empty() || possible_path.size() < 3) {
 			BOOST_LOG_TRIVIAL(debug) << "empty";
-			return boost::filesystem::path();
+			return filesystem::path();
 		}
-		if (boost::filesystem::exists(possible_path)) {
+		if (filesystem::exists(possible_path)) {
 			BOOST_LOG_TRIVIAL(debug) << "is path";
-			return boost::filesystem::path(possible_path);
+			return filesystem::path(possible_path);
 		} else if (possible_path[0] == '\"') {
-			if(boost::filesystem::exists(possible_path.substr(1, possible_path.size() - 2))) {
+			if(filesystem::exists(possible_path.substr(1, possible_path.size() - 2))) {
 				BOOST_LOG_TRIVIAL(debug) << "is path in quotes";
-				return boost::filesystem::path(possible_path.substr(1, possible_path.size() - 2));
+				return filesystem::path(possible_path.substr(1, possible_path.size() - 2));
 			}
 		}
 		BOOST_LOG_TRIVIAL(debug) << "is NOT path";
-		return boost::filesystem::path();
+		return filesystem::path();
 	}
 } //namespace MessageHandlerInternal
 
 void OtherInstanceMessageHandler::handle_message(const std::string& message) {
-	std::vector<boost::filesystem::path> paths;
+	std::vector<filesystem::path> paths;
 	auto                                 next_space = message.find(" : ");
 	size_t                               last_space = 0;
 	int                                  counter    = 0;
@@ -379,7 +379,7 @@ void OtherInstanceMessageHandler::handle_message(const std::string& message) {
 	{	
 		if (counter != 0) {
 			std::string possible_path = message.substr(last_space, next_space - last_space);
-			boost::filesystem::path p = MessageHandlerInternal::get_path(std::move(possible_path));
+			filesystem::path p = MessageHandlerInternal::get_path(std::move(possible_path));
 			if(!p.string().empty())
 				paths.emplace_back(p);
 		}
@@ -388,14 +388,14 @@ void OtherInstanceMessageHandler::handle_message(const std::string& message) {
 		counter++;
 	}
 	if (counter != 0 ) {
-		boost::filesystem::path p = MessageHandlerInternal::get_path(message.substr(last_space));
+		filesystem::path p = MessageHandlerInternal::get_path(message.substr(last_space));
 		if (!p.string().empty())
 			paths.emplace_back(p);
 	}
 	if (!paths.empty()) {
 		//wxEvtHandler* evt_handler = wxGetApp().plater(); //assert here?
 		//if (evt_handler) {
-			wxPostEvent(m_callback_evt_handler, LoadFromOtherInstanceEvent(GUI::EVT_LOAD_MODEL_OTHER_INSTANCE, std::vector<boost::filesystem::path>(std::move(paths))));
+			wxPostEvent(m_callback_evt_handler, LoadFromOtherInstanceEvent(GUI::EVT_LOAD_MODEL_OTHER_INSTANCE, std::vector<filesystem::path>(std::move(paths))));
 		//}
 	}
 }

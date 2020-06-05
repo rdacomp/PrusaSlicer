@@ -8,7 +8,7 @@
 
 #include <wx/image.h>
 
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include <vector>
@@ -140,7 +140,7 @@ bool GLTexture::load_from_file(const std::string& filename, bool use_mipmaps, EC
 {
     reset();
 
-    if (!boost::filesystem::exists(filename))
+    if (!filesystem::exists(filename))
         return false;
 
     if (boost::algorithm::iends_with(filename, ".png"))
@@ -153,7 +153,7 @@ bool GLTexture::load_from_svg_file(const std::string& filename, bool use_mipmaps
 {
     reset();
 
-    if (!boost::filesystem::exists(filename))
+    if (!filesystem::exists(filename))
         return false;
 
     if (boost::algorithm::iends_with(filename, ".svg"))
@@ -204,7 +204,7 @@ bool GLTexture::load_from_svg_files_as_sprites_array(const std::vector<std::stri
     {
         ++sprite_id;
 
-        if (!boost::filesystem::exists(filename))
+        if (!filesystem::exists(filename))
             continue;
 
         if (!boost::algorithm::iends_with(filename, ".svg"))

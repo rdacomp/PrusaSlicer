@@ -16,11 +16,9 @@
 #include <fstream>
 #include <stdexcept>
 #include <unordered_map>
-#include <boost/format.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
-#include <boost/algorithm/string/predicate.hpp>
 
+#include <boost/format.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/nowide/cenv.hpp>
 #include <boost/nowide/convert.hpp>
 #include <boost/nowide/cstdio.hpp>
@@ -36,6 +34,7 @@
 #include <wx/wupdlock.h>
 
 #include "libslic3r/libslic3r.h"
+#include "libslic3r/filesystem.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/PlaceholderParser.hpp"
 #include "Plater.hpp"
@@ -78,10 +77,10 @@ ConfigFileType guess_config_file_type(const ptree &tree)
 }
 
 
-VendorProfile VendorProfile::from_ini(const boost::filesystem::path &path, bool load_all)
+VendorProfile VendorProfile::from_ini(const filesystem::path &path, bool load_all)
 {
     ptree tree;
-    boost::filesystem::ifstream ifs(path);
+    std::ifstream ifs(path);
     boost::property_tree::read_ini(ifs, tree);
     return VendorProfile::from_ini(tree, path, load_all);
 }
@@ -96,7 +95,7 @@ static const std::unordered_map<std::string, std::string> pre_family_model_map {
     { "SL1",        "SL1" },
 }};
 
-VendorProfile VendorProfile::from_ini(const ptree &tree, const boost::filesystem::path &path, bool load_all)
+VendorProfile VendorProfile::from_ini(const ptree &tree, const filesystem::path &path, bool load_all)
 {
     static const std::string printer_model_key = "printer_model:";
     static const std::string filaments_section = "default_filaments";
@@ -104,7 +103,7 @@ VendorProfile VendorProfile::from_ini(const ptree &tree, const boost::filesystem
 
     const std::string id = path.stem().string();
 
-    if (! boost::filesystem::exists(path)) {
+    if (! filesystem::exists(path)) {
         throw std::runtime_error((boost::format("Cannot load Vendor Config Bundle `%1%`: File not found: `%2%`.") % id % path).str());
     }
 
@@ -639,13 +638,13 @@ void PresetCollection::add_default_preset(const std::vector<std::string> &keys, 
 // Throws an exception on error.
 void PresetCollection::load_presets(const std::string &dir_path, const std::string &subdir)
 {
-    boost::filesystem::path dir = boost::filesystem::canonical(boost::filesystem::path(dir_path) / subdir).make_preferred();
+    filesystem::path dir = filesystem::canonical(filesystem::path(dir_path) / subdir).make_preferred();
     m_dir_path = dir.string();
     std::string errors_cummulative;
     // Store the loaded presets into a new vector, otherwise the binary search for already existing presets would be broken.
     // (see the "Preset already present, not loading" message).
     std::deque<Preset> presets_loaded;
-    for (auto &dir_entry : boost::filesystem::directory_iterator(dir))
+    for (auto &dir_entry : filesystem::directory_iterator(dir))
         if (Slic3r::is_ini_file(dir_entry)) {
             std::string name = dir_entry.path().filename().string();
             // Remove the .ini suffix.
@@ -1601,7 +1600,7 @@ std::vector<std::string> PresetCollection::system_preset_names() const
 std::string PresetCollection::path_from_name(const std::string &new_name) const
 {
     std::string file_name = boost::iends_with(new_name, ".ini") ? new_name : (new_name + ".ini");
-    return (boost::filesystem::path(m_dir_path) / file_name).make_preferred().string();
+    return (filesystem::path(m_dir_path) / file_name).make_preferred().string();
 }
 
 void PresetCollection::clear_bitmap_cache()

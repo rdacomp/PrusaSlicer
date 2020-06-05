@@ -13,7 +13,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/nowide/iostream.hpp>
 
@@ -508,7 +508,7 @@ end:
 
 std::string Model::propose_export_file_name_and_path(const std::string &new_extension) const
 {
-    return boost::filesystem::path(this->propose_export_file_name_and_path()).replace_extension(new_extension).string();
+    return filesystem::path(this->propose_export_file_name_and_path()).replace_extension(new_extension).string();
 }
 
 ModelObject::~ModelObject()
@@ -1411,7 +1411,7 @@ void ModelObject::print_info() const
 {
     using namespace std;
     cout << fixed;
-    boost::nowide::cout << "[" << boost::filesystem::path(this->input_file).filename().string() << "]" << endl;
+    boost::nowide::cout << "[" << filesystem::path(this->input_file).filename().string() << "]" << endl;
     
     TriangleMesh mesh = this->raw_mesh();
     mesh.check_topology();
@@ -1461,8 +1461,8 @@ std::string ModelObject::get_export_filename() const
         else
         {
             // Replace file name in input_file with name, but keep the path and file extension.
-            ret = (boost::filesystem::path(name).parent_path().empty()) ?
-                (boost::filesystem::path(ret).parent_path() / name).make_preferred().string() : name;
+            ret = (filesystem::path(name).parent_path().empty()) ?
+                (filesystem::path(ret).parent_path() / name).make_preferred().string() : name;
         }
     }
 

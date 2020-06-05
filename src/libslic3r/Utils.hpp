@@ -8,8 +8,7 @@
 #include <system_error>
 
 #include "libslic3r.h"
-
-namespace boost { namespace filesystem { class directory_entry; }}
+#include "filesystem.hpp"
 
 namespace Slic3r {
 
@@ -84,9 +83,9 @@ extern CopyFileResult check_copy(const std::string& origin, const std::string& c
 
 // Ignore system and hidden files, which may be created by the DropBox synchronisation process.
 // https://github.com/prusa3d/PrusaSlicer/issues/1298
-extern bool is_plain_file(const boost::filesystem::directory_entry &path);
-extern bool is_ini_file(const boost::filesystem::directory_entry &path);
-extern bool is_idx_file(const boost::filesystem::directory_entry &path);
+extern bool is_plain_file(const filesystem::directory_entry &path);
+extern bool is_ini_file(const filesystem::directory_entry &path);
+extern bool is_idx_file(const filesystem::directory_entry &path);
 
 // File path / name / extension splitting utilities, working with UTF-8,
 // to be published to Perl.

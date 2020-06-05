@@ -64,10 +64,6 @@
 #include <boost/config.hpp>
 #include <boost/config/warning_disable.hpp>
 #include <boost/container/small_vector.hpp>
-#include <boost/date_time/local_time/local_time.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/path.hpp>
 #include <boost/foreach.hpp>
 #include <boost/format.hpp>
 #include <boost/geometry.hpp>
@@ -111,6 +107,7 @@
 #include "BoundingBox.hpp"
 #include "ClipperUtils.hpp"
 #include "Config.hpp"
+#include "filesystem.hpp"
 #include "format.hpp"
 #include "I18N.hpp"
 #include "MultiPoint.hpp"
@@ -123,6 +120,7 @@
 #include "libslic3r_version.h"
 
 #include "clipper.hpp"
+#include "filesystem.hpp"
 
 #include <Shiny/Shiny.h>
 

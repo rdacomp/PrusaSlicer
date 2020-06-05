@@ -7,10 +7,10 @@
 #include <string>
 #include <regex>
 #include <future>
+#include <libslic3r/filesystem.hpp>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/filesystem/operations.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/nowide/convert.hpp>
 
@@ -87,7 +87,7 @@
 #include "libslic3r/CustomGCode.hpp"
 
 using boost::optional;
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 using Slic3r::_3DScene;
 using Slic3r::Preset;
 using Slic3r::PrintHostJob;
@@ -3691,8 +3691,8 @@ wxString Plater::priv::get_project_filename(const wxString& extension) const
 
 void Plater::priv::set_project_filename(const wxString& filename)
 {
-    boost::filesystem::path full_path = into_path(filename);
-    boost::filesystem::path ext = full_path.extension();
+    filesystem::path full_path = into_path(filename);
+    filesystem::path ext = full_path.extension();
     if (boost::iequals(ext.string(), ".amf")) {
         // Remove the first extension.
         full_path.replace_extension("");
@@ -4901,7 +4901,7 @@ void Plater::export_amf()
     }
 }
 
-void Plater::export_3mf(const boost::filesystem::path& output_path)
+void Plater::export_3mf(const filesystem::path& output_path)
 {
     if (p->model.objects.empty()) { return; }
 

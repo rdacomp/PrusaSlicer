@@ -22,7 +22,7 @@
 #include <cstring>
 #include <iostream>
 #include <math.h>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/nowide/args.hpp>
 #include <boost/nowide/cenv.hpp>
 #include <boost/nowide/iostream.hpp>
@@ -68,7 +68,7 @@ int CLI::run(int argc, char **argv)
     ::setenv("GDK_BACKEND", "x11", /* replace */ true);
 #endif
 
-	// Switch boost::filesystem to utf8.
+	// Switch filesystem to utf8.
     try {
         boost::nowide::nowide_filesystem();
     } catch (const std::runtime_error& ex) {
@@ -106,7 +106,7 @@ int CLI::run(int argc, char **argv)
 
     // load config files supplied via --load
     for (auto const &file : load_configs) {
-        if (! boost::filesystem::exists(file)) {
+        if (! filesystem::exists(file)) {
             if (m_config.opt_bool("ignore_nonexistent_config")) {
                 continue;
             } else {
@@ -134,7 +134,7 @@ int CLI::run(int argc, char **argv)
 
     // Read input file(s) if any.
     for (const std::string &file : m_input_files) {
-        if (! boost::filesystem::exists(file)) {
+        if (! filesystem::exists(file)) {
             boost::nowide::cerr << "No such file: " << file << std::endl;
             exit(1);
         }
@@ -585,27 +585,27 @@ bool CLI::setup(int argc, char **argv)
         }
     }
 
-    boost::filesystem::path path_to_binary = boost::filesystem::system_complete(argv[0]);
+    filesystem::path path_to_binary = filesystem::system_complete(argv[0]);
 
     // Path from the Slic3r binary to its resources.
 #ifdef __APPLE__
     // The application is packed in the .dmg archive as 'Slic3r.app/Contents/MacOS/Slic3r'
     // The resources are packed to 'Slic3r.app/Contents/Resources'
-    boost::filesystem::path path_resources = path_to_binary.parent_path() / "../Resources";
+    filesystem::path path_resources = path_to_binary.parent_path() / "../Resources";
 #elif defined _WIN32
     // The application is packed in the .zip archive in the root,
     // The resources are packed to 'resources'
     // Path from Slic3r binary to resources:
-    boost::filesystem::path path_resources = path_to_binary.parent_path() / "resources";
+    filesystem::path path_resources = path_to_binary.parent_path() / "resources";
 #elif defined SLIC3R_FHS
     // The application is packaged according to the Linux Filesystem Hierarchy Standard
     // Resources are set to the 'Architecture-independent (shared) data', typically /usr/share or /usr/local/share
-    boost::filesystem::path path_resources = SLIC3R_FHS_RESOURCES;
+    filesystem::path path_resources = SLIC3R_FHS_RESOURCES;
 #else
     // The application is packed in the .tar.bz archive (or in AppImage) as 'bin/slic3r',
     // The resources are packed to 'resources'
     // Path from Slic3r binary to resources:
-    boost::filesystem::path path_resources = path_to_binary.parent_path() / "../resources";
+    filesystem::path path_resources = path_to_binary.parent_path() / "../resources";
 #endif
 
     set_resources_dir(path_resources.string());
@@ -729,13 +729,13 @@ std::string CLI::output_filepath(const Model &model, IO::ExportFormat format) co
         case IO::TMF: ext = ".3mf"; break;
         default: assert(false); break;
     };
-    auto proposed_path = boost::filesystem::path(model.propose_export_file_name_and_path(ext));
+    auto proposed_path = filesystem::path(model.propose_export_file_name_and_path(ext));
     // use --output when available
     std::string cmdline_param = m_config.opt_string("output");
     if (! cmdline_param.empty()) {
         // if we were supplied a directory, use it and append our automatically generated filename
-        boost::filesystem::path cmdline_path(cmdline_param);
-        if (boost::filesystem::is_directory(cmdline_path))
+        filesystem::path cmdline_path(cmdline_param);
+        if (filesystem::is_directory(cmdline_path))
             proposed_path = cmdline_path / proposed_path.filename();
         else
             proposed_path = cmdline_path;

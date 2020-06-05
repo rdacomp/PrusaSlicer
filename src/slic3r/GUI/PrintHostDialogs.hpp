@@ -2,7 +2,7 @@
 #define slic3r_PrintHostSendDialog_hpp_
 
 #include <string>
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include <wx/string.h>
 #include <wx/event.h>
@@ -29,8 +29,8 @@ namespace GUI {
 class PrintHostSendDialog : public GUI::MsgDialog
 {
 public:
-    PrintHostSendDialog(const boost::filesystem::path &path, bool can_start_print);
-    boost::filesystem::path filename() const;
+    PrintHostSendDialog(const filesystem::path &path, bool can_start_print);
+    filesystem::path filename() const;
     bool start_print() const;
 
     virtual void EndModal(int ret) override;

@@ -17,7 +17,7 @@
 #include "Http.hpp"
 
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 namespace pt = boost::property_tree;
 
 

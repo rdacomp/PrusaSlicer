@@ -7,7 +7,7 @@
 #include <set>
 #include <unordered_map>
 #include <functional>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include <wx/sizer.h>
 #include <wx/panel.h>
@@ -28,7 +28,7 @@
 #include "wxExtensions.hpp"
 
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 
 namespace Slic3r {
 namespace GUI {

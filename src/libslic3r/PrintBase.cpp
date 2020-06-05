@@ -1,6 +1,6 @@
 #include "PrintBase.hpp"
 
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include "I18N.hpp"
@@ -40,7 +40,7 @@ void PrintBase::update_object_placeholders(DynamicConfig &config, const std::str
     config.set_key_value("scale", new ConfigOptionStrings(v_scale));
     if (! input_file.empty()) {
         // get basename with and without suffix
-        const std::string input_filename = boost::filesystem::path(input_file).filename().string();
+        const std::string input_filename = filesystem::path(input_file).filename().string();
         const std::string input_filename_base = input_filename.substr(0, input_filename.find_last_of("."));
         config.set_key_value("input_filename", new ConfigOptionString(input_filename_base + default_ext));
         config.set_key_value("input_filename_base", new ConfigOptionString(input_filename_base));
@@ -61,11 +61,11 @@ std::string PrintBase::output_filename(const std::string &format, const std::str
 		cfg.set_key_value("input_filename_base", new ConfigOptionString(filename_base));
     }
     try {
-		boost::filesystem::path filename = format.empty() ?
+		filesystem::path filename = format.empty() ?
 			cfg.opt_string("input_filename_base") + default_ext :
 			this->placeholder_parser().process(format, 0, &cfg);
         if (filename.extension().empty())
-            filename = boost::filesystem::change_extension(filename, default_ext);
+            filename.replace_extension(default_ext);
         return filename.string();
     } catch (std::runtime_error &err) {
         throw std::runtime_error(L("Failed processing of the output_filename_format template.") + "\n" + err.what());
@@ -77,11 +77,11 @@ std::string PrintBase::output_filepath(const std::string &path, const std::strin
     // if we were supplied no path, generate an automatic one based on our first object's input file
     if (path.empty())
         // get the first input file name
-        return (boost::filesystem::path(m_model.propose_export_file_name_and_path()).parent_path() / this->output_filename(filename_base)).make_preferred().string();
+        return (filesystem::path(m_model.propose_export_file_name_and_path()).parent_path() / this->output_filename(filename_base)).make_preferred().string();
     
     // if we were supplied a directory, use it and append our automatically generated filename
-    boost::filesystem::path p(path);
-    if (boost::filesystem::is_directory(p))
+    filesystem::path p(path);
+    if (filesystem::is_directory(p))
         return (p / this->output_filename(filename_base)).make_preferred().string();
     
     // if we were supplied a file which is not a directory, use it

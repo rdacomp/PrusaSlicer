@@ -42,6 +42,8 @@ add_library(libslic3r STATIC
     ExtrusionSimulator.cpp
     ExtrusionSimulator.hpp
     FileParserError.hpp
+    filesystem.cpp
+    filesystem.hpp
     Fill/Fill.cpp
     Fill/Fill.hpp
     Fill/Fill3DHoneycomb.cpp
@@ -284,6 +286,7 @@ target_link_libraries(libslic3r
     libigl
     miniz
     boost_libs
+    std_filesystem
     clipper
     nowide
     ${EXPAT_LIBRARIES}

@@ -19,7 +19,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/find.hpp>
 #include <boost/foreach.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/beast/core/detail/base64.hpp>
 
@@ -704,7 +704,7 @@ void GCode::do_export(Print* print, const char* path, GCodePreviewData* preview_
     PROFILE_CLEAR();
 
     // Does the file exist? If so, we hope that it is still valid.
-    if (print->is_step_done(psGCodeExport) && boost::filesystem::exists(boost::filesystem::path(path)))
+    if (print->is_step_done(psGCodeExport) && filesystem::exists(filesystem::path(path)))
         return;
 
     print->set_started(psGCodeExport);

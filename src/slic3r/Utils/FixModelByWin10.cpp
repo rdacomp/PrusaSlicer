@@ -24,7 +24,7 @@
 #include <string>
 #include <thread>
 
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/nowide/convert.hpp>
 #include <boost/nowide/cstdio.hpp>
 
@@ -357,28 +357,26 @@ void fix_model_by_win10_sdk_gui(ModelObject &model_object, int volume_idx)
 			meshes_repaired.reserve(volumes.size());
 			for (; ivolume < volumes.size(); ++ ivolume) {
 				on_progress(L("Exporting source model"), 0);
-				boost::filesystem::path path_src = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
-				path_src += ".3mf";
+				filesystem::path path_src = gen_temp_file_path("prusaslicer-fix-model-src-", ".3mf");
 				Model model;
 				ModelObject *model_object = model.add_object();
 				model_object->add_volume(*volumes[ivolume]);
 				model_object->add_instance();
 				if (!Slic3r::store_3mf(path_src.string().c_str(), &model, nullptr, false)) {
-					boost::filesystem::remove(path_src);
+					filesystem::remove(path_src);
 					throw std::runtime_error(L("Export of a temporary 3mf file failed"));
 				}
 				model.clear_objects();
 				model.clear_materials();
-				boost::filesystem::path path_dst = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
-				path_dst += ".3mf";
+				filesystem::path path_dst = gen_temp_file_path("prusaslicer-fix-model-dst-", ".3mf");
 				fix_model_by_win10_sdk(path_src.string().c_str(), path_dst.string(), on_progress, 
 					[&canceled]() { if (canceled) throw RepairCanceledException(); });
-				boost::filesystem::remove(path_src);
+				filesystem::remove(path_src);
 	            // PresetBundle bundle;
 				on_progress(L("Loading repaired model"), 80);
 				DynamicPrintConfig config;
 				bool loaded = Slic3r::load_3mf(path_dst.string().c_str(), &config, &model, false);
-			    boost::filesystem::remove(path_dst);
+			    filesystem::remove(path_dst);
 				if (! loaded)
 	 				throw std::runtime_error(L("Import of the repaired 3mf file failed"));
 	 			if (model.objects.size() == 0)

@@ -9,9 +9,10 @@
 
 #include <cstdlib>
 #include <string>
+#include <fstream>
 
 #include <boost/nowide/cstdio.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <libslic3r/ModelArrange.hpp>
 
 using namespace std;
@@ -241,7 +242,7 @@ void init_and_process_print(std::initializer_list<TriangleMesh> meshes, Slic3r::
 
 std::string gcode(Print & print)
 {
-	boost::filesystem::path temp = boost::filesystem::unique_path();
+	filesystem::path temp = gen_temp_file_path("prusaslicer-test-", ".gcode");
     print.set_status_silent();
     print.process();
     print.export_gcode(temp.string(), nullptr);

@@ -5,8 +5,7 @@
 #include <set>
 #include <string>
 #include <vector>
-
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include "libslic3r/Semver.hpp"
 #include "Version.hpp"
@@ -115,7 +114,7 @@ public:
 
 private:
 	// Create the snapshots directory if it does not exist yet.
-	static boost::filesystem::path	create_db_dir();
+	static filesystem::path			create_db_dir();
 
 	// Snapshots are sorted by their date/time, oldest first.
 	std::vector<Snapshot>			m_snapshots;

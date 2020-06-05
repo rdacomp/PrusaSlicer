@@ -7,7 +7,7 @@
 
 #include <boost/format.hpp>
 #include <boost/log/trivial.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include <wx/string.h>
 #include <wx/event.h>
@@ -812,7 +812,7 @@ std::vector<unsigned char> ImGuiWrapper::load_svg(const std::string& bitmap_name
 #else
     std::string folder = "white/";
 #endif        
-    if (!boost::filesystem::exists(Slic3r::var(folder + bitmap_name + ".svg")))
+    if (!filesystem::exists(Slic3r::var(folder + bitmap_name + ".svg")))
         folder.clear();
 
     NSVGimage* image = ::nsvgParseFromFile(Slic3r::var(folder + bitmap_name + ".svg").c_str(), "px", 96.0f);

@@ -79,12 +79,12 @@ BundleMap BundleMap::load()
 {
     BundleMap res;
 
-    const auto vendor_dir = (boost::filesystem::path(Slic3r::data_dir()) / "vendor").make_preferred();
-    const auto rsrc_vendor_dir = (boost::filesystem::path(resources_dir()) / "profiles").make_preferred();
+    const auto vendor_dir = (filesystem::path(Slic3r::data_dir()) / "vendor").make_preferred();
+    const auto rsrc_vendor_dir = (filesystem::path(resources_dir()) / "profiles").make_preferred();
 
     auto prusa_bundle_path = (vendor_dir / PresetBundle::PRUSA_BUNDLE).replace_extension(".ini");
     auto prusa_bundle_rsrc = false;
-    if (! boost::filesystem::exists(prusa_bundle_path)) {
+    if (! filesystem::exists(prusa_bundle_path)) {
         prusa_bundle_path = (rsrc_vendor_dir / PresetBundle::PRUSA_BUNDLE).replace_extension(".ini");
         prusa_bundle_rsrc = true;
     }
@@ -98,7 +98,7 @@ BundleMap BundleMap::load()
     // and then additionally from resources/profiles.
     bool is_in_resources = false;
     for (auto dir : { &vendor_dir, &rsrc_vendor_dir }) {
-        for (const auto &dir_entry : boost::filesystem::directory_iterator(*dir)) {
+        for (const auto &dir_entry : filesystem::directory_iterator(*dir)) {
             if (Slic3r::is_ini_file(dir_entry)) {
                 std::string id = dir_entry.path().stem().string();  // stem() = filename() without the trailing ".ini" part
 
@@ -1458,7 +1458,7 @@ void ConfigWizard::priv::load_vendors()
     } else {
         // In case of legacy datadir, try to guess the preference based on the printer preset files that are present
         const auto printer_dir = fs::path(Slic3r::data_dir()) / "printer";
-        for (auto &dir_entry : boost::filesystem::directory_iterator(printer_dir))
+        for (auto &dir_entry : filesystem::directory_iterator(printer_dir))
             if (Slic3r::is_ini_file(dir_entry)) {
                 auto needle = legacy_preset_map.find(dir_entry.path().filename().string());
                 if (needle == legacy_preset_map.end()) { continue; }

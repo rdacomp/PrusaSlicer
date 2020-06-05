@@ -19,8 +19,7 @@
 #include <sys/stat.h>
 #include <glob.h>
 #include <pwd.h>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/convenience.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/process.hpp>
 #endif
 
@@ -184,7 +183,7 @@ namespace search_for_drives_internal
 		//if not same file system - could be removable drive
 		if (! compare_filesystem_id(path, parent_path)) {
 			//free space
-			boost::filesystem::space_info si = boost::filesystem::space(path);
+			filesystem::space_info si = filesystem::space(path);
 			if (si.available != 0) {
 				//user id
 				struct stat buf;
@@ -193,7 +192,7 @@ namespace search_for_drives_internal
 				std::string username(std::getenv("USER"));
 				struct passwd *pw = getpwuid(uid);
 				if (pw != 0 && pw->pw_name == username)
-					out.emplace_back(DriveData{ boost::filesystem::basename(boost::filesystem::path(path)), path });
+                    out.emplace_back(DriveData{ filesystem::path(path).stem(), path });
 			}
 		}
 	}

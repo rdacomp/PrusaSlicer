@@ -7,7 +7,7 @@
 #include <memory>
 #include <set>
 #include <unordered_map>
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 class wxWindow;
 

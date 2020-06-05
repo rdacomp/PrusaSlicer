@@ -1,11 +1,11 @@
 #include "HexFile.hpp"
 
 #include <sstream>
-#include <boost/filesystem/fstream.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 namespace pt = boost::property_tree;
 
 
@@ -22,7 +22,7 @@ static HexFile::DeviceKind parse_device_kind(const std::string &str)
 	else { return HexFile::DEV_GENERIC; }
 }
 
-static size_t hex_num_sections(fs::ifstream &file)
+static size_t hex_num_sections(std::ifstream &file)
 {
 	file.seekg(0);
 	if (! file.good()) {
@@ -49,7 +49,7 @@ static size_t hex_num_sections(fs::ifstream &file)
 HexFile::HexFile(fs::path path) :
 	path(std::move(path))
 {
-	fs::ifstream file(this->path);
+	std::ifstream file(this->path);
 	if (! file.good()) {
 		return;
 	}

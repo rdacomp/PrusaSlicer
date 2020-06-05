@@ -5,9 +5,8 @@
 #include <utility>
 #include <vector>
 #include <stdexcept>
+#include <libslic3r/filesystem.hpp>
 
-#include <boost/filesystem/path.hpp>
-#include <boost/filesystem/operations.hpp>
 #include <boost/nowide/cenv.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/property_tree/ini_parser.hpp>
@@ -377,7 +376,7 @@ void AppConfig::reset_selections()
 
 std::string AppConfig::config_path()
 {
-	return (boost::filesystem::path(Slic3r::data_dir()) / (SLIC3R_APP_KEY ".ini")).make_preferred().string();
+	return (filesystem::path(Slic3r::data_dir()) / (SLIC3R_APP_KEY ".ini")).make_preferred().string();
 }
 
 std::string AppConfig::version_check_url() const
@@ -388,7 +387,7 @@ std::string AppConfig::version_check_url() const
 
 bool AppConfig::exists()
 {
-    return boost::filesystem::exists(AppConfig::config_path());
+    return filesystem::exists(AppConfig::config_path());
 }
 
 }; // namespace Slic3r

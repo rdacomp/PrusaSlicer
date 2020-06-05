@@ -1,5 +1,6 @@
 #include "SLAImport.hpp"
 
+#include <libslic3r/filesystem.hpp>
 #include <sstream>
 
 #include "libslic3r/SlicesToTriangleMesh.hpp"
@@ -11,7 +12,6 @@
 #include "libslic3r/miniz_extension.hpp"
 
 #include <boost/property_tree/ini_parser.hpp>
-#include <boost/filesystem/path.hpp>
 #include <boost/algorithm/string.hpp>
 
 #include <wx/image.h>
@@ -111,7 +111,7 @@ ArchiveData extract_sla_archive(const std::string &zipfname,
             if (name == CONFIG_FNAME) arch.config = read_ini(entry, zip);
             if (name == PROFILE_FNAME) arch.profile = read_ini(entry, zip);
             
-            if (boost::filesystem::path(name).extension().string() == ".png") {
+            if (filesystem::path(name).extension().string() == ".png") {
                 auto it = std::lower_bound(
                     arch.images.begin(), arch.images.end(), sla::EncodedRaster({}, name),
                     [](const sla::EncodedRaster &r1, const sla::EncodedRaster &r2) {

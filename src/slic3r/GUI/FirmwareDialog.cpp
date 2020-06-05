@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <boost/format.hpp>
 #include <boost/asio.hpp>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/optional.hpp>
 
@@ -43,7 +43,7 @@
 #include <wx/filefn.h>
 
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 namespace asio = boost::asio;
 using boost::system::error_code;
 using boost::optional;

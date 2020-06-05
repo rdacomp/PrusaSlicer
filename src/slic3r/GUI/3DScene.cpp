@@ -29,12 +29,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <libslic3r/filesystem.hpp>
 
 #include <boost/log/trivial.hpp>
-
-#include <boost/filesystem/operations.hpp>
 #include <boost/algorithm/string/predicate.hpp>
-
 #include <boost/nowide/cstdio.hpp>
 
 #include <Eigen/Dense>
@@ -1079,7 +1077,7 @@ void GLVolumeCollection::export_toolpaths_to_obj(const char* filename) const
     }
 
     // save materials file
-    boost::filesystem::path mat_filename(filename);
+    filesystem::path mat_filename(filename);
     mat_filename.replace_extension("mtl");
     FILE* fp = boost::nowide::fopen(mat_filename.string().c_str(), "w");
     if (fp == nullptr) {
@@ -2248,7 +2246,7 @@ bool GLBed::on_init_from_file(const std::string& filename)
 {
     reset();
 
-    if (!boost::filesystem::exists(filename))
+    if (!filesystem::exists(filename))
         return false;
 
     if (!boost::algorithm::iends_with(filename, ".stl"))

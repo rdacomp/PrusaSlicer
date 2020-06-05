@@ -1,7 +1,7 @@
 #include <catch2/catch.hpp>
 
 #include <iostream>
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/ElephantFootCompensation.hpp"

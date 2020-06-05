@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include <boost/filesystem.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #if __linux__
 #include <boost/thread.hpp>
@@ -38,7 +38,7 @@ class MainFrame;
     #define BACKGROUND_MESSAGE_LISTENER
 #endif // __linux__
 
-using LoadFromOtherInstanceEvent = Event<std::vector<boost::filesystem::path>>;
+using LoadFromOtherInstanceEvent = Event<std::vector<filesystem::path>>;
 wxDECLARE_EVENT(EVT_LOAD_MODEL_OTHER_INSTANCE, LoadFromOtherInstanceEvent);
 
 using InstanceGoToFrontEvent = SimpleEvent;

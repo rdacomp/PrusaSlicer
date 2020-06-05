@@ -21,7 +21,7 @@
 #include "../Utils/PrintHost.hpp"
 #include "wxExtensions.hpp"
 
-namespace fs = boost::filesystem;
+namespace fs = Slic3r::filesystem;
 
 namespace Slic3r {
 namespace GUI {

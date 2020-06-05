@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <vector>
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include <wx/panel.h>
 #include <wx/bmpcbox.h>
@@ -151,7 +151,7 @@ private:
 class Plater: public wxPanel
 {
 public:
-    using fs_path = boost::filesystem::path;
+    using fs_path = filesystem::path;
 
     Plater(wxWindow *parent, MainFrame *main_frame);
     Plater(Plater &&) = delete;
@@ -174,7 +174,7 @@ public:
     void import_sl1_archive();
     void extract_config_from_project();
 
-    std::vector<size_t> load_files(const std::vector<boost::filesystem::path>& input_files, bool load_model = true, bool load_config = true, bool imperial_units = false);
+    std::vector<size_t> load_files(const std::vector<filesystem::path>& input_files, bool load_model = true, bool load_config = true, bool imperial_units = false);
     // To be called when providing a list of files to the GUI slic3r on command line.
     std::vector<size_t> load_files(const std::vector<std::string>& input_files, bool load_model = true, bool load_config = true, bool imperial_units = false);
 
@@ -223,7 +223,7 @@ public:
     void export_gcode(bool prefer_removable = true);
     void export_stl(bool extended = false, bool selection_only = false);
     void export_amf();
-    void export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path());
+    void export_3mf(const filesystem::path& output_path = filesystem::path());
     void reload_from_disk();
     void reload_all_from_disk();
     bool has_toolpaths_to_export() const;

@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <functional>
-#include <boost/filesystem/path.hpp>
+#include <libslic3r/filesystem.hpp>
 
 #include <wx/string.h>
 
@@ -18,8 +18,8 @@ class DynamicPrintConfig;
 
 struct PrintHostUpload
 {
-    boost::filesystem::path source_path;
-    boost::filesystem::path upload_path;
+    filesystem::path source_path;
+    filesystem::path upload_path;
     bool start_print = false;
 };
 

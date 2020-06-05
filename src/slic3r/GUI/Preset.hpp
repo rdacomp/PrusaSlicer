@@ -4,8 +4,8 @@
 #include <deque>
 #include <set>
 #include <unordered_map>
+#include <libslic3r/filesystem.hpp>
 
-#include <boost/filesystem/path.hpp>
 #include <boost/property_tree/ptree_fwd.hpp>
 
 #include "libslic3r/libslic3r.h"
@@ -87,8 +87,8 @@ public:
 
     // Load VendorProfile from an ini file.
     // If `load_all` is false, only the header with basic info (name, version, URLs) is loaded.
-    static VendorProfile from_ini(const boost::filesystem::path &path, bool load_all=true);
-    static VendorProfile from_ini(const boost::property_tree::ptree &tree, const boost::filesystem::path &path, bool load_all=true);
+    static VendorProfile from_ini(const filesystem::path &path, bool load_all=true);
+    static VendorProfile from_ini(const boost::property_tree::ptree &tree, const filesystem::path &path, bool load_all=true);
 
     size_t      num_variants() const { size_t n = 0; for (auto &model : models) n += model.variants.size(); return n; }
     std::vector<std::string> families() const;
