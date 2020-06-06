@@ -1,10 +1,15 @@
 #include "PostProcessor.hpp"
 
+#include <stdexcept>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/format.hpp>
-#include <libslic3r/filesystem.hpp>
 #include <boost/nowide/convert.hpp>
+
+#include <libslic3r/filesystem.hpp>
+
+namespace fs = Slic3r::filesystem;
 
 #ifdef WIN32
 
@@ -103,7 +108,7 @@ static int run_script(const std::string &script, const std::string &gcode, std::
 
     std::wstring command_line;
     std::wstring command = szArglist[0];
-	if (! filesystem::exists(filesystem::path(command)))
+	if (! fs::exists(fs::path(command)))
 		throw std::runtime_error(std::string("The configured post-processing script does not exist: ") + boost::nowide::narrow(command));
     if (boost::iends_with(command, L".pl")) {
         // This is a perl script. Run it through the perl interpreter.
@@ -111,9 +116,9 @@ static int run_script(const std::string &script, const std::string &gcode, std::
         // Find the path of the process:
         wchar_t wpath_exe[_MAX_PATH + 1];
         ::GetModuleFileNameW(nullptr, wpath_exe, _MAX_PATH);
-        filesystem::path path_exe(wpath_exe);
-        filesystem::path path_perl = path_exe.parent_path() / "perl" / "perl.exe";
-        if (! filesystem::exists(path_perl)) {
+        fs::path path_exe(wpath_exe);
+        fs::path path_perl = path_exe.parent_path() / "perl" / "perl.exe";
+        if (! fs::exists(path_perl)) {
 			LocalFree(szArglist);
 			throw std::runtime_error(std::string("Perl interpreter ") + path_perl.string() + " does not exist.");
         }
@@ -185,8 +190,8 @@ void run_post_process_scripts(const std::string &path, const PrintConfig &config
         return;
 
     config.setenv_();
-    auto gcode_file = filesystem::path(path);
-    if (! filesystem::exists(gcode_file))
+    auto gcode_file = fs::path(path);
+    if (! fs::exists(gcode_file))
         throw std::runtime_error(std::string("Post-processor can't find exported gcode file"));
 
     for (const std::string &scripts : config.post_process.values) {

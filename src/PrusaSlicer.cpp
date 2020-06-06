@@ -585,7 +585,7 @@ bool CLI::setup(int argc, char **argv)
         }
     }
 
-    filesystem::path path_to_binary = filesystem::system_complete(argv[0]);
+    filesystem::path path_to_binary = filesystem::absolute(argv[0]);
 
     // Path from the Slic3r binary to its resources.
 #ifdef __APPLE__

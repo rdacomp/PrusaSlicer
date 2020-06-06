@@ -233,7 +233,7 @@ namespace instance_check_internal
 
 bool instance_check(int argc, char** argv, bool app_config_single_instance)
 {	
-	std::size_t hashed_path = std::hash<std::string>{}(filesystem::system_complete(argv[0]).string());
+	std::size_t hashed_path = std::hash<std::string>{}(filesystem::absolute(argv[0]).string());
 	std::string lock_name 	= std::to_string(hashed_path);
 	GUI::wxGetApp().set_instance_hash(hashed_path);
 	BOOST_LOG_TRIVIAL(debug) <<"full path: "<< lock_name;
