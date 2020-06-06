@@ -32,6 +32,8 @@
 #undef recvfrom
 #undef sendto
 #undef pause
+#undef rename
+//#undef path
 
 // these need to be included early for Win32 (listing it in Build.PL is not enough)
 #include <ostream>
