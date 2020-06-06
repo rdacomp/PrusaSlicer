@@ -214,7 +214,7 @@ if(CXX_FILESYSTEM_HAVE_FS)
         set(_found TRUE)
 
         if (CXX_FILESYSTEM_IS_EXPERIMENTAL)
-            SET_TARGET_PROPERTIES(std_filesystem PROPERTIES DEFINE_SYMBOL "CXX_FILESYSTEM_IS_EXPERIMENTAL")
+            target_compile_definitions(std_filesystem PUBLIC CXX_FILESYSTEM_IS_EXPERIMENTAL)
         endif()
 
         if(CXX_FILESYSTEM_NO_LINK_NEEDED)
