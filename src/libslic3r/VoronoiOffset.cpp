@@ -654,7 +654,7 @@ std::vector<Vec2d> edge_offset_contour_intersections(
 
     const VD::vertex_type *first_vertex = &vd.vertices().front();
     const VD::edge_type   *first_edge   = &vd.edges().front();
-    double                 nan = std::numeric_limits<double>::quiet_NaN();
+    static constexpr double nan         = std::numeric_limits<double>::quiet_NaN();
     // By default none edge has an intersection with the offset curve.
     std::vector<Vec2d>     out(vd.num_edges(), Vec2d(nan, 0.));
 
@@ -751,7 +751,6 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                     assert(dmin == 0.);
                 }
 #endif // NDEBUG
-
                 if (! bisector || (dmin != dmax && offset_distance >= dmin)) {
                     double t = (offset_distance - dmin) / (dmax - dmin);
                     t = clamp(0., 1., t);
@@ -881,6 +880,122 @@ std::vector<Vec2d> edge_offset_contour_intersections(
     return out;
 }
 
+Polygons offset(
+    const Geometry::VoronoiDiagram  &vd,
+    const Lines                     &lines,
+    const std::vector<double>       &signed_vertex_distances,
+    double                           offset_distance,
+    double                           discretization_error)
+{
+    std::vector<Vec2d> edge_points = edge_offset_contour_intersections(vd, lines, signed_vertex_distances, offset_distance);
+
+    const VD::edge_type *front_edge = &vd.edges().front();
+
+    auto next_offset_edge = [&edge_points, front_edge](const VD::edge_type *start_edge) -> const VD::edge_type* {
+	    for (const VD::edge_type *edge = start_edge->next(); edge != start_edge; edge = edge->next())
+            if (edge_offset_has_intersection(edge_points[edge->twin() - front_edge]))
+                return edge->twin();
+        // assert(false);
+        return nullptr;
+	};
+
+#ifndef NDEBUG
+	auto dist_to_site = [&lines](const VD::cell_type &cell, const Vec2d &point) {
+        const Line &line = lines[cell.source_index()];
+        return cell.contains_point() ?
+            (((cell.source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line.a : line.b).cast<double>() - point).norm() :
+            (Geometry::foot_pt<Vec2d>(line.a.cast<double>(), (line.b - line.a).cast<double>(), point) - point).norm();
+	};
+#endif /* NDEBUG */
+
+	// Track the offset curves.
+	Polygons out;
+	double angle_step    = 2. * acos((offset_distance - discretization_error) / offset_distance);
+    double cos_threshold = cos(angle_step);
+    static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+	for (size_t seed_edge_idx = 0; seed_edge_idx < vd.num_edges(); ++ seed_edge_idx) {
+        Vec2d last_pt = edge_points[seed_edge_idx];
+        if (edge_offset_has_intersection(last_pt)) {
+            const VD::edge_type *start_edge = &vd.edges()[seed_edge_idx];
+            const VD::edge_type *edge       = start_edge;
+            Polygon  			 poly;
+		    do {
+		        // find the next edge
+                const VD::edge_type *next_edge = next_offset_edge(edge);
+#ifdef VORONOI_DEBUG_OUT
+                if (next_edge == nullptr) {
+                    Lines helper_lines;
+                    dump_voronoi_to_svg(debug_out_path("voronoi-offset-open-loop-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), to_lines(poly));
+                }
+#endif // VORONOI_DEBUG_OUT
+                assert(next_edge);
+		        //std::cout << "offset-output: "; print_edge(edge); std::cout << " to "; print_edge(next_edge); std::cout << "\n";
+		        // Interpolate a circular segment or insert a linear segment between edge and next_edge.
+                const VD::cell_type  *cell      = edge->cell();
+                // Mark the edge / offset curve intersection point as consumed.
+                Vec2d p1 = last_pt;
+                Vec2d p2 = edge_points[next_edge - front_edge];
+                edge_points[next_edge - front_edge].x() = nan;
+#ifndef NDEBUG
+                {
+                    double err  = dist_to_site(*cell, p1) - offset_distance;
+                    double err2 = dist_to_site(*cell, p2) - offset_distance;
+#ifdef VORONOI_DEBUG_OUT
+                    if (std::max(err, err2) >= SCALED_EPSILON) {
+                        Lines helper_lines;
+                        dump_voronoi_to_svg(debug_out_path("voronoi-offset-incorrect_pt-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), to_lines(poly));
+                    }
+#endif // VORONOI_DEBUG_OUT
+                    assert(std::abs(err) < SCALED_EPSILON);
+                    assert(std::abs(err2) < SCALED_EPSILON);
+                }
+#endif /* NDEBUG */
+				if (cell->contains_point()) {
+					// Discretize an arc from p1 to p2 with radius = offset_distance and discretization_error.
+                    // The extracted contour is CCW oriented, extracted holes are CW oriented.
+                    // The extracted arc will have the same orientation. As the Voronoi regions are convex, the angle covered by the arc will be convex as well.
+                    const Line  &line0  = lines[cell->source_index()];
+					const Vec2d &center = ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b).cast<double>();
+					const Vec2d  v1 	= p1 - center;
+					const Vec2d  v2 	= p2 - center;
+                    bool 		 ccw    = cross2(v1, v2) > 0;
+                    double       cos_a  = v1.dot(v2);
+                    double       norm   = v1.norm() * v2.norm();
+                    assert(norm > 0.);
+                    if (cos_a < cos_threshold * norm) {
+						// Angle is bigger than the threshold, therefore the arc will be discretized.
+                        cos_a /= norm;
+                        assert(cos_a > -1. - EPSILON && cos_a < 1. + EPSILON);
+                        double angle = acos(std::max(-1., std::min(1., cos_a)));
+						size_t n_steps = size_t(ceil(angle / angle_step));
+						double astep = angle / n_steps;
+						if (! ccw)
+							astep *= -1.;
+						double a = astep;
+						for (size_t i = 1; i < n_steps; ++ i, a += astep) {
+							double c = cos(a);
+							double s = sin(a);
+							Vec2d  p = center + Vec2d(c * v1.x() - s * v1.y(), s * v1.x() + c * v1.y());
+                            poly.points.emplace_back(Point(coord_t(p.x()), coord_t(p.y())));
+						}
+                    }
+				}
+                {
+                    Point pt_last(coord_t(p2.x()), coord_t(p2.y()));
+                    if (poly.empty() || poly.points.back() != pt_last)
+                        poly.points.emplace_back(pt_last);
+                }
+                edge = next_edge;
+                last_pt = p2;
+		    } while (edge != start_edge);
+		    out.emplace_back(std::move(poly));
+		}
+    }
+
+	return out;
+}
+
+#if 0
 Polygons offset(
     const Geometry::VoronoiDiagram  &vd,
     const Lines                     &lines,
@@ -1459,7 +1574,7 @@ Polygons offset(
 	Polygons out;
 	double angle_step    = 2. * acos((offset_distance - discretization_error) / offset_distance);
     double cos_threshold = cos(angle_step);
-	for (size_t seed_edge_idx = 0; seed_edge_idx < vd.num_edges(); ++ seed_edge_idx)
+    for (size_t seed_edge_idx = 0; seed_edge_idx < vd.num_edges(); ++ seed_edge_idx)
 		if (edge_state[seed_edge_idx] == EdgeState::Active) {
             const VD::edge_type *start_edge = &vd.edges()[seed_edge_idx];
             const VD::edge_type *edge       = start_edge;
@@ -1536,6 +1651,20 @@ Polygons offset(
 
 	return out;
 }
+#else
+
+Polygons offset(
+	const VD 		&vd, 
+	const Lines 	&lines, 
+	double 			 offset_distance, 
+	double 			 discretization_error)
+{
+    annotate_inside_outside(const_cast<VD&>(vd), lines);
+    std::vector<double> dist = signed_vertex_distances(vd, lines);
+    return offset(vd, lines, dist, offset_distance, discretization_error);
+}
+
+#endif
 
 } // namespace Voronoi
 } // namespace Slic3r

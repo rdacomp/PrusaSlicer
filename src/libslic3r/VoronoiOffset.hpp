@@ -110,21 +110,17 @@ std::vector<double> signed_vertex_distances(const VD &vd, const Lines &lines);
 static inline bool edge_offset_no_intersection(const Vec2d &intersection_point)
 	{ return std::isnan(intersection_point.x()); }
 static inline bool edge_offset_has_intersection(const Vec2d &intersection_point)
-	{ return edge_offset_has_intersection(intersection_point); }
+	{ return ! edge_offset_no_intersection(intersection_point); }
 std::vector<Vec2d> edge_offset_contour_intersections(
 	const VD &vd, const Lines &lines, const std::vector<double> &distances,
 	double offset_distance);
 
-// Offset a polygon or a set of polygons possibly with holes by traversing a Voronoi diagram.
-// The input polygons are stored in lines and lines are referenced by vd.
-// Outer curve will be extracted for a positive offset_distance,
-// inner curve will be extracted for a negative offset_distance.
-// Circular arches will be discretized to achieve discretization_error.
 Polygons offset(
-	const VD 		&vd, 
-	const Lines 	&lines, 
-	double 			 offset_distance, 
-	double 			 discretization_error);
+    const Geometry::VoronoiDiagram  &vd,
+    const Lines                     &lines,
+    const std::vector<double>       &signed_vertex_distances,
+    double                           offset_distance,
+    double                           discretization_error);
 
 // Offset a polygon or a set of polygons possibly with holes by traversing a Voronoi diagram.
 // The input polygons are stored in lines and lines are referenced by vd.

@@ -1237,7 +1237,7 @@ TEST_CASE("Voronoi offset", "[VoronoiOffset]")
             OffsetTest { scale_(0.55), 1, 0 }
       }) {
 
-      Polygons offsetted_polygons_out = voronoi_offset(vd, lines, ot.distance, scale_(0.005));
+      Polygons offsetted_polygons_out = Slic3r::Voronoi::offset(vd, lines, ot.distance, scale_(0.005));
       REQUIRE(offsetted_polygons_out.size() == ot.num_outer);
 
 #ifdef VORONOI_DEBUG_OUT
@@ -1245,7 +1245,7 @@ TEST_CASE("Voronoi offset", "[VoronoiOffset]")
           vd, Points(), lines, offsetted_polygons_out);
 #endif
 
-      Polygons offsetted_polygons_in = voronoi_offset(vd, lines, - ot.distance, scale_(0.005));
+      Polygons offsetted_polygons_in = Slic3r::Voronoi::offset(vd, lines, - ot.distance, scale_(0.005));
       REQUIRE(offsetted_polygons_in.size() == ot.num_inner);
 
 #ifdef VORONOI_DEBUG_OUT
@@ -1303,14 +1303,14 @@ TEST_CASE("Voronoi offset 2", "[VoronoiOffset]")
             OffsetTest { scale_(0.8), 1, 0 }
       }) {
 
-      Polygons offsetted_polygons_out = voronoi_offset(vd, lines, ot.distance, scale_(0.005));
+      Polygons offsetted_polygons_out = Slic3r::Voronoi::offset(vd, lines, ot.distance, scale_(0.005));
 #ifdef VORONOI_DEBUG_OUT
       dump_voronoi_to_svg(debug_out_path("voronoi-offset2-out-%lf.svg", ot.distance).c_str(),
           vd, Points(), lines, offsetted_polygons_out);
 #endif
       REQUIRE(offsetted_polygons_out.size() == ot.num_outer);
 
-      Polygons offsetted_polygons_in = voronoi_offset(vd, lines, - ot.distance, scale_(0.005));
+      Polygons offsetted_polygons_in = Slic3r::Voronoi::offset(vd, lines, - ot.distance, scale_(0.005));
 #ifdef VORONOI_DEBUG_OUT
       dump_voronoi_to_svg(debug_out_path("voronoi-offset2-in-%lf.svg", ot.distance).c_str(),
           vd, Points(), lines, offsetted_polygons_in);
@@ -1380,14 +1380,14 @@ TEST_CASE("Voronoi offset 3", "[VoronoiOffset]")
             OffsetTest { scale_(1.01), 1, 0 },
       }) {
 
-      Polygons offsetted_polygons_out = voronoi_offset(vd, lines, ot.distance, scale_(0.005));
+      Polygons offsetted_polygons_out = Slic3r::Voronoi::offset(vd, lines, ot.distance, scale_(0.005));
 #ifdef VORONOI_DEBUG_OUT
       dump_voronoi_to_svg(debug_out_path("voronoi-offset2-out-%lf.svg", ot.distance).c_str(),
           vd, Points(), lines, offsetted_polygons_out);
 #endif
       REQUIRE(offsetted_polygons_out.size() == ot.num_outer);
 
-      Polygons offsetted_polygons_in = voronoi_offset(vd, lines, - ot.distance, scale_(0.005));
+      Polygons offsetted_polygons_in = Slic3r::Voronoi::offset(vd, lines, - ot.distance, scale_(0.005));
 #ifdef VORONOI_DEBUG_OUT
       dump_voronoi_to_svg(debug_out_path("voronoi-offset2-in-%lf.svg", ot.distance).c_str(),
           vd, Points(), lines, offsetted_polygons_in);
