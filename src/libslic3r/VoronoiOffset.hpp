@@ -19,9 +19,9 @@ inline Point&       contour_point(const VD::cell_type &cell, Line &line)
 	{ return ((cell.source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line.a : line.b); }
 
 inline const Point& contour_point(const VD::cell_type &cell, const Lines &lines)
-	{ return contour_point(cell, lines[cell.source_index()]) }
+	{ return contour_point(cell, lines[cell.source_index()]); }
 inline Point&       contour_point(const VD::cell_type &cell, Lines &lines)
-	{ return contour_point(cell, lines[cell.source_index()]) }
+	{ return contour_point(cell, lines[cell.source_index()]); }
 
 inline Vec2d 		vertex_point(const VD::vertex_type &v) { return Vec2d(v.x(), v.y()); }
 inline Vec2d 		vertex_point(const VD::vertex_type *v) { return Vec2d(v->x(), v->y()); }
@@ -60,7 +60,7 @@ enum class EdgeCategory : unsigned char
 enum class CellCategory : unsigned char
 {
 	// This Voronoi cell is split by an input segment to two halves, one is inside, the other is outside.
-	Mixed,
+	Boundary,
 	// This Voronoi cell is completely inside.
 	Inside,
 	// This Voronoi cell is completely outside.
@@ -74,27 +74,27 @@ inline VertexCategory 	vertex_category(const VD::vertex_type &v)
 inline VertexCategory 	vertex_category(const VD::vertex_type *v)
 	{ return static_cast<VertexCategory>(v->color()); }
 inline void 		  	set_vertex_category(VD::vertex_type &v, VertexCategory c)
-	{ v.color(static_cast<VD::color_type>(c)); }
+	{ v.color(static_cast<VD::vertex_type::color_type>(c)); }
 inline void 		  	set_vertex_category(VD::vertex_type *v, VertexCategory c)
-	{ v->color(static_cast<VD::color_type>(c)); }
+	{ v->color(static_cast<VD::vertex_type::color_type>(c)); }
 
 inline EdgeCategory 	edge_category(const VD::edge_type &e)
 	{ return static_cast<EdgeCategory>(e.color()); }
 inline EdgeCategory 	edge_category(const VD::edge_type *e)
 	{ return static_cast<EdgeCategory>(e->color()); }
 inline void 			set_edge_category(VD::edge_type &e, EdgeCategory c)
-	{ e.color(static_cast<VD::color_type>(c)); }
+	{ e.color(static_cast<VD::edge_type::color_type>(c)); }
 inline void 			set_edge_category(VD::edge_type *e, EdgeCategory c)
-	{ e->color(static_cast<VD::color_type>(c)); }
+	{ e->color(static_cast<VD::edge_type::color_type>(c)); }
 
 inline CellCategory   	cell_category(const VD::cell_type &v)
 	{ return static_cast<CellCategory>(v.color()); }
 inline CellCategory   	cell_category(const VD::cell_type *v)
 	{ return static_cast<CellCategory>(v->color()); }
 inline void 		  	set_cell_category(const VD::cell_type &v, CellCategory c)
-	{ v.color(static_cast<VD::color_type>(c)); }
+	{ v.color(static_cast<VD::cell_type::color_type>(c)); }
 inline void 		  	set_cell_category(const VD::cell_type *v, CellCategory c)
-	{ v->color(static_cast<VD::color_type>(c)); }
+	{ v->color(static_cast<VD::cell_type::color_type>(c)); }
 
 // Mark the "Color" of VD vertices, edges and cells as Unknown.
 void reset_inside_outside_annotations(VD &vd);
@@ -107,8 +107,10 @@ void annotate_inside_outside(VD &vd, const Lines &lines);
 // (negative distances inside, positive distances outside).
 std::vector<double> signed_vertex_distances(const VD &vd, const Lines &lines);
 
-static constexpr bool edge_offset_no_intersection(const Vec2d &intersection_point)
+static inline bool edge_offset_no_intersection(const Vec2d &intersection_point)
 	{ return std::isnan(intersection_point.x()); }
+static inline bool edge_offset_has_intersection(const Vec2d &intersection_point)
+	{ return edge_offset_has_intersection(intersection_point); }
 std::vector<Vec2d> edge_offset_contour_intersections(
 	const VD &vd, const Lines &lines, const std::vector<double> &distances,
 	double offset_distance);

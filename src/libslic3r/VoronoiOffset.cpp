@@ -1,6 +1,7 @@
 // Polygon offsetting using Voronoi diagram prodiced by boost::polygon.
 
 #include "VoronoiOffset.hpp"
+#include "libslic3r.h"
 
 #include <cmath>
 
@@ -270,8 +271,8 @@ namespace debug
                     }
                 }
                 {
-                    VD::cell_type *cell_other = edge.twin()->cell();
-                    CellCategory   cc_other   = cell_category(cell_other);
+                    const VD::cell_type *cell_other = edge->twin()->cell();
+                    const CellCategory   cc_other   = cell_category(cell_other);
                     assert(cc_other != CellCategory::Unknown);
                     switch (cc) {
                     case CellCategory::Boundary:
@@ -349,64 +350,64 @@ namespace debug
 
 void reset_inside_outside_annotations(VD &vd)
 {
-    for (VD::vertex_type &v : vd.vertices())
-        set_vertex_category(v, VertexCategory::Unknown);
-    for (VD::edge_type &e : vd.edges())
-        set_edge_category(e, EdgeCategory::Unknown);
-    for (VD::cell_type &c : vd.cells())
-        set_cell_category(c, CellCategory::Unknown);
+    for (const VD::vertex_type &v : vd.vertices())
+        set_vertex_category(const_cast<VD::vertex_type&>(v), VertexCategory::Unknown);
+    for (const VD::edge_type &e : vd.edges())
+        set_edge_category(const_cast<VD::edge_type&>(e), EdgeCategory::Unknown);
+    for (const VD::cell_type &c : vd.cells())
+        set_cell_category(const_cast<VD::cell_type&>(c), CellCategory::Unknown);
 }
 
 void annotate_inside_outside(VD &vd, const Lines &lines)
 {
-    assert(verify_twin_halfedges_successive(vd, lines));
+    assert(debug::verify_twin_halfedges_successive(vd, lines));
 
     reset_inside_outside_annotations(vd);
 
     // Set a VertexCategory, verify validity of the operation.
-    auto annotate_vertex = [](VD::vertex_type *vertex, VertexCategory new_vertex_category) {
+    auto annotate_vertex = [](const VD::vertex_type *vertex, VertexCategory new_vertex_category) {
         VertexCategory vc = vertex_category(vertex);
         assert(vc == VertexCategory::Unknown || vc == new_vertex_category);
         assert(new_vertex_category == VertexCategory::Inside || 
                new_vertex_category == VertexCategory::Outside ||
                new_vertex_category == VertexCategory::OnContour);
-        set_vertex_category(vertex, new_vertex_category);
+        set_vertex_category(const_cast<VD::vertex_type*>(vertex), new_vertex_category);
     };
 
     // Set an EdgeCategory, verify validity of the operation.
-    auto annotate_edge = [](VD::edge_type *edge, EdgeCategory new_edge_category) {
+    auto annotate_edge = [](const VD::edge_type *edge, EdgeCategory new_edge_category) {
         EdgeCategory ec = edge_category(edge);
         assert(ec == EdgeCategory::Unknown || ec == new_edge_category);
         assert(new_edge_category == EdgeCategory::PointsInside || 
                new_edge_category == EdgeCategory::PointsOutside ||
                new_edge_category == EdgeCategory::PointsToContour);
-        set_edge_category(edge, new_edge_category);
+        set_edge_category(const_cast<VD::edge_type*>(edge), new_edge_category);
     };
 
     // Set a CellCategory, verify validity of the operation.
     // Handle marking of boundary cells (first time the cell is marked as outside, the other time as inside).
     // Returns true if the current cell category was modified.
-    auto annotate_cell = [](VD::cell_type *cell, CellCategory new_cell_category) -> bool {
-        CellCategory cell_type = cell_state[cell - front_cell];
+    auto annotate_cell = [](const VD::cell_type *cell, CellCategory new_cell_category) -> bool {
+        CellCategory cc = cell_category(cell);
         assert(one_of(cc, { CellCategory::Inside, CellCategory::Outside, CellCategory::Boundary, CellCategory::Unknown }));
         assert(one_of(new_cell_category, { CellCategory::Inside, CellCategory::Outside, CellCategory::Boundary }));
         switch (cc) {
         case CellCategory::Unknown:
             // Old category unknown, just write the new category.
             break;
-        case CellCategory::Active:
-            if (new_cell_category == CellCategory::Inactive)
+        case CellCategory::Outside:
+            if (new_cell_category == CellCategory::Inside)
                 new_cell_category = CellCategory::Boundary;
             break;
-        case CellCategory::Inactive:
-            if (new_cell_category == CellCategory::Active)
+        case CellCategory::Inside:
+            if (new_cell_category == CellCategory::Outside)
                 new_cell_category = CellCategory::Boundary;
             break;
         case CellCategory::Boundary:
             return false;
         }
         if (cc != new_cell_category) {
-            set_cell_category(cell, new_cell_category);
+            set_cell_category(const_cast<VD::cell_type*>(cell), new_cell_category);
             return true;
         }
         return false;
@@ -465,7 +466,7 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                     // One end of the current Voronoi edge shares a point of a contour.
                     assert(edge.cell()->contains_point() != edge.twin()->cell()->contains_point());
                     const Line &line2 = lines[cell2->source_index()];
-                    pt_on_contour = &contour_point(*cell2, line2.a);
+                    pt_on_contour = &contour_point(*cell2, line2);
                 }
                 if (pt_on_contour) {
                     // One end of the current Voronoi edge shares a point of a contour.
@@ -493,7 +494,7 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                     if (v1_on_contour) {
                         // Skip secondary edge pointing to a contour point.
                         annotate_edge(&edge, EdgeCategory::PointsToContour);
-                        annotate_vertex(*v1, VertexCategory::OnContour);
+                        annotate_vertex(v1, VertexCategory::OnContour);
                         continue;
                     }
                 }
@@ -506,10 +507,10 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                 // No Voronoi edge could connect two vertices of input polygons.
                 assert(side != 0.);
                 auto vc = side > 0. ? VertexCategory::Outside : VertexCategory::Inside;
-                annotate_vertex(*v1, vc);
+                annotate_vertex(v1, vc);
                 annotate_edge(&edge, vc == VertexCategory::Outside ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside);
                 if (pt_on_contour) {
-                    annotate_vertex(*v0, VertexCategory::OnContour);
+                    annotate_vertex(edge.vertex0(), VertexCategory::OnContour);
                     annotate_edge(edge.twin(), EdgeCategory::PointsToContour);
                 } else {
                     // Otherwise v0 is not on the contour and its inside / outside state will be set later.
@@ -530,8 +531,8 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
         assert((edge_category(edge) == EdgeCategory::Unknown) == (edge_category(edge.twin()) == EdgeCategory::Unknown));
         if (edge_category(edge) == EdgeCategory::Unknown) {
             assert(edge.is_finite());
-            VD::cell_type &cell  = *edge.cell();
-            VD::cell_type &cell2 = *edge.twin()->cell();
+            const VD::cell_type &cell  = *edge.cell();
+            const VD::cell_type &cell2 = *edge.twin()->cell();
             assert(cell.contains_point() && cell2.contains_point());
             VertexCategory vc    = vertex_category(edge.vertex0());
             if (vc != VertexCategory::Unknown) {
@@ -542,15 +543,17 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                 annotate_edge(&edge, ec_new);
                 annotate_edge(edge.twin(), ec_new);
                 // Edge separating two point sources, not yet classified as inside / outside.
+                CellCategory cc  = cell_category(cell);
+                CellCategory cc2 = cell_category(cell2);
                 auto cc_new = (vc == VertexCategory::Outside) ? CellCategory::Outside : CellCategory::Inside;
                 assert(cc != CellCategory::Boundary && cc2 != CellCategory::Boundary);
                 assert(cc == CellCategory::Unknown || cc == cc_new);
                 if (cc != cc_new) {
-                    set_cell_state(cell, cc_new);
+                    annotate_cell(&cell, cc_new);
                     cell_queue.emplace_back(&cell);
                 }
                 if (cc2 != cc_new) {
-                    set_cell_state(cell2, cc_new);
+                    annotate_cell(&cell2, cc_new);
                     cell_queue.emplace_back(&cell2);
                 }
             }
@@ -565,26 +568,26 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
         cell_queue.pop_back();
         const VD::edge_type *first_edge = cell->incident_edge();
         const VD::edge_type *edge       = first_edge;
-        auto                 ec_new     = (cc == CellCategory::Outside) ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
+        const auto           ec_new     = (cc == CellCategory::Outside) ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
         do {
             EdgeCategory ec = edge_category(edge);
             if (ec == EdgeCategory::Unknown) {
-                assert(edge->cell().contains_point() && edge->twin()->cell()->contains_point());
+                assert(edge->cell()->contains_point() && edge->twin()->cell()->contains_point());
                 annotate_edge(edge, ec_new);
                 annotate_edge(edge->twin(), ec_new);
-                VD::cell_type *cell2 = edge->twin()->cell();
+                const VD::cell_type *cell2 = edge->twin()->cell();
                 CellCategory cc2 = cell_category(cell2);
                 assert(cc2 == CellCategory::Unknown || cc2 == cc);
                 if (cc2 != cc) {
-                    set_cell_state(cell2, cc);
+                    annotate_cell(cell2, cc);
                     cell_queue.emplace_back(cell2);
                 }
             } else {
-                assert(edge.vertex0() == nullptr || vertex_category(edge.vertex0()) != VertexCategory::Unknown);
-                assert(edge.vertex1() == nullptr || vertex_category(edge.vertex1()) != VertexCategory::Unknown);
-                assert(edge_category(edge.twin()) != EdgeCategory::Unknown);
-                assert(cell_category(edge.cell()) != CellCategory::Unknown);
-                assert(cell_category(edge.twin()->cell()) != CellCategory::Unknown);
+                assert(edge->vertex0() == nullptr || vertex_category(edge->vertex0()) != VertexCategory::Unknown);
+                assert(edge->vertex1() == nullptr || vertex_category(edge->vertex1()) != VertexCategory::Unknown);
+                assert(edge_category(edge->twin()) != EdgeCategory::Unknown);
+                assert(cell_category(edge->cell()) != CellCategory::Unknown);
+                assert(cell_category(edge->twin()->cell()) != CellCategory::Unknown);
             }
             edge = edge->next();
         } while (edge != first_edge);
@@ -623,13 +626,15 @@ std::vector<double> signed_vertex_distances(const VD &vd, const Lines &lines)
                     line.a.cast<double>(), (line.b - line.a).cast<double>(), vertex_point(vertex));
             } else {
                 // Distance to a contour point.
-                dist = (contour_point(*cell2, lines).cast<double>() - vertex_point(vertex)).norm();
+                dist = (contour_point(*point_cell, lines).cast<double>() - vertex_point(vertex)).norm();
             }
             if (vc == VertexCategory::Inside)
                 dist = - dist;
         }
         out[&vertex - first_vertex] = dist;
     }
+
+    return out;
 }
 
 std::vector<Vec2d> edge_offset_contour_intersections(
@@ -655,7 +660,7 @@ std::vector<Vec2d> edge_offset_contour_intersections(
 
     for (const VD::edge_type &edge : vd.edges()) {
         size_t                 edge_idx = &edge - first_edge;
-        if (out[edge_idx] != 0.)
+        if (edge_offset_has_intersection(out[edge_idx]) || out[edge_idx].y() != 0.)
             // This edge was already classified.
             continue;
 
@@ -688,7 +693,7 @@ std::vector<Vec2d> edge_offset_contour_intersections(
         const VD::cell_type   *cell2 = edge.twin()->cell();
         const Line            &line0 = lines[cell->source_index()];
         const Line            &line1 = lines[cell2->source_index()];
-        size_t                 edge_idx2 = edge.twin() - front_edge;
+        size_t                 edge_idx2 = edge.twin() - first_edge;
         if (v1 == nullptr) {
             assert(edge.is_infinite());
             assert(edge.is_linear());
@@ -697,8 +702,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                 // There is certainly an intersection with the offset curve.
                 if (cell->contains_point() && cell2->contains_point()) {
                     assert(! edge.is_secondary());
-                    const Point &pt0 = contour_point(cell, line0);
-                    const Point &pt1 = contour_point(cell2, line1);
+                    const Point &pt0 = contour_point(*cell, line0);
+                    const Point &pt1 = contour_point(*cell2, line1);
                     Vec2d dir(double(pt0.y() - pt1.y()), double(pt1.x() - pt0.x()));
                     Vec2d pt(v0->x(), v0->y());
                     double t = detail::first_circle_segment_intersection_parameter(Vec2d(pt0.x(), pt0.y()), offset_distance, pt, dir);
@@ -709,13 +714,13 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                     assert(cell->contains_point() != cell2->contains_point());
                     // Linear edge goes through the endpoint of a segment.
                     assert(edge.is_secondary());
-                    const Point &ipt = cell->contains_segment() ? contour_point(cell2, line1) : contour_point(cell, line0);
+                    const Point &ipt = cell->contains_segment() ? contour_point(*cell2, line1) : contour_point(*cell, line0);
     #ifndef NDEBUG
                     if (cell->contains_segment()) {
-                        const Point &pt1 = contour_point(cell2, line1);
+                        const Point &pt1 = contour_point(*cell2, line1);
                         assert(pt1 == line0.a || pt1 == line0.b);
                     } else {
-                        const Point &pt0 = (cell0, line0);
+                        const Point &pt0 = contour_point(*cell, line0);
                         assert(pt0 == line1.a || pt0 == line1.b);
                     }
                     assert((vertex_point(v0) - ipt.cast<double>()).norm() < SCALED_EPSILON);
@@ -746,19 +751,21 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                     assert(dmin == 0.);
                 }
 #endif // NDEBUG
+
                 if (! bisector || (dmin != dmax && offset_distance >= dmin)) {
                     double t = (offset_distance - dmin) / (dmax - dmin);
                     t = clamp(0., 1., t);
-                if (d1 < d0)
-                    out[edge_idx2] = Slic3r::lerp(vertex_point(v1), vertex_point(v0), t);
-                    // mark visited
-                    out[edge_idx].y() = 1.;
-                } else {
-                    out[edge_idx] = Slic3r::lerp(vertex_point(v0), vertex_point(v1), t);
-                    // mark visited
-                    out[edge_idx2].y() = 1.;
+                    if (d1 < d0) {
+                        out[edge_idx2] = Slic3r::lerp(vertex_point(v1), vertex_point(v0), t);
+                        // mark visited
+                        out[edge_idx].y() = 1.;
+                    } else {
+                        out[edge_idx] = Slic3r::lerp(vertex_point(v0), vertex_point(v1), t);
+                        // mark visited
+                        out[edge_idx2].y() = 1.;
+                    }
+                    done = true;
                 }
-                done = true;
             } else {
                 // Point - Segment or Point - Point edge, distance along this Voronoi edge may not be monotonous,
                 // there may be a minimum distance point somewhere along this Voronoi edge.
@@ -766,7 +773,7 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                 bool point_vs_segment = cell->contains_point() != cell2->contains_point();
                 bool has_intersection = false;
                 bool possibly_two_points = false;
-                const Point &pt0 = cell->contains_point() ? contour_point(cell, line0) : contour_point(cell2, line1);
+                const Point &pt0 = cell->contains_point() ? contour_point(*cell, line0) : contour_point(*cell2, line1);
                 // Project p0 to line segment <v0, v1>.
                 Vec2d p0(v0->x(), v0->y());
                 Vec2d p1(v1->x(), v1->y());
@@ -814,7 +821,7 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                         assert(cell->contains_point() || cell2->contains_point());
                         intersections = detail::line_point_equal_distance_points(cell->contains_segment() ? line0 : line1, pt0, offset_distance);
                     } else {
-                        const Point &pt1 = contour_point(cell2, line1);
+                        const Point &pt1 = contour_point(*cell2, line1);
                         intersections = detail::point_point_equal_distance_points(pt0, pt1, offset_distance);
                     }
                     // If the span of distances of start / end point / foot point to the point site indicate an intersection,
@@ -859,8 +866,6 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                         } else if (intersections.count == 1) {
                             if (d1 < d0)
                                 std::swap(edge_idx, edge_idx2);
-                            set_edge_state_final(edge_idx, EdgeState::Active);
-                            set_edge_state_final(edge_idx2, EdgeState::Inactive);
                             out[edge_idx] = intersections.pts[0];
                             out[edge_idx2].y() = 1.;
                             done = true;
@@ -872,6 +877,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                 out[edge_idx].y() = out[edge_idx2].y() = 1.;
         }
     }
+
+    return out;
 }
 
 Polygons offset(
