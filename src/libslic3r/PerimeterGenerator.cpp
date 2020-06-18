@@ -2,9 +2,18 @@
 #include "ClipperUtils.hpp"
 #include "ExtrusionEntityCollection.hpp"
 #include "ShortestPath.hpp"
+#include "Geometry.hpp"
+#include "EdgeGrid.hpp"
+#include "VoronoiOffset.hpp"
 
 #include <cmath>
 #include <cassert>
+
+ #define VORONOI_DEBUG_OUT
+
+#ifdef VORONOI_DEBUG_OUT
+#include <libslic3r/VoronoiVisualUtils.hpp>
+#endif
 
 namespace Slic3r {
 
@@ -165,7 +174,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
                 (float)perimeter_generator.layer_height);
             
             // get overhang paths by checking what parts of this loop fall 
-            // outside the grown lower slices (thus where the distance between
+            // outside the grown lower slices (thus where the distance between
             // the loop centerline and original lower slices is >= half nozzle diameter
             extrusion_paths_append(
                 paths,
@@ -279,6 +288,61 @@ void PerimeterGenerator::process()
         int        loop_number = this->config->perimeters + surface.extra_perimeters - 1;  // 0-indexed loops
         ExPolygons last        = union_ex(surface.expolygon.simplify_p(SCALED_RESOLUTION));
         ExPolygons gaps;
+
+#if 0
+        for (ExPolygon &expoly : last) {
+            Geometry::VoronoiDiagram vd;
+            Lines lines = to_lines(expoly);
+#if 0
+            static int irun = 0;
+            ++ irun;
+            if (irun == 1174) {
+                printf("contour = {\n");
+                for (auto &pt : expoly.contour.points)
+                    printf("\t\t{ %d, %d },\n", pt.x(), pt.y());
+                for (auto &hole : expoly.holes) {
+                    printf("}\nhole = {\n");
+                    for (auto &pt : hole.points)
+                        printf("\t\t{ %d, %d },\n", pt.x(), pt.y());
+                }
+                printf("\nend\n");
+            }
+            if (! intersecting_edges(to_polygons(expoly)).empty()) {
+                printf("self intersecting\n");
+            }
+#endif
+            boost::polygon::construct_voronoi(lines.begin(), lines.end(), &vd);
+            Polygons offsets;
+            double offset_distance = ext_perimeter_width / 2;
+            for (;;) {
+                Polygons new_offsets = voronoi_offset(vd, lines, - offset_distance, scale_(0.005));
+                if (new_offsets.empty())
+                    break;
+                offset_distance += perimeter_width;
+                append(offsets, std::move(new_offsets));
+            }
+#ifndef NDEBUG
+            std::vector<std::pair<EdgeGrid::Grid::ContourEdge, EdgeGrid::Grid::ContourEdge>> self_intersections = intersecting_edges(offsets);
+            bool has_self_intersections = ! intersecting_edges(offsets).empty();
+#endif // NDEBUG
+#ifdef VORONOI_DEBUG_OUT
+            static int irun = 0;
+            Lines ilines;
+            for (const std::pair<EdgeGrid::Grid::ContourEdge, EdgeGrid::Grid::ContourEdge> &ie : self_intersections) {
+                auto edge = [](const EdgeGrid::Grid::ContourEdge &e) {
+                    return Line(e.first->at(e.second),
+                                e.first->at((e.second + 1 == e.first->size()) ? 0 : e.second + 1));
+                };
+                ilines.emplace_back(edge(ie.first));
+                ilines.emplace_back(edge(ie.second));
+            }
+            dump_voronoi_to_svg(debug_out_path(has_self_intersections ? "perimeter-voronoi-bad-%d.svg" : "perimeter-voronoi-ok-%d.svg", irun ++).c_str(),
+                vd, Points(), lines, offsets, ilines);
+#endif
+            assert(! has_self_intersections);
+        }
+#endif
+
         if (loop_number >= 0) {
             // In case no perimeters are to be generated, loop_number will equal to -1.
             std::vector<PerimeterGeneratorLoops> contours(loop_number+1);    // depth => loops
