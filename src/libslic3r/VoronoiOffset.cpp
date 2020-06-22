@@ -199,6 +199,14 @@ namespace detail {
 #ifndef NDEBUG
 namespace debug
 {
+    double dist_to_site(const Lines &lines, const VD::cell_type &cell, const Vec2d &point)
+    {
+        const Line &line = lines[cell.source_index()];
+        return cell.contains_point() ?
+            (((cell.source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line.a : line.b).cast<double>() - point).norm() :
+            (Geometry::foot_pt<Vec2d>(line.a.cast<double>(), (line.b - line.a).cast<double>(), point) - point).norm();
+    };
+
     // Verify that twin halfedges are stored next to the other in vd.
     bool verify_twin_halfedges_successive(const VD &vd, const Lines &lines)
     {
@@ -248,10 +256,13 @@ namespace debug
                     EdgeCategory ec = edge_category(edge);
                     switch (ec) {
                     case EdgeCategory::PointsInside:
+                        assert(edge->vertex0() != nullptr && edge->vertex1() != nullptr);
                         ++ num_edges_point_inside; break;
                     case EdgeCategory::PointsOutside:
+//                        assert(edge->vertex0() != nullptr);
                         ++ num_edges_point_outside; break;
                     case EdgeCategory::PointsToContour:
+                        assert(edge->vertex1() != nullptr);
                         ++ num_edges_point_to_contour; break;
                     default:
                         assert(false);
@@ -277,31 +288,12 @@ namespace debug
                     switch (cc) {
                     case CellCategory::Boundary:
                         assert(cc_other != CellCategory::Boundary || cell_other->contains_segment());
-                        assert(cell.contains_segment());
-                        assert(num_edges_point_to_contour == 2);
-                        assert(num_vertices_on_contour == 2);
-                        assert(num_vertices_inside > 0);
-                        assert(num_vertices_outside > 0);
-                        assert(num_edges_point_inside > 0);
-                        assert(num_edges_point_outside > 0);
                         break;
                     case CellCategory::Inside:
-                        assert(one_of(cc_other, { CellCategory::Inside, CellCategory::Boundary }));
-                        assert(num_vertices_on_contour <= 1);
-                        assert(num_edges_point_to_contour <= 1);
-                        assert(num_vertices_inside > 0);
-                        assert(num_vertices_outside == 0);
-                        assert(num_edges_point_inside > 0);
-                        assert(num_edges_point_outside == 0);
+                        assert(cc_other == CellCategory::Inside || cc_other ==CellCategory::Boundary);
                         break;
                     case CellCategory::Outside:
-                        assert(one_of(cc_other, { CellCategory::Outside, CellCategory::Boundary }));
-                        assert(num_vertices_on_contour <= 1);
-                        assert(num_edges_point_to_contour <= 1);
-                        assert(num_vertices_inside == 0);
-                        assert(num_vertices_outside > 0);
-                        assert(num_edges_point_inside == 0);
-                        assert(num_edges_point_outside > 0);
+                        assert(cc_other == CellCategory::Outside || cc_other == CellCategory::Boundary);
                         break;
                     default:
                         assert(false);
@@ -345,6 +337,44 @@ namespace debug
 
         return true;
     }
+
+    bool verify_signed_distances(const VD &vd, const Lines &lines, const std::vector<double> &signed_distances)
+    {
+        for (const VD::edge_type &edge : vd.edges()) {
+            const VD::vertex_type *v = edge.vertex0();
+            double d = (v == nullptr) ? std::numeric_limits<double>::max() : signed_distances[v - &vd.vertices().front()];
+            if (v == nullptr || vertex_category(v) == VertexCategory::Outside)
+                assert(d > 0.);
+            else if (vertex_category(v) == VertexCategory::OnContour)
+                assert(d == 0.);
+            else
+                assert(d < 0.);
+            if (v != nullptr) {
+                double err  = std::abs(dist_to_site(lines, *edge.cell(), vertex_point(v)) - std::abs(d));
+                double err2 = std::abs(dist_to_site(lines, *edge.twin()->cell(), vertex_point(v)) - std::abs(d));
+                assert(err < EPSILON);
+                assert(err2 < EPSILON);
+            }
+        }
+        return true;
+    }
+
+    bool verify_offset_intersection_points(const VD &vd, const Lines &lines, const double offset_distance, const std::vector<Vec2d> &offset_intersection_points)
+    {
+        const VD::edge_type *front_edge = &vd.edges().front();
+        const double d = std::abs(offset_distance);
+        for (const VD::edge_type &edge : vd.edges()) {
+            const Vec2d &p = offset_intersection_points[&edge - front_edge];
+            if (edge_offset_has_intersection(p)) {
+                double err  = std::abs(dist_to_site(lines, *edge.cell(), p) - d);
+                double err2 = std::abs(dist_to_site(lines, *edge.twin()->cell(), p) - d);
+                assert(err < EPSILON);
+                assert(err2 < EPSILON);
+            }
+        }
+        return true;
+    }
+
 }
 #endif // NDEBUG
 
@@ -378,9 +408,23 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
     auto annotate_edge = [](const VD::edge_type *edge, EdgeCategory new_edge_category) {
         EdgeCategory ec = edge_category(edge);
         assert(ec == EdgeCategory::Unknown || ec == new_edge_category);
-        assert(new_edge_category == EdgeCategory::PointsInside || 
-               new_edge_category == EdgeCategory::PointsOutside ||
-               new_edge_category == EdgeCategory::PointsToContour);
+#ifndef NDEBUG
+        switch (new_edge_category) {
+        case EdgeCategory::PointsInside:
+            assert(edge->vertex0() != nullptr);
+            assert(edge->vertex1() != nullptr);
+            break;
+        case EdgeCategory::PointsOutside:
+            // assert(edge->vertex0() != nullptr);
+            break;
+        case EdgeCategory::PointsToContour:
+            assert(edge->vertex1() != nullptr);
+            break;
+        default:
+            assert(false);
+        }
+
+#endif // NDEBUG
         set_edge_category(const_cast<VD::edge_type*>(edge), new_edge_category);
     };
 
@@ -389,8 +433,8 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
     // Returns true if the current cell category was modified.
     auto annotate_cell = [](const VD::cell_type *cell, CellCategory new_cell_category) -> bool {
         CellCategory cc = cell_category(cell);
-        assert(one_of(cc, { CellCategory::Inside, CellCategory::Outside, CellCategory::Boundary, CellCategory::Unknown }));
-        assert(one_of(new_cell_category, { CellCategory::Inside, CellCategory::Outside, CellCategory::Boundary }));
+        assert(cc == CellCategory::Inside || cc == CellCategory::Outside || cc == CellCategory::Boundary || cc == CellCategory::Unknown);
+        assert(new_cell_category == CellCategory::Inside || new_cell_category == CellCategory::Outside || new_cell_category == CellCategory::Boundary);
         switch (cc) {
         case CellCategory::Unknown:
             // Old category unknown, just write the new category.
@@ -420,24 +464,24 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
             assert(edge.is_infinite());
             assert(edge.is_linear());
             assert(edge.vertex0() != nullptr);
+            const VD::cell_type *cell  = edge.cell();
+            const VD::cell_type *cell2 = edge.twin()->cell();
+            // A Point-Segment secondary Voronoi edge touches the input contour, a Point-Point Voronoi
+            // edge does not.
+            assert(edge.is_secondary() ? (cell->contains_segment() != cell2->contains_segment()) :
+                                         (cell->contains_point() == cell2->contains_point()));
             annotate_edge(&edge, EdgeCategory::PointsOutside);
             // Opposite edge of an infinite edge is certainly not active.
-            annotate_edge(edge.twin(), EdgeCategory::PointsToContour);
-            annotate_vertex(edge.vertex0(), VertexCategory::OnContour);
+            annotate_edge(edge.twin(), edge.is_secondary() ? EdgeCategory::PointsToContour : EdgeCategory::PointsOutside);
+            annotate_vertex(edge.vertex0(), edge.is_secondary() ? VertexCategory::OnContour : VertexCategory::Outside);
             // edge.vertex1() is null, it is implicitely outside.
-            if (edge.is_secondary()) {
-                // edge.vertex0() must lie on the source contour.
-                const VD::cell_type *cell  = edge.cell();
-                const VD::cell_type *cell2 = edge.twin()->cell();
-                if (cell->contains_segment())
-                    std::swap(cell, cell2);
-                // State of a cell containing a boundary point is certainly outside.
-                assert(cell->contains_point());
-                annotate_cell(cell, CellCategory::Outside);
-                // State of a cell containing a boundary edge is Boundary.
-                assert(cell2->contains_segment());
-                annotate_cell(cell2, CellCategory::Boundary);
-            }
+            if (cell->contains_segment())
+                std::swap(cell, cell2);
+            // State of a cell containing a boundary point is certainly outside.
+            assert(cell->contains_point());
+            annotate_cell(cell, CellCategory::Outside);
+            assert(edge.is_secondary() == cell2->contains_segment());
+            annotate_cell(cell2, cell2->contains_point() ? CellCategory::Outside : CellCategory::Boundary);
         } else if (edge.vertex0() != nullptr) {
             assert(edge.is_finite());
             const VD::cell_type *cell = edge.cell();
@@ -473,10 +517,12 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                     // Find out which one it is.
                     const VD::vertex_type *v0 = edge.vertex0();
                     bool v1_on_contour = false;
-                    if (coord_t(v0->x() + 0.5) == pt_on_contour->x() && 
-                        coord_t(v0->y() + 0.5) == pt_on_contour->y()) {
-                        if (coord_t(v1->x() + 0.5) == pt_on_contour->x() && 
-                            coord_t(v1->y() + 0.5) == pt_on_contour->y()) {
+                    auto on_contour = [&pt_on_contour](const VD::vertex_type *v) {
+                        return std::abs(v->x() - pt_on_contour->x()) < 0.5 + SCALED_EPSILON &&
+                               std::abs(v->y() - pt_on_contour->y()) < 0.5 + SCALED_EPSILON;
+                    };
+                    if (on_contour(v0)) {
+                        if (on_contour(v1)) {
                             // This is really a degenerate case, we don't want this to happen.
                             assert(false);
                             // If it happens, play safe and try to detect the more probable point on contour.
@@ -487,8 +533,7 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                         }
                     } else {
                         // v1 is on the contour.
-                        assert(coord_t(v1->x() + 0.5) == pt_on_contour->x() && 
-                               coord_t(v1->y() + 0.5) == pt_on_contour->y());
+                        assert(on_contour(v1));
                         v1_on_contour = true;
                     }
                     if (v1_on_contour) {
@@ -508,13 +553,12 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                 assert(side != 0.);
                 auto vc = side > 0. ? VertexCategory::Outside : VertexCategory::Inside;
                 annotate_vertex(v1, vc);
-                annotate_edge(&edge, vc == VertexCategory::Outside ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside);
-                if (pt_on_contour) {
-                    annotate_vertex(edge.vertex0(), VertexCategory::OnContour);
-                    annotate_edge(edge.twin(), EdgeCategory::PointsToContour);
-                } else {
-                    // Otherwise v0 is not on the contour and its inside / outside state will be set later.
-                }
+                auto ec = vc == VertexCategory::Outside ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
+                annotate_edge(&edge, ec);
+                // Annotate the twin edge and its vertex. As the Voronoi edge may never cross the input
+                // contour, the twin edge and its vertex will share the property of edge.
+                annotate_vertex(edge.vertex0(), pt_on_contour ? VertexCategory::OnContour : vc);
+                annotate_edge(edge.twin(), pt_on_contour ? EdgeCategory::PointsToContour : ec);
                 assert(cell->contains_segment());
                 annotate_cell(cell, pt_on_contour ? CellCategory::Boundary :
                     (vc == VertexCategory::Outside ? CellCategory::Outside : CellCategory::Inside));
@@ -564,7 +608,7 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
     while (! cell_queue.empty()) {
         const VD::cell_type *cell = cell_queue.back();
         const CellCategory   cc   = cell_category(cell);
-        assert(one_of(cc, { CellCategory::Outside, CellCategory::Inside }));
+        assert(cc == CellCategory::Outside || cc == CellCategory::Inside);
         cell_queue.pop_back();
         const VD::edge_type *first_edge = cell->incident_edge();
         const VD::edge_type *edge       = first_edge;
@@ -634,6 +678,8 @@ std::vector<double> signed_vertex_distances(const VD &vd, const Lines &lines)
         out[&vertex - first_vertex] = dist;
     }
 
+    assert(debug::verify_signed_distances(vd, lines, out));
+
     return out;
 }
 
@@ -646,8 +692,7 @@ std::vector<Vec2d> edge_offset_contour_intersections(
     // vd shall be annotated.
     assert(debug::verify_inside_outside_annotations(vd));
 
-    bool         outside          = offset_distance > 0;
-    const double offset_distance2 = offset_distance * offset_distance;
+    bool outside = offset_distance > 0;
     if (! outside)
         offset_distance = - offset_distance;
     assert(offset_distance > 0.);
@@ -659,21 +704,39 @@ std::vector<Vec2d> edge_offset_contour_intersections(
     std::vector<Vec2d>     out(vd.num_edges(), Vec2d(nan, 0.));
 
     for (const VD::edge_type &edge : vd.edges()) {
-        size_t                 edge_idx = &edge - first_edge;
+        size_t edge_idx = &edge - first_edge;
         if (edge_offset_has_intersection(out[edge_idx]) || out[edge_idx].y() != 0.)
             // This edge was already classified.
             continue;
 
         const VD::vertex_type *v0 = edge.vertex0();
         const VD::vertex_type *v1 = edge.vertex1();
+        if (v0 == nullptr) {
+            assert(vertex_category(v1) == VertexCategory::OnContour || vertex_category(v1) == VertexCategory::Outside);
+            continue;
+        }
+
         double d0 = (v0 == nullptr) ? std::numeric_limits<double>::max() : vertex_distances[v0 - first_vertex];
         double d1 = (v1 == nullptr) ? std::numeric_limits<double>::max() : vertex_distances[v1 - first_vertex];
-        if (d0 == d1)
-            continue;
+        assert(d0 * d1 >= 0.);
         if (! outside) {
             d0 = - d0;
             d1 = - d1;
         }
+#ifndef NDEBUG
+        {
+            double err  = std::abs(debug::dist_to_site(lines, *edge.cell(), vertex_point(v0)) - std::abs(d0));
+            double err2 = std::abs(debug::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v0)) - std::abs(d0));
+            assert(err < EPSILON);
+            assert(err2 < EPSILON);
+            if (v1 != nullptr) {
+                double err3 = std::abs(debug::dist_to_site(lines, *edge.cell(), vertex_point(v1)) - std::abs(d1));
+                double err4 = std::abs(debug::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v1)) - std::abs(d1));
+                assert(err3 < EPSILON);
+                assert(err4 < EPSILON);
+            }
+        }
+#endif // NDEBUG
         double dmin, dmax;
         if (d0 < d1)
             dmin = d0, dmax = d1;
@@ -698,7 +761,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
             assert(edge.is_infinite());
             assert(edge.is_linear());
             // Unconstrained edges have always montonous distance.
-            if (offset_distance >= dmin) {
+            assert(d0 != d1);
+            if (offset_distance > dmin) {
                 // There is certainly an intersection with the offset curve.
                 if (cell->contains_point() && cell2->contains_point()) {
                     assert(! edge.is_secondary());
@@ -730,7 +794,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                     assert(line.a == ipt || line.b == ipt);
                     out[edge_idx] = ipt.cast<double>() + offset_distance * Vec2d(line.b.y() - line.a.y(), line.a.x() - line.b.x()).normalized();
                 }
-            }
+            } else if (offset_distance == dmin)
+                out[edge_idx] = vertex_point(v0);
             // The other edge of an unconstrained edge starting with null vertex shall never be intersected. Mark it as visited.
             out[edge_idx2].y() = 1.;
         } else {
@@ -766,109 +831,169 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                     done = true;
                 }
             } else {
-                // Point - Segment or Point - Point edge, distance along this Voronoi edge may not be monotonous,
-                // there may be a minimum distance point somewhere along this Voronoi edge.
+                // Point - Segment or Point - Point edge, distance along this Voronoi edge may not be monotonous:
+                // The distance function along the Voronoi edge may either have one maximum at one vertex and one minimum at the other vertex,
+                // or it may have two maxima at the vertices and a minimum somewhere along the Voronoi edge, and this Voronoi edge
+                // may be intersected twice by an offset curve.
+                //
+                // Tracing an offset curve accross Voronoi regions with linear edges of montonously increasing or decrasing distance
+                // to a Voronoi region is stable in a sense, that if the distance of Voronoi vertices is calculated correctly, there will
+                // be maximum one intersection of an offset curve found at each Voronoi edge and tracing these intersections shall
+                // produce a set of closed curves.
+                //
+                // Having a non-monotonous distance function between the Voronoi edge end points may lead to splitting of offset curves
+                // at these Voronoi edges. If a Voronoi edge is classified as having no intersection at all while it has some,
+                // the extracted offset curve will contain self intersections at this Voronoi edge.
+                //
+                // If on the other side the two intersection points are found by a numerical error even though none should be found, then
+                // it may happen that it would not be possible to connect these two points into a closed loop, which is likely worse
+                // than the issue above.
+                //
+                // While it is likely not possible to avoid all the numerical issues, one shall strive for the highest numerical robustness.
                 assert(cell->contains_point() || cell2->contains_point());
-                bool point_vs_segment = cell->contains_point() != cell2->contains_point();
-                bool has_intersection = false;
-                bool possibly_two_points = false;
-                const Point &pt0 = cell->contains_point() ? contour_point(*cell, line0) : contour_point(*cell2, line1);
+                size_t       num_intersections  = 0;
+                bool         point_vs_segment   = cell->contains_point() != cell2->contains_point();
+                const Point &pt0                = cell->contains_point() ? contour_point(*cell, line0) : contour_point(*cell2, line1);
                 // Project p0 to line segment <v0, v1>.
                 Vec2d p0(v0->x(), v0->y());
                 Vec2d p1(v1->x(), v1->y());
                 Vec2d px(pt0.x(), pt0.y());
-                if (offset_distance2 >= dmin) {
-                    has_intersection = true;
+                const Point *pt1 = nullptr;
+                Vec2d dir;
+                if (point_vs_segment) {
+                    const Line &line = cell->contains_segment() ? line0 : line1;
+                    dir = (line.b - line.a).cast<double>();
                 } else {
-                    double dmin_new = dmin;
+                    pt1 = &contour_point(*cell2, line1);
+                    // Perpendicular to the (pt1 - pt0) direction.
+                    dir = Vec2d(double(pt0.y() - pt1->y()), double(pt1->x() - pt0.x()));
+                }
+                double s0 = (p0 - px).dot(dir);
+                double s1 = (p1 - px).dot(dir);
+                if (offset_distance >= dmin) {
+                    // This Voronoi edge is intersected by the offset curve just once.
+                    // There may be numerical issues if dmin is close to the minimum of the non-monotonous distance function.
+                    num_intersections = 1;
+                } else {
+                    // This Voronoi edge may not be intersected by the offset curve, or it may split the offset curve
+                    // into two loops. First classify this edge robustly with regard to the Point-Segment bisector or Point-Point bisector.
+                    double dmin_new;
+                    bool   found = false;
                     if (point_vs_segment) {
-                        // Project on the source segment.
-                        const Line &line    = cell->contains_segment() ? line0 : line1;
-                        const Vec2d pt_line = line.a.cast<double>();
-                        const Vec2d v_line  = (line.b - line.a).cast<double>();
-                        double      t0      = (p0 - pt_line).dot(v_line);
-                        double      t1      = (p1 - pt_line).dot(v_line);
-                        double      tx      = (px - pt_line).dot(v_line);
-                        if ((tx >= t0 && tx <= t1) || (tx >= t1 && tx <= t0)) {
-                            // Projection of the Point site falls between the projections of the Voronoi edge end points
-                            // onto the Line site.
-                            Vec2d ft = pt_line + (tx / v_line.squaredNorm()) * v_line;
-                            dmin_new = (ft - px).squaredNorm() * 0.25;
+                        if (s0 * s1 <= 0.) {
+                            // One end of the Voronoi edge is on one side of the Point-Segment bisector, the other end of the Voronoi
+                            // edge is on the other side of the bisector, therefore with a high probability we should find a minimum
+                            // of the distance to a nearest site somewhere inside this Voronoi edge (at the intersection of the bisector
+                            // and the Voronoi edge.
+                            const Line &line = cell->contains_segment() ? line0 : line1;
+                            dmin_new = 0.5 * (Geometry::foot_pt<Vec2d>(line.a.cast<double>(), dir, px) - px).norm();
+                            found    = true;
                         }
                     } else {
-                        // Point-Point Voronoi sites. Project point site onto the current Voronoi edge.
-                        Vec2d  v   = p1 - p0;
-                        auto   l2  = v.squaredNorm();
-                        assert(l2 > 0);
-                        auto   t   = v.dot(px - p0);
-                        if (t >= 0. && t <= l2) {
-                            // Projection falls onto the Voronoi edge. Calculate foot point and distance.
-                            Vec2d ft = p0 + (t / l2) * v;
-                            dmin_new = (ft - px).squaredNorm();
+                        // Point-Point Voronoi sites.
+                        if (s0 * s1 <= 0.) {
+                            // This Voronoi edge intersects connection line of the two Point sites.
+                            dmin_new = 0.5 * (pt1->cast<double>() - px).norm();
+                            found    = true;
                         }
                     }
-                    assert(dmin_new < dmax + SCALED_EPSILON);
-                    assert(dmin_new < dmin + SCALED_EPSILON);
-                    if (dmin_new < dmin) {
-                        dmin = dmin_new;
-                        has_intersection = possibly_two_points = offset_distance2 >= dmin;
+                    if (found) {
+                        assert(dmin_new < dmax + SCALED_EPSILON);
+                        assert(dmin_new < dmin + SCALED_EPSILON);
+                        if (dmin_new <= offset_distance) {
+                            // 1) offset_distance > dmin_new -> two new distinct intersection points are found.
+                            // 2) offset_distance == dmin_new -> one duplicate point is found.
+                            // If 2) is ignored, then two tangentially touching offset curves are created.
+                            // If not ignored, then the two offset curves merge at this double point.
+                            // We should merge the contours while pushing the the two copies of the tangent point away a bit.
+                            dmin = dmin_new;
+                            num_intersections = (offset_distance > dmin) + 1;
+                        }
                     }
                 }
-                if (has_intersection) {
+                if (num_intersections > 0) {
                     detail::Intersections intersections;
                     if (point_vs_segment) {
                         assert(cell->contains_point() || cell2->contains_point());
                         intersections = detail::line_point_equal_distance_points(cell->contains_segment() ? line0 : line1, pt0, offset_distance);
                     } else {
-                        const Point &pt1 = contour_point(*cell2, line1);
-                        intersections = detail::point_point_equal_distance_points(pt0, pt1, offset_distance);
+                        intersections = detail::point_point_equal_distance_points(pt0, *pt1, offset_distance);
                     }
-                    // If the span of distances of start / end point / foot point to the point site indicate an intersection,
-                    // we should find one.
-                    assert(intersections.count > 0);
-                    if (intersections.count == 2) {
-                        // Now decide which points fall on this Voronoi edge.
-                        // Tangential points (single intersection) are ignored.
-                        if (possibly_two_points) {
-                            Vec2d  v  = p1 - p0;
-                            double l2 = v.squaredNorm();
-                            double t0 = v.dot(intersections.pts[0] - p0);
-                            double t1 = v.dot(intersections.pts[1] - p0);
-                            if (t0 > t1) {
-                                std::swap(t0, t1);
+                    // The functions above perform complex calculations in doubles, therefore the results may not be quite accurate and
+                    // the number of intersections found may not be in accord to the number of intersections expected from evaluating simpler expressions.
+                    // Adjust the result to the number of intersection points expected.
+                    if (num_intersections == 2) {
+                        switch (intersections.count) {
+                        case 0:
+                            // No intersection found even though one or two were expected to be found.
+                            // Not trying to find the intersection means that we may produce offset curves, that intersect at this Voronoi edge.
+                            //FIXME We are fine with that for now, but we may try to create artificial split points in further revisions.
+                            break;
+                        case 1:
+                            // Tangential point found.
+                            //FIXME We are fine with that for now, but we may try to create artificial split points in further revisions.
+                            break;
+                        default:
+                        {
+                            // Two intersection points found. Sort them.
+                            assert(intersections.count == 2);
+                            double q0 = (intersections.pts[0] - px).dot(dir);
+                            double q1 = (intersections.pts[1] - px).dot(dir);
+                            // Both Voronoi edge end points and offset contour intersection points should be separated by the bisector.
+                            assert(q0 * q1 <= 0.);
+                            assert(s0 * s1 <= 0.);
+                            // Sort the intersection points by dir.
+                            if ((q0 < q1) != (s0 < s1))
                                 std::swap(intersections.pts[0], intersections.pts[1]);
+                        }
+                        }
+                    } else {
+                        assert(num_intersections == 1);
+                        switch (intersections.count) {
+                        case 0:
+                            // No intersection found. This should not happen.
+                            // Create one artificial intersection point by repeating the dmin point, which is supposed to be
+                            // close to the minimum.
+                            intersections.pts[0] = (dmin == d0) ? p0 : p1;
+                            intersections.count = 1;
+                            break;
+                        case 1:
+                            // One intersection found. This is a tangential point. Use it.
+                            break;
+                        default:
+                            // Two intersections found.
+                            // Now decide which of the point fall on this Voronoi edge.
+                            assert(intersections.count == 2);
+                            double q0 = (intersections.pts[0] - px).dot(dir);
+                            double q1 = (intersections.pts[1] - px).dot(dir);
+                            // Offset contour intersection points should be separated by the bisector.
+                            assert(q0 * q1 <= 0);
+                            assert(s0 * s1 >= 0);
+                            bool take_2nd = false;
+                            if (s0 > 0. || s1 > 0.) {
+                                // Take the most positive.
+                                take_2nd = q1 > q0;
+                            } else {
+                                assert(s0 < 0. || s1 < 0.);
+                                // Take the most negative.
+                                take_2nd = q1 < q0;
                             }
-                            // Remove points outside of the line range.
-                            if (t0 < 0. || t0 > l2) {
-                                if (t1 < 0. || t1 > l2)
-                                    intersections.count = 0;
-                                else {
-                                    -- intersections.count;
-                                    t0 = t1;
-                                    intersections.pts[0] = intersections.pts[1];
-                                }
-                            } else if (t1 < 0. || t1 > l2)
-                                -- intersections.count;
-                        } else {
-                            // Take the point furthest from the end points of the Voronoi edge or a Voronoi parabolic arc.
-                            double d0 = std::max((intersections.pts[0] - p0).squaredNorm(), (intersections.pts[0] - p1).squaredNorm());
-                            double d1 = std::max((intersections.pts[1] - p0).squaredNorm(), (intersections.pts[1] - p1).squaredNorm());
-                            if (d0 > d1)
+                            if (take_2nd)
                                 intersections.pts[0] = intersections.pts[1];
                             -- intersections.count;
                         }
-                        assert(intersections.count > 0);
-                        if (intersections.count == 2) {
-                            out[edge_idx] = intersections.pts[1];
-                            out[edge_idx2] = intersections.pts[0];
-                            done = true;
-                        } else if (intersections.count == 1) {
-                            if (d1 < d0)
-                                std::swap(edge_idx, edge_idx2);
-                            out[edge_idx] = intersections.pts[0];
-                            out[edge_idx2].y() = 1.;
-                            done = true;
-                        }
+                    }
+                    assert(intersections.count > 0);
+                    if (intersections.count == 2) {
+                        out[edge_idx] = intersections.pts[1];
+                        out[edge_idx2] = intersections.pts[0];
+                        done = true;
+                    } else if (intersections.count == 1) {
+                        if (d1 < d0)
+                            std::swap(edge_idx, edge_idx2);
+                        out[edge_idx] = intersections.pts[0];
+                        out[edge_idx2].y() = 1.;
+                        done = true;
                     }
                 }
             }
@@ -876,6 +1001,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                 out[edge_idx].y() = out[edge_idx2].y() = 1.;
         }
     }
+
+    assert(debug::verify_offset_intersection_points(vd, lines, offset_distance, out));
 
     return out;
 }
@@ -887,9 +1014,78 @@ Polygons offset(
     double                           offset_distance,
     double                           discretization_error)
 {
-    std::vector<Vec2d> edge_points = edge_offset_contour_intersections(vd, lines, signed_vertex_distances, offset_distance);
+#ifdef VORONOI_DEBUG_OUT
+    BoundingBox bbox;
+    {
+        bbox.merge(get_extents(lines));
+        bbox.min -= (0.01 * bbox.size().cast<double>()).cast<coord_t>();
+        bbox.max += (0.01 * bbox.size().cast<double>()).cast<coord_t>();
+    }
+    static int irun = 0;
+    ++ irun;
+    {
+        Lines helper_lines;
+        for (const VD::edge_type &edge : vd.edges())
+            if (edge_category(edge) == (offset_distance > 0 ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside) &&
+                edge.vertex0() != nullptr) {
+                const VD::vertex_type *v0 = edge.vertex0();
+                const VD::vertex_type *v1 = edge.vertex1();
+                Vec2d pt1(v0->x(), v0->y());
+                Vec2d pt2;
+                if (v1 == nullptr) {
+                    // Unconstrained edge. Calculate a trimmed position.
+                    assert(edge.is_linear());
+                    const VD::cell_type *cell  = edge.cell();
+                    const VD::cell_type *cell2 = edge.twin()->cell();
+                    const Line          &line0 = lines[cell->source_index()];
+                    const Line          &line1 = lines[cell2->source_index()];
+                    if (cell->contains_point() && cell2->contains_point()) {
+                        const Point &pt0 = (cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b;
+                        const Point &pt1 = (cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b;
+                        // Direction vector of this unconstrained Voronoi edge.
+                        Vec2d dir(double(pt0.y() - pt1.y()), double(pt1.x() - pt0.x()));
+                        pt2 = Vec2d(v0->x(), v0->y()) + dir.normalized() * scale_(10.);
+                    } else {
+                        // Infinite edges could not be created by two segment sites.
+                        assert(cell->contains_point() != cell2->contains_point());
+                        // Linear edge goes through the endpoint of a segment.
+                        assert(edge.is_secondary());
+                        const Point &ipt = cell->contains_segment() ?
+                            ((cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b) :
+                            ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b);
+                        // Infinite edge starts at an input contour, therefore there is always an intersection with an offset curve.
+                        const Line  &line = cell->contains_segment() ? line0 : line1;
+                        assert(line.a == ipt || line.b == ipt);
+                        // dir is perpendicular to line.
+                        Vec2d dir(line.a.y() - line.b.y(), line.b.x() - line.a.x());
+                        assert(dir.norm() > 0.);
+                        if (((line.a == ipt) == cell->contains_point()) == (v0 == nullptr))
+                            dir = - dir;
+                        pt2 = ipt.cast<double>() + dir.normalized() * scale_(10.);
+                    }
+                } else {
+                    pt2 = Vec2d(v1->x(), v1->y());
+                    // Clip the line by the bounding box, so that the coloring of the line will be visible.
+                    Geometry::liang_barsky_line_clipping(pt1, pt2, BoundingBoxf(bbox.min.cast<double>(), bbox.max.cast<double>()));
+                }
+                helper_lines.emplace_back(Line(Point(pt1.cast<coord_t>()), Point(((pt1 + pt2) * 0.5).cast<coord_t>())));
+            }
+        dump_voronoi_to_svg(debug_out_path("voronoi-offset-candidates1-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), helper_lines);
+    }
+#endif // VORONOI_DEBUG_OUT
 
-    const VD::edge_type *front_edge = &vd.edges().front();
+    std::vector<Vec2d>   edge_points = edge_offset_contour_intersections(vd, lines, signed_vertex_distances, offset_distance);
+    const VD::edge_type *front_edge  = &vd.edges().front();
+
+#ifdef VORONOI_DEBUG_OUT
+    Lines helper_lines;
+    {
+        for (const VD::edge_type &edge : vd.edges())
+            if (edge_offset_has_intersection(edge_points[&edge - front_edge]))
+                helper_lines.emplace_back(Line(Point(edge.vertex0()->x(), edge.vertex0()->y()), Point(edge_points[&edge - front_edge].cast<coord_t>())));
+        dump_voronoi_to_svg(debug_out_path("voronoi-offset-candidates2-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), helper_lines);
+    }
+#endif // VORONOI_DEBUG_OUT
 
     auto next_offset_edge = [&edge_points, front_edge](const VD::edge_type *start_edge) -> const VD::edge_type* {
 	    for (const VD::edge_type *edge = start_edge->next(); edge != start_edge; edge = edge->next())
@@ -899,17 +1095,12 @@ Polygons offset(
         return nullptr;
 	};
 
-#ifndef NDEBUG
-	auto dist_to_site = [&lines](const VD::cell_type &cell, const Vec2d &point) {
-        const Line &line = lines[cell.source_index()];
-        return cell.contains_point() ?
-            (((cell.source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line.a : line.b).cast<double>() - point).norm() :
-            (Geometry::foot_pt<Vec2d>(line.a.cast<double>(), (line.b - line.a).cast<double>(), point) - point).norm();
-	};
-#endif /* NDEBUG */
+    const bool inside_offset = offset_distance < 0.;
+    if (inside_offset)
+        offset_distance = - offset_distance;
 
-	// Track the offset curves.
-	Polygons out;
+    // Track the offset curves.
+    Polygons out;
 	double angle_step    = 2. * acos((offset_distance - discretization_error) / offset_distance);
     double cos_threshold = cos(angle_step);
     static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -924,8 +1115,9 @@ Polygons offset(
                 const VD::edge_type *next_edge = next_offset_edge(edge);
 #ifdef VORONOI_DEBUG_OUT
                 if (next_edge == nullptr) {
-                    Lines helper_lines;
-                    dump_voronoi_to_svg(debug_out_path("voronoi-offset-open-loop-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), to_lines(poly));
+                    Lines hl = helper_lines;
+                    append(hl, to_lines(Polyline(poly.points)));
+                    dump_voronoi_to_svg(debug_out_path("voronoi-offset-open-loop-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), hl);
                 }
 #endif // VORONOI_DEBUG_OUT
                 assert(next_edge);
@@ -938,8 +1130,8 @@ Polygons offset(
                 edge_points[next_edge - front_edge].x() = nan;
 #ifndef NDEBUG
                 {
-                    double err  = dist_to_site(*cell, p1) - offset_distance;
-                    double err2 = dist_to_site(*cell, p2) - offset_distance;
+                    double err  = debug::dist_to_site(lines, *cell, p1) - offset_distance;
+                    double err2 = debug::dist_to_site(lines, *cell, p2) - offset_distance;
 #ifdef VORONOI_DEBUG_OUT
                     if (std::max(err, err2) >= SCALED_EPSILON) {
                         Lines helper_lines;
@@ -995,664 +1187,6 @@ Polygons offset(
 	return out;
 }
 
-#if 0
-Polygons offset(
-    const Geometry::VoronoiDiagram  &vd,
-    const Lines                     &lines,
-    double                           offset_distance,
-    double                           discretization_error)
-{
-#ifndef NDEBUG
-    // Verify that twin halfedges are stored next to the other in vd.
-    for (size_t i = 0; i < vd.num_edges(); i += 2) {
-        const VD::edge_type &e  = vd.edges()[i];
-        const VD::edge_type &e2 = vd.edges()[i + 1];
-        assert(e.twin() == &e2);
-        assert(e2.twin() == &e);
-        assert(e.is_secondary() == e2.is_secondary());
-        if (e.is_secondary()) {
-            assert(e.cell()->contains_point() != e2.cell()->contains_point());
-            const VD::edge_type &ex = (e.cell()->contains_point() ? e : e2);
-            // Verify that the Point defining the cell left of ex is an end point of a segment
-            // defining the cell right of ex.
-            const Line  &line0 = lines[ex.cell()->source_index()];
-            const Line  &line1 = lines[ex.twin()->cell()->source_index()];
-            const Point &pt    = (ex.cell()->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b;
-            assert(pt == line1.a || pt == line1.b);
-        }
-    }
-#endif // NDEBUG
-
-    enum class EdgeState : unsigned char {
-        // Initial state, don't know.
-        Unknown,
-        // This edge will certainly not be intersected by the offset curve.
-        Inactive,
-        // This edge will certainly be intersected by the offset curve.
-        Active,
-        // This edge will possibly be intersected by the offset curve.
-        Possible
-    };
-
-    enum class CellState : unsigned char {
-        // Initial state, don't know.
-        Unknown,
-        // Inactive cell is inside for outside curves and outside for inside curves.
-        Inactive,
-        // Active cell is outside for outside curves and inside for inside curves.
-        Active,
-        // Boundary cell is intersected by the input segment, part of it is active.
-        Boundary
-    };
-
-    // Mark edges with outward vertex pointing outside the polygons, thus there is a chance
-    // that such an edge will have an intersection with our desired offset curve.
-    bool                    outside = offset_distance > 0.;
-    std::vector<EdgeState>  edge_state(vd.num_edges(), EdgeState::Unknown);
-    std::vector<CellState>  cell_state(vd.num_cells(), CellState::Unknown);
-    const VD::edge_type    *front_edge = &vd.edges().front();
-    const VD::cell_type    *front_cell = &vd.cells().front();
-    auto                    set_edge_state_initial = [&edge_state, front_edge](const VD::edge_type *edge, EdgeState new_edge_type) {
-        EdgeState &edge_type = edge_state[edge - front_edge];
-        assert(edge_type == EdgeState::Unknown || edge_type == new_edge_type);
-        assert(new_edge_type == EdgeState::Possible || new_edge_type == EdgeState::Inactive);
-        edge_type = new_edge_type;
-    };
-    auto                    set_edge_state_final = [&edge_state, front_edge](const size_t edge_id, EdgeState new_edge_type) {
-        EdgeState &edge_type = edge_state[edge_id];
-        assert(edge_type == EdgeState::Possible || edge_type == new_edge_type);
-        assert(new_edge_type == EdgeState::Active || new_edge_type == EdgeState::Inactive);
-        edge_type = new_edge_type;
-    };
-    auto                    set_cell_state = [&cell_state, front_cell](const VD::cell_type *cell, CellState new_cell_type) -> bool {
-        CellState &cell_type = cell_state[cell - front_cell];
-        assert(cell_type == CellState::Active || cell_type == CellState::Inactive || cell_type == CellState::Boundary || cell_type == CellState::Unknown);
-        assert(new_cell_type == CellState::Active || new_cell_type == CellState::Inactive || new_cell_type == CellState::Boundary);
-        switch (cell_type) {
-        case CellState::Unknown:
-            break;
-        case CellState::Active:
-            if (new_cell_type == CellState::Inactive)
-                new_cell_type = CellState::Boundary;
-            break;
-        case CellState::Inactive:
-            if (new_cell_type == CellState::Active)
-                new_cell_type = CellState::Boundary;
-            break;
-        case CellState::Boundary:
-            return false;
-        }
-        if (cell_type != new_cell_type) {
-            cell_type = new_cell_type;
-            return true;
-        }
-        return false;
-    };
-
-    for (const VD::edge_type &edge : vd.edges())
-        if (edge.vertex1() == nullptr) {
-            // Infinite Voronoi edge separating two Point sites or a Point site and a Segment site.
-            // Infinite edge is always outside and it has at least one valid vertex.
-            assert(edge.vertex0() != nullptr);
-            set_edge_state_initial(&edge, outside ? EdgeState::Possible : EdgeState::Inactive);
-            // Opposite edge of an infinite edge is certainly not active.
-            set_edge_state_initial(edge.twin(), EdgeState::Inactive);
-            if (edge.is_secondary()) {
-                // edge.vertex0() must lie on source contour.
-                const VD::cell_type *cell  = edge.cell();
-                const VD::cell_type *cell2 = edge.twin()->cell();
-                if (cell->contains_segment())
-                    std::swap(cell, cell2);
-                // State of a cell containing a boundary point is known.
-                assert(cell->contains_point());
-                set_cell_state(cell, outside ? CellState::Active : CellState::Inactive);
-                // State of a cell containing a boundary edge is Boundary.
-                assert(cell2->contains_segment());
-                set_cell_state(cell2, CellState::Boundary);
-            }
-        } else if (edge.vertex0() != nullptr) {
-            // Finite edge.
-            const VD::cell_type *cell = edge.cell();
-            const Line          *line = cell->contains_segment() ? &lines[cell->source_index()] : nullptr;
-            if (line == nullptr) {
-                cell = edge.twin()->cell();
-                line = cell->contains_segment() ? &lines[cell->source_index()] : nullptr;
-            }
-            if (line) {
-                const VD::vertex_type *v1    = edge.vertex1();
-                const VD::cell_type   *cell2 = (cell == edge.cell()) ? edge.twin()->cell() : edge.cell();
-                assert(v1);
-                const Point *pt_on_contour = nullptr;
-                if (cell == edge.cell() && edge.twin()->cell()->contains_segment()) {
-                    // Constrained bisector of two segments.
-                    // If the two segments share a point, then one end of the current Voronoi edge shares this point as well.
-                    // Find pt_on_contour if it exists.
-                    const Line &line2 = lines[cell2->source_index()];
-                    if (line->a == line2.b)
-                        pt_on_contour = &line->a;
-                    else if (line->b == line2.a)
-                        pt_on_contour = &line->b;
-                } else if (edge.is_secondary()) {
-                    assert(edge.is_linear());
-                    // One end of the current Voronoi edge shares a point of a contour.
-                    assert(edge.cell()->contains_point() != edge.twin()->cell()->contains_point());
-                    const Line &line2 = lines[cell2->source_index()];
-                    pt_on_contour = &((cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line2.a : line2.b);
-                }
-                if (pt_on_contour) {
-                    // One end of the current Voronoi edge shares a point of a contour.
-                    // Find out which one it is.
-                    const VD::vertex_type   *v0 = edge.vertex0();
-                    Vec2d                    vec0(v0->x() - pt_on_contour->x(), v0->y() - pt_on_contour->y());
-                    Vec2d                    vec1(v1->x() - pt_on_contour->x(), v1->y() - pt_on_contour->y());
-                    double                   d0 = vec0.squaredNorm();
-                    double                   d1 = vec1.squaredNorm();
-                    assert(std::min(d0, d1) < SCALED_EPSILON * SCALED_EPSILON);
-                    if (d0 < d1) {
-                        // v0 is equal to pt.
-                    } else {
-                        // Skip secondary edge pointing to a contour point.
-                        set_edge_state_initial(&edge, EdgeState::Inactive);
-                        continue;
-                    }
-                }
-                Vec2d l0(line->a.cast<double>());
-                Vec2d lv((line->b - line->a).cast<double>());
-                double side = cross2(lv, Vec2d(v1->x(), v1->y()) - l0);
-                bool edge_active = outside ? (side < 0.) : (side > 0.);
-                set_edge_state_initial(&edge, edge_active ? EdgeState::Possible : EdgeState::Inactive);
-                assert(cell->contains_segment());
-                set_cell_state(cell, 
-                    pt_on_contour ? CellState::Boundary :
-                                    edge_active ? CellState::Active : CellState::Inactive);
-                set_cell_state(cell2,
-                    (pt_on_contour && cell2->contains_segment()) ?
-                        CellState::Boundary :
-                        edge_active ? CellState::Active : CellState::Inactive);
-            }
-        }
-    {
-        // Perform one round of expansion marking Voronoi edges and cells next to boundary cells as active / inactive.
-        std::vector<const VD::cell_type*> cell_queue;
-        for (const VD::edge_type &edge : vd.edges())
-            if (edge_state[&edge - front_edge] == EdgeState::Unknown) {
-                assert(edge.cell()->contains_point() && edge.twin()->cell()->contains_point());
-                // Edge separating two point sources, not yet classified as inside / outside.
-                CellState cs  = cell_state[edge.cell() - front_cell];
-                CellState cs2 = cell_state[edge.twin()->cell() - front_cell];
-                if (cs != CellState::Unknown || cs2 != CellState::Unknown) {
-                    if (cs == CellState::Unknown) {
-                        cs = cs2;
-                        if (set_cell_state(edge.cell(), cs))
-                            cell_queue.emplace_back(edge.cell());
-                    } else if (set_cell_state(edge.twin()->cell(), cs))
-                        cell_queue.emplace_back(edge.twin()->cell());
-                    EdgeState es = (cs == CellState::Active) ? EdgeState::Possible : EdgeState::Inactive;
-                    set_edge_state_initial(&edge, es);
-                    set_edge_state_initial(edge.twin(), es);
-                } else {
-                    const VD::edge_type *e = edge.twin()->rot_prev();
-                    do {
-                        EdgeState es = edge_state[e->twin() - front_edge];
-                        if (es != EdgeState::Unknown) {
-                            assert(es == EdgeState::Possible || es == EdgeState::Inactive);
-                            set_edge_state_initial(&edge, es);
-                            CellState cs = (es == EdgeState::Possible) ? CellState::Active : CellState::Inactive;
-                            if (set_cell_state(edge.cell(), cs))
-                                cell_queue.emplace_back(edge.cell());
-                            if (set_cell_state(edge.twin()->cell(), cs))
-                                cell_queue.emplace_back(edge.twin()->cell());
-                            break;
-                        }
-                        e = e->rot_prev();
-                    } while (e != edge.twin());
-                }
-            }
-        // Do a final seed fill over Voronoi cells and unmarked Voronoi edges.
-        while (! cell_queue.empty()) {
-            const VD::cell_type *cell       = cell_queue.back();
-            const CellState      cs         = cell_state[cell - front_cell];
-            cell_queue.pop_back();
-            const VD::edge_type *first_edge = cell->incident_edge();
-            const VD::edge_type *edge       = cell->incident_edge();
-            EdgeState            es         = (cs == CellState::Active) ? EdgeState::Possible : EdgeState::Inactive;
-            do {
-                if (set_cell_state(edge->twin()->cell(), cs)) {
-                    set_edge_state_initial(edge, es);
-                    set_edge_state_initial(edge->twin(), es);
-                    cell_queue.emplace_back(edge->twin()->cell());
-                }
-                edge = edge->next();
-            } while (edge != first_edge);
-        }
-    }
-
-    if (! outside)
-        offset_distance = - offset_distance;
-
-#ifdef VORONOI_DEBUG_OUT
-    BoundingBox bbox;
-    {
-        bbox.merge(get_extents(lines));
-        bbox.min -= (0.01 * bbox.size().cast<double>()).cast<coord_t>();
-        bbox.max += (0.01 * bbox.size().cast<double>()).cast<coord_t>();
-    }
-    static int irun = 0;
-    ++ irun;
-    {
-        Lines helper_lines;
-        for (const VD::edge_type &edge : vd.edges())
-            if (edge_state[&edge - front_edge] == EdgeState::Possible) {
-                const VD::vertex_type *v0 = edge.vertex0();
-                const VD::vertex_type *v1 = edge.vertex1();
-                assert(v0 != nullptr);
-                Vec2d pt1(v0->x(), v0->y());
-                Vec2d pt2;
-                if (v1 == nullptr) {
-                    // Unconstrained edge. Calculate a trimmed position.
-                    assert(edge.is_linear());
-                    const VD::cell_type *cell  = edge.cell();
-                    const VD::cell_type *cell2 = edge.twin()->cell();
-                    const Line          &line0 = lines[cell->source_index()];
-                    const Line          &line1 = lines[cell2->source_index()];
-                    if (cell->contains_point() && cell2->contains_point()) {
-                        const Point &pt0 = (cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b;
-                        const Point &pt1 = (cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b;
-                        // Direction vector of this unconstrained Voronoi edge.
-                        Vec2d dir(double(pt0.y() - pt1.y()), double(pt1.x() - pt0.x()));
-                        pt2 = Vec2d(v0->x(), v0->y()) + dir.normalized() * scale_(10.);
-                    } else {
-                        // Infinite edges could not be created by two segment sites.
-                        assert(cell->contains_point() != cell2->contains_point());
-                        // Linear edge goes through the endpoint of a segment.
-                        assert(edge.is_secondary());
-                        const Point &ipt = cell->contains_segment() ?
-                            ((cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b) :
-                            ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b);
-                        // Infinite edge starts at an input contour, therefore there is always an intersection with an offset curve.
-                        const Line  &line = cell->contains_segment() ? line0 : line1;
-                        assert(line.a == ipt || line.b == ipt);
-                        // dir is perpendicular to line.
-                        Vec2d dir(line.a.y() - line.b.y(), line.b.x() - line.a.x());
-                        assert(dir.norm() > 0.);
-                        if (((line.a == ipt) == cell->contains_point()) == (v0 == nullptr))
-                            dir = - dir;
-                        pt2 = ipt.cast<double>() + dir.normalized() * scale_(10.);
-                    }
-                } else {
-                    pt2 = Vec2d(v1->x(), v1->y());
-                    // Clip the line by the bounding box, so that the coloring of the line will be visible.
-                    Geometry::liang_barsky_line_clipping(pt1, pt2, BoundingBoxf(bbox.min.cast<double>(), bbox.max.cast<double>()));
-                }
-                helper_lines.emplace_back(Line(Point(pt1.cast<coord_t>()), Point(((pt1 + pt2) * 0.5).cast<coord_t>())));
-            }
-        dump_voronoi_to_svg(debug_out_path("voronoi-offset-candidates1-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), helper_lines);
-    }
-#endif // VORONOI_DEBUG_OUT
-
-    std::vector<Vec2d> edge_offset_point(vd.num_edges(), Vec2d());
-    const double offset_distance2 = offset_distance * offset_distance;
-    for (const VD::edge_type &edge : vd.edges()) {
-        assert(edge_state[&edge - front_edge] != EdgeState::Unknown);
-        size_t edge_idx = &edge - front_edge;
-        if (edge_state[edge_idx] == EdgeState::Possible) {
-            // Edge candidate, intersection points were not calculated yet.
-            const VD::vertex_type *v0    = edge.vertex0();
-            const VD::vertex_type *v1    = edge.vertex1();
-            assert(v0 != nullptr);
-            const VD::cell_type   *cell  = edge.cell();
-            const VD::cell_type   *cell2 = edge.twin()->cell();
-            const Line            &line0 = lines[cell->source_index()];
-            const Line            &line1 = lines[cell2->source_index()];
-            size_t                 edge_idx2 = edge.twin() - front_edge;
-            if (v1 == nullptr) {
-                assert(edge.is_infinite());
-                assert(edge.is_linear());
-                assert(edge_state[edge_idx2] == EdgeState::Inactive);
-                if (cell->contains_point() && cell2->contains_point()) {
-                    assert(! edge.is_secondary());
-                    const Point &pt0 = (cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b;
-                    const Point &pt1 = (cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b;
-                    double dmin2 = (Vec2d(v0->x(), v0->y()) - pt0.cast<double>()).squaredNorm();
-                    assert(dmin2 >= SCALED_EPSILON * SCALED_EPSILON);
-                    if (dmin2 <= offset_distance2) {
-                        // There shall be an intersection of this unconstrained edge with the offset curve.
-                        // Direction vector of this unconstrained Voronoi edge.
-                        Vec2d dir(double(pt0.y() - pt1.y()), double(pt1.x() - pt0.x()));
-                        Vec2d pt(v0->x(), v0->y());
-                        double t = detail::first_circle_segment_intersection_parameter(Vec2d(pt0.x(), pt0.y()), offset_distance, pt, dir);
-                        edge_offset_point[edge_idx] = pt + t * dir;
-                        set_edge_state_final(edge_idx, EdgeState::Active);
-                    } else
-                        set_edge_state_final(edge_idx, EdgeState::Inactive);
-                } else {
-                    // Infinite edges could not be created by two segment sites.
-                    assert(cell->contains_point() != cell2->contains_point());
-                    // Linear edge goes through the endpoint of a segment.
-                    assert(edge.is_secondary());
-                    const Point &ipt = cell->contains_segment() ?
-                        ((cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b) :
-                        ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b);
-    #ifndef NDEBUG
-                    if (cell->contains_segment()) {
-                        const Point &pt1 = (cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b;
-                        assert((pt1.x() == line0.a.x() && pt1.y() == line0.a.y()) ||
-                               (pt1.x() == line0.b.x() && pt1.y() == line0.b.y()));
-                    } else {
-                        const Point &pt0 = (cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b;
-                        assert((pt0.x() == line1.a.x() && pt0.y() == line1.a.y()) ||
-                               (pt0.x() == line1.b.x() && pt0.y() == line1.b.y()));
-                    }
-                    assert((Vec2d(v0->x(), v0->y()) - ipt.cast<double>()).norm() < SCALED_EPSILON);
-    #endif /* NDEBUG */
-                    // Infinite edge starts at an input contour, therefore there is always an intersection with an offset curve.
-                    const Line &line = cell->contains_segment() ? line0 : line1;
-                    assert(line.a == ipt || line.b == ipt);
-                    edge_offset_point[edge_idx] = ipt.cast<double>() + offset_distance * Vec2d(line.b.y() - line.a.y(), line.a.x() - line.b.x()).normalized();
-                    set_edge_state_final(edge_idx, EdgeState::Active);
-                }
-                // The other edge of an unconstrained edge starting with null vertex shall never be intersected.
-                set_edge_state_final(edge_idx2, EdgeState::Inactive);
-            } else if (edge.is_secondary()) {
-                assert(edge.is_linear());
-                assert(cell->contains_point() != cell2->contains_point());
-                const Line  &line0 = lines[edge.cell()->source_index()];
-                const Line  &line1 = lines[edge.twin()->cell()->source_index()];
-                const Point &pt    = cell->contains_point() ?
-                    ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b) :
-                    ((cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b);
-                const Line  &line  = cell->contains_segment() ? line0 : line1;
-                assert(pt == line.a || pt == line.b);
-                assert((pt.cast<double>() - Vec2d(v0->x(), v0->y())).norm() < SCALED_EPSILON);
-                Vec2d dir(v1->x() - v0->x(), v1->y() - v0->y());
-                double l2 = dir.squaredNorm();
-                if (offset_distance2 <= l2) {
-                    edge_offset_point[edge_idx] = pt.cast<double>() + (offset_distance / sqrt(l2)) * dir;
-                    set_edge_state_final(edge_idx, EdgeState::Active);
-                } else {
-                    set_edge_state_final(edge_idx, EdgeState::Inactive);
-                }
-                set_edge_state_final(edge_idx2, EdgeState::Inactive);
-            } else {
-                // Finite edge has valid points at both sides.
-                bool done = false;
-                if (cell->contains_segment() && cell2->contains_segment()) {
-                    // This edge is a bisector of two line segments. Project v0, v1 onto one of the line segments.
-                    Vec2d  pt(line0.a.cast<double>());
-                    Vec2d  dir(line0.b.cast<double>() - pt);
-                    Vec2d  vec0 = Vec2d(v0->x(), v0->y()) - pt;
-                    Vec2d  vec1 = Vec2d(v1->x(), v1->y()) - pt;
-                    double l2   = dir.squaredNorm();
-                    assert(l2 > 0.);
-                    double dmin = (dir * (vec0.dot(dir) / l2) - vec0).squaredNorm();
-                    double dmax = (dir * (vec1.dot(dir) / l2) - vec1).squaredNorm();
-                    bool   flip = dmin > dmax;
-                    if (flip)
-                        std::swap(dmin, dmax);
-                    if (offset_distance2 >= dmin && offset_distance2 <= dmax) {
-                        // Intersect. Maximum one intersection will be found.
-                        // This edge is a bisector of two line segments. Distance to the input polygon increases/decreases monotonically.
-                        dmin = sqrt(dmin);
-                        dmax = sqrt(dmax);
-                        assert(offset_distance > dmin - EPSILON && offset_distance < dmax + EPSILON);
-                        double ddif = dmax - dmin;
-                        if (ddif == 0.) {
-                            // line, line2 are exactly parallel. This is a singular case, the offset curve should miss it.
-                        } else {
-                            if (flip) {
-                                std::swap(edge_idx, edge_idx2);
-                                std::swap(v0, v1);
-                            }
-                            double t = clamp(0., 1., (offset_distance - dmin) / ddif);
-                            edge_offset_point[edge_idx] = Vec2d(lerp(v0->x(), v1->x(), t), lerp(v0->y(), v1->y(), t));
-                            set_edge_state_final(edge_idx, EdgeState::Active);
-                            set_edge_state_final(edge_idx2, EdgeState::Inactive);
-                            done = true;
-                        }
-                    }
-                } else {
-                    assert(cell->contains_point() || cell2->contains_point());
-                    bool point_vs_segment = cell->contains_point() != cell2->contains_point();
-                    const Point &pt0 = cell->contains_point() ?
-                        ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b) :
-                        ((cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b);
-                    // Project p0 to line segment <v0, v1>.
-                    Vec2d p0(v0->x(), v0->y());
-                    Vec2d p1(v1->x(), v1->y());
-                    Vec2d px(pt0.x(), pt0.y());
-                    double d0 = (p0 - px).squaredNorm();
-                    double d1 = (p1 - px).squaredNorm();
-                    double dmin = std::min(d0, d1);
-                    double dmax = std::max(d0, d1);
-                    bool has_intersection = false;
-                    bool possibly_two_points = false;
-                    if (offset_distance2 <= dmax) {
-                        if (offset_distance2 >= dmin) {
-                            has_intersection = true;
-                        } else {
-                            double dmin_new = dmin;
-                            if (point_vs_segment) {
-                                // Project on the source segment.
-                                const Line &line    = cell->contains_segment() ? line0 : line1;
-                                const Vec2d pt_line = line.a.cast<double>();
-                                const Vec2d v_line  = (line.b - line.a).cast<double>();
-                                double      t0      = (p0 - pt_line).dot(v_line);
-                                double      t1      = (p1 - pt_line).dot(v_line);
-                                double      tx      = (px - pt_line).dot(v_line);
-                                if ((tx >= t0 && tx <= t1) || (tx >= t1 && tx <= t0)) {
-                                    // Projection of the Point site falls between the projections of the Voronoi edge end points
-                                    // onto the Line site.
-                                    Vec2d ft = pt_line + (tx / v_line.squaredNorm()) * v_line;
-                                    dmin_new = (ft - px).squaredNorm() * 0.25;
-                                }
-                            } else {
-                                // Point-Point Voronoi sites. Project point site onto the current Voronoi edge.
-                                Vec2d  v   = p1 - p0;
-                                auto   l2  = v.squaredNorm();
-                                assert(l2 > 0);
-                                auto   t   = v.dot(px - p0);
-                                if (t >= 0. && t <= l2) {
-                                    // Projection falls onto the Voronoi edge. Calculate foot point and distance.
-                                    Vec2d  ft = p0 + (t / l2) * v;
-                                    dmin_new = (ft - px).squaredNorm();
-                                }
-                            }
-                            assert(dmin_new < dmax + SCALED_EPSILON);
-                            assert(dmin_new < dmin + SCALED_EPSILON);
-                            if (dmin_new < dmin) {
-                                dmin = dmin_new;
-                                has_intersection = possibly_two_points = offset_distance2 >= dmin;
-                            }
-                        }
-                    }
-                    if (has_intersection) {
-                        detail::Intersections intersections;
-                        if (point_vs_segment) {
-                            assert(cell->contains_point() || cell2->contains_point());
-                            intersections = detail::line_point_equal_distance_points(cell->contains_segment() ? line0 : line1, pt0, offset_distance);
-                        } else {
-                            const Point &pt1 = (cell2->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line1.a : line1.b;
-                            intersections = detail::point_point_equal_distance_points(pt0, pt1, offset_distance);
-                        }
-                        // If the span of distances of start / end point / foot point to the point site indicate an intersection,
-                        // we should find one.
-                        assert(intersections.count > 0);
-                        if (intersections.count == 2) {
-                            // Now decide which points fall on this Voronoi edge.
-                            // Tangential points (single intersection) are ignored.
-                            if (possibly_two_points) {
-                                Vec2d  v  = p1 - p0;
-                                double l2 = v.squaredNorm();
-                                double t0 = v.dot(intersections.pts[0] - p0);
-                                double t1 = v.dot(intersections.pts[1] - p0);
-                                if (t0 > t1) {
-                                    std::swap(t0, t1);
-                                    std::swap(intersections.pts[0], intersections.pts[1]);
-                                }
-                                // Remove points outside of the line range.
-                                if (t0 < 0. || t0 > l2) {
-                                    if (t1 < 0. || t1 > l2)
-                                        intersections.count = 0;
-                                    else {
-                                        -- intersections.count;
-                                        t0 = t1;
-                                        intersections.pts[0] = intersections.pts[1];
-                                    }
-                                } else if (t1 < 0. || t1 > l2)
-                                    -- intersections.count;
-                            } else {
-                                // Take the point furthest from the end points of the Voronoi edge or a Voronoi parabolic arc.
-                                double d0 = std::max((intersections.pts[0] - p0).squaredNorm(), (intersections.pts[0] - p1).squaredNorm());
-                                double d1 = std::max((intersections.pts[1] - p0).squaredNorm(), (intersections.pts[1] - p1).squaredNorm());
-                                if (d0 > d1)
-                                    intersections.pts[0] = intersections.pts[1];
-                                -- intersections.count;
-                            }
-                            assert(intersections.count > 0);
-                            if (intersections.count == 2) {
-                                set_edge_state_final(edge_idx, EdgeState::Active);
-                                set_edge_state_final(edge_idx2, EdgeState::Active);
-                                edge_offset_point[edge_idx]  = intersections.pts[1];
-                                edge_offset_point[edge_idx2] = intersections.pts[0];
-                                done = true;
-                            } else if (intersections.count == 1) {
-                                if (d1 < d0)
-                                    std::swap(edge_idx, edge_idx2);
-                                set_edge_state_final(edge_idx, EdgeState::Active);
-                                set_edge_state_final(edge_idx2, EdgeState::Inactive);
-                                edge_offset_point[edge_idx] = intersections.pts[0];
-                                done = true;
-                            }
-                        }
-                    }
-                }
-                if (! done) {
-                    set_edge_state_final(edge_idx, EdgeState::Inactive);
-                    set_edge_state_final(edge_idx2, EdgeState::Inactive);
-                }
-            }
-        }
-    }
-
-#ifndef NDEBUG
-    for (const VD::edge_type &edge : vd.edges()) {
-        assert(edge_state[&edge - front_edge] == EdgeState::Inactive || edge_state[&edge - front_edge] == EdgeState::Active);
-        // None of a new edge candidate may start with null vertex.
-        assert(edge_state[&edge - front_edge] == EdgeState::Inactive || edge.vertex0() != nullptr);
-        assert(edge_state[edge.twin() - front_edge] == EdgeState::Inactive || edge.twin()->vertex0() != nullptr);
-    }
-#endif // NDEBUG
-
-#ifdef VORONOI_DEBUG_OUT
-    {
-        Lines helper_lines;
-        for (const VD::edge_type &edge : vd.edges())
-            if (edge_state[&edge - front_edge] == EdgeState::Active)
-                helper_lines.emplace_back(Line(Point(edge.vertex0()->x(), edge.vertex0()->y()), Point(edge_offset_point[&edge - front_edge].cast<coord_t>())));
-        dump_voronoi_to_svg(debug_out_path("voronoi-offset-candidates2-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), helper_lines);
-    }
-#endif // VORONOI_DEBUG_OUT
-
-    auto next_offset_edge = [&edge_state, front_edge](const VD::edge_type *start_edge) -> const VD::edge_type* {
-	    for (const VD::edge_type *edge = start_edge->next(); edge != start_edge; edge = edge->next())
-            if (edge_state[edge->twin() - front_edge] == EdgeState::Active)
-                return edge->twin();
-        // assert(false);
-        return nullptr;
-	};
-
-#ifndef NDEBUG
-	auto dist_to_site = [&lines](const VD::cell_type &cell, const Vec2d &point) {
-        const Line &line = lines[cell.source_index()];
-        return cell.contains_point() ?
-            (((cell.source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line.a : line.b).cast<double>() - point).norm() :
-            (Geometry::foot_pt<Vec2d>(line.a.cast<double>(), (line.b - line.a).cast<double>(), point) - point).norm();
-	};
-#endif /* NDEBUG */
-
-	// Track the offset curves.
-	Polygons out;
-	double angle_step    = 2. * acos((offset_distance - discretization_error) / offset_distance);
-    double cos_threshold = cos(angle_step);
-    for (size_t seed_edge_idx = 0; seed_edge_idx < vd.num_edges(); ++ seed_edge_idx)
-		if (edge_state[seed_edge_idx] == EdgeState::Active) {
-            const VD::edge_type *start_edge = &vd.edges()[seed_edge_idx];
-            const VD::edge_type *edge       = start_edge;
-            Polygon  			 poly;
-		    do {
-		        // find the next edge
-                const VD::edge_type *next_edge = next_offset_edge(edge);
-#ifdef VORONOI_DEBUG_OUT
-                if (next_edge == nullptr) {
-                    Lines helper_lines;
-                    dump_voronoi_to_svg(debug_out_path("voronoi-offset-open-loop-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), to_lines(poly));
-                }
-#endif // VORONOI_DEBUG_OUT
-                assert(next_edge);
-		        //std::cout << "offset-output: "; print_edge(edge); std::cout << " to "; print_edge(next_edge); std::cout << "\n";
-		        // Interpolate a circular segment or insert a linear segment between edge and next_edge.
-                const VD::cell_type  *cell      = edge->cell();
-                edge_state[next_edge - front_edge] = EdgeState::Inactive;
-                Vec2d p1 = edge_offset_point[edge - front_edge];
-                Vec2d p2 = edge_offset_point[next_edge - front_edge];
-#ifndef NDEBUG
-                {
-                    double err  = dist_to_site(*cell, p1) - offset_distance;
-                    double err2 = dist_to_site(*cell, p2) - offset_distance;
-#ifdef VORONOI_DEBUG_OUT
-                    if (std::max(err, err2) >= SCALED_EPSILON) {
-                        Lines helper_lines;
-                        dump_voronoi_to_svg(debug_out_path("voronoi-offset-incorrect_pt-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), to_lines(poly));
-                    }
-#endif // VORONOI_DEBUG_OUT
-                    assert(std::abs(err) < SCALED_EPSILON);
-                    assert(std::abs(err2) < SCALED_EPSILON);
-                }
-#endif /* NDEBUG */
-				if (cell->contains_point()) {
-					// Discretize an arc from p1 to p2 with radius = offset_distance and discretization_error.
-                    // The extracted contour is CCW oriented, extracted holes are CW oriented.
-                    // The extracted arc will have the same orientation. As the Voronoi regions are convex, the angle covered by the arc will be convex as well.
-                    const Line  &line0  = lines[cell->source_index()];
-					const Vec2d &center = ((cell->source_category() == boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ? line0.a : line0.b).cast<double>();
-					const Vec2d  v1 	= p1 - center;
-					const Vec2d  v2 	= p2 - center;
-                    bool 		 ccw    = cross2(v1, v2) > 0;
-                    double       cos_a  = v1.dot(v2);
-                    double       norm   = v1.norm() * v2.norm();
-                    assert(norm > 0.);
-                    if (cos_a < cos_threshold * norm) {
-						// Angle is bigger than the threshold, therefore the arc will be discretized.
-                        cos_a /= norm;
-                        assert(cos_a > -1. - EPSILON && cos_a < 1. + EPSILON);
-                        double angle = acos(std::max(-1., std::min(1., cos_a)));
-						size_t n_steps = size_t(ceil(angle / angle_step));
-						double astep = angle / n_steps;
-						if (! ccw)
-							astep *= -1.;
-						double a = astep;
-						for (size_t i = 1; i < n_steps; ++ i, a += astep) {
-							double c = cos(a);
-							double s = sin(a);
-							Vec2d  p = center + Vec2d(c * v1.x() - s * v1.y(), s * v1.x() + c * v1.y());
-                            poly.points.emplace_back(Point(coord_t(p.x()), coord_t(p.y())));
-						}
-                    }
-				}
-                {
-                    Point pt_last(coord_t(p2.x()), coord_t(p2.y()));
-                    if (poly.empty() || poly.points.back() != pt_last)
-                        poly.points.emplace_back(pt_last);
-                }
-                edge = next_edge;
-		    } while (edge != start_edge);
-		    out.emplace_back(std::move(poly));
-		}
-
-	return out;
-}
-#else
-
 Polygons offset(
 	const VD 		&vd, 
 	const Lines 	&lines, 
@@ -1663,8 +1197,6 @@ Polygons offset(
     std::vector<double> dist = signed_vertex_distances(vd, lines);
     return offset(vd, lines, dist, offset_distance, discretization_error);
 }
-
-#endif
 
 } // namespace Voronoi
 } // namespace Slic3r

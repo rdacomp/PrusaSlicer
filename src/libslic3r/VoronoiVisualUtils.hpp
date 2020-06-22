@@ -5,6 +5,8 @@
 #include <libslic3r/Polygon.hpp>
 #include <libslic3r/SVG.hpp>
 
+#include "VoronoiOffset.hpp"
+
 namespace boost { namespace polygon {
 
 // The following code for the visualization of the boost Voronoi diagram is based on:
@@ -317,8 +319,8 @@ static inline void dump_voronoi_to_svg(
 
     if (scale == 0)
         scale =
-//                0.1
-                0.01
+                0.1
+//                0.01
                 * std::min(bbox.size().x(), bbox.size().y());
     else
         scale /= SCALING_FACTOR;
@@ -329,6 +331,8 @@ static inline void dump_voronoi_to_svg(
     const coord_t       inputSegmentLineWidth       = coord_t(0.03 * scale);
 
     const std::string   voronoiPointColor           = "black";
+    const std::string   voronoiPointColorOutside    = "red";
+    const std::string   voronoiPointColorInside     = "blue";
     const coord_t       voronoiPointRadius          = coord_t(0.06 * scale);
     const std::string   voronoiLineColorPrimary     = "black";
     const std::string   voronoiLineColorSecondary   = "green";
@@ -360,9 +364,11 @@ static inline void dump_voronoi_to_svg(
             Voronoi::Internal::point_type(double(it->b(0)), double(it->b(1)))));
 
     // Color exterior edges.
-    for (boost::polygon::voronoi_diagram<double>::const_edge_iterator it = vd.edges().begin(); it != vd.edges().end(); ++it)
-        if (!it->is_finite())
-            Voronoi::Internal::color_exterior(&(*it));
+    if (internalEdgesOnly) {
+        for (boost::polygon::voronoi_diagram<double>::const_edge_iterator it = vd.edges().begin(); it != vd.edges().end(); ++it)
+            if (!it->is_finite())
+                Voronoi::Internal::color_exterior(&(*it));
+    }
 
     // Draw the end points of the input polygon.
     for (Lines::const_iterator it = lines.begin(); it != lines.end(); ++it) {
@@ -376,8 +382,16 @@ static inline void dump_voronoi_to_svg(
 #if 1
     // Draw voronoi vertices.
     for (boost::polygon::voronoi_diagram<double>::const_vertex_iterator it = vd.vertices().begin(); it != vd.vertices().end(); ++it)
-        if (! internalEdgesOnly || it->color() != Voronoi::Internal::EXTERNAL_COLOR)
-            svg.draw(Point(coord_t(it->x()), coord_t(it->y())), voronoiPointColor, voronoiPointRadius);
+        if (! internalEdgesOnly || it->color() != Voronoi::Internal::EXTERNAL_COLOR) {
+            const std::string *color = nullptr;
+            switch (Voronoi::vertex_category(*it)) {
+            case Voronoi::VertexCategory::OnContour:    color = &voronoiPointColor;         break;
+            case Voronoi::VertexCategory::Outside:      color = &voronoiPointColorOutside;  break;
+            case Voronoi::VertexCategory::Inside:       color = &voronoiPointColorInside;   break;
+            default: assert(false);
+            }
+            svg.draw(Point(coord_t(it->x()), coord_t(it->y())), *color, voronoiPointRadius);
+        }
 
     for (boost::polygon::voronoi_diagram<double>::const_edge_iterator it = vd.edges().begin(); it != vd.edges().end(); ++it) {
         if (primaryEdgesOnly && !it->is_primary())
