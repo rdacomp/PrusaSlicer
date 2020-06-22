@@ -352,8 +352,8 @@ namespace debug
             if (v != nullptr) {
                 double err  = std::abs(dist_to_site(lines, *edge.cell(), vertex_point(v)) - std::abs(d));
                 double err2 = std::abs(dist_to_site(lines, *edge.twin()->cell(), vertex_point(v)) - std::abs(d));
-                assert(err < EPSILON);
-                assert(err2 < EPSILON);
+                assert(err < SCALED_EPSILON);
+                assert(err2 < SCALED_EPSILON);
             }
         }
         return true;
@@ -368,8 +368,8 @@ namespace debug
             if (edge_offset_has_intersection(p)) {
                 double err  = std::abs(dist_to_site(lines, *edge.cell(), p) - d);
                 double err2 = std::abs(dist_to_site(lines, *edge.twin()->cell(), p) - d);
-                assert(err < EPSILON);
-                assert(err2 < EPSILON);
+                assert(err < SCALED_EPSILON);
+                assert(err2 < SCALED_EPSILON);
             }
         }
         return true;
@@ -518,8 +518,8 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                     const VD::vertex_type *v0 = edge.vertex0();
                     bool v1_on_contour = false;
                     auto on_contour = [&pt_on_contour](const VD::vertex_type *v) {
-                        return std::abs(v->x() - pt_on_contour->x()) < 0.5 + SCALED_EPSILON &&
-                               std::abs(v->y() - pt_on_contour->y()) < 0.5 + SCALED_EPSILON;
+                        return std::abs(v->x() - pt_on_contour->x()) < 0.5001 &&
+                               std::abs(v->y() - pt_on_contour->y()) < 0.5001;
                     };
                     if (on_contour(v0)) {
                         if (on_contour(v1)) {
@@ -575,23 +575,30 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
         assert((edge_category(edge) == EdgeCategory::Unknown) == (edge_category(edge.twin()) == EdgeCategory::Unknown));
         if (edge_category(edge) == EdgeCategory::Unknown) {
             assert(edge.is_finite());
-            const VD::cell_type &cell  = *edge.cell();
-            const VD::cell_type &cell2 = *edge.twin()->cell();
+            const VD::cell_type &cell   = *edge.cell();
+            const VD::cell_type &cell2  = *edge.twin()->cell();
             assert(cell.contains_point() && cell2.contains_point());
-            VertexCategory vc    = vertex_category(edge.vertex0());
-            if (vc != VertexCategory::Unknown) {
+            CellCategory         cc     = cell_category(cell);
+            CellCategory         cc2    = cell_category(cell2);
+            assert(cc != CellCategory::Boundary && cc2 != CellCategory::Boundary);
+            CellCategory         cc_new = cc;
+            if (cc_new == CellCategory::Unknown)
+                cc_new = cc2;
+            else
+                assert(cc2 == CellCategory::Unknown || cc == cc2);
+            if (cc_new == CellCategory::Unknown) {
+                VertexCategory vc = vertex_category(edge.vertex0());
                 assert(vc != VertexCategory::OnContour);
-                // Propagate.
+                if (vc != VertexCategory::Unknown)
+                    cc_new = (vc == VertexCategory::Outside) ? CellCategory::Outside : CellCategory::Inside;
+            }
+            if (cc_new != CellCategory::Unknown) {
+                VertexCategory vc = (cc_new == CellCategory::Outside) ? VertexCategory::Outside : VertexCategory::Inside;
+                annotate_vertex(edge.vertex0(), vc);
                 annotate_vertex(edge.vertex1(), vc);
-                auto ec_new = (vc == VertexCategory::Outside) ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
+                auto ec_new = (cc_new == CellCategory::Outside) ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
                 annotate_edge(&edge, ec_new);
                 annotate_edge(edge.twin(), ec_new);
-                // Edge separating two point sources, not yet classified as inside / outside.
-                CellCategory cc  = cell_category(cell);
-                CellCategory cc2 = cell_category(cell2);
-                auto cc_new = (vc == VertexCategory::Outside) ? CellCategory::Outside : CellCategory::Inside;
-                assert(cc != CellCategory::Boundary && cc2 != CellCategory::Boundary);
-                assert(cc == CellCategory::Unknown || cc == cc_new);
                 if (cc != cc_new) {
                     annotate_cell(&cell, cc_new);
                     cell_queue.emplace_back(&cell);
@@ -727,13 +734,13 @@ std::vector<Vec2d> edge_offset_contour_intersections(
         {
             double err  = std::abs(debug::dist_to_site(lines, *edge.cell(), vertex_point(v0)) - std::abs(d0));
             double err2 = std::abs(debug::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v0)) - std::abs(d0));
-            assert(err < EPSILON);
-            assert(err2 < EPSILON);
+            assert(err < SCALED_EPSILON);
+            assert(err2 < SCALED_EPSILON);
             if (v1 != nullptr) {
                 double err3 = std::abs(debug::dist_to_site(lines, *edge.cell(), vertex_point(v1)) - std::abs(d1));
                 double err4 = std::abs(debug::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v1)) - std::abs(d1));
-                assert(err3 < EPSILON);
-                assert(err4 < EPSILON);
+                assert(err3 < SCALED_EPSILON);
+                assert(err4 < SCALED_EPSILON);
             }
         }
 #endif // NDEBUG
@@ -968,16 +975,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                             double q1 = (intersections.pts[1] - px).dot(dir);
                             // Offset contour intersection points should be separated by the bisector.
                             assert(q0 * q1 <= 0);
-                            assert(s0 * s1 >= 0);
-                            bool take_2nd = false;
-                            if (s0 > 0. || s1 > 0.) {
-                                // Take the most positive.
-                                take_2nd = q1 > q0;
-                            } else {
-                                assert(s0 < 0. || s1 < 0.);
-                                // Take the most negative.
-                                take_2nd = q1 < q0;
-                            }
+                            double s = (dmax == d0) ? s0 : s1;
+                            bool take_2nd = (s > 0.) ? q1 > q0 : q1 < q0;
                             if (take_2nd)
                                 intersections.pts[0] = intersections.pts[1];
                             -- intersections.count;
@@ -1180,7 +1179,11 @@ Polygons offset(
                 edge = next_edge;
                 last_pt = p2;
 		    } while (edge != start_edge);
-		    out.emplace_back(std::move(poly));
+
+            while (! poly.empty() && poly.points.front() == poly.points.back())
+                poly.points.pop_back();
+            if (poly.size() >= 3)
+                out.emplace_back(std::move(poly));
 		}
     }
 
