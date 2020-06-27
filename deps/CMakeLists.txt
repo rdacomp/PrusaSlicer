@@ -170,50 +170,37 @@ if (NOT "${ZLIB_PKG}" STREQUAL "")
     add_dependencies(dep_openexr ${ZLIB_PKG})
 endif ()
 
+set(_dep_list
+    dep_boost
+    dep_tbb
+    dep_libcurl
+    dep_wxWidgets
+    dep_gtest
+    dep_cereal
+    dep_nlopt
+    dep_openvdb
+    dep_OpenCSG
+    dep_CGAL
+    ${PNG_PKG}
+    ${ZLIB_PKG}
+    ${EXPAT_PKG}
+    )
+
+if ("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    # Only override boost::Polygon Voronoi implementation with Vojtech's GMP hacks on 64bit platforms.
+    list(APPEND _dep_list "dep_boost_polygon")
+endif ()
+
 if (MSVC)
-
-    add_custom_target(deps ALL
-    DEPENDS
-        dep_boost
-        dep_boost_polygon
-        dep_tbb
-        dep_libcurl
-        dep_wxWidgets
-        dep_gtest
-        dep_cereal
-        dep_nlopt
-        # dep_qhull # Experimental
-        dep_openvdb
-        dep_OpenCSG
-        dep_CGAL
-        ${PNG_PKG}
-        ${ZLIB_PKG}
-        ${EXPAT_PKG}
-    )
-
+    # Experimental
+    #list(APPEND _dep_list "dep_qhull")
 else()
-
-    add_custom_target(deps ALL
-    DEPENDS
-        dep_boost
-        dep_boost_polygon
-        dep_tbb
-        dep_libcurl
-        dep_wxWidgets
-        dep_gtest
-        dep_cereal
-        dep_nlopt
-        dep_qhull
-        dep_openvdb
-        dep_OpenCSG
-        dep_CGAL
-        ${PNG_PKG}
-        ${ZLIB_PKG}
-        ${EXPAT_PKG}
-        # dep_libigl # Not working, static build has different Eigen
-    )
-
+    list(APPEND _dep_list "dep_qhull")
+    # Not working, static build has different Eigen
+    #list(APPEND _dep_list "dep_libigl")
 endif()
+
+add_custom_target(deps ALL DEPENDS ${_dep_list})
 
 # Note: I'm not using any of the LOG_xxx options in ExternalProject_Add() commands
 # because they seem to generate bogus build files (possibly a bug in ExternalProject).
