@@ -129,19 +129,6 @@ else()
     include("deps-linux.cmake")
 endif()
 
-# Patch the boost::polygon library with a custom one.
-ExternalProject_Add(dep_boost_polygon
-    EXCLUDE_FROM_ALL ON
-    GIT_REPOSITORY "https://github.com/prusa3d/polygon"
-    GIT_TAG prusaslicer_gmp
-    DEPENDS dep_boost
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_BINARY_DIR}/dep_boost_polygon-prefix/src/dep_boost_polygon/include/boost/polygon"
-        "${DESTDIR}/usr/local/include/boost/polygon"
-)
-
 set(ZLIB_PKG "")
 if (NOT ZLIB_FOUND) 
     include(ZLIB/ZLIB.cmake)
@@ -187,6 +174,18 @@ set(_dep_list
     )
 
 if ("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    # Patch the boost::polygon library with a custom one.
+    ExternalProject_Add(dep_boost_polygon
+        EXCLUDE_FROM_ALL ON
+        GIT_REPOSITORY "https://github.com/prusa3d/polygon"
+        GIT_TAG prusaslicer_gmp
+        DEPENDS dep_boost
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND ""
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/dep_boost_polygon-prefix/src/dep_boost_polygon/include/boost/polygon"
+            "${DESTDIR}/usr/local/include/boost/polygon"
+    )
     # Only override boost::Polygon Voronoi implementation with Vojtech's GMP hacks on 64bit platforms.
     list(APPEND _dep_list "dep_boost_polygon")
 endif ()
