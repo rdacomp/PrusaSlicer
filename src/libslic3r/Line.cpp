@@ -7,18 +7,6 @@
 
 namespace Slic3r {
 
-Linef3 transform(const Linef3& line, const Transform3d& t)
-{
-    typedef Eigen::Matrix<double, 3, 2> LineInMatrixForm;
-
-    LineInMatrixForm world_line;
-    ::memcpy((void*)world_line.col(0).data(), (const void*)line.a.data(), 3 * sizeof(double));
-    ::memcpy((void*)world_line.col(1).data(), (const void*)line.b.data(), 3 * sizeof(double));
-
-    LineInMatrixForm local_line = t * world_line.colwise().homogeneous();
-    return Linef3(Vec3d(local_line(0, 0), local_line(1, 0), local_line(2, 0)), Vec3d(local_line(0, 1), local_line(1, 1), local_line(2, 1)));
-}
-
 bool Line::intersection_infinite(const Line &other, Point* point) const
 {
     Vec2d a1 = this->a.cast<double>();
@@ -31,24 +19,6 @@ bool Line::intersection_infinite(const Line &other, Point* point) const
     double t1 = cross2(v12, v2) / denom;
     *point = (a1 + t1 * v1).cast<coord_t>();
     return true;
-}
-
-// Distance to the closest point of line.
-double Line::distance_to_squared(const Point &point, const Point &a, const Point &b)
-{
-    const Vec2d   v  = (b - a).cast<double>();
-    const Vec2d   va = (point  - a).cast<double>();
-    const double  l2 = v.squaredNorm();  // avoid a sqrt
-    if (l2 == 0.0) 
-        // a == b case
-        return va.squaredNorm();
-    // Consider the line extending the segment, parameterized as a + t (b - a).
-    // We find projection of this point onto the line. 
-    // It falls where t = [(this-a) . (b-a)] / |b-a|^2
-    const double t = va.dot(v) / l2;
-    if (t < 0.0)      return va.squaredNorm();  // beyond the 'a' end of the segment
-    else if (t > 1.0) return (point - b).cast<double>().squaredNorm();  // beyond the 'b' end of the segment
-    return (t * v - va).squaredNorm();
 }
 
 double Line::perp_distance_to(const Point &point) const
@@ -116,13 +86,6 @@ bool Line::clip_with_bbox(const BoundingBox &bbox)
 		this->b = x1clip.cast<coord_t>();
 	}
 	return result;
-}
-
-Vec3d Linef3::intersect_plane(double z) const
-{
-    auto   v = (this->b - this->a).cast<double>();
-    double t = (z - this->a(2)) / v(2);
-    return Vec3d(this->a(0) + v(0) * t, this->a(1) + v(1) * t, z);
 }
 
 BoundingBox get_extents(const Lines &lines)

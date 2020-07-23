@@ -161,7 +161,7 @@ std::vector<Point> MultiPoint::_douglas_peucker(const std::vector<Point>& pts, c
                 size_t furthest_idx = anchor_idx;
                 // find point furthest from line seg created by (anchor, floater) and note it
                 for (size_t i = anchor_idx + 1; i < floater_idx; ++ i) {
-                    double dist_sq = Line::distance_to_squared(pts[i], *anchor, *floater);
+                    double dist_sq = line::distance_to_squared(Line{*anchor, *floater}, pts[i]);
                     if (dist_sq > max_dist_sq) {
                         max_dist_sq  = dist_sq;
                         furthest_idx = i;

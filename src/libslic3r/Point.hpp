@@ -48,10 +48,13 @@ typedef Eigen::Matrix<double, 2, 2, Eigen::DontAlign> Matrix2d;
 typedef Eigen::Matrix<float,  3, 3, Eigen::DontAlign> Matrix3f;
 typedef Eigen::Matrix<double, 3, 3, Eigen::DontAlign> Matrix3d;
 
-typedef Eigen::Transform<float,  2, Eigen::Affine, Eigen::DontAlign> Transform2f;
-typedef Eigen::Transform<double, 2, Eigen::Affine, Eigen::DontAlign> Transform2d;
-typedef Eigen::Transform<float,  3, Eigen::Affine, Eigen::DontAlign> Transform3f;
-typedef Eigen::Transform<double, 3, Eigen::Affine, Eigen::DontAlign> Transform3d;
+template<size_t N, class T, class = FloatingOnly<T>>
+using Transform = Eigen::Transform<T, N, Eigen::Affine, Eigen::DontAlign>;
+
+using Transform2f = Transform<2, float>;
+using Transform2d = Transform<2, double>;
+using Transform3f = Transform<3, float>;
+using Transform3d = Transform<3, double>;
 
 inline bool operator<(const Vec2d &lhs, const Vec2d &rhs) { return lhs(0) < rhs(0) || (lhs(0) == rhs(0) && lhs(1) < rhs(1)); }
 
@@ -84,6 +87,8 @@ inline std::string to_string(const Vec3d   &pt) { return std::string("[") + std:
 
 std::vector<Vec3f> transform(const std::vector<Vec3f>& points, const Transform3f& t);
 Pointf3s transform(const Pointf3s& points, const Transform3d& t);
+
+template<int N, class T> using Vec = Eigen::Matrix<T,  N, 1, Eigen::DontAlign>;
 
 class Point : public Vec2crd
 {
