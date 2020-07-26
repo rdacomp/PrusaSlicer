@@ -69,6 +69,9 @@ public:
 	// On Windows, the function does not block, and the eject is detected in the background thread.
 	void 		eject_drive();
 
+	void        set_queue_eject(bool q) { this->m_queue_eject = q; }
+	bool        get_queue_eject()       { return this->m_queue_eject; }
+
 	// Status is used to retrieve info for showing UI buttons.
 	// Status is called every time when change of UI buttons is possible therefore should not perform update.
 	struct RemovableDrivesStatus {
@@ -124,6 +127,8 @@ private:
 	// Verifies that exporting was finished so drive can be ejected.
 	// Set false by set_and_verify_last_save_path() that is called just before exporting.
 	bool                    m_exporting_finished;
+	// queue_eject is only telling what is set, the eject has to be called from outside after exporting is done.
+	bool                    m_queue_eject { false };
 #if __APPLE__
     void register_window_osx();
     void unregister_window_osx();

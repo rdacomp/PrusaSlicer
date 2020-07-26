@@ -3619,6 +3619,12 @@ void Plater::priv::on_process_completed(SlicingProcessCompletedEvent &evt)
     }
     else if (wxGetApp().get_mode() == comSimple)
 	{
+
+		wxGetApp().removable_drive_manager()->set_exporting_finished(true); 
+		if (wxGetApp().removable_drive_manager()->get_queue_eject()){
+			wxGetApp().removable_drive_manager()->set_queue_eject(false);
+			q->eject_drive();
+		}
 		show_action_buttons(false);
 	}
 	else if (this->writing_to_removable_device)
@@ -4960,11 +4966,13 @@ void Plater::export_gcode(bool prefer_removable)
         show_error(this, ex.what());
         return;
     }
+	
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
     AppConfig 				&appconfig 				 = *wxGetApp().app_config;
     RemovableDriveManager 	&removable_drive_manager = *wxGetApp().removable_drive_manager();
     // Get a last save path, either to removable media or to an internal media.
     std::string      		 start_dir 				 = appconfig.get_last_output_dir(default_output_file.parent_path().string(), prefer_removable);
+	removable_drive_manager.set_queue_eject(false);
 	if (prefer_removable) {
 		// Returns a path to a removable media if it exists, prefering start_dir. Update the internal removable drives database.
 		start_dir = removable_drive_manager.get_removable_drive_path(start_dir);
@@ -4987,6 +4995,8 @@ void Plater::export_gcode(bool prefer_removable)
 
     if (! output_path.empty()) {
 		bool path_on_removable_media = removable_drive_manager.set_and_verify_last_save_path(output_path.string());
+		if(path_on_removable_media)
+			removable_drive_manager.set_queue_eject(true);
         p->export_gcode(output_path, path_on_removable_media, PrintHostJob());
         // Storing a path to AppConfig either as path to removable media or a path to internal media.
         // is_path_on_removable_drive() is called with the "true" parameter to update its internal database as the user may have shuffled the external drives
