@@ -289,14 +289,18 @@ void PerimeterGenerator::process()
         ExPolygons last        = union_ex(surface.expolygon.simplify_p(SCALED_RESOLUTION));
         ExPolygons gaps;
 
-#if 0
+#ifdef VORONOI_DEBUG_OUT
+        static int irun = 0;
+        ++ irun;
+#endif
+
+#if 1
         for (ExPolygon &expoly : last) {
-            Geometry::VoronoiDiagram vd;
-            Lines lines = to_lines(expoly);
-#if 0
-            static int irun = 0;
-            ++ irun;
-            if (irun == 1174) {
+            if (! intersecting_edges(to_polygons(expoly)).empty()) {
+                printf("Input contours are self intersecting\n");
+            }
+#if 1
+            if (irun == 1639) {
                 printf("contour = {\n");
                 for (auto &pt : expoly.contour.points)
                     printf("\t\t{ %d, %d },\n", pt.x(), pt.y());
@@ -307,15 +311,22 @@ void PerimeterGenerator::process()
                 }
                 printf("\nend\n");
             }
-            if (! intersecting_edges(to_polygons(expoly)).empty()) {
-                printf("self intersecting\n");
-            }
 #endif
+            Geometry::VoronoiDiagram vd;
+            Lines lines = to_lines(expoly);
             boost::polygon::construct_voronoi(lines.begin(), lines.end(), &vd);
+            Voronoi::annotate_inside_outside(vd, lines);
+            std::vector<Vec2d> skeleton_edges = Voronoi::skeleton_edges_rough(vd, lines, M_PI / 12.); // 30 degrees
+            bool has_invalid_cell = std::find_if(vd.cells().begin(), vd.cells().end(), [](auto &cell){ return cell.incident_edge() == nullptr; }) != vd.cells().end();
+#ifdef VORONOI_DEBUG_OUT
+            if (has_invalid_cell)
+                dump_voronoi_to_svg(debug_out_path("voronoi-invalid-cells", irun).c_str(), vd, Points(), lines);
+#endif
+//            assert(! has_invalid_cell);
             Polygons offsets;
             double offset_distance = ext_perimeter_width / 2;
             for (;;) {
-                Polygons new_offsets = voronoi_offset(vd, lines, - offset_distance, scale_(0.005));
+                Polygons new_offsets = Voronoi::offset(vd, lines, - offset_distance, scale_(0.005));
                 if (new_offsets.empty())
                     break;
                 offset_distance += perimeter_width;
@@ -326,7 +337,6 @@ void PerimeterGenerator::process()
             bool has_self_intersections = ! intersecting_edges(offsets).empty();
 #endif // NDEBUG
 #ifdef VORONOI_DEBUG_OUT
-            static int irun = 0;
             Lines ilines;
             for (const std::pair<EdgeGrid::Grid::ContourEdge, EdgeGrid::Grid::ContourEdge> &ie : self_intersections) {
                 auto edge = [](const EdgeGrid::Grid::ContourEdge &e) {
@@ -336,7 +346,7 @@ void PerimeterGenerator::process()
                 ilines.emplace_back(edge(ie.first));
                 ilines.emplace_back(edge(ie.second));
             }
-            dump_voronoi_to_svg(debug_out_path(has_self_intersections ? "perimeter-voronoi-bad-%d.svg" : "perimeter-voronoi-ok-%d.svg", irun ++).c_str(),
+            dump_voronoi_to_svg(debug_out_path(has_self_intersections ? "perimeter-voronoi-bad-%d.svg" : "perimeter-voronoi-ok-%d.svg", irun).c_str(),
                 vd, Points(), lines, offsets, ilines);
 #endif
             assert(! has_self_intersections);

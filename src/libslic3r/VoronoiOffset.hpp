@@ -115,6 +115,11 @@ std::vector<Vec2d> edge_offset_contour_intersections(
 	const VD &vd, const Lines &lines, const std::vector<double> &distances,
 	double offset_distance);
 
+std::vector<Vec2d> skeleton_edges_rough(
+    const VD                    &vd,
+    const Lines                 &lines,
+    const double                 threshold_alpha);
+
 Polygons offset(
     const Geometry::VoronoiDiagram  &vd,
     const Lines                     &lines,

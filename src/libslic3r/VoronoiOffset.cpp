@@ -5,7 +5,9 @@
 
 #include <cmath>
 
-// #define VORONOI_DEBUG_OUT
+ #define VORONOI_DEBUG_OUT
+
+#include <boost/polygon/detail/voronoi_ctypes.hpp>
 
 #ifdef VORONOI_DEBUG_OUT
 #include <libslic3r/VoronoiVisualUtils.hpp>
@@ -194,11 +196,32 @@ namespace detail {
         return out;
     }
 
-} // namespace detail
+    // Double vertex equal to a coord_t point after conversion to double.
+    template<typename VertexType>
+    inline bool vertex_equal_to_point(const VertexType &vertex, const Point &ipt)
+    {
+        // Convert ipt to doubles, force the 80bit FPU temporary to 64bit and then compare.
+        // This should work with any settings of math compiler switches and the C++ compiler
+        // shall understand the memcpies as type punning and it shall optimize them out.
+#if 1
+        using ulp_cmp_type = boost::polygon::detail::ulp_comparison<double>;
+        ulp_cmp_type ulp_cmp;
+        static constexpr int ULPS = boost::polygon::voronoi_diagram_traits<double>::vertex_equality_predicate_type::ULPS;
+        return ulp_cmp(vertex.x(), double(ipt.x()), ULPS) == ulp_cmp_type::EQUAL &&
+               ulp_cmp(vertex.y(), double(ipt.y()), ULPS) == ulp_cmp_type::EQUAL;
+#else
+        volatile double u = static_cast<double>(ipt.x());
+        volatile double v = vertex.x();
+        if (u != v)
+            return false;
+        u = static_cast<double>(ipt.y());
+        v = vertex.y();
+        return u == v;
+#endif
+    };
+    bool vertex_equal_to_point(const VD::vertex_type *vertex, const Point &ipt)
+        { return vertex_equal_to_point(*vertex, ipt); }
 
-#ifndef NDEBUG
-namespace debug
-{
     double dist_to_site(const Lines &lines, const VD::cell_type &cell, const Vec2d &point)
     {
         const Line &line = lines[cell.source_index()];
@@ -207,6 +230,224 @@ namespace debug
             (Geometry::foot_pt<Vec2d>(line.a.cast<double>(), (line.b - line.a).cast<double>(), point) - point).norm();
     };
 
+    bool on_site(const Lines &lines, const VD::cell_type &cell, const Vec2d &pt)
+    {
+        const Line &line = lines[cell.source_index()];
+        auto on_contour = [&pt](const Point &ipt) { return detail::vertex_equal_to_point(pt, ipt); };
+        if (cell.contains_point()) {
+            return on_contour(contour_point(cell, line));
+        } else {
+            assert(! (on_contour(line.a) && on_contour(line.b)));
+            return on_contour(line.a) || on_contour(line.b);
+        }
+    };
+
+    // For a Voronoi segment starting with voronoi_point1 and ending with voronoi_point2,
+    // defined by a bisector of Voronoi sites pt1_site and pt2_site (line)
+    // find two points on the Voronoi bisector, that delimit regions with dr/dl measure
+    // lower / higher than threshold_dr_dl.
+    //
+    // Linear segment from voronoi_point1 to return.first and
+    // linear segment from return.second to voronoi_point2 have dr/dl measure
+    // higher than threshold_dr_dl.
+    // If such respective segment does not exist, then return.first resp. return.second is nan.
+    std::pair<Vec2d, Vec2d> point_point_dr_dl_thresholds(
+        // Two Voronoi sites
+        const Point &pt1_site, const Point &pt2_site,
+        // End points of a Voronoi segment
+        const Vec2d &voronoi_point1, const Vec2d &voronoi_point2,
+        // Threshold of the skeleton function.
+        const double threshold_dr_dl)
+    {
+        // sympy code to calculate +-x
+        // of a linear bisector of pt1_site, pt2_site parametrized with pt + x * v, |v| = 1
+        // where dr/dl = threshold_dr_dl
+        // equals d|pt1_site - pt + x * v| / dx = threshold_dr_dl
+        //
+        // a = 1 / (4 * b)
+        // dy = diff(y, x)
+        // solve(dy - c, x)
+        //
+        // Project voronoi_point1/2 to line_site.
+        Vec2d  dir_y = (pt2_site - pt1_site).cast<double>();
+        Vec2d  dir_x = Vec2d(- dir_y.y(), dir_y.x()).normalized();
+        Vec2d  cntr  = 0.5 * (pt1_site.cast<double>() + pt2_site.cast<double>());
+        double t1 = (voronoi_point1 - cntr).dot(dir_x);
+        double t2 = (voronoi_point2 - cntr).dot(dir_x);
+        if (t1 > t2) {
+            t1 = -t1;
+            t2 = -t2;
+            dir_x = - dir_x;
+        }
+        auto d2 = 0.25 * dir_y.squaredNorm();
+        auto c2 = Slic3r::sqr(threshold_dr_dl);
+        // sqrt(c2 / (1. - c2)) == 1. / tan(...)
+        auto x  = sqrt(c2 * d2 / (1. - c2));
+        static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        auto out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
+        if (t2 > -x && t1 < x) {
+            // Intervals overlap.
+            dir_x *= x;
+            out.first  = (t1 < -x) ? cntr - dir_x : voronoi_point1;
+            out.second = (t2 > +x) ? cntr + dir_x : voronoi_point2;
+        }
+        return out;
+    }
+
+    // For a Voronoi segment starting with voronoi_point1 and ending with voronoi_point2,
+    // defined by a bisector of Voronoi sites pt_site and line site (parabolic arc)
+    // find two points on the Voronoi parabolic arc, that delimit regions with dr/dl measure
+    // lower / higher than threshold_dr_dl.
+    //
+    // Parabolic arc from voronoi_point1 to return.first and
+    // parabolic arc from return.second to voronoi_point2 have dr/dl measure
+    // higher than threshold_dr_dl.
+    // If such respective segment does not exist, then return.first resp. return.second is nan.
+    std::pair<Vec2d, Vec2d> point_segment_dr_dl_thresholds(
+        // Two Voronoi sites
+        const Point &pt_site, const Line &line_site,
+        // End points of a Voronoi segment
+        const Vec2d &voronoi_point1, const Vec2d &voronoi_point2,
+        // Threshold of the skeleton function.
+        const double threshold_dr_dl)
+    {
+        // sympy code to calculate  +-x
+        // of a parabola            y = ax^2 + b
+        // where                    dr/dl = threshold_dr_dl
+        //
+        // a = 1 / (4 * b)
+        // y = a*x**2 + b
+        // dy = diff(y, x)
+        // solve(dy / sqrt(1 + dy**2) - c, x)
+        //
+        // Foot point of the point site on the line site.
+        Vec2d  ft = Geometry::foot_pt(line_site, pt_site);
+        // Minimum distance of the bisector (parabolic arc) from the two sites, squared.
+        Vec2d  dir_pt_ft = pt_site.cast<double>() - ft;
+        double b2 = 0.25 * dir_pt_ft.squaredNorm();
+        double b  = sqrt(b2);
+        double c2 = Slic3r::sqr(threshold_dr_dl);
+        assert(c2 < 1.);
+        static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        auto out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
+        {
+            // +x, -x are the two parameters along the line_site, where threshold_dr_dl is met.
+            // sqrt(c2 / (1. - c2)) == 1/tan(...)
+            double x2 = 4. * b2 * c2 / (1. - c2);
+            double x  = sqrt(x2);
+            // Project voronoi_point1/2 to line_site.
+            Vec2d  dir_x = (line_site.b - line_site.a).cast<double>().normalized();
+            double t1 = (voronoi_point1 - ft).dot(dir_x);
+            double t2 = (voronoi_point2 - ft).dot(dir_x);
+            if (t1 > t2) {
+                t1 = -t1;
+                t2 = -t2;
+                dir_x = - dir_x;
+            }
+            if (t2 > -x && t1 < x) {
+                // Intervals overlap.
+                bool t1_valid = t1 < -x;
+                bool t2_valid = t2 > +x;
+                // Direction of the Y axis of the parabola.
+                Vec2d dir_y(- dir_x.y(), dir_x.x());
+                // Orient the Y axis towards the point site.
+                if (dir_y.dot(dir_pt_ft) < 0.)
+                    dir_y = - dir_y;
+                // Equation of the parabola: y = b + a * x^2
+                double a = 0.25 / b;
+                dir_x *= x;
+                dir_y *= b + a * x2;
+                out.first  = t1_valid ? ft - dir_x + dir_y : voronoi_point1;
+                out.second = t2_valid ? ft + dir_x + dir_y : voronoi_point2;
+            }
+        }
+        return out;
+    }
+
+    std::pair<Vec2d, Vec2d> point_point_skeleton_thresholds(
+        // Two Voronoi sites
+        const Point &pt1_site, const Point &pt2_site,
+        // End points of a Voronoi segment
+        const Vec2d &voronoi_point1, const Vec2d &voronoi_point2,
+        // Threshold of the skeleton function.
+        const double tan_alpha_half)
+    {
+        // Project voronoi_point1/2 to line_site.
+        Vec2d  dir_y = (pt2_site - pt1_site).cast<double>();
+        Vec2d  dir_x = Vec2d(- dir_y.y(), dir_y.x()).normalized();
+        Vec2d  cntr  = 0.5 * (pt1_site.cast<double>() + pt2_site.cast<double>());
+        double t1 = (voronoi_point1 - cntr).dot(dir_x);
+        double t2 = (voronoi_point2 - cntr).dot(dir_x);
+        if (t1 > t2) {
+            t1 = -t1;
+            t2 = -t2;
+            dir_x = - dir_x;
+        }
+        auto x = 0.5 * dir_y.norm() * tan_alpha_half;
+        static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        auto out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
+        if (t2 > -x && t1 < x) {
+            // Intervals overlap.
+            dir_x *= x;
+            out.first  = (t1 < -x) ? cntr - dir_x : voronoi_point1;
+            out.second = (t2 > +x) ? cntr + dir_x : voronoi_point2;
+        }
+        return out;
+    }
+
+    std::pair<Vec2d, Vec2d> point_segment_skeleton_thresholds(
+        // Two Voronoi sites
+        const Point &pt_site, const Line &line_site,
+        // End points of a Voronoi segment
+        const Vec2d &voronoi_point1, const Vec2d &voronoi_point2,
+        // Threshold of the skeleton function.
+        const double threshold_cos_alpha)
+    {
+        // Foot point of the point site on the line site.
+        Vec2d  ft = Geometry::foot_pt(line_site, pt_site);
+        // Minimum distance of the bisector (parabolic arc) from the two sites, squared.
+        Vec2d  dir_pt_ft = pt_site.cast<double>() - ft;
+        // Distance of Voronoi point site from the Voronoi line site.
+        double l  = dir_pt_ft.norm();
+        static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+        auto   out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
+        // +x, -x are the two parameters along the line_site, where threshold is met.
+        double r  = l / (1. + threshold_cos_alpha);
+        double x2 = r * r - Slic3r::sqr(l - r);
+        double x  = sqrt(x2);
+        // Project voronoi_point1/2 to line_site.
+        Vec2d  dir_x = (line_site.b - line_site.a).cast<double>().normalized();
+        double t1 = (voronoi_point1 - ft).dot(dir_x);
+        double t2 = (voronoi_point2 - ft).dot(dir_x);
+        if (t1 > t2) {
+            t1 = -t1;
+            t2 = -t2;
+            dir_x = - dir_x;
+        }
+        if (t2 > -x && t1 < x) {
+            // Intervals overlap.
+            bool t1_valid = t1 < -x;
+            bool t2_valid = t2 > +x;
+            // Direction of the Y axis of the parabola.
+            Vec2d dir_y(- dir_x.y(), dir_x.x());
+            // Orient the Y axis towards the point site.
+            if (dir_y.dot(dir_pt_ft) < 0.)
+                dir_y = - dir_y;
+            // Equation of the parabola: y = b + a * x^2
+            double a = 0.5 / l;
+            dir_x *= x;
+            dir_y *= 0.5 * l + a * x2;
+            out.first  = t1_valid ? ft - dir_x + dir_y : voronoi_point1;
+            out.second = t2_valid ? ft + dir_x + dir_y : voronoi_point2;
+        }
+        return out;
+    }
+
+} // namespace detail
+
+#ifndef NDEBUG
+namespace debug
+{
     // Verify that twin halfedges are stored next to the other in vd.
     bool verify_twin_halfedges_successive(const VD &vd, const Lines &lines)
     {
@@ -233,15 +474,25 @@ namespace debug
     bool verify_inside_outside_annotations(const VD &vd)
     {
         // Verify that "Colors" are set at all Voronoi entities.
-        for (const VD::vertex_type &v : vd.vertices())
+        for (const VD::vertex_type &v : vd.vertices()) {
+            assert(! v.is_degenerate());
             assert(vertex_category(v) != VertexCategory::Unknown);
+        }
         for (const VD::edge_type &e : vd.edges())
             assert(edge_category(e) != EdgeCategory::Unknown);
-        for (const VD::cell_type &c : vd.cells())
-            assert(cell_category(c) != CellCategory::Unknown);
+        for (const VD::cell_type &c : vd.cells()) {
+            // Unfortunately denegerate cells could be created, which reference a null edge.
+            // https://github.com/boostorg/polygon/issues/47
+            assert(c.is_degenerate() || cell_category(c) != CellCategory::Unknown);
+        }
 
         // Verify consistency between markings of Voronoi cells, edges and verticies.
         for (const VD::cell_type &cell : vd.cells()) {
+            if (cell.is_degenerate()) {
+                // Unfortunately denegerate cells could be created, which reference a null edge.
+                // https://github.com/boostorg/polygon/issues/47
+                continue;
+            }
             const VD::edge_type *first_edge = cell.incident_edge();
             const VD::edge_type *edge       = first_edge;
             CellCategory         cc         = cell_category(cell);
@@ -338,6 +589,19 @@ namespace debug
         return true;
     }
 
+    bool verify_vertices_on_contour(const VD &vd, const Lines &lines)
+    {
+        for (const VD::edge_type &edge : vd.edges()) {
+            const VD::vertex_type *v = edge.vertex0();
+            if (v != nullptr) {
+                bool on_contour = vertex_category(v) == VertexCategory::OnContour;
+                assert(detail::on_site(lines, *edge.cell(), vertex_point(v)) == on_contour);
+                assert(detail::on_site(lines, *edge.twin()->cell(), vertex_point(v)) == on_contour);
+            }
+        }
+        return true;
+    }
+
     bool verify_signed_distances(const VD &vd, const Lines &lines, const std::vector<double> &signed_distances)
     {
         for (const VD::edge_type &edge : vd.edges()) {
@@ -350,8 +614,8 @@ namespace debug
             else
                 assert(d < 0.);
             if (v != nullptr) {
-                double err  = std::abs(dist_to_site(lines, *edge.cell(), vertex_point(v)) - std::abs(d));
-                double err2 = std::abs(dist_to_site(lines, *edge.twin()->cell(), vertex_point(v)) - std::abs(d));
+                double err  = std::abs(detail::dist_to_site(lines, *edge.cell(), vertex_point(v)) - std::abs(d));
+                double err2 = std::abs(detail::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v)) - std::abs(d));
                 assert(err < SCALED_EPSILON);
                 assert(err2 < SCALED_EPSILON);
             }
@@ -366,8 +630,8 @@ namespace debug
         for (const VD::edge_type &edge : vd.edges()) {
             const Vec2d &p = offset_intersection_points[&edge - front_edge];
             if (edge_offset_has_intersection(p)) {
-                double err  = std::abs(dist_to_site(lines, *edge.cell(), p) - d);
-                double err2 = std::abs(dist_to_site(lines, *edge.twin()->cell(), p) - d);
+                double err  = std::abs(detail::dist_to_site(lines, *edge.cell(), p) - d);
+                double err2 = std::abs(detail::dist_to_site(lines, *edge.twin()->cell(), p) - d);
                 assert(err < SCALED_EPSILON);
                 assert(err2 < SCALED_EPSILON);
             }
@@ -393,6 +657,18 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
     assert(debug::verify_twin_halfedges_successive(vd, lines));
 
     reset_inside_outside_annotations(vd);
+
+#ifdef VORONOI_DEBUG_OUT
+    BoundingBox bbox;
+    {
+        bbox.merge(get_extents(lines));
+        bbox.min -= (0.01 * bbox.size().cast<double>()).cast<coord_t>();
+        bbox.max += (0.01 * bbox.size().cast<double>()).cast<coord_t>();
+    }
+    static int irun = 0;
+    ++ irun;
+    dump_voronoi_to_svg(debug_out_path("voronoi-offset-initial-%d.svg", irun).c_str(), vd, Points(), lines);
+#endif // VORONOI_DEBUG_OUT
 
     // Set a VertexCategory, verify validity of the operation.
     auto annotate_vertex = [](const VD::vertex_type *vertex, VertexCategory new_vertex_category) {
@@ -457,6 +733,55 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
         return false;
     };
 
+    // The next loop is supposed to annotate the "on input contour" vertices, but due to
+    // merging very close Voronoi vertices together by boost::polygon Voronoi generator
+    // the condition may not always be met. It should be safe to mark all Voronoi very close
+    // to the input contour as on contour.
+    for (const VD::edge_type &edge : vd.edges()) {
+        const VD::vertex_type *v = edge.vertex0();
+        if (v != nullptr) {
+            bool on_contour = detail::on_site(lines, *edge.cell(), vertex_point(v));
+#ifndef NDEBUG
+            bool on_contour2 = detail::on_site(lines, *edge.twin()->cell(), vertex_point(v));
+            assert(on_contour == on_contour2);
+#endif // NDEBUG
+            if (on_contour)
+                annotate_vertex(v, VertexCategory::OnContour);
+        }
+    }
+
+    // One side of a secondary edge is always on the source contour. Mark these vertices as OnContour.
+    // See the comment at the loop before, the condition may not always be met.
+    for (const VD::edge_type &edge : vd.edges()) {
+        if (edge.is_secondary() && edge.vertex0() != nullptr) {
+            assert(edge.is_linear());
+            assert(edge.cell()->contains_point() != edge.twin()->cell()->contains_point());
+            // The point associated with the point site shall be equal with one vertex of this Voronoi edge.
+            const Point &pt_on_contour = edge.cell()->contains_point() ? contour_point(*edge.cell(), lines) : contour_point(*edge.twin()->cell(), lines);
+            auto on_contour = [&pt_on_contour](const VD::vertex_type *v) { return detail::vertex_equal_to_point(v, pt_on_contour); };
+            if (edge.vertex1() == nullptr) {
+                assert(on_contour(edge.vertex0()));
+                annotate_vertex(edge.vertex0(), VertexCategory::OnContour);
+            } else {
+                // Only one of the two vertices may lie on input contour.
+                const VD::vertex_type  *v0          = edge.vertex0();
+                const VD::vertex_type  *v1          = edge.vertex1();
+                VertexCategory          v0_category = vertex_category(v0);
+                VertexCategory          v1_category = vertex_category(v1);
+                assert(v0_category != VertexCategory::OnContour || v1_category != VertexCategory::OnContour);
+                assert(! (on_contour(v0) && on_contour(v1)));
+                if (on_contour(v0))
+                    annotate_vertex(v0, VertexCategory::OnContour);
+                else {
+                    assert(on_contour(v1));
+                    annotate_vertex(v1, VertexCategory::OnContour);
+                }
+            }
+        }
+    }
+
+    assert(debug::verify_vertices_on_contour(vd, lines));
+
     for (const VD::edge_type &edge : vd.edges())
         if (edge.vertex1() == nullptr) {
             // Infinite Voronoi edge separating two Point sites or a Point site and a Segment site.
@@ -490,14 +815,26 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                 cell = edge.twin()->cell();
                 line = cell->contains_segment() ? &lines[cell->source_index()] : nullptr;
             }
+            // Only one of the two vertices may lie on input contour.
+            assert(! edge.is_linear() || vertex_category(edge.vertex0()) != VertexCategory::OnContour || vertex_category(edge.vertex1()) != VertexCategory::OnContour);
+            // Now classify the Voronoi vertices and edges as inside outside, if at least one Voronoi
+            // site is a Segment site.
+            // Inside / outside classification of Point - Point Voronoi edges will be done later
+            // by a propagation (seed fill).
             if (line) {
                 const VD::vertex_type *v1    = edge.vertex1();
                 const VD::cell_type   *cell2 = (cell == edge.cell()) ? edge.twin()->cell() : edge.cell();
                 assert(v1 != nullptr);
-                const Point *pt_on_contour = nullptr;
-                if (cell == edge.cell() && edge.twin()->cell()->contains_segment()) {
-                    // Constrained bisector of two segments.
+                VertexCategory         v0_category = vertex_category(edge.vertex0());
+                VertexCategory         v1_category = vertex_category(edge.vertex1());
+                bool                   on_contour  = v0_category == VertexCategory::OnContour || v1_category == VertexCategory::OnContour;
+#ifndef NDEBUG
+                if (! on_contour && cell == edge.cell() && edge.twin()->cell()->contains_segment()) {
+                    // Constrained bisector of two segments. Vojtech is not quite sure whether the Voronoi generator is robust enough
+                    // to always connect at least one secondary edge to an input contour point. Catch it here.
                     assert(edge.is_linear());
+                    // OnContour state of this edge is not known yet.
+                    const Point *pt_on_contour = nullptr;
                     // If the two segments share a point, then one end of the current Voronoi edge shares this point as well.
                     // A bisector may not necessarily connect to the source contour. Find pt_on_contour if it exists.
                     const Line &line2 = lines[cell2->source_index()];
@@ -505,67 +842,46 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
                         pt_on_contour = &line->a;
                     else if (line->b == line2.a)
                         pt_on_contour = &line->b;
-                } else if (edge.is_secondary()) {
-                    assert(edge.is_linear());
-                    // One end of the current Voronoi edge shares a point of a contour.
-                    assert(edge.cell()->contains_point() != edge.twin()->cell()->contains_point());
-                    const Line &line2 = lines[cell2->source_index()];
-                    pt_on_contour = &contour_point(*cell2, line2);
-                }
-                if (pt_on_contour) {
-                    // One end of the current Voronoi edge shares a point of a contour.
-                    // Find out which one it is.
-                    const VD::vertex_type *v0 = edge.vertex0();
-                    bool v1_on_contour = false;
-                    auto on_contour = [&pt_on_contour](const VD::vertex_type *v) {
-                        return std::abs(v->x() - pt_on_contour->x()) < 0.5001 &&
-                               std::abs(v->y() - pt_on_contour->y()) < 0.5001;
-                    };
-                    if (on_contour(v0)) {
-                        if (on_contour(v1)) {
-                            // This is really a degenerate case, we don't want this to happen.
-                            assert(false);
-                            // If it happens, play safe and try to detect the more probable point on contour.
-                            Vec2d vec0(v0->x() - pt_on_contour->x(), v0->y() - pt_on_contour->y());
-                            Vec2d vec1(v1->x() - pt_on_contour->x(), v1->y() - pt_on_contour->y());
-                            if (vec0.squaredNorm() > vec1.squaredNorm())
-                                v1_on_contour = true;
-                        }
-                    } else {
-                        // v1 is on the contour.
-                        assert(on_contour(v1));
-                        v1_on_contour = true;
-                    }
-                    if (v1_on_contour) {
-                        // Skip secondary edge pointing to a contour point.
-                        annotate_edge(&edge, EdgeCategory::PointsToContour);
-                        annotate_vertex(v1, VertexCategory::OnContour);
-                        continue;
+                    if (pt_on_contour) {
+                        const VD::vertex_type *v0 = edge.vertex0();
+                        auto on_contour = [&pt_on_contour](const VD::vertex_type *v) {
+                            return std::abs(v->x() - pt_on_contour->x()) < 0.5001 &&
+                                   std::abs(v->y() - pt_on_contour->y()) < 0.5001;
+                        };
+                        assert(! on_contour(v0) && ! on_contour(v1));
                     }
                 }
-                // v0 is certainly not on the input polygons.
-                // Is v1 inside or outside the input polygons?
-                // The Voronoi vertex coordinate is in doubles, calculate orientation in doubles.
-                Vec2d l0(line->a.cast<double>());
-                Vec2d lv((line->b - line->a).cast<double>());
-                double side = cross2(Vec2d(v1->x(), v1->y()) - l0, lv);
-                // No Voronoi edge could connect two vertices of input polygons.
-                assert(side != 0.);
-                auto vc = side > 0. ? VertexCategory::Outside : VertexCategory::Inside;
-                annotate_vertex(v1, vc);
-                auto ec = vc == VertexCategory::Outside ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
-                annotate_edge(&edge, ec);
-                // Annotate the twin edge and its vertex. As the Voronoi edge may never cross the input
-                // contour, the twin edge and its vertex will share the property of edge.
-                annotate_vertex(edge.vertex0(), pt_on_contour ? VertexCategory::OnContour : vc);
-                annotate_edge(edge.twin(), pt_on_contour ? EdgeCategory::PointsToContour : ec);
-                assert(cell->contains_segment());
-                annotate_cell(cell, pt_on_contour ? CellCategory::Boundary :
-                    (vc == VertexCategory::Outside ? CellCategory::Outside : CellCategory::Inside));
-                annotate_cell(cell2, (pt_on_contour && cell2->contains_segment()) ? CellCategory::Boundary :
-                    (vc == VertexCategory::Outside ? CellCategory::Outside : CellCategory::Inside));
+#endif // NDEBUG
+                if (on_contour && v1_category == VertexCategory::OnContour) {
+                    // Skip secondary edge pointing to a contour point.
+                    annotate_edge(&edge, EdgeCategory::PointsToContour);
+                } else {
+                    // v0 is certainly not on the input polygons.
+                    // Is v1 inside or outside the input polygons?
+                    // The Voronoi vertex coordinate is in doubles, calculate orientation in doubles.
+                    Vec2d l0(line->a.cast<double>());
+                    Vec2d lv((line->b - line->a).cast<double>());
+                    double side = cross2(Vec2d(v1->x(), v1->y()) - l0, lv);
+                    // No Voronoi edge could connect two vertices of input polygons.
+                    assert(side != 0.);
+                    auto vc = side > 0. ? VertexCategory::Outside : VertexCategory::Inside;
+                    annotate_vertex(v1, vc);
+                    auto ec = vc == VertexCategory::Outside ? EdgeCategory::PointsOutside : EdgeCategory::PointsInside;
+                    annotate_edge(&edge, ec);
+                    // Annotate the twin edge and its vertex. As the Voronoi edge may never cross the input
+                    // contour, the twin edge and its vertex will share the property of edge.
+                    annotate_vertex(edge.vertex0(), on_contour ? VertexCategory::OnContour : vc);
+                    annotate_edge(edge.twin(), on_contour ? EdgeCategory::PointsToContour : ec);
+                    assert(cell->contains_segment());
+                    annotate_cell(cell, on_contour ? CellCategory::Boundary :
+                        (vc == VertexCategory::Outside ? CellCategory::Outside : CellCategory::Inside));
+                    annotate_cell(cell2, (on_contour && cell2->contains_segment()) ? CellCategory::Boundary :
+                        (vc == VertexCategory::Outside ? CellCategory::Outside : CellCategory::Inside));
+                }
             }
         }
+
+    assert(debug::verify_vertices_on_contour(vd, lines));
 
     // Now most Voronoi vertices, edges and cells are annotated, with the exception of some
     // edges separating two Point sites, their cells and vertices.
@@ -611,6 +927,8 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
         }
     }
 
+    assert(debug::verify_vertices_on_contour(vd, lines));
+
     // Do a final seed fill over Voronoi cells and unmarked Voronoi edges.
     while (! cell_queue.empty()) {
         const VD::cell_type *cell = cell_queue.back();
@@ -644,6 +962,7 @@ void annotate_inside_outside(VD &vd, const Lines &lines)
         } while (edge != first_edge);
     }
 
+    assert(debug::verify_vertices_on_contour(vd, lines));
     assert(debug::verify_inside_outside_annotations(vd));
 }
 
@@ -732,13 +1051,13 @@ std::vector<Vec2d> edge_offset_contour_intersections(
         }
 #ifndef NDEBUG
         {
-            double err  = std::abs(debug::dist_to_site(lines, *edge.cell(), vertex_point(v0)) - std::abs(d0));
-            double err2 = std::abs(debug::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v0)) - std::abs(d0));
+            double err  = std::abs(detail::dist_to_site(lines, *edge.cell(), vertex_point(v0)) - std::abs(d0));
+            double err2 = std::abs(detail::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v0)) - std::abs(d0));
             assert(err < SCALED_EPSILON);
             assert(err2 < SCALED_EPSILON);
             if (v1 != nullptr) {
-                double err3 = std::abs(debug::dist_to_site(lines, *edge.cell(), vertex_point(v1)) - std::abs(d1));
-                double err4 = std::abs(debug::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v1)) - std::abs(d1));
+                double err3 = std::abs(detail::dist_to_site(lines, *edge.cell(), vertex_point(v1)) - std::abs(d1));
+                double err4 = std::abs(detail::dist_to_site(lines, *edge.twin()->cell(), vertex_point(v1)) - std::abs(d1));
                 assert(err3 < SCALED_EPSILON);
                 assert(err4 < SCALED_EPSILON);
             }
@@ -1129,8 +1448,8 @@ Polygons offset(
                 edge_points[next_edge - front_edge].x() = nan;
 #ifndef NDEBUG
                 {
-                    double err  = debug::dist_to_site(lines, *cell, p1) - offset_distance;
-                    double err2 = debug::dist_to_site(lines, *cell, p2) - offset_distance;
+                    double err  = detail::dist_to_site(lines, *cell, p1) - offset_distance;
+                    double err2 = detail::dist_to_site(lines, *cell, p2) - offset_distance;
 #ifdef VORONOI_DEBUG_OUT
                     if (std::max(err, err2) >= SCALED_EPSILON) {
                         Lines helper_lines;
@@ -1199,6 +1518,115 @@ Polygons offset(
     annotate_inside_outside(const_cast<VD&>(vd), lines);
     std::vector<double> dist = signed_vertex_distances(vd, lines);
     return offset(vd, lines, dist, offset_distance, discretization_error);
+}
+
+// Produce a list of start positions of a skeleton segment at a halfedge.
+// If the whole Voronoi edge is part of the skeleton, then zero start positions are assigned
+// to both ends of the edge. Position "1" shall never be assigned to a halfedge.
+//
+// Skeleton edges must be inside a closed polygon, therefore these edges are finite.
+// A Voronoi Edge-Edge bisector is either completely part of a skeleton, or not at all.
+// An infinite Voronoi Edge-Point (parabola) or Point-Point (line) bisector is split into
+// a center part close to the Voronoi sites (not skeleton) and the ends (skeleton),
+// though either part could be clipped by the Voronoi segment.
+// 
+// Further filtering of the skeleton may be necessary.
+std::vector<Vec2d> skeleton_edges_rough(
+    const VD                    &vd,
+    const Lines                 &lines,
+    const double                 threshold_alpha)
+{
+    // vd shall be annotated.
+    assert(debug::verify_inside_outside_annotations(vd));
+
+    const VD::edge_type    *first_edge   = &vd.edges().front();
+    static constexpr double nan         = std::numeric_limits<double>::quiet_NaN();
+    // By default no edge is annotated as being part of the skeleton.
+    std::vector<Vec2d>      out(vd.num_edges(), Vec2d(nan, nan));
+    const double            threshold_cos_alpha = cos(threshold_alpha);
+    const double            threshold_tan_alpha_half = tan(0.5 * threshold_alpha);
+
+    for (const VD::edge_type &edge : vd.edges()) {
+        size_t edge_idx = &edge - first_edge;
+        if (
+            // Ignore secondary and unbounded edges, they shall never be part of the skeleton.
+            edge.is_secondary() || edge.is_infinite() ||
+            // Skip the twin edge of an edge, that has already been processed.
+            &edge > edge.twin() ||
+            // Ignore outer edges.
+            (edge_category(edge) != EdgeCategory::PointsInside && edge_category(edge.twin()) != EdgeCategory::PointsInside))
+            continue;
+        const VD::vertex_type *v0 = edge.vertex0();
+        const VD::vertex_type *v1 = edge.vertex1();
+        const VD::cell_type   *cell  = edge.cell();
+        const VD::cell_type   *cell2 = edge.twin()->cell();
+        const Line            &line0 = lines[cell->source_index()];
+        const Line            &line1 = lines[cell2->source_index()];
+        size_t                 edge_idx2 = edge.twin() - first_edge;
+        if (cell->contains_segment() && cell2->contains_segment()) {
+            // Bisector of two line segments, distance along the bisector is linear,
+            // dr/dl is constant.
+            // using trigonometric identity sin^2(a) = (1-cos(2a))/2
+            Vec2d  lv0 = (line0.b - line0.a).cast<double>();
+            Vec2d  lv1 = (line1.b - line1.a).cast<double>();
+            double d   = lv0.dot(lv1);
+            if (d < 0.) {
+                double cos_alpha = - d / (lv0.norm() * lv1.norm());
+                if (cos_alpha > threshold_cos_alpha) {
+                    // The whole bisector is a skeleton segment.
+                    out[edge_idx]  = vertex_point(v0);
+                    out[edge_idx2] = vertex_point(v1);
+                }
+            }
+        } else {
+            // An infinite Voronoi Edge-Point (parabola) or Point-Point (line) bisector, clipped to a finite Voronoi segment.
+            // The infinite bisector has a distance (skeleton radius) minimum, which is also a minimum 
+            // of the skeleton function dr / dt.
+            assert(cell->contains_point() || cell2->contains_point());
+            if (cell->contains_point() != cell2->contains_point()) {
+                // Point - Segment
+                const Point &pt0  = cell->contains_point() ? contour_point(*cell, line0) : contour_point(*cell2, line1);
+                const Line  &line = cell->contains_segment() ? line0 : line1;
+                std::tie(out[edge_idx], out[edge_idx2]) = detail::point_segment_skeleton_thresholds(
+                    pt0, line, vertex_point(v0), vertex_point(v1), threshold_cos_alpha);
+            } else {
+                // Point - Point
+                const Point &pt0 = contour_point(*cell,  line0);
+                const Point &pt1 = contour_point(*cell2, line1);
+                std::tie(out[edge_idx], out[edge_idx2]) = detail::point_point_skeleton_thresholds(
+                    pt0, pt1, vertex_point(v0), vertex_point(v1), threshold_tan_alpha_half);
+            }
+        }
+    }
+
+#ifdef VORONOI_DEBUG_OUT
+    {
+        static int irun = 0;
+        ++ irun;
+        Lines helper_lines;
+        for (const VD::edge_type &edge : vd.edges())
+            if (&edge < edge.twin() && edge.is_finite()) {
+                const Vec2d &skeleton_pt      = out[&edge - first_edge];
+                const Vec2d &skeleton_pt2     = out[edge.twin() - first_edge];
+                bool         has_skeleton_pt  = ! std::isnan(skeleton_pt.x());
+                bool         has_skeleton_pt2 = ! std::isnan(skeleton_pt2.x());
+                const Vec2d &vertex_pt        = vertex_point(edge.vertex0());
+                const Vec2d &vertex_pt2       = vertex_point(edge.vertex1());
+                if (has_skeleton_pt && has_skeleton_pt2) {
+                    // Complete edge is part of the skeleton.
+                    helper_lines.emplace_back(Line(Point(vertex_pt.x(), vertex_pt.y()), Point(vertex_pt2.x(), vertex_pt2.y())));
+                } else {
+                    if (has_skeleton_pt)
+                        helper_lines.emplace_back(Line(Point(vertex_pt2.x(), vertex_pt2.y()), Point(skeleton_pt.x(), skeleton_pt.y())));
+                    if (has_skeleton_pt2)
+                        helper_lines.emplace_back(Line(Point(vertex_pt.x(), vertex_pt.y()), Point(skeleton_pt2.x(), skeleton_pt2.y())));
+                }
+            }
+        dump_voronoi_to_svg(debug_out_path("voronoi-skeleton-edges-%d.svg", irun).c_str(), vd, Points(), lines, Polygons(), helper_lines);
+    }
+#endif // VORONOI_DEBUG_OUT
+
+    return out;
 }
 
 } // namespace Voronoi
