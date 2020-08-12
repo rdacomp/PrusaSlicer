@@ -5,7 +5,7 @@
 
 #include <cmath>
 
- #define VORONOI_DEBUG_OUT
+// #define VORONOI_DEBUG_OUT
 
 #include <boost/polygon/detail/voronoi_ctypes.hpp>
 
@@ -256,15 +256,15 @@ namespace detail {
         const Point &pt1_site, const Point &pt2_site,
         // End points of a Voronoi segment
         const Vec2d &voronoi_point1, const Vec2d &voronoi_point2,
-        // Threshold of the skeleton function.
-        const double threshold_dr_dl)
+        // Threshold of the skeleton function, where alpha is an angle of a sharp convex corner with the same dr/dl.
+        const double threshold_tan_alpha_half)
     {
         // sympy code to calculate +-x
         // of a linear bisector of pt1_site, pt2_site parametrized with pt + x * v, |v| = 1
         // where dr/dl = threshold_dr_dl
         // equals d|pt1_site - pt + x * v| / dx = threshold_dr_dl
         //
-        // a = 1 / (4 * b)
+        // y = sqrt(x^2 + d^2)
         // dy = diff(y, x)
         // solve(dy - c, x)
         //
@@ -279,10 +279,7 @@ namespace detail {
             t2 = -t2;
             dir_x = - dir_x;
         }
-        auto d2 = 0.25 * dir_y.squaredNorm();
-        auto c2 = Slic3r::sqr(threshold_dr_dl);
-        // sqrt(c2 / (1. - c2)) == 1. / tan(...)
-        auto x  = sqrt(c2 * d2 / (1. - c2));
+        auto x  = 0.5 * dir_y.norm() * threshold_tan_alpha_half;
         static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
         auto out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
         if (t2 > -x && t1 < x) {
@@ -308,8 +305,8 @@ namespace detail {
         const Point &pt_site, const Line &line_site,
         // End points of a Voronoi segment
         const Vec2d &voronoi_point1, const Vec2d &voronoi_point2,
-        // Threshold of the skeleton function.
-        const double threshold_dr_dl)
+        // Threshold of the skeleton function, where alpha is an angle of a sharp convex corner with the same dr/dl.
+        const double threshold_tan_alpha_half)
     {
         // sympy code to calculate  +-x
         // of a parabola            y = ax^2 + b
@@ -321,20 +318,15 @@ namespace detail {
         // solve(dy / sqrt(1 + dy**2) - c, x)
         //
         // Foot point of the point site on the line site.
-        Vec2d  ft = Geometry::foot_pt(line_site, pt_site);
+        Vec2d  ft  = Geometry::foot_pt(line_site, pt_site);
         // Minimum distance of the bisector (parabolic arc) from the two sites, squared.
         Vec2d  dir_pt_ft = pt_site.cast<double>() - ft;
-        double b2 = 0.25 * dir_pt_ft.squaredNorm();
-        double b  = sqrt(b2);
-        double c2 = Slic3r::sqr(threshold_dr_dl);
-        assert(c2 < 1.);
+        double b   = 0.5 * dir_pt_ft.norm();
         static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
-        auto out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
+        auto   out = std::make_pair(Vec2d(nan, nan), Vec2d(nan, nan));
         {
-            // +x, -x are the two parameters along the line_site, where threshold_dr_dl is met.
-            // sqrt(c2 / (1. - c2)) == 1/tan(...)
-            double x2 = 4. * b2 * c2 / (1. - c2);
-            double x  = sqrt(x2);
+            // +x, -x are the two parameters along the line_site, where threshold_tan_alpha_half is met.
+            double x  = 2. * b * threshold_tan_alpha_half;
             // Project voronoi_point1/2 to line_site.
             Vec2d  dir_x = (line_site.b - line_site.a).cast<double>().normalized();
             double t1 = (voronoi_point1 - ft).dot(dir_x);
@@ -356,7 +348,7 @@ namespace detail {
                 // Equation of the parabola: y = b + a * x^2
                 double a = 0.25 / b;
                 dir_x *= x;
-                dir_y *= b + a * x2;
+                dir_y *= b + a * x * x;
                 out.first  = t1_valid ? ft - dir_x + dir_y : voronoi_point1;
                 out.second = t2_valid ? ft + dir_x + dir_y : voronoi_point2;
             }
@@ -1534,6 +1526,7 @@ Polygons offset(
 std::vector<Vec2d> skeleton_edges_rough(
     const VD                    &vd,
     const Lines                 &lines,
+    // Angle threshold at a sharp convex corner, which is marked for a gap fill.
     const double                 threshold_alpha)
 {
     // vd shall be annotated.
@@ -1543,7 +1536,10 @@ std::vector<Vec2d> skeleton_edges_rough(
     static constexpr double nan         = std::numeric_limits<double>::quiet_NaN();
     // By default no edge is annotated as being part of the skeleton.
     std::vector<Vec2d>      out(vd.num_edges(), Vec2d(nan, nan));
+    // Threshold at a sharp corner, derived from a dot product of the sharp corner edges.
     const double            threshold_cos_alpha = cos(threshold_alpha);
+    // For sharp corners, dr/dl = sin(alpha/2). Substituting the dr/dl threshold with tan(alpha/2) threshold
+    // in Voronoi point - point and Voronoi point - line site functions.
     const double            threshold_tan_alpha_half = tan(0.5 * threshold_alpha);
 
     for (const VD::edge_type &edge : vd.edges()) {
@@ -1587,13 +1583,13 @@ std::vector<Vec2d> skeleton_edges_rough(
                 // Point - Segment
                 const Point &pt0  = cell->contains_point() ? contour_point(*cell, line0) : contour_point(*cell2, line1);
                 const Line  &line = cell->contains_segment() ? line0 : line1;
-                std::tie(out[edge_idx], out[edge_idx2]) = detail::point_segment_skeleton_thresholds(
-                    pt0, line, vertex_point(v0), vertex_point(v1), threshold_cos_alpha);
+                std::tie(out[edge_idx], out[edge_idx2]) = detail::point_segment_dr_dl_thresholds(
+                    pt0, line, vertex_point(v0), vertex_point(v1), threshold_tan_alpha_half);
             } else {
                 // Point - Point
                 const Point &pt0 = contour_point(*cell,  line0);
                 const Point &pt1 = contour_point(*cell2, line1);
-                std::tie(out[edge_idx], out[edge_idx2]) = detail::point_point_skeleton_thresholds(
+                std::tie(out[edge_idx], out[edge_idx2]) = detail::point_point_dr_dl_thresholds(
                     pt0, pt1, vertex_point(v0), vertex_point(v1), threshold_tan_alpha_half);
             }
         }
