@@ -1359,6 +1359,146 @@ void MainFrame::init_gcodeviewer_menubar()
     m_gcodeviewer_menubar->Append(helpMenu, _L("&Help"));
 }
 
+class MyDialog;
+static MyDialog *gs_dialog = nullptr;
+                        
+class MyTaskBarIcon : public wxTaskBarIcon
+{
+public:
+#if defined(__WXOSX__) && wxOSX_USE_COCOA
+    MyTaskBarIcon(wxTaskBarIconType iconType = wxTBI_DEFAULT_TYPE)
+    :   wxTaskBarIcon(iconType)
+#else
+    MyTaskBarIcon()
+#endif
+    {}
+
+    void OnLeftButtonDClick(wxTaskBarIconEvent&);
+    void OnMenuRestore(wxCommandEvent&);
+    void OnMenuExit(wxCommandEvent&);
+    void OnMenuSetNewIcon(wxCommandEvent&);
+    void OnMenuCheckmark(wxCommandEvent&);
+    void OnMenuUICheckmark(wxUpdateUIEvent&);
+    void OnMenuSub(wxCommandEvent&);
+    virtual wxMenu *CreatePopupMenu() wxOVERRIDE;
+
+    wxDECLARE_EVENT_TABLE();
+};
+
+class MyDialog: public wxDialog
+{
+public:
+    MyDialog(const wxString& title);
+    virtual ~MyDialog();
+
+protected:
+    void OnAbout(wxCommandEvent& event);
+    void OnOK(wxCommandEvent& event);
+    void OnExit(wxCommandEvent& event);
+    void OnCloseWindow(wxCloseEvent& event);
+
+    MyTaskBarIcon   *m_taskBarIcon;
+#if defined(__WXOSX__) && wxOSX_USE_COCOA
+    MyTaskBarIcon   *m_dockIcon;
+#endif
+
+    wxDECLARE_EVENT_TABLE();
+};
+
+// ----------------------------------------------------------------------------
+// MyTaskBarIcon implementation
+// ----------------------------------------------------------------------------
+
+enum
+{
+    PU_RESTORE = 10001,
+    PU_NEW_ICON,
+    PU_EXIT,
+    PU_CHECKMARK,
+    PU_SUB1,
+    PU_SUB2,
+    PU_SUBMAIN
+};
+
+
+wxBEGIN_EVENT_TABLE(MyTaskBarIcon, wxTaskBarIcon)
+    EVT_MENU(PU_RESTORE, MyTaskBarIcon::OnMenuRestore)
+    EVT_MENU(PU_EXIT,    MyTaskBarIcon::OnMenuExit)
+    EVT_MENU(PU_NEW_ICON,MyTaskBarIcon::OnMenuSetNewIcon)
+    EVT_MENU(PU_CHECKMARK,MyTaskBarIcon::OnMenuCheckmark)
+    EVT_UPDATE_UI(PU_CHECKMARK,MyTaskBarIcon::OnMenuUICheckmark)
+    EVT_TASKBAR_LEFT_DCLICK  (MyTaskBarIcon::OnLeftButtonDClick)
+    EVT_MENU(PU_SUB1, MyTaskBarIcon::OnMenuSub)
+    EVT_MENU(PU_SUB2, MyTaskBarIcon::OnMenuSub)
+wxEND_EVENT_TABLE()
+
+void MyTaskBarIcon::OnMenuRestore(wxCommandEvent& )
+{
+    gs_dialog->Show(true);
+}
+
+void MyTaskBarIcon::OnMenuExit(wxCommandEvent& )
+{
+    gs_dialog->Close(true);
+}
+
+static bool check = true;
+
+void MyTaskBarIcon::OnMenuCheckmark(wxCommandEvent& )
+{
+    check = !check;
+}
+
+void MyTaskBarIcon::OnMenuUICheckmark(wxUpdateUIEvent &event)
+{
+    event.Check(check);
+}
+
+void MyTaskBarIcon::OnMenuSetNewIcon(wxCommandEvent&)
+{
+//    wxIcon icon(smile_xpm);
+
+//    if (!SetIcon(icon, "wxTaskBarIcon Sample - a different icon"))
+//        wxMessageBox("Could not set new icon.");
+}
+
+void MyTaskBarIcon::OnMenuSub(wxCommandEvent&)
+{
+    wxMessageBox("You clicked on a submenu!");
+}
+
+// Overridables
+wxMenu *MyTaskBarIcon::CreatePopupMenu()
+{
+    wxMenu *menu = new wxMenu;
+    menu->Append(PU_RESTORE, "&Restore main window");
+    menu->AppendSeparator();
+    menu->Append(PU_NEW_ICON, "&Set New Icon");
+    menu->AppendSeparator();
+    menu->AppendCheckItem(PU_CHECKMARK, "Test &check mark");
+    menu->AppendSeparator();
+    wxMenu *submenu = new wxMenu;
+    submenu->Append(PU_SUB1, "One submenu");
+    submenu->AppendSeparator();
+    submenu->Append(PU_SUB2, "Another submenu");
+    menu->Append(PU_SUBMAIN, "Submenu", submenu);
+    /* OSX has built-in quit menu for the dock menu, but not for the status item */
+#ifdef __WXOSX__
+    if ( OSXIsStatusItem() )
+#endif
+    {
+        menu->AppendSeparator();
+        menu->Append(PU_EXIT,    "E&xit");
+    }
+    return menu;
+}
+
+void MyTaskBarIcon::OnLeftButtonDClick(wxTaskBarIconEvent&)
+{
+    gs_dialog->Show(true);
+}
+
+
 void MainFrame::set_mode(EMode mode)
 {
     if (m_mode == mode)
@@ -1481,6 +1621,19 @@ void MainFrame::set_mode(EMode mode)
         m_plater->Thaw();
 
         SetIcon(wxIcon(Slic3r::var("PrusaSlicerGCodeViewer_128px.png"), wxBITMAP_TYPE_PNG));
+        auto *taskbar_icon = new MyTaskBarIcon(wxTBI_DOCK);
+        taskbar_icon->SetIcon(wxIcon(Slic3r::var("PrusaSlicerGCodeViewer_128px.png"), wxBITMAP_TYPE_PNG), "PrusaSlicer");
+        taskbar_icon->Bind(wxEVT_TASKBAR_CLICK, [this](wxTaskBarIconEvent& evt) {
+            wxString msg = _L("You pressed the icon in taskbar for ") + "\n";
+            if (m_mode == EMode::Editor)
+                msg += wxString(SLIC3R_APP_NAME);
+            else
+                msg += wxString(SLIC3R_APP_NAME) + "-GCode viewer";
+
+            wxMessageDialog dialog(nullptr, msg, _("Taskbar icon clicked"), wxOK);
+            dialog.ShowModal();
+            });
+        
 #if ENABLE_GCODE_VIEWER_TASKBAR_ICON
         if (m_taskbar_icon != nullptr) {
             m_taskbar_icon->RemoveIcon();

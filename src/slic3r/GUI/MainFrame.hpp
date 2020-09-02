@@ -7,9 +7,9 @@
 #include <wx/settings.h>
 #include <wx/string.h>
 #include <wx/filehistory.h>
-#if ENABLE_GCODE_VIEWER_TASKBAR_ICON
+//#if ENABLE_GCODE_VIEWER_TASKBAR_ICON
 #include <wx/taskbar.h>
-#endif // ENABLE_GCODE_VIEWER_TASKBAR_ICON
+//#endif // ENABLE_GCODE_VIEWER_TASKBAR_ICON
 
 #include <string>
 #include <map>
