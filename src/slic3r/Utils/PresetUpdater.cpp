@@ -134,6 +134,7 @@ struct Updates
 {
 	std::vector<Incompat> incompats;
 	std::vector<Update> updates;
+	std::vector<Semver> common_versions;
 };
 
 
@@ -170,6 +171,7 @@ struct PresetUpdater::priv
 	Updates get_config_updates(const Semver& old_slic3r_version) const;
 	void perform_updates(Updates &&updates, bool snapshot = true) const;
 	void set_waiting_updates(Updates u);
+	void check_common_profiles(const std::vector<Semver>& versions) const;
 };
 
 PresetUpdater::priv::priv()
@@ -463,6 +465,9 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 
 		if (recommended->config_version == vp.config_version) {
 			// The recommended config bundle is already installed.
+			// Add common config version
+			if (vp.using_common_profile && std::find(updates.common_versions.begin(), updates.common_versions.end(), vp.common_version) == updates.common_versions.end())
+				updates.common_versions.push_back(vp.common_version);
 			continue;
 		}
 
@@ -496,6 +501,9 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 					new_update = Update(std::move(path_in_cache), std::move(bundle_path), *recommended, vp.name, vp.changelog_url, current_not_supported);
 					// and install the config index from the cache into vendor's directory.
 					bundle_path_idx_to_install = idx.path();
+					// store common config version needed for current profile (until update is performed)
+					if (vp.using_common_profile && std::find(updates.common_versions.begin(), updates.common_versions.end(), vp.common_version) == updates.common_versions.end())
+						updates.common_versions.push_back(vp.common_version);
 					found = true;
 				}
 			} catch (const std::exception &ex) {
@@ -524,7 +532,10 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 				recommended = rsrc_idx.recommended();
 				if (recommended != rsrc_idx.end() && recommended->config_version == rsrc_vp.config_version && recommended->config_version > vp.config_version) {
 					new_update = Update(std::move(path_in_rsrc), std::move(bundle_path), *recommended, vp.name, vp.changelog_url, current_not_supported);
-					bundle_path_idx_to_install = path_idx_in_rsrc;
+					bundle_path_idx_to_install = path_idx_in_rsrc;		
+					// store common config version needed for current profile (until update is performed)
+					if (vp.using_common_profile && std::find(updates.common_versions.begin(), updates.common_versions.end(), vp.common_version) == updates.common_versions.end())
+						updates.common_versions.push_back(vp.common_version);
 					found = true;
 				} else {
 					BOOST_LOG_TRIVIAL(warning) << format("The recommended config version for vendor `%1%` in resources does not match the recommended\n"
@@ -644,12 +655,68 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			for (const auto &name : bundle.obsolete_presets.printers)  { obsolete_remover("printer", name); }
 		}
 	}
+
+	check_common_profiles(updates.common_versions);
 }
 
-void PresetUpdater::priv::set_waiting_updates(Updates u)
+void PresetUpdater::priv::set_waiting_updates(Updates u) 
 {
 	waiting_updates = u;
 	has_waiting_updates = true;
+}
+
+void PresetUpdater::priv::check_common_profiles(const std::vector<Semver>& versions) const
+{
+	if (versions.empty())
+		return;
+
+	Updates updates;
+	Index common_idx;
+	//find idx
+	bool idx_found = false;
+	for (const auto idx : index_db) {
+		if (idx.vendor() == "common")
+		{
+			idx_found = true;
+			common_idx = idx;
+			break;
+		}
+	}
+
+	if (!idx_found) {
+		BOOST_LOG_TRIVIAL(error) << "Common idx not found!";
+		return;
+	}
+
+	for (const auto& version : versions) {
+		BOOST_LOG_TRIVIAL(error) << "Version of common profile needed: " << version;
+		// TODO:
+		// check if compatible with slicer version
+		
+		auto index_with_version = common_idx.find(version);
+		if (!(*index_with_version).is_current_slic3r_supported())
+		{
+			// if not compatible with slicer version -> logic error -> explode
+			BOOST_LOG_TRIVIAL(error) << "aszdglkjinbsdrflgijkbnaserljkihgnbseuriojhngblseurt";
+		}
+
+		// find if version is present at vendor folder
+		const fs::path path_in_vendor = vendor_path / ("common." + version.to_string() + ".ini");
+		if (!fs::exists(path_in_vendor)) {
+			// if not at vendor folder - find it
+			BOOST_LOG_TRIVIAL(error) << "Common profile not present: " << version;
+			
+			// Update from rsrc
+			fs::path path_in_rsrc = rsrc_path   / ("common." + version.to_string() + ".ini");
+			fs::path path_target  = vendor_path / ("common." + version.to_string() + ".ini");
+
+			// third argument is version
+			// version *(common_idx.recommended()) is recommended version and we want version iterator
+			Update update(std::move(path_in_rsrc), std::move(path_target), *index_with_version, "common", "", true);
+			updates.updates.push_back(update);
+		}
+	}
+	perform_updates(std::move(updates), true);
 }
 
 PresetUpdater::PresetUpdater() :
@@ -834,7 +901,7 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 	} else {
 		BOOST_LOG_TRIVIAL(info) << "No configuration updates available.";
 	}
-
+	p->check_common_profiles(updates.common_versions);
 	return R_NOOP;
 }
 
@@ -883,7 +950,8 @@ void PresetUpdater::on_update_notification_confirm()
 		BOOST_LOG_TRIVIAL(info) << "User refused the update";
 		//return R_UPDATE_REJECT;
 	}
-	
 }
+
+
 
 }

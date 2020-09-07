@@ -127,6 +127,7 @@ VendorProfile VendorProfile::from_ini(const ptree &tree, const boost::filesystem
     const auto &vendor_section = get_or_throw(tree, "vendor")->second;
     res.name = get_or_throw(vendor_section, "name")->second.data();
 
+    // Load config version
     auto config_version_str = get_or_throw(vendor_section, "config_version")->second.data();
     auto config_version = Semver::parse(config_version_str);
     if (! config_version) {
@@ -134,6 +135,22 @@ VendorProfile VendorProfile::from_ini(const ptree &tree, const boost::filesystem
     } else {
         res.config_version = std::move(*config_version);
     }
+
+    // Load common profile version
+    try {
+        auto common_version_str = get_or_throw(vendor_section, "common_version")->second.data();
+        auto common_version = Semver::parse(common_version_str);
+        if (!common_version) {
+            BOOST_LOG_TRIVIAL(error) << boost::format("Vendor bundle: `%1%`: Does not uses common profile.") % id;
+        }
+        else {
+            res.using_common_profile = true; 
+            res.common_version = std::move(*common_version);
+        }
+    } catch (const std::runtime_error &err){
+        BOOST_LOG_TRIVIAL(error) << boost::format("Vendor bundle: `%1%`: Does not uses common profile.") % id;
+    }
+    
 
     // Load URLs
     const auto config_update_url = vendor_section.find("config_update_url");
