@@ -625,6 +625,11 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			PresetBundle bundle;
 			bundle.load_configbundle(update.source.string(), PresetBundle::LOAD_CFGBNDLE_SYSTEM);
 
+            // Add version of common profile to common versions
+			if(!bundle.vendors.empty() && (*bundle.vendors.begin()).second.using_common_profile &&
+			   std::find(updates.common_versions.begin(), updates.common_versions.end(), (*bundle.vendors.begin()).second.common_version) == updates.common_versions.end())
+				updates.common_versions.push_back((*bundle.vendors.begin()).second.common_version);
+
 			BOOST_LOG_TRIVIAL(info) << format("Deleting %1% conflicting presets", bundle.prints.size() + bundle.filaments.size() + bundle.printers.size());
 
 			auto preset_remover = [](const Preset &preset) {
@@ -655,8 +660,8 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			for (const auto &name : bundle.obsolete_presets.printers)  { obsolete_remover("printer", name); }
 		}
 	}
-
-	check_common_profiles(updates.common_versions);
+	if (!updates.common_versions.empty())
+		check_common_profiles(updates.common_versions);
 }
 
 void PresetUpdater::priv::set_waiting_updates(Updates u) 
@@ -670,7 +675,6 @@ void PresetUpdater::priv::check_common_profiles(const std::vector<Semver>& versi
 	if (versions.empty())
 		return;
 
-	Updates updates;
 	Index common_idx;
 	//find idx
 	bool idx_found = false;
@@ -694,12 +698,14 @@ void PresetUpdater::priv::check_common_profiles(const std::vector<Semver>& versi
 		// check if compatible with slicer version
 		
 		auto index_with_version = common_idx.find(version);
+		assert((*index_with_version).is_current_slic3r_supported());
+		/*
 		if (!(*index_with_version).is_current_slic3r_supported())
 		{
 			// if not compatible with slicer version -> logic error -> explode
 			BOOST_LOG_TRIVIAL(error) << "aszdglkjinbsdrflgijkbnaserljkihgnbseuriojhngblseurt";
 		}
-
+		*/
 		// find if version is present at vendor folder
 		const fs::path path_in_vendor = vendor_path / ("common." + version.to_string() + ".ini");
 		if (!fs::exists(path_in_vendor)) {
@@ -709,14 +715,18 @@ void PresetUpdater::priv::check_common_profiles(const std::vector<Semver>& versi
 			// Update from rsrc
 			fs::path path_in_rsrc = rsrc_path   / ("common." + version.to_string() + ".ini");
 			fs::path path_target  = vendor_path / ("common." + version.to_string() + ".ini");
-
-			// third argument is version
-			// version *(common_idx.recommended()) is recommended version and we want version iterator
 			Update update(std::move(path_in_rsrc), std::move(path_target), *index_with_version, "common", "", true);
-			updates.updates.push_back(update);
+			// install
+			update.install();
+			PresetBundle bundle;
+			bundle.load_configbundle(update.source.string(), PresetBundle::LOAD_CFGBNDLE_SYSTEM);
 		}
 	}
-	perform_updates(std::move(updates), true);
+
+	// TODO: here it would be suitable to delete old common ini files from vendor folder
+	// for that you need all needed common versions
+	// this function is called when checking existing ini files that are ok as well for updated ones
+	// so versions vector does not contain all needed versions
 }
 
 PresetUpdater::PresetUpdater() :

@@ -1132,7 +1132,10 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
     const VendorProfile *vendor_profile = nullptr;
     if (flags & (LOAD_CFGBNDLE_SYSTEM | LOAD_CFGBUNDLE_VENDOR_ONLY)) {
         auto vp = VendorProfile::from_ini(tree, path);
-        if (vp.models.size() == 0) {
+        if (vp.name == "common profile"){
+            return load_common_configbundle(path, flags, tree, vp);
+        }
+        else if (vp.models.size() == 0) {
             BOOST_LOG_TRIVIAL(error) << boost::format("Vendor bundle: `%1%`: No printer model defined.") % path;
             return 0;
         } else if (vp.num_variants() == 0) {
@@ -1427,6 +1430,11 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
     }
 
     return presets_loaded + ph_printers_loaded;
+}
+
+size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned int flags, boost::property_tree::ptree& tree, VendorProfile& vp)
+{
+    return 1;
 }
 
 void PresetBundle::update_multi_material_filament_presets()

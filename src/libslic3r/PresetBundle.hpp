@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <boost/filesystem/path.hpp>
 
+
 namespace Slic3r {
 
 // Bundle of Print + Filament + Printer presets.
@@ -100,6 +101,9 @@ public:
     };
     // Load the config bundle, store it to the user profile directory by default.
     size_t                      load_configbundle(const std::string &path, unsigned int flags = LOAD_CFGBNDLE_SAVE);
+    
+    // Load common confing bundle, called from load_configbundle
+    size_t                      load_common_configbundle(const std::string& path, unsigned int flags, boost::property_tree::ptree& tree, VendorProfile& vp);
 
     // Export a config bundle file containing all the presets and the names of the active presets.
     void                        export_configbundle(const std::string &path, bool export_system_settings = false, bool export_physical_printers = false);
