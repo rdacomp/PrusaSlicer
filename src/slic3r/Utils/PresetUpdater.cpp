@@ -166,6 +166,8 @@ struct PresetUpdater::priv
 	void prune_tmps() const;
 	void sync_version() const;
 	void sync_config(const VendorMap vendors);
+	void sync_common_config(const VendorMap vendors);
+	void update_common_index(const VendorProfile& vendor, Index& index);
 
 	void check_install_indices() const;
 	Updates get_config_updates(const Semver& old_slic3r_version) const;
@@ -370,7 +372,108 @@ void PresetUpdater::priv::sync_config(const VendorMap vendors)
 		if (! get_file(bundle_url, bundle_path)) { continue; }
 		if (cancel) { return; }
 	}
+
+	sync_common_config(vendors);
 }
+
+// Download common index and ini files
+void PresetUpdater::priv::sync_common_config(const VendorMap vendors)
+{
+	// Get common index
+	auto index_it = std::find_if(index_db.begin(), index_db.end(), [](const Index& i) { return i.vendor() == "common"; });
+	if (index_it == index_db.end())
+		return;
+	Index& index = *index_it;
+
+	// Get all versions of common profiles that are in vendor profiles in cache.
+	std::vector<Semver> common_versions;
+	for (const auto idx : index_db) {
+		auto bundle_path = vendor_path / (idx.vendor() + ".ini");
+		if (!fs::exists(bundle_path))
+			continue;
+		const auto vp = VendorProfile::from_ini(bundle_path, false);
+		if (vp.using_common_profile && std::find(common_versions.begin(), common_versions.end(), vp.common_version) == common_versions.end())
+			common_versions.push_back(vp.common_version);
+	}
+
+	// Get any common profil from vendors
+	auto it = vendors.begin();
+	for (; it != vendors.end(); ++it) {
+		if (it->second.name == "common")
+			break;
+	}
+	if (it == vendors.end())
+		return;
+
+	// To download index, any common profile is suitable 
+	const VendorProfile& vendor = it->second;
+	// Update index if needed
+	update_common_index(vendor, index);
+	
+	// Download all common_versions that are not in cache folder and are supported according to index
+	for (const auto version : common_versions) {
+		auto index_with_version = index.find(version);
+		// Skip unsupported profiles- will backfire later though
+		if(!(*index_with_version).is_current_slic3r_supported()) {
+			BOOST_LOG_TRIVIAL(error) << format("Version of common profile %1%, not supproted by this version of Slicer yet required by some vendor profile.");
+			continue;
+		}
+		const auto bundle_url = format("%1%/%2%.ini", vendor.config_update_url, version.to_string());
+		const auto bundle_path = cache_path / (vendor.name + "." + version.to_string() + ".ini");
+		if(fs::exists(bundle_path))
+			continue;
+		BOOST_LOG_TRIVIAL(info) << "Downloading new bundle for common config version: " << version;
+		if (!get_file(bundle_url, bundle_path)) {
+			BOOST_LOG_TRIVIAL(error) << format("Could not download ini for %1 from %2%", vendor.id, bundle_url);
+		}
+	}
+	
+
+}
+
+void PresetUpdater::priv::update_common_index(const VendorProfile& vendor, Index& index)
+{
+	// Download a fresh index
+	BOOST_LOG_TRIVIAL(info) << "Downloading index for common profiles";
+	const auto idx_url = vendor.config_update_url + "/" + INDEX_FILENAME;
+	const std::string idx_path = (cache_path / (vendor.name + ".idx")).string();
+	const std::string idx_path_temp = idx_path + "-update";
+	//check if idx_url is leading to our site 
+	if (!boost::starts_with(idx_url, "http://files.prusa3d.com/wp-content/uploads/repository/")) {
+		BOOST_LOG_TRIVIAL(warning) << "unsafe url path for vendor \"" << vendor.name << "\" rejected: " << idx_url;
+		return;
+	}
+	if (!get_file(idx_url, idx_path_temp)) {
+		BOOST_LOG_TRIVIAL(error) << format("Could not download index for common profiles from %1%", idx_url);
+		return;
+	}
+	if (cancel)
+		return;
+	// Load the fresh index up
+	{
+		Index new_index;
+		try {
+			new_index.load(idx_path_temp);
+		}
+		catch (const std::exception& /* err */) {
+			BOOST_LOG_TRIVIAL(error) << format("Could not load downloaded index %1% for common profiles: invalid index?", idx_path_temp);
+			return;
+		}
+		if (new_index.version() < index.version()) {
+			BOOST_LOG_TRIVIAL(warning) << format("The downloaded index %1% for common profiles is older than the active one. Ignoring the downloaded index.", idx_path_temp, vendor.name);
+			return;
+		}
+		Slic3r::rename_file(idx_path_temp, idx_path);
+		try {
+			index.load(idx_path);
+		}
+		catch (const std::exception& /* err */) {
+			BOOST_LOG_TRIVIAL(error) << format("Could not load downloaded index %1% for common profiles: invalid index?", idx_path, vendor.name);
+			return;
+		}
+	}
+}
+
 
 // Install indicies from resources. Only installs those that are either missing or older than in resources.
 void PresetUpdater::priv::check_install_indices() const
@@ -698,6 +801,7 @@ void PresetUpdater::priv::check_common_profiles(const std::vector<Semver>& versi
 		// check if compatible with slicer version
 		
 		auto index_with_version = common_idx.find(version);
+		// FIXME: How do we want to have this signaled??
 		assert((*index_with_version).is_current_slic3r_supported());
 		/*
 		if (!(*index_with_version).is_current_slic3r_supported())
@@ -715,11 +819,17 @@ void PresetUpdater::priv::check_common_profiles(const std::vector<Semver>& versi
 			// Update from rsrc
 			fs::path path_in_rsrc = rsrc_path   / ("common." + version.to_string() + ".ini");
 			fs::path path_target  = vendor_path / ("common." + version.to_string() + ".ini");
+			//assert(fs::exists(path_in_rsrc));
+			if(!fs::exists(path_in_rsrc)){
+				continue;
+			}
 			Update update(std::move(path_in_rsrc), std::move(path_target), *index_with_version, "common", "", true);
 			// install
 			update.install();
 			PresetBundle bundle;
 			bundle.load_configbundle(update.source.string(), PresetBundle::LOAD_CFGBNDLE_SYSTEM);
+			
+			
 		}
 	}
 
