@@ -2347,6 +2347,12 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
             continue;
         }
 
+        if (pair.second.vendor_profile->name == "common_filaments" || pair.second.vendor_profile->name == "common_materials") {
+            // Always install common bundles
+            install_bundles.emplace_back(pair.first);
+            continue;
+        }
+
         const auto vendor = enabled_vendors.find(pair.first);
         if (vendor == enabled_vendors.end()) { continue; }
 

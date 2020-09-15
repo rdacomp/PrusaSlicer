@@ -1132,7 +1132,7 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
     const VendorProfile *vendor_profile = nullptr;
     if (flags & (LOAD_CFGBNDLE_SYSTEM | LOAD_CFGBUNDLE_VENDOR_ONLY)) {
         auto vp = VendorProfile::from_ini(tree, path);
-        if (vp.name == "common"){
+        if (vp.name == "common" || vp.name == "common_filaments" || vp.name == "common_materials"){
             return load_common_configbundle(path, flags, tree, vp);
         }
         else if (vp.models.size() == 0) {
@@ -1434,13 +1434,12 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
 
 size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned int flags, boost::property_tree::ptree& tree, VendorProfile& vp)
 {
-
     const VendorProfile* vendor_profile = &this->vendors.insert({ vp.id, vp }).first->second;
 
     // FIXME 
     // Follows copied code from load_configbundle
 
-
+    
     // 1.5) Flatten the config bundle by applying the inheritance rules. Internal profiles (with names starting with '*') are removed.
      // If loading a user config bundle, do not flatten with the system profiles, but keep the "inherits" flag intact.
     flatten_configbundle_hierarchy(tree, ((flags & LOAD_CFGBNDLE_SYSTEM) == 0) ? this : nullptr);
@@ -1458,6 +1457,7 @@ size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned 
     std::string              active_sla_material;
     std::string              active_printer;
     size_t                   presets_loaded = 0;
+    /*
     for (const auto& section : tree) {
         PresetCollection* presets = nullptr;
         std::vector<std::string>* loaded = nullptr;
@@ -1673,7 +1673,7 @@ size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned 
             ++presets_loaded;
         }
     }
-
+     */
     // 3) Activate the presets.
     if ((flags & LOAD_CFGBNDLE_SYSTEM) == 0) {
         if (!active_print.empty())
