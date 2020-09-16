@@ -21,33 +21,13 @@ namespace FillAdaptive_Internal
         double line_xy_distance;// Defines maximal distance from a center of a cube on X and Y axis on which lines will be created
     };
 
-    struct Cube
-    {
-        Vec3d center;
-        std::unique_ptr<Cube> children[8] = {};
-        Cube(const Vec3d &center) : center(center) {}
+    struct Cube;
+    struct Octree;
+    // To keep the definition of Octree opaque, we have to define a custom deleter.
+    struct OctreeDeleter {
+        void operator()(Octree *p);
     };
-
-    struct Octree
-    {
-        std::unique_ptr<Cube> root_cube;
-        Vec3d origin;
-        std::vector<CubeProperties> cubes_properties;
-
-        Octree(std::unique_ptr<Cube> rootCube, const Vec3d &origin, const std::vector<CubeProperties> &cubes_properties)
-            : root_cube(std::move(rootCube)), origin(origin), cubes_properties(cubes_properties) {}
-
-        inline static int find_octant(const Vec3d &i_cube, const Vec3d &current)
-        {
-            return (i_cube.z() > current.z()) * 4 + (i_cube.y() > current.y()) * 2 + (i_cube.x() > current.x());
-        }
-
-        static void propagate_point(
-            Vec3d                        point,
-            FillAdaptive_Internal::Cube *current_cube,
-            int                          depth,
-            const std::vector<FillAdaptive_Internal::CubeProperties> &cubes_properties);
-    };
+    using OctreePtr = std::unique_ptr<Octree, OctreeDeleter>;
 }; // namespace FillAdaptive_Internal
 
 //
@@ -72,7 +52,7 @@ protected:
 	virtual bool no_sort() const { return true; }
 
     void generate_infill_lines(
-        FillAdaptive_Internal::Cube *cube,
+        const FillAdaptive_Internal::Cube *cube,
         double                       z_position,
         const Vec3d &                origin,
         const Transform3d &          rotation_matrix,
@@ -90,14 +70,14 @@ protected:
                          FillAdaptive_Internal::Octree *octree);
 
 public:
-    static std::unique_ptr<FillAdaptive_Internal::Octree> build_octree(
+    static FillAdaptive_Internal::OctreePtr build_octree(
         TriangleMesh &triangle_mesh,
         coordf_t      line_spacing,
         const Vec3d & cube_center);
 
     static void expand_cube(
-        FillAdaptive_Internal::Cube *cube,
-        const std::vector<FillAdaptive_Internal::CubeProperties> &cubes_properties,
+        FillAdaptive_Internal::Octree  &octree,
+        FillAdaptive_Internal::Cube    *cube,
         const AABBTreeIndirect::Tree3f &distance_tree,
         const TriangleMesh &            triangle_mesh,
         int                             depth);
@@ -121,7 +101,7 @@ protected:
         Polylines                       &polylines_out);
 
 public:
-    static std::unique_ptr<FillAdaptive_Internal::Octree> build_octree(
+    static FillAdaptive_Internal::OctreePtr build_octree(
         TriangleMesh &     triangle_mesh,
         coordf_t           line_spacing,
         const Vec3d &      cube_center,

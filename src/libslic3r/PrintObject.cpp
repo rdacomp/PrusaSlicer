@@ -436,13 +436,13 @@ void PrintObject::generate_support_material()
 
 //#define ADAPTIVE_SUPPORT_SIMPLE
 
-std::pair<std::unique_ptr<FillAdaptive_Internal::Octree>, std::unique_ptr<FillAdaptive_Internal::Octree>> PrintObject::prepare_adaptive_infill_data()
+std::pair<FillAdaptive_Internal::OctreePtr, FillAdaptive_Internal::OctreePtr> PrintObject::prepare_adaptive_infill_data()
 {
     using namespace FillAdaptive_Internal;
 
     auto [adaptive_line_spacing, support_line_spacing] = adaptive_fill_line_spacing(*this);
 
-    std::unique_ptr<Octree> adaptive_fill_octree = {}, support_fill_octree = {};
+    OctreePtr adaptive_fill_octree = {}, support_fill_octree = {};
 
     if (adaptive_line_spacing == 0. && support_line_spacing == 0.)
         return std::make_pair(std::move(adaptive_fill_octree), std::move(support_fill_octree));
