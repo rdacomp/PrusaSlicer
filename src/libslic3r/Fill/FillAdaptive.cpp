@@ -2,18 +2,151 @@
 #include "../ExPolygon.hpp"
 #include "../Surface.hpp"
 #include "../Geometry.hpp"
-#include "../AABBTreeIndirect.hpp"
 #include "../Layer.hpp"
 #include "../Print.hpp"
 #include "../ShortestPath.hpp"
 
 #include "FillAdaptive.hpp"
 
+#include <cstdlib>
+#include <cmath>
+
 // Boost pool: Don't use mutexes to synchronize memory allocation.
 #define BOOST_POOL_NO_MT
 #include <boost/pool/object_pool.hpp>
 
 namespace Slic3r {
+
+// Derived from https://github.com/juj/MathGeoLib/blob/master/src/Geometry/Triangle.cpp
+// The AABB-Triangle test implementation is based on the pseudo-code in
+// Christer Ericson's Real-Time Collision Detection, pp. 169-172. It is
+// practically a standard SAT test.
+//
+// Original MathGeoLib benchmark:
+//    Best: 17.282 nsecs / 46.496 ticks, Avg: 17.804 nsecs, Worst: 18.434 nsecs
+//
+//FIXME Vojtech: The MathGeoLib contains a vectorized implementation.
+template<typename Vector> 
+bool triangle_AABB_intersects(const Vector &a, const Vector &b, const Vector &c, const BoundingBoxBase<Vector> &aabb)
+{
+    using Scalar = typename Vector::Scalar;
+
+    Vector tMin = a.cwiseMin(b.cwiseMin(c));
+    Vector tMax = a.cwiseMax(b.cwiseMax(c));
+
+    if (tMin.x() >= aabb.max.x() || tMax.x() <= aabb.min.x()
+        || tMin.y() >= aabb.max.y() || tMax.y() <= aabb.min.y()
+        || tMin.z() >= aabb.max.z() || tMax.z() <= aabb.min.z())
+        return false;
+
+    Vector center = (aabb.min + aabb.max) * 0.5f;
+    Vector h = aabb.max - center;
+
+    const Vector t[3] { b-a, c-a, c-b };
+
+    Vector ac = a - center;
+
+    Vector n = t[0].cross(t[1]);
+    Scalar s = n.dot(ac);
+    Scalar r = std::abs(h.dot(n.cwiseAbs()));
+    if (abs(s) >= r)
+        return false;
+
+    const Vector at[3] = { t[0].cwiseAbs(), t[1].cwiseAbs(), t[2].cwiseAbs() };
+
+    Vector bc = b - center;
+    Vector cc = c - center;
+
+    // SAT test all cross-axes.
+    // The following is a fully unrolled loop of this code, stored here for reference:
+    /*
+    Scalar d1, d2, a1, a2;
+    const Vector e[3] = { DIR_VEC(1, 0, 0), DIR_VEC(0, 1, 0), DIR_VEC(0, 0, 1) };
+    for(int i = 0; i < 3; ++i)
+        for(int j = 0; j < 3; ++j)
+        {
+            Vector axis = Cross(e[i], t[j]);
+            ProjectToAxis(axis, d1, d2);
+            aabb.ProjectToAxis(axis, a1, a2);
+            if (d2 <= a1 || d1 >= a2) return false;
+        }
+    */
+
+    // eX <cross> t[0]
+    Scalar d1 = t[0].y() * ac.z() - t[0].z() * ac.y();
+    Scalar d2 = t[0].y() * cc.z() - t[0].z() * cc.y();
+    Scalar tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.y() * at[0].z() + h.z() * at[0].y());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eX <cross> t[1]
+    d1 = t[1].y() * ac.z() - t[1].z() * ac.y();
+    d2 = t[1].y() * bc.z() - t[1].z() * bc.y();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.y() * at[1].z() + h.z() * at[1].y());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eX <cross> t[2]
+    d1 = t[2].y() * ac.z() - t[2].z() * ac.y();
+    d2 = t[2].y() * bc.z() - t[2].z() * bc.y();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.y() * at[2].z() + h.z() * at[2].y());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eY <cross> t[0]
+    d1 = t[0].z() * ac.x() - t[0].x() * ac.z();
+    d2 = t[0].z() * cc.x() - t[0].x() * cc.z();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.x() * at[0].z() + h.z() * at[0].x());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eY <cross> t[1]
+    d1 = t[1].z() * ac.x() - t[1].x() * ac.z();
+    d2 = t[1].z() * bc.x() - t[1].x() * bc.z();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.x() * at[1].z() + h.z() * at[1].x());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eY <cross> t[2]
+    d1 = t[2].z() * ac.x() - t[2].x() * ac.z();
+    d2 = t[2].z() * bc.x() - t[2].x() * bc.z();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.x() * at[2].z() + h.z() * at[2].x());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eZ <cross> t[0]
+    d1 = t[0].x() * ac.y() - t[0].y() * ac.x();
+    d2 = t[0].x() * cc.y() - t[0].y() * cc.x();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.y() * at[0].x() + h.x() * at[0].y());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eZ <cross> t[1]
+    d1 = t[1].x() * ac.y() - t[1].y() * ac.x();
+    d2 = t[1].x() * bc.y() - t[1].y() * bc.x();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.y() * at[1].x() + h.x() * at[1].y());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // eZ <cross> t[2]
+    d1 = t[2].x() * ac.y() - t[2].y() * ac.x();
+    d2 = t[2].x() * bc.y() - t[2].y() * bc.x();
+    tc = (d1 + d2) * 0.5f;
+    r = std::abs(h.y() * at[2].x() + h.x() * at[2].y());
+    if (r + std::abs(tc - d1) < std::abs(tc))
+        return false;
+
+    // No separating axis exists, the AABB and triangle intersect.
+    return true;
+}
 
 namespace FillAdaptive_Internal
 {
@@ -36,16 +169,7 @@ namespace FillAdaptive_Internal
         Octree(const Vec3d &origin, const std::vector<CubeProperties> &cubes_properties)
             : root_cube(pool.construct(origin)), origin(origin), cubes_properties(cubes_properties) {}
 
-        inline static int find_octant(const Vec3d &i_cube, const Vec3d &current)
-        {
-            return (i_cube.z() > current.z()) * 4 + (i_cube.y() > current.y()) * 2 + (i_cube.x() > current.x());
-        }
-
-        static void propagate_point(
-            Octree                            &octree,
-            Vec3d                              point,
-            Cube                              *current_cube,
-            int                                depth);
+        void insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, BoundingBoxf3 &current_bbox, int depth);
     };
 
     void OctreeDeleter::operator()(Octree *p) {
@@ -302,12 +426,12 @@ static double bbox_max_radius(const BoundingBoxf3 &bbox, const Vec3d &center)
     return sqrt(r2max);
 }
 
-static std::vector<FillAdaptive_Internal::CubeProperties> make_cubes_properties(const BoundingBoxf3 &bbox, const Vec3d &center, double line_spacing)
+static std::vector<FillAdaptive_Internal::CubeProperties> make_cubes_properties(double max_cube_edge_length, double line_spacing)
 {
-    double max_cube_edge_length = bbox_max_radius(bbox, center) * 2. + EPSILON;
+    max_cube_edge_length += EPSILON;
 
     std::vector<FillAdaptive_Internal::CubeProperties> cubes_properties;
-    for (double edge_length = line_spacing * 2.; edge_length < max_cube_edge_length; edge_length *= 2.)
+    for (double edge_length = line_spacing * 2.;; edge_length *= 2.)
     {
         FillAdaptive_Internal::CubeProperties props{};
         props.edge_length = edge_length;
@@ -316,32 +440,47 @@ static std::vector<FillAdaptive_Internal::CubeProperties> make_cubes_properties(
         props.line_z_distance = edge_length / sqrt(3);
         props.line_xy_distance = edge_length / sqrt(6);
         cubes_properties.emplace_back(props);
+        if (edge_length > max_cube_edge_length)
+            break;
     }
     return cubes_properties;
 }
 
-FillAdaptive_Internal::OctreePtr FillAdaptive::build_octree(
-    TriangleMesh &triangle_mesh,
-    coordf_t line_spacing,
-    const Vec3d &cube_center)
+static inline bool is_overhang_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, const Vec3d &up)
+{
+    // Calculate triangle normal.
+    auto n = (b - a).cross(c - b);
+    return n.dot(up) > 0.707 * n.norm();
+}
+
+FillAdaptive_Internal::OctreePtr FillAdaptive::build_octree(const indexed_triangle_set &triangle_mesh, const Vec3d &up_vector, coordf_t line_spacing, bool support_overhangs_only)
 {
     using namespace FillAdaptive_Internal;
 
     assert(line_spacing > 0);
     assert(! std::isnan(line_spacing));
 
-    std::vector<CubeProperties> cubes_properties = make_cubes_properties(triangle_mesh.bounding_box(), cube_center, line_spacing);
+    BoundingBox3Base<Vec3f>     bbox(triangle_mesh.vertices);
+    Vec3d                       cube_center      = bbox.center().cast<double>();
+    std::vector<CubeProperties> cubes_properties = make_cubes_properties(double(bbox.size().maxCoeff()), line_spacing);
+    auto                        octree           = OctreePtr(new Octree(cube_center, cubes_properties));
 
-    if (triangle_mesh.its.vertices.empty())
-    {
-        triangle_mesh.require_shared_vertices();
+    if (cubes_properties.size() > 1) {
+        for (auto &tri : triangle_mesh.indices) {
+            auto a = triangle_mesh.vertices[tri[0]].cast<double>();
+            auto b = triangle_mesh.vertices[tri[1]].cast<double>();
+            auto c = triangle_mesh.vertices[tri[2]].cast<double>();
+            if (support_overhangs_only && ! is_overhang_triangle(a, b, c, up_vector))
+                continue;
+            double edge_length_half = 0.5 * cubes_properties.back().edge_length;
+            Vec3d  diag_half(edge_length_half, edge_length_half, edge_length_half);
+            octree->insert_triangle(
+                a, b, c,
+                octree->root_cube, 
+                BoundingBoxf3(octree->root_cube->center - diag_half, octree->root_cube->center + diag_half),
+                int(cubes_properties.size()) - 1);
+        }
     }
-
-    AABBTreeIndirect::Tree3f aabbTree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(
-            triangle_mesh.its.vertices, triangle_mesh.its.indices);
-    auto octree = OctreePtr(new Octree(cube_center, cubes_properties));
-
-    FillAdaptive::expand_cube(*octree.get(), octree->root_cube, aabbTree, triangle_mesh, int(cubes_properties.size()) - 1);
 
     return octree;
 }
@@ -354,116 +493,32 @@ static const std::array<Vec3d, 8> child_centers {
     Vec3d(-1, -1,  1), Vec3d( 1, -1,  1), Vec3d(-1,  1,  1), Vec3d( 1,  1,  1)
 };
 
-void FillAdaptive::expand_cube(
-    FillAdaptive_Internal::Octree& octree,
-    FillAdaptive_Internal::Cube *cube,
-    const AABBTreeIndirect::Tree3f &distance_tree,
-    const TriangleMesh &triangle_mesh, int depth)
+void FillAdaptive_Internal::Octree::insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, BoundingBoxf3 &current_bbox, int depth)
 {
-    using namespace FillAdaptive_Internal;
+    assert(current_cube);
+    assert(depth > 0);
 
-    if (cube == nullptr || depth == 0)
-    {
-        return;
-    }
-
-    double cube_radius_squared = (octree.cubes_properties[depth].height * octree.cubes_properties[depth].height) / 16;
-
-    for (size_t i = 0; i < 8; ++i)
-    {
+    for (size_t i = 0; i < 8; ++ i) {
         const Vec3d &child_center = child_centers[i];
-        Vec3d child_center_transformed = cube->center + (child_center * (octree.cubes_properties[depth].edge_length / 4));
-
-        if(AABBTreeIndirect::is_any_triangle_in_radius(triangle_mesh.its.vertices, triangle_mesh.its.indices,
-            distance_tree, child_center_transformed, cube_radius_squared))
-        {
-            cube->children[i] = octree.pool.construct(child_center_transformed);
-            FillAdaptive::expand_cube(octree, cube->children[i], distance_tree, triangle_mesh, depth - 1);
+        // Calculate a slightly expanded bounding box of a child cube to cope with triangles touching a cube wall and other numeric errors.
+        // We will rather densify the octree a bit more than necessary instead of missing a triangle.
+        BoundingBoxf3 bbox;
+        for (int k = 0; k < 3; ++ k) {
+            if (child_center[k] == -1.) {
+                bbox.min[k] = current_bbox.min[k];
+                bbox.max[k] = current_cube->center[k] + EPSILON;
+            } else {
+                bbox.min[k] = current_cube->center[k] - EPSILON;
+                bbox.max[k] = current_bbox.max[k];
+            }
+        }
+        if (triangle_AABB_intersects(a, b, c, bbox)) {
+            if (! current_cube->children[i])
+                current_cube->children[i] = this->pool.construct(current_cube->center + (child_center * (this->cubes_properties[depth].edge_length / 4)));
+            if (depth > 1)
+                this->insert_triangle(a, b, c, current_cube->children[i], bbox, depth - 1);
         }
     }
-}
-
-void FillAdaptive_Internal::Octree::propagate_point(
-    Octree&                                                   octree,
-    Vec3d                                                     point,
-    FillAdaptive_Internal::Cube *                             current,
-    int                                                       depth)
-{
-    using namespace FillAdaptive_Internal;
-
-    if(depth <= 0)
-    {
-        return;
-    }
-
-    size_t octant_idx = Octree::find_octant(point, current->center);
-    Cube * child = current->children[octant_idx];
-
-    // Octant not exists, then create it
-    if (child == nullptr) {
-        const Vec3d &child_center = child_centers[octant_idx];
-        Vec3d child_center_transformed = current->center + (child_center * (octree.cubes_properties[depth].edge_length / 4.));
-
-        current->children[octant_idx] = octree.pool.construct(child_center_transformed);
-        child = current->children[octant_idx];
-    }
-
-    Octree::propagate_point(octree, point, child, depth - 1);
-}
-
-FillAdaptive_Internal::OctreePtr FillSupportCubic::build_octree(
-    TriangleMesh &     triangle_mesh,
-    coordf_t           line_spacing,
-    const Vec3d &      cube_center,
-    const Transform3d &rotation_matrix)
-{
-    using namespace FillAdaptive_Internal;
-
-    assert(line_spacing > 0);
-    assert(! std::isnan(line_spacing));
-
-    const BoundingBoxf3 mesh_bb = triangle_mesh.bounding_box();
-    const std::vector<CubeProperties> cubes_properties = make_cubes_properties(mesh_bb, cube_center, line_spacing);
-
-    if (triangle_mesh.its.vertices.empty())
-    {
-        triangle_mesh.require_shared_vertices();
-    }
-
-    auto octree = OctreePtr(new Octree(cube_center, cubes_properties));
-
-    double cube_edge_length = line_spacing / 2.0;
-    int max_depth = int(octree->cubes_properties.size()) - 1;
-    const Vec3d cube_center_shift = Vec3d(cube_edge_length / 2., cube_edge_length / 2., 0.) + mesh_bb.min;
-
-    for (const stl_facet &facet : triangle_mesh.stl.facet_start)
-        if (facet.normal.z() > 0.707) {
-            // Internal overhang, face angle is smaller than PI/4.
-            // Generate dense cubes.
-            const Vec3d       triangle_vertices[3] { facet.vertex[0].cast<double>(), facet.vertex[1].cast<double>(), facet.vertex[2].cast<double>() };
-            BoundingBoxf3     triangle_bb;
-            for (size_t i = 0; i < 3; ++ i)
-                triangle_bb.merge(triangle_vertices[i]);
-
-            Vec3d triangle_start_idx(((triangle_bb.min - mesh_bb.min) / cube_edge_length).array().floor());
-            Vec3d triangle_end_idx  (((triangle_bb.max - mesh_bb.min) / cube_edge_length).array().floor() + Eigen::Array3d(EPSILON, EPSILON, EPSILON));
-            Vec3d cube_idx;
-
-            for (cube_idx.z() = triangle_start_idx.z(); cube_idx.z() < triangle_end_idx.z(); cube_idx.z() += 1.)
-                for (cube_idx.y() = triangle_start_idx.y(); cube_idx.y() < triangle_end_idx.y(); cube_idx.y() += 1.)
-                    for (cube_idx.x() = triangle_start_idx.x(); cube_idx.x() < triangle_end_idx.x(); cube_idx.x() += 1.) {
-                        Vec3d cube_center_absolute(cube_idx * cube_edge_length + cube_center_shift);
-                        double distance, cord_u, cord_v;
-                        if (AABBTreeIndirect::detail::intersect_triangle(cube_center_absolute, Vec3d(0., 0., 1.), triangle_vertices[0], triangle_vertices[1], triangle_vertices[2], distance, cord_u, cord_v) && 
-                            distance > 0. && distance <= cube_edge_length)
-                        {
-                            cube_center_absolute.z() += cube_edge_length / 2.0;
-                            Octree::propagate_point(*octree.get(), rotation_matrix * cube_center_absolute, octree->root_cube, max_depth);
-                        }
-                    }
-        }
-
-    return octree;
 }
 
 void FillSupportCubic::_fill_surface_single(const FillParams &             params,

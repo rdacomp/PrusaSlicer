@@ -71,16 +71,13 @@ protected:
 
 public:
     static FillAdaptive_Internal::OctreePtr build_octree(
-        TriangleMesh &triangle_mesh,
-        coordf_t      line_spacing,
-        const Vec3d & cube_center);
-
-    static void expand_cube(
-        FillAdaptive_Internal::Octree  &octree,
-        FillAdaptive_Internal::Cube    *cube,
-        const AABBTreeIndirect::Tree3f &distance_tree,
-        const TriangleMesh &            triangle_mesh,
-        int                             depth);
+        // Mesh is rotated to the coordinate system of the octree.
+        const indexed_triangle_set  &triangle_mesh, 
+        // Up vector of the mesh rotated to the coordinate system of the octree.
+        const Vec3d                 &up_vector, 
+        coordf_t                     line_spacing, 
+        // If true, octree is densified below internal overhangs only.
+        bool                         support_overhangs_only);
 };
 
 class FillSupportCubic : public FillAdaptive
@@ -91,21 +88,12 @@ public:
 protected:
     virtual Fill* clone() const { return new FillSupportCubic(*this); };
 
-    virtual bool no_sort() const { return true; }
-
     virtual void _fill_surface_single(
         const FillParams                &params,
         unsigned int                     thickness_layers,
         const std::pair<float, Point>   &direction,
         ExPolygon                       &expolygon,
         Polylines                       &polylines_out);
-
-public:
-    static FillAdaptive_Internal::OctreePtr build_octree(
-        TriangleMesh &     triangle_mesh,
-        coordf_t           line_spacing,
-        const Vec3d &      cube_center,
-        const Transform3d &rotation_matrix);
 };
 
 // Calculate line spacing for

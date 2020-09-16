@@ -434,8 +434,6 @@ void PrintObject::generate_support_material()
     }
 }
 
-//#define ADAPTIVE_SUPPORT_SIMPLE
-
 std::pair<FillAdaptive_Internal::OctreePtr, FillAdaptive_Internal::OctreePtr> PrintObject::prepare_adaptive_infill_data()
 {
     using namespace FillAdaptive_Internal;
@@ -447,59 +445,24 @@ std::pair<FillAdaptive_Internal::OctreePtr, FillAdaptive_Internal::OctreePtr> Pr
     if (adaptive_line_spacing == 0. && support_line_spacing == 0.)
         return std::make_pair(std::move(adaptive_fill_octree), std::move(support_fill_octree));
 
-    TriangleMesh mesh = this->model_object()->raw_mesh();
-    mesh.transform(m_trafo, true);
-    // Apply XY shift
-    mesh.translate(- unscale<float>(m_center_offset.x()), - unscale<float>(m_center_offset.y()), 0);
-    // Center of the first cube in octree
-    Vec3d mesh_origin = mesh.bounding_box().center();
+    indexed_triangle_set mesh = this->model_object()->raw_indexed_triangle_set();
+    Vec3d                up;
 
-#ifdef ADAPTIVE_SUPPORT_SIMPLE
-    if (mesh.its.vertices.empty())
     {
-        mesh.require_shared_vertices();
-    }
-
-    Vec3f vertical(0, 0, 1);
-
-    indexed_triangle_set its_set;
-    its_set.vertices = mesh.its.vertices;
-
-    // Filter out non overhanging faces
-    for (size_t i = 0; i < mesh.its.indices.size(); ++i) {
-        stl_triangle_vertex_indices vertex_idx = mesh.its.indices[i];
-
-        auto its_calculate_normal = [](const stl_triangle_vertex_indices &index, const std::vector<stl_vertex> &vertices) {
-            stl_normal normal = (vertices[index.y()] - vertices[index.x()]).cross(vertices[index.z()] - vertices[index.x()]);
-            return normal;
-        };
-
-        stl_normal normal = its_calculate_normal(vertex_idx, mesh.its.vertices);
-        stl_normalize_vector(normal);
-
-        if(normal.dot(vertical) >= 0.707) {
-            its_set.indices.push_back(vertex_idx);
-        }
-    }
-
-    mesh = TriangleMesh(its_set);
-
-#ifdef SLIC3R_DEBUG_SLICE_PROCESSING
-    Slic3r::store_stl(debug_out_path("overhangs.stl").c_str(), &mesh, false);
-#endif /* SLIC3R_DEBUG_SLICE_PROCESSING */
-#endif /* ADAPTIVE_SUPPORT_SIMPLE */
-
-    Vec3d rotation = Vec3d((5.0 * M_PI) / 4.0, Geometry::deg2rad(215.264), M_PI / 6.0);
-    Transform3d rotation_matrix = Geometry::assemble_transform(Vec3d::Zero(), rotation, Vec3d::Ones(), Vec3d::Ones()).inverse();
-
-    if (adaptive_line_spacing != 0.) {
+        Vec3d rotation = Vec3d((5.0 * M_PI) / 4.0, Geometry::deg2rad(215.264), M_PI / 6.0);
+        Transform3d rotation_matrix = Geometry::assemble_transform(Vec3d::Zero(), rotation, Vec3d::Ones(), Vec3d::Ones()).inverse();
+        up = rotation_matrix * Vec3d(0., 0., 1.);
         // Rotate mesh and build octree on it with axis-aligned (standart base) cubes
-        mesh.transform(rotation_matrix);
-        adaptive_fill_octree = FillAdaptive::build_octree(mesh, adaptive_line_spacing, rotation_matrix * mesh_origin);
+        Transform3d m = m_trafo;
+        m.translate(Vec3d(- unscale<float>(m_center_offset.x()), - unscale<float>(m_center_offset.y()), 0));
+        its_transform(mesh, rotation_matrix * m, true);
     }
+
+    if (adaptive_line_spacing != 0.)
+        adaptive_fill_octree = FillAdaptive::build_octree(mesh, up, adaptive_line_spacing, false);
 
     if (support_line_spacing != 0.)
-        support_fill_octree = FillSupportCubic::build_octree(mesh, support_line_spacing, rotation_matrix * mesh_origin, rotation_matrix);
+        support_fill_octree = FillAdaptive::build_octree(mesh, up, support_line_spacing, true);
 
     return std::make_pair(std::move(adaptive_fill_octree), std::move(support_fill_octree));
 }
