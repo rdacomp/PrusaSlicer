@@ -8,6 +8,9 @@
 
 #include "FillAdaptive.hpp"
 
+// for indexed_triangle_set
+#include <admesh/stl.h>
+
 #include <cstdlib>
 #include <cmath>
 
@@ -597,7 +600,9 @@ static inline bool is_overhang_triangle(const Vec3d &a, const Vec3d &b, const Ve
 
 static void transform_center(FillAdaptive_Internal::Cube *current_cube, const Eigen::Matrix3d &rot)
 {
+#ifndef NDEBUG
     current_cube->center_octree = current_cube->center;
+#endif // NDEBUG
     current_cube->center = rot * current_cube->center;
     for (auto *child : current_cube->children)
         if (child)

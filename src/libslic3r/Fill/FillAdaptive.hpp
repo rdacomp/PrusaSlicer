@@ -15,11 +15,11 @@
 
 #include "FillBase.hpp"
 
+struct indexed_triangle_set;
+
 namespace Slic3r {
 
 class PrintObject;
-struct indexed_triangle_set;
-
 namespace FillAdaptive_Internal
 {
     struct Octree;
