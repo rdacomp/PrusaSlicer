@@ -69,7 +69,7 @@ public:
         BoundingBoxBase<PointClass>(pmin, pmax) 
         { if (pmin(2) >= pmax(2)) BoundingBoxBase<PointClass>::defined = false; }
     BoundingBox3Base(const PointClass &p1, const PointClass &p2, const PointClass &p3) :
-        min(p1), max(p1), defined(false) { merge(p2); merge(p3); }
+        BoundingBoxBase<PointClass>(p1, p1) { merge(p2); merge(p3); }
     BoundingBox3Base(const std::vector<PointClass>& points)
     {
         if (points.empty())
