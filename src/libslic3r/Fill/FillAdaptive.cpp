@@ -198,7 +198,7 @@ namespace FillAdaptive_Internal
         Octree(const Vec3d &origin, const std::vector<CubeProperties> &cubes_properties)
             : root_cube(pool.construct(origin)), origin(origin), cubes_properties(cubes_properties) {}
 
-        void insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, BoundingBoxf3 &current_bbox, int depth);
+        void insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, const BoundingBoxf3 &current_bbox, int depth);
     };
 
     void OctreeDeleter::operator()(Octree *p) {
@@ -645,7 +645,7 @@ FillAdaptive_Internal::OctreePtr FillAdaptive_Internal::build_octree(const index
     return octree;
 }
 
-void FillAdaptive_Internal::Octree::insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, BoundingBoxf3 &current_bbox, int depth)
+void FillAdaptive_Internal::Octree::insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, const BoundingBoxf3 &current_bbox, int depth)
 {
     assert(current_cube);
     assert(depth > 0);
