@@ -148,6 +148,20 @@ bool triangle_AABB_intersects(const Vector &a, const Vector &b, const Vector &c,
     return true;
 }
 
+// Ordering of children cubes.
+static const std::array<Vec3d, 8> child_centers {
+    Vec3d(-1, -1, -1), Vec3d( 1, -1, -1), Vec3d(-1,  1, -1), Vec3d( 1,  1, -1),
+    Vec3d(-1, -1,  1), Vec3d( 1, -1,  1), Vec3d(-1,  1,  1), Vec3d( 1,  1,  1)
+};
+
+// Traversal order of octree children cells for three infill directions,
+// so that a single line will be discretized in a strictly monotonous order.
+static constexpr std::array<std::array<int, 8>, 3> child_traversal_order {
+    std::array<int, 8>{ 2, 3, 0, 1, 6, 7, 4, 5 },
+    std::array<int, 8>{ 4, 0, 6, 2, 5, 1, 7, 3 },
+    std::array<int, 8>{ 1, 5, 0, 4, 3, 7, 2, 6 },
+};
+
 namespace FillAdaptive_Internal
 {
     struct Cube
@@ -266,6 +280,197 @@ void FillAdaptive::_fill_surface_single(const FillParams &             params,
         this->generate_infill(params, thickness_layers, direction, expolygon, polylines_out, this->adapt_fill_octree);
 }
 
+// Context used by generate_infill_lines() when recursively traversing an octree in a DDA fashion
+// (Digital Differential Analyzer).
+struct FillContext
+{
+    // The angles have to agree with child_traversal_order.
+    static constexpr double direction_angles[3] {
+        0.,
+        (2.0 * M_PI) / 3.0,
+        -(2.0 * M_PI) / 3.0
+    };
+
+    FillContext(const FillAdaptive_Internal::Octree &octree, const Transform3d &to_world, double z_position, int direction_idx) :
+        origin_world(to_world * octree.origin),
+        to_world(to_world), 
+        cubes_properties(octree.cubes_properties),
+        z_position(z_position),
+        traversal_order(child_traversal_order[direction_idx]),
+        cos_a(cos(direction_angles[direction_idx])),
+        sin_a(sin(direction_angles[direction_idx]))
+    {
+        static constexpr auto unused = std::numeric_limits<coord_t>::max();
+        temp_lines.assign((1 << octree.cubes_properties.size()) - 1, Line(Point(unused, unused), Point(unused, unused)));
+    }
+
+    // Rotate the point, uses the same convention as Point::rotate().
+    Vec2d rotate(const Vec2d& v) { return Vec2d(this->cos_a * v.x() - this->sin_a * v.y(), this->sin_a * v.x() + this->cos_a * v.y()); }
+
+    // Center of the root cube in the Octree coordinate system.
+    const Vec3d                                                 origin_world;
+    // Rotation from the Octree coordinate system to the world coordinate system.
+    const Transform3d                                          &to_world;
+    const std::vector<FillAdaptive_Internal::CubeProperties>   &cubes_properties;
+    // Top of the current layer.
+    const double                                                z_position;
+    // Order of traversal for this line direction.
+    const std::array<int, 8>                                    traversal_order;
+    // Rotation of the generated line for this line direction.
+    const double                                                cos_a;
+    const double                                                sin_a;
+
+    // Linearized tree spanning a single Octree wall, used to connect lines spanning
+    // neighboring Octree cells. Unused lines have the Line::a::x set to infinity.
+    std::vector<Line>                                           temp_lines;
+    // Final output
+    std::vector<Line>                                           output_lines;
+};
+
+#ifndef NDEBUG
+// Verify that the traversal order of the octree children matches the line direction,
+// therefore the infill line may get extended with O(1) time & space complexity.
+bool verify_traversal_order(
+    FillContext                         &context,
+    const FillAdaptive_Internal::Cube   *cube,
+    int                                  depth,
+    const Vec2d                         &line_from,
+    const Vec2d                         &line_to)
+{
+    std::array<Vec3d, 8> c;
+    for (int i = 0; i < 8; ++i) {
+        int j = context.traversal_order[i];
+        Vec3d cntr = cube->center + (child_centers[j] * (context.cubes_properties[depth].edge_length / 4.));
+        assert(!cube->children[j] || cube->children[j]->center.isApprox(cntr));
+        c[i] = context.to_world * cntr;
+    }
+    std::array<Vec3d, 10> dirs = {
+        c[1] - c[0], c[2] - c[0], c[3] - c[1], c[3] - c[2], c[3] - c[0],
+        c[5] - c[4], c[6] - c[4], c[7] - c[5], c[7] - c[6], c[7] - c[4]
+    };
+    assert(std::abs(dirs[4].z()) < 0.001);
+    assert(std::abs(dirs[9].z()) < 0.001);
+    assert(dirs[0].isApprox(dirs[3]));
+    assert(dirs[1].isApprox(dirs[2]));
+    assert(dirs[5].isApprox(dirs[8]));
+    assert(dirs[6].isApprox(dirs[7]));
+    Vec3d line_dir = Vec3d(line_to.x() - line_from.x(), line_to.y() - line_from.y(), 0.).normalized();
+    for (auto& dir : dirs) {
+        double d = dir.normalized().dot(line_dir);
+        assert(d > 0.7);
+    }
+    return true;
+}
+#endif // NDEBUG
+
+void generate_infill_lines_recursive(
+    FillContext                         &context,
+    const FillAdaptive_Internal::Cube   *cube,
+    // Address of this wall in the octree,  used to address context.temp_lines.
+    int                                  address,
+    int                                  depth)
+{
+    assert(cube != nullptr);
+
+    const std::vector<FillAdaptive_Internal::CubeProperties> &cubes_properties = context.cubes_properties;
+    Vec3d cube_center_world = context.to_world * cube->center;
+    const double z_diff     = context.z_position - cube_center_world.z();
+    const double z_diff_abs = std::abs(z_diff);
+
+    if (z_diff_abs > cubes_properties[depth].height / 2.)
+        return;
+
+    if (z_diff_abs < cubes_properties[depth].line_z_distance) {
+        // Discretize a single wall splitting the cube into two.
+        Vec2d from(
+                (cubes_properties[depth].diagonal_length / 2) * (cubes_properties[depth].line_z_distance - z_diff_abs) / cubes_properties[depth].line_z_distance,
+                cubes_properties[depth].line_xy_distance - ((context.z_position - (cube_center_world.z() - cubes_properties[depth].line_z_distance)) / sqrt(2.)));
+        Vec2d to(-from.x(), from.y());
+        from = context.rotate(from);
+        to   = context.rotate(to);
+        // Relative to cube center
+        Vec2d offset(cube_center_world.x() - context.origin_world.x(), cube_center_world.y() - context.origin_world.y());
+        from += offset;
+        to   += offset;
+        // Verify that the traversal order of the octree children matches the line direction,
+        // therefore the infill line may get extended with O(1) time & space complexity.
+        assert(verify_traversal_order(context, cube, depth, from, to));
+        // Either extend an existing line or start a new one.
+        Line &last_line = context.temp_lines[address];
+        Line  new_line(Point::new_scale(from), Point::new_scale(to));
+        if (last_line.a.x() == std::numeric_limits<coord_t>::max()) {
+            last_line.a = new_line.a;
+        } else if ((new_line.a - last_line.b).cwiseAbs().maxCoeff() > 300) { // SCALED_EPSILON is 100 and it is not enough) {
+            context.output_lines.emplace_back(last_line);
+            last_line.a = new_line.a;
+        }
+        last_line.b = new_line.b;
+    }
+
+    // left child index
+    address = address * 2 + 1;
+    -- depth;
+    size_t i = 0;
+    for (const int child_idx : context.traversal_order) {
+        const FillAdaptive_Internal::Cube *child = cube->children[child_idx];
+        if (child != nullptr)
+            generate_infill_lines_recursive(context, child, address, depth);
+        if (++ i == 4)
+            // right child index
+            ++ address;
+    }
+}
+
+#ifndef NDEBUG
+//    #define ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT
+#endif
+
+#ifdef ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT
+static void export_infill_lines_to_svg(const ExPolygon &expoly, const Polylines &polylines, const std::string &path)
+{
+    BoundingBox bbox = get_extents(expoly);
+    bbox.offset(scale_(3.));
+
+    ::Slic3r::SVG svg(path, bbox);
+    svg.draw(expoly);
+    svg.draw_outline(expoly, "green");
+    svg.draw(polylines, "red");
+    static constexpr double trim_length = scale_(0.4);
+    for (Polyline polyline : polylines) {
+        Vec2d a = polyline.points.front().cast<double>();
+        Vec2d d = polyline.points.back().cast<double>();
+        if (polyline.size() == 2) {
+            Vec2d v = d - a;
+            double l = v.norm();
+            if (l > 2. * trim_length) {
+                a += v * trim_length / l;
+                d -= v * trim_length / l;
+                polyline.points.front() = a.cast<coord_t>();
+                polyline.points.back() = d.cast<coord_t>();
+            } else
+                polyline.points.clear();
+        } else if (polyline.size() > 2) {
+            Vec2d b = polyline.points[1].cast<double>();
+            Vec2d c = polyline.points[polyline.points.size() - 2].cast<double>();
+            Vec2d v = b - a;
+            double l = v.norm();
+            if (l > trim_length) {
+                a += v * trim_length / l;
+                polyline.points.front() = a.cast<coord_t>();
+            } else
+                polyline.points.erase(polyline.points.begin());
+            v = d - c;
+            l = v.norm();
+            if (l > trim_length)
+                polyline.points.back() = (d - v * trim_length / l).cast<coord_t>();
+            else
+                polyline.points.pop_back();
+        }
+        svg.draw(polyline, "black");
+    }
+}
+#endif /* ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT */
+
 void FillAdaptive::generate_infill(const FillParams &                  params,
                                         unsigned int                   thickness_layers,
                                         const std::pair<float, Point> &direction,
@@ -276,50 +481,57 @@ void FillAdaptive::generate_infill(const FillParams &                  params,
     Vec3d rotation = Vec3d((5.0 * M_PI) / 4.0, Geometry::deg2rad(215.264), M_PI / 6.0);
     Transform3d rotation_matrix = Geometry::assemble_transform(Vec3d::Zero(), rotation, Vec3d::Ones(), Vec3d::Ones());
 
-    // Store grouped lines by its direction (multiple of 120°)
-    std::vector<Lines> infill_lines_dir(3);
-    this->generate_infill_lines(octree->root_cube,
-                                this->z, octree->origin, rotation_matrix,
-                                infill_lines_dir, octree->cubes_properties,
-                                int(octree->cubes_properties.size()) - 1);
-
     Polylines all_polylines;
-    all_polylines.reserve(infill_lines_dir[0].size() * 3);
-    for (Lines &infill_lines : infill_lines_dir)
     {
-        for (const Line &line : infill_lines)
-        {
-            all_polylines.emplace_back(line.a, line.b);
+        // 3 contexts for three directions of infill lines
+        std::array<FillContext, 3> contexts { 
+            FillContext { *octree, rotation_matrix, this->z, 0 },
+            FillContext { *octree, rotation_matrix, this->z, 1 },
+            FillContext { *octree, rotation_matrix, this->z, 2 }
+        };
+        // Generate the infill lines along the octree cells, merge touching lines of the same direction.
+        size_t num_lines = 0;
+        for (auto &context : contexts) {
+            generate_infill_lines_recursive(context, octree->root_cube, 0, int(octree->cubes_properties.size()) - 1);
+            num_lines += context.output_lines.size() + context.temp_lines.size();
         }
+        // Collect the lines.
+        std::vector<Line> lines;
+        lines.reserve(num_lines);
+        for (auto &context : contexts) {
+            append(lines, context.output_lines);
+            for (const Line &line : context.temp_lines)
+                if (line.a.x() != std::numeric_limits<coord_t>::max())
+                    lines.emplace_back(line);
+        }
+        // Convert lines to polylines.
+        all_polylines.reserve(lines.size());
+        std::transform(lines.begin(), lines.end(), std::back_inserter(all_polylines), [](const Line& l) { return Polyline{ l.a, l.b }; });
     }
+
+    // Crop all polylines
+    all_polylines = intersection_pl(std::move(all_polylines), to_polygons(expolygon));
+
+#ifdef ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT
+    {
+        static int iRun = 0;
+        export_infill_lines_to_svg(expolygon, all_polylines, debug_out_path("FillAdaptive-initial-%d.svg", iRun++));
+    }
+#endif /* ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT */
 
     if (params.dont_connect)
-    {
-        // Crop all polylines
-        polylines_out = intersection_pl(all_polylines, to_polygons(expolygon));
-    }
-    else
-    {
-        // Crop all polylines
-        all_polylines = intersection_pl(all_polylines, to_polygons(expolygon));
-
+        append(polylines_out, std::move(all_polylines));
+    else {
         Polylines boundary_polylines;
         Polylines non_boundary_polylines;
         for (const Polyline &polyline : all_polylines)
-        {
             // connect_infill required all polylines to touch the boundary.
-            if(polyline.lines().size() == 1 && expolygon.has_boundary_point(polyline.lines().front().a) && expolygon.has_boundary_point(polyline.lines().front().b))
-            {
+            if (polyline.lines().size() == 1 && expolygon.has_boundary_point(polyline.lines().front().a) && expolygon.has_boundary_point(polyline.lines().front().b))
                 boundary_polylines.push_back(polyline);
-            }
             else
-            {
                 non_boundary_polylines.push_back(polyline);
-            }
-        }
 
-        if (!boundary_polylines.empty())
-        {
+        if (!boundary_polylines.empty()) {
             boundary_polylines = chain_polylines(boundary_polylines);
             FillAdaptive::connect_infill(std::move(boundary_polylines), expolygon, polylines_out, this->spacing, params);
         }
@@ -327,93 +539,12 @@ void FillAdaptive::generate_infill(const FillParams &                  params,
         append(polylines_out, std::move(non_boundary_polylines));
     }
 
-#ifdef SLIC3R_DEBUG_SLICE_PROCESSING
+#ifdef ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT
     {
-        static int iRuna = 0;
-        BoundingBox bbox_svg = this->bounding_box;
-        {
-            ::Slic3r::SVG svg(debug_out_path("FillAdaptive-%d.svg", iRuna), bbox_svg);
-            for (const Polyline &polyline : polylines_out)
-            {
-                for (const Line &line : polyline.lines())
-                {
-                    Point from = line.a;
-                    Point to = line.b;
-                    Point diff = to - from;
-
-                    float shrink_length = scale_(0.4);
-                    float line_slope = (float)diff.y() / diff.x();
-                    float shrink_x = shrink_length / (float)std::sqrt(1.0 + (line_slope * line_slope));
-                    float shrink_y = line_slope * shrink_x;
-
-                    to.x() -= shrink_x;
-                    to.y() -= shrink_y;
-                    from.x() += shrink_x;
-                    from.y() += shrink_y;
-
-                    svg.draw(Line(from, to));
-                }
-            }
-        }
-
-        iRuna++;
+        static int iRun = 0;
+        export_infill_lines_to_svg(expolygon, polylines_out, debug_out_path("FillAdaptive-final-%d.svg", iRun ++));
     }
-#endif /* SLIC3R_DEBUG */
-}
-
-void FillAdaptive::generate_infill_lines(
-        const FillAdaptive_Internal::Cube *cube,
-        double z_position,
-        const Vec3d &origin,
-        const Transform3d &rotation_matrix,
-        std::vector<Lines> &dir_lines_out,
-        const std::vector<FillAdaptive_Internal::CubeProperties> &cubes_properties,
-        int depth)
-{
-    using namespace FillAdaptive_Internal;
-
-    assert(cube != nullptr);
-
-    Vec3d cube_center_tranformed = rotation_matrix * cube->center;
-    double z_diff = std::abs(z_position - cube_center_tranformed.z());
-
-    if (z_diff > cubes_properties[depth].height / 2)
-    {
-        return;
-    }
-
-    if (z_diff < cubes_properties[depth].line_z_distance)
-    {
-        Point from(
-                scale_((cubes_properties[depth].diagonal_length / 2) * (cubes_properties[depth].line_z_distance - z_diff) / cubes_properties[depth].line_z_distance),
-                scale_(cubes_properties[depth].line_xy_distance - ((z_position - (cube_center_tranformed.z() - cubes_properties[depth].line_z_distance)) / sqrt(2))));
-        Point to(-from.x(), from.y());
-        // Relative to cube center
-
-        double rotation_angle = (2.0 * M_PI) / 3.0;
-        Vec3d  offset3 = cube_center_tranformed - rotation_matrix * origin;
-        auto   offset  = (Vec2d(offset3.x(), offset3.y()) * (1. / SCALING_FACTOR)).cast<coord_t>();
-        for (Lines &lines : dir_lines_out)
-        {
-            this->connect_lines(lines, Line(from + offset, to + offset));
-            from.rotate(rotation_angle);
-            to.rotate(rotation_angle);
-        }
-    }
-
-    for (const Cube *child : cube->children)
-        if (child != nullptr)
-            generate_infill_lines(child, z_position, origin, rotation_matrix, dir_lines_out, cubes_properties, depth - 1);
-}
-
-void FillAdaptive::connect_lines(Lines &lines, Line new_line)
-{
-    for (Line &line : lines)
-        if ((new_line.a - line.b).cwiseAbs().maxCoeff() < SCALED_EPSILON) {
-            line.b = new_line.b;
-            return;
-        }
-    lines.emplace_back(new_line);
+#endif /* ADAPTIVE_CUBIC_INFILL_DEBUG_OUTPUT */
 }
 
 static double bbox_max_radius(const BoundingBoxf3 &bbox, const Vec3d &center)
@@ -484,14 +615,6 @@ FillAdaptive_Internal::OctreePtr FillAdaptive::build_octree(const indexed_triang
 
     return octree;
 }
-
-// Children are ordered so that the lower index is always traversed before the higher index.
-// This is important when chaining the generated lines, as one will have to chain the end of an existing line
-// to the start of a new line only.
-static const std::array<Vec3d, 8> child_centers {
-    Vec3d(-1, -1, -1), Vec3d( 1, -1, -1), Vec3d(-1,  1, -1), Vec3d( 1,  1, -1),
-    Vec3d(-1, -1,  1), Vec3d( 1, -1,  1), Vec3d(-1,  1,  1), Vec3d( 1,  1,  1)
-};
 
 void FillAdaptive_Internal::Octree::insert_triangle(const Vec3d &a, const Vec3d &b, const Vec3d &c, Cube *current_cube, BoundingBoxf3 &current_bbox, int depth)
 {

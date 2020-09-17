@@ -51,17 +51,6 @@ protected:
 
 	virtual bool no_sort() const { return true; }
 
-    void generate_infill_lines(
-        const FillAdaptive_Internal::Cube *cube,
-        double                       z_position,
-        const Vec3d &                origin,
-        const Transform3d &          rotation_matrix,
-        std::vector<Lines> &         dir_lines_out,
-        const std::vector<FillAdaptive_Internal::CubeProperties> &cubes_properties,
-        int  depth);
-
-    static void connect_lines(Lines &lines, Line new_line);
-
     void generate_infill(const FillParams &             params,
                          unsigned int                   thickness_layers,
                          const std::pair<float, Point> &direction,
