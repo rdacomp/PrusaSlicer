@@ -1,3 +1,13 @@
+// Adaptive cubic infill was inspired by the work of @mboerwinkle
+// as implemented for Cura.
+// https://github.com/Ultimaker/CuraEngine/issues/381
+// https://github.com/Ultimaker/CuraEngine/pull/401
+//
+// Our implementation is more accurate (discretizes a bit less cubes than Cura's)
+// by splitting only such cubes which contain a triangle. 
+// Our line extraction is time optimal instead of O(n^2) when connecting extracted lines,
+// and we also implemented adaptivity for supporting internal overhangs only.
+
 #ifndef slic3r_FillAdaptive_hpp_
 #define slic3r_FillAdaptive_hpp_
 
@@ -28,6 +38,26 @@ namespace FillAdaptive_Internal
         void operator()(Octree *p);
     };
     using OctreePtr = std::unique_ptr<Octree, OctreeDeleter>;
+
+    // Calculate line spacing for
+    // 1) adaptive cubic infill
+    // 2) adaptive internal support cubic infill
+    // Returns zero for a particular infill type if no such infill is to be generated.
+    std::pair<double, double>        adaptive_fill_line_spacing(const PrintObject &print_object);
+
+    // Rotation of the octree to stand on one of its corners.
+    Eigen::Quaterniond               adaptive_fill_octree_transform_to_world();
+    // Inverse roation of the above.
+    Eigen::Quaterniond               adaptive_fill_octree_transform_to_octree();
+
+    FillAdaptive_Internal::OctreePtr build_octree(
+        // Mesh is rotated to the coordinate system of the octree.
+        const indexed_triangle_set  &triangle_mesh, 
+        // Up vector of the mesh rotated to the coordinate system of the octree.
+        const Vec3d                 &up_vector, 
+        coordf_t                     line_spacing, 
+        // If true, octree is densified below internal overhangs only.
+        bool                         support_overhangs_only);
 }; // namespace FillAdaptive_Internal
 
 //
@@ -50,46 +80,7 @@ protected:
 	    Polylines                       &polylines_out);
 
 	virtual bool no_sort() const { return true; }
-
-    void generate_infill(const FillParams &             params,
-                         unsigned int                   thickness_layers,
-                         const std::pair<float, Point> &direction,
-                         ExPolygon &                    expolygon,
-                         Polylines &                    polylines_out,
-                         FillAdaptive_Internal::Octree *octree);
-
-public:
-    static FillAdaptive_Internal::OctreePtr build_octree(
-        // Mesh is rotated to the coordinate system of the octree.
-        const indexed_triangle_set  &triangle_mesh, 
-        // Up vector of the mesh rotated to the coordinate system of the octree.
-        const Vec3d                 &up_vector, 
-        coordf_t                     line_spacing, 
-        // If true, octree is densified below internal overhangs only.
-        bool                         support_overhangs_only);
 };
-
-class FillSupportCubic : public FillAdaptive
-{
-public:
-    virtual ~FillSupportCubic() = default;
-
-protected:
-    virtual Fill* clone() const { return new FillSupportCubic(*this); };
-
-    virtual void _fill_surface_single(
-        const FillParams                &params,
-        unsigned int                     thickness_layers,
-        const std::pair<float, Point>   &direction,
-        ExPolygon                       &expolygon,
-        Polylines                       &polylines_out);
-};
-
-// Calculate line spacing for
-// 1) adaptive cubic infill
-// 2) adaptive internal support cubic infill
-// Returns zero for a particular infill type if no such infill is to be generated.
-std::pair<double, double> adaptive_fill_line_spacing(const PrintObject &print_object);
 
 } // namespace Slic3r
 

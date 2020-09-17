@@ -439,32 +439,22 @@ std::pair<FillAdaptive_Internal::OctreePtr, FillAdaptive_Internal::OctreePtr> Pr
     using namespace FillAdaptive_Internal;
 
     auto [adaptive_line_spacing, support_line_spacing] = adaptive_fill_line_spacing(*this);
-
-    OctreePtr adaptive_fill_octree = {}, support_fill_octree = {};
-
     if (adaptive_line_spacing == 0. && support_line_spacing == 0.)
-        return std::make_pair(std::move(adaptive_fill_octree), std::move(support_fill_octree));
+        return std::make_pair(OctreePtr(), OctreePtr());
 
     indexed_triangle_set mesh = this->model_object()->raw_indexed_triangle_set();
     Vec3d                up;
-
     {
-        Vec3d rotation = Vec3d((5.0 * M_PI) / 4.0, Geometry::deg2rad(215.264), M_PI / 6.0);
-        Transform3d rotation_matrix = Geometry::assemble_transform(Vec3d::Zero(), rotation, Vec3d::Ones(), Vec3d::Ones()).inverse();
-        up = rotation_matrix * Vec3d(0., 0., 1.);
+        auto m = adaptive_fill_octree_transform_to_octree().toRotationMatrix();
+        up = m * Vec3d(0., 0., 1.);
         // Rotate mesh and build octree on it with axis-aligned (standart base) cubes
-        Transform3d m = m_trafo;
-        m.translate(Vec3d(- unscale<float>(m_center_offset.x()), - unscale<float>(m_center_offset.y()), 0));
-        its_transform(mesh, rotation_matrix * m, true);
+        Transform3d m2 = m_trafo;
+        m2.translate(Vec3d(- unscale<float>(m_center_offset.x()), - unscale<float>(m_center_offset.y()), 0));
+        its_transform(mesh, m * m2, true);
     }
-
-    if (adaptive_line_spacing != 0.)
-        adaptive_fill_octree = FillAdaptive::build_octree(mesh, up, adaptive_line_spacing, false);
-
-    if (support_line_spacing != 0.)
-        support_fill_octree = FillAdaptive::build_octree(mesh, up, support_line_spacing, true);
-
-    return std::make_pair(std::move(adaptive_fill_octree), std::move(support_fill_octree));
+    return std::make_pair(
+        adaptive_line_spacing ? build_octree(mesh, up, adaptive_line_spacing, false) : OctreePtr(),
+        support_line_spacing  ? build_octree(mesh, up, support_line_spacing, true) : OctreePtr());
 }
 
 void PrintObject::clear_layers()
