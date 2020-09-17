@@ -18,20 +18,10 @@
 namespace Slic3r {
 
 class PrintObject;
-class TriangleMesh;
+struct indexed_triangle_set;
 
 namespace FillAdaptive_Internal
 {
-    struct CubeProperties
-    {
-        double edge_length;     // Lenght of edge of a cube
-        double height;          // Height of rotated cube (standing on the corner)
-        double diagonal_length; // Length of diagonal of a cube a face
-        double line_z_distance; // Defines maximal distance from a center of a cube on Z axis on which lines will be created
-        double line_xy_distance;// Defines maximal distance from a center of a cube on X and Y axis on which lines will be created
-    };
-
-    struct Cube;
     struct Octree;
     // To keep the definition of Octree opaque, we have to define a custom deleter.
     struct OctreeDeleter {

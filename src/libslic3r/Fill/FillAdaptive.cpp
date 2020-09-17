@@ -174,6 +174,15 @@ namespace FillAdaptive_Internal
         Cube(const Vec3d &center) : center(center) {}
     };
 
+    struct CubeProperties
+    {
+        double edge_length;     // Lenght of edge of a cube
+        double height;          // Height of rotated cube (standing on the corner)
+        double diagonal_length; // Length of diagonal of a cube a face
+        double line_z_distance; // Defines maximal distance from a center of a cube on Z axis on which lines will be created
+        double line_xy_distance;// Defines maximal distance from a center of a cube on X and Y axis on which lines will be created
+    };
+
     struct Octree
     {
         // Octree will allocate its Cubes from the pool. The pool only supports deletion of the complete pool,

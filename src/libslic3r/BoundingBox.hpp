@@ -20,7 +20,7 @@ public:
     BoundingBoxBase(const PointClass &pmin, const PointClass &pmax) : 
         min(pmin), max(pmax), defined(pmin(0) < pmax(0) && pmin(1) < pmax(1)) {}
     BoundingBoxBase(const PointClass &p1, const PointClass &p2, const PointClass &p3) :
-        min(pmin), max(pmin), defined(false) { merge(p2); merge(p3); }
+        min(p1), max(p1), defined(false) { merge(p2); merge(p3); }
     BoundingBoxBase(const std::vector<PointClass>& points) : min(PointClass::Zero()), max(PointClass::Zero())
     {
         if (points.empty()) {
@@ -69,7 +69,7 @@ public:
         BoundingBoxBase<PointClass>(pmin, pmax) 
         { if (pmin(2) >= pmax(2)) BoundingBoxBase<PointClass>::defined = false; }
     BoundingBox3Base(const PointClass &p1, const PointClass &p2, const PointClass &p3) :
-        min(pmin), max(pmin), defined(false) { merge(p2); merge(p3); }
+        min(p1), max(p1), defined(false) { merge(p2); merge(p3); }
     BoundingBox3Base(const std::vector<PointClass>& points)
     {
         if (points.empty())
