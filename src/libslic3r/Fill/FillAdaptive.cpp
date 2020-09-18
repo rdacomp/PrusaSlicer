@@ -310,21 +310,21 @@ struct FillContext
     Vec2d rotate(const Vec2d& v) { return Vec2d(this->cos_a * v.x() - this->sin_a * v.y(), this->sin_a * v.x() + this->cos_a * v.y()); }
 
     // Center of the root cube in the Octree coordinate system.
-    const Vec3d                                                 origin_world;
-    const std::vector<CubeProperties>   &cubes_properties;
+    const Vec3d                         origin_world;
+    const std::vector<CubeProperties>  &cubes_properties;
     // Top of the current layer.
-    const double                                                z_position;
+    const double                        z_position;
     // Order of traversal for this line direction.
-    const std::array<int, 8>                                    traversal_order;
+    const std::array<int, 8>            traversal_order;
     // Rotation of the generated line for this line direction.
-    const double                                                cos_a;
-    const double                                                sin_a;
+    const double                        cos_a;
+    const double                        sin_a;
 
     // Linearized tree spanning a single Octree wall, used to connect lines spanning
     // neighboring Octree cells. Unused lines have the Line::a::x set to infinity.
-    std::vector<Line>                                           temp_lines;
+    std::vector<Line>                   temp_lines;
     // Final output
-    std::vector<Line>                                           output_lines;
+    std::vector<Line>                   output_lines;
 };
 
 static constexpr double octree_rot[3] = { 5.0 * M_PI / 4.0, Geometry::deg2rad(215.264), M_PI / 6.0 };
@@ -343,11 +343,11 @@ Eigen::Quaterniond transform_to_octree()
 // Verify that the traversal order of the octree children matches the line direction,
 // therefore the infill line may get extended with O(1) time & space complexity.
 static bool verify_traversal_order(
-    FillContext                         &context,
+    FillContext  &context,
     const Cube   *cube,
-    int                                  depth,
-    const Vec2d                         &line_from,
-    const Vec2d                         &line_to)
+    int           depth,
+    const Vec2d  &line_from,
+    const Vec2d  &line_to)
 {
     std::array<Vec3d, 8> c;
     Eigen::Quaterniond to_world = transform_to_world();
@@ -377,11 +377,11 @@ static bool verify_traversal_order(
 #endif // NDEBUG
 
 static void generate_infill_lines_recursive(
-    FillContext                         &context,
-    const Cube   *cube,
+    FillContext     &context,
+    const Cube      *cube,
     // Address of this wall in the octree,  used to address context.temp_lines.
-    int                                  address,
-    int                                  depth)
+    int              address,
+    int              depth)
 {
     assert(cube != nullptr);
 
@@ -607,7 +607,7 @@ static void transform_center(Cube *current_cube, const Eigen::Matrix3d &rot)
             transform_center(child, rot);
 }
 
-OctreePtr build_octree(const indexed_triangle_set &triangle_mesh, const Vec3d &up_vector, coordf_t line_spacing, bool support_overhangs_only)
+OctreePtr build_octree(const indexed_triangle_set &triangle_mesh, coordf_t line_spacing, bool support_overhangs_only)
 {
     assert(line_spacing > 0);
     assert(! std::isnan(line_spacing));
@@ -618,6 +618,7 @@ OctreePtr build_octree(const indexed_triangle_set &triangle_mesh, const Vec3d &u
     auto                        octree           = OctreePtr(new Octree(cube_center, cubes_properties));
 
     if (cubes_properties.size() > 1) {
+        auto up_vector = support_overhangs_only ? transform_to_octree() * Vec3d(0., 0., 1.) : Vec3d();
         for (auto &tri : triangle_mesh.indices) {
             auto a = triangle_mesh.vertices[tri[0]].cast<double>();
             auto b = triangle_mesh.vertices[tri[1]].cast<double>();

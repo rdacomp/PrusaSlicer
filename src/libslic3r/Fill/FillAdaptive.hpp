@@ -11,8 +11,6 @@
 #ifndef slic3r_FillAdaptive_hpp_
 #define slic3r_FillAdaptive_hpp_
 
-#include "../AABBTreeIndirect.hpp"
-
 #include "FillBase.hpp"
 
 struct indexed_triangle_set;
@@ -43,8 +41,6 @@ Eigen::Quaterniond              transform_to_octree();
 FillAdaptive::OctreePtr         build_octree(
     // Mesh is rotated to the coordinate system of the octree.
     const indexed_triangle_set  &triangle_mesh, 
-    // Up vector of the mesh rotated to the coordinate system of the octree.
-    const Vec3d                 &up_vector, 
     coordf_t                     line_spacing, 
     // If true, octree is densified below internal overhangs only.
     bool                         support_overhangs_only);
