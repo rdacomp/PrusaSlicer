@@ -434,9 +434,9 @@ void PrintObject::generate_support_material()
     }
 }
 
-std::pair<FillAdaptive_Internal::OctreePtr, FillAdaptive_Internal::OctreePtr> PrintObject::prepare_adaptive_infill_data()
+std::pair<FillAdaptive::OctreePtr, FillAdaptive::OctreePtr> PrintObject::prepare_adaptive_infill_data()
 {
-    using namespace FillAdaptive_Internal;
+    using namespace FillAdaptive;
 
     auto [adaptive_line_spacing, support_line_spacing] = adaptive_fill_line_spacing(*this);
     if (adaptive_line_spacing == 0. && support_line_spacing == 0.)
@@ -445,7 +445,7 @@ std::pair<FillAdaptive_Internal::OctreePtr, FillAdaptive_Internal::OctreePtr> Pr
     indexed_triangle_set mesh = this->model_object()->raw_indexed_triangle_set();
     Vec3d                up;
     {
-        auto m = adaptive_fill_octree_transform_to_octree().toRotationMatrix();
+        auto m = transform_to_octree().toRotationMatrix();
         up = m * Vec3d(0., 0., 1.);
         // Rotate mesh and build octree on it with axis-aligned (standart base) cubes
         Transform3d m2 = m_trafo;
