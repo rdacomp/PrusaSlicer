@@ -281,6 +281,7 @@ void RemovableDriveManager::eject_drive()
 			//this->eject_device(correct_path);
 #else
     		boost::process::search_path("umount"), correct_path.c_str(), (boost::process::std_out & boost::process::std_err) > istd_err);
+			boost::process::search_path("sync"), correct_path.c_str(), (boost::process::std_out & boost::process::std_err) > istd_err);
 #endif
 		std::string line;
 		while (child.running() && std::getline(istd_err, line)) {
