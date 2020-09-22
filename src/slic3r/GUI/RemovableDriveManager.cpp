@@ -281,7 +281,6 @@ void RemovableDriveManager::eject_drive()
 			//this->eject_device(correct_path);
 #else
     		boost::process::search_path("umount"), correct_path.c_str(), (boost::process::std_out & boost::process::std_err) > istd_err);
-			boost::process::search_path("sync"), correct_path.c_str(), (boost::process::std_out & boost::process::std_err) > istd_err);
 #endif
 		std::string line;
 		while (child.running() && std::getline(istd_err, line)) {
@@ -298,6 +297,27 @@ void RemovableDriveManager::eject_drive()
     		return;
     	}
 		BOOST_LOG_TRIVIAL(info) << "Ejecting finished";
+
+		// Perform Sync operation
+#if __APPLE__		
+#else
+		boost::process::child child2(boost::process::search_path("sync"), correct_path.c_str(), (boost::process::std_out & boost::process::std_err) > istd_err);
+		line;
+		while (child2.running() && std::getline(istd_err, line)) {
+			BOOST_LOG_TRIVIAL(trace) << line;
+		}
+		// wait for command to finnish (blocks ui thread)
+		child2.wait();
+		err = child2.exit_code();
+		if (err) {
+			BOOST_LOG_TRIVIAL(error) << "Sync failed";
+			assert(m_callback_evt_handler);
+			if (m_callback_evt_handler)
+				wxPostEvent(m_callback_evt_handler, RemovableDriveEjectEvent(EVT_REMOVABLE_DRIVE_EJECTED, std::pair<DriveData, bool>(*it_drive_data, false)));
+			return;
+		}
+		BOOST_LOG_TRIVIAL(info) << "Sync finished";
+#endif
 
 		assert(m_callback_evt_handler);
 		if (m_callback_evt_handler) 
