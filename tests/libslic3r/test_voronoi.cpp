@@ -1779,6 +1779,108 @@ TEST_CASE("Voronoi offset with edge collapse", "[VoronoiOffset4]")
   }
 }
 
+// A sample extracted from file medallion_printable_fixed-teeth.stl from https://www.thingiverse.com/thing:1347129
+// This test for offset scale_(2.9) and bigger
+// triggers assert(r < std::max(d0, d1) + EPSILON) in function first_circle_segment_intersection_parameter.
+TEST_CASE("Voronoi offset 5", "[VoronoiOffset5]")
+{
+    Polygons poly = {
+        Polygon {
+            {        0 , -16077501 },
+            {  3015222 , -16142836 },
+            {  3072642 , -16138163 },
+            {  3094279 , -16105662 },
+            {  3110660 , -15140728 },
+            {  3157438 , -14105326 },
+            {  3338367 , -11081394 },
+            {  3443412 ,  -8381621 },
+            {  3472489 ,  -6084497 },
+            {  3445790 ,  -5962924 },
+            {  3061725 ,  -6003484 },
+            {  3030326 ,  -6030622 },
+            {  2989343 ,  -6270378 },
+            {  2903752 ,  -7368176 },
+            {  2856704 ,  -7740619 },
+            {  2795743 ,  -7978809 },
+            {  2729231 ,  -8098866 },
+            {  2666509 ,  -8131138 },
+            {  2614169 ,  -8112308 },
+            {  2561157 ,  -8032014 },
+            {  2488290 ,  -7479351 },
+            {  2453360 ,  -6911556 },
+            {  2456148 ,  -6463146 },
+            {  2546029 ,  -4580396 },
+            {  2688181 ,  -2593262 },
+            {  2717617 ,  -1700519 },
+            {  2682232 ,  -1128411 },
+            {  2631029 ,   -832886 },
+            {  2535941 ,   -504483 },
+            {  2399115 ,   -199303 },
+            {  2290997 ,   -171213 },
+            {   611824 ,   -132865 },
+            {     6419 ,   -375849 },
+            {  -611825 ,   -132865 },
+            { -2377355 ,   -185241 },
+            { -2420740 ,   -231171 },
+            { -2535942 ,   -504484 },
+            { -2631030 ,   -832887 },
+            { -2684831 ,  -1150821 },
+            { -2714840 ,  -1586454 },
+            { -2688181 ,  -2593262 },
+            { -2546030 ,  -4580396 },
+            { -2456149 ,  -6463145 },
+            { -2453361 ,  -6911557 },
+            { -2488291 ,  -7479352 },
+            { -2561159 ,  -8032018 },
+            { -2614171 ,  -8112309 },
+            { -2666509 ,  -8131138 },
+            { -2729233 ,  -8098868 },
+            { -2795744 ,  -7978809 },
+            { -2856706 ,  -7740619 },
+            { -2903752 ,  -7368176 },
+            { -2989345 ,  -6270378 },
+            { -3030327 ,  -6030622 },
+            { -3061726 ,  -6003484 },
+            { -3445790 ,  -5962924 },
+            { -3472490 ,  -6084498 },
+            { -3468804 ,  -7244095 },
+            { -3399287 ,  -9714025 },
+            { -3338368 , -11081395 },
+            { -3141015 , -14446051 },
+            { -3094280 , -16105662 },
+            { -3072643 , -16138163 },
+            { -3008836 , -16143225 }
+        }
+    };
+    double area = std::accumulate(poly.begin(), poly.end(), 0., [](double a, auto &poly){ return a + poly.area(); });
+    REQUIRE(area > 0.);
+
+    VD vd;
+    Lines lines = to_lines(poly);
+    construct_voronoi(lines.begin(), lines.end(), &vd);
+
+    for (const OffsetTest &ot : {
+            OffsetTest { scale_(2.8), 1, 1 },
+            OffsetTest { scale_(2.9), 1, 1 },
+            OffsetTest { scale_(3.0), 1, 1 },
+    }) {
+
+        Polygons offsetted_polygons_out = Slic3r::Voronoi::offset(vd, lines, ot.distance, scale_(0.005));
+#ifdef VORONOI_DEBUG_OUT
+        dump_voronoi_to_svg(debug_out_path("voronoi-offset5-out-%lf.svg", ot.distance).c_str(),
+            vd, Points(), lines, offsetted_polygons_out);
+#endif
+        REQUIRE(offsetted_polygons_out.size() == ot.num_outer);
+
+        Polygons offsetted_polygons_in = Slic3r::Voronoi::offset(vd, lines, - ot.distance, scale_(0.005));
+#ifdef VORONOI_DEBUG_OUT
+        dump_voronoi_to_svg(debug_out_path("voronoi-offset5-in-%lf.svg", ot.distance).c_str(),
+            vd, Points(), lines, offsetted_polygons_in);
+#endif
+        REQUIRE(offsetted_polygons_in.size() == ot.num_inner);
+    }
+}
+
 TEST_CASE("Voronoi skeleton", "[VoronoiSkeleton]")
 {
     coord_t mm = coord_t(scale_(1.));
