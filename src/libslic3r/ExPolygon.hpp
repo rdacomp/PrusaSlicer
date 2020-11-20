@@ -49,6 +49,7 @@ public:
     double area() const;
     bool empty() const { return contour.points.empty(); }
     bool is_valid() const;
+    void douglas_peucker(double tolerance);
 
     // Contains the line / polyline / polylines etc COMPLETELY.
     bool contains(const Line &line) const;
