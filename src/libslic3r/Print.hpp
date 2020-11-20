@@ -73,7 +73,7 @@ public:
 
     // Collect 0-based extruder indices used to print this region's object.
 	void                        collect_object_printing_extruders(std::vector<unsigned int> &object_extruders) const;
-	static void                 collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, std::vector<unsigned int> &object_extruders);
+	static void                 collect_object_printing_extruders(const PrintConfig &print_config, const PrintRegionConfig &region_config, const bool has_brim, std::vector<unsigned int> &object_extruders);
 
 // Methods modifying the PrintRegion's state:
 public:
@@ -376,6 +376,7 @@ public:
 
     bool                has_infinite_skirt() const;
     bool                has_skirt() const;
+    bool                has_brim() const;
 
     // Returns an empty string if valid, otherwise returns an error message.
     std::string         validate() const override;
@@ -453,6 +454,7 @@ private:
 
     void                _make_skirt();
     void                _make_brim();
+    void                _make_inner_brim(const PrintObjectPtrs &top_level_objects_with_brim);
     void                _make_wipe_tower();
     void                finalize_first_layer_convex_hull();
 
