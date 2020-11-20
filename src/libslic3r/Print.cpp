@@ -2036,6 +2036,73 @@ static void optimize_polylines_by_reversing(Polylines *polylines)
     }
 }
 
+static Polylines connect_brim_lines(Polylines &&polylines, const Polygons &brim_area, float max_connection_length)
+{
+    EdgeGrid::Grid grid;
+    BoundingBox    bbox(get_extents(polylines));
+    bbox.offset(SCALED_EPSILON);
+    grid.set_bbox(bbox);
+
+    std::vector<Points> polylines_points(polylines.size() + brim_area.size());
+    for (const Polyline &poly : polylines)
+        polylines_points[&poly - &polylines.front()] = poly.points;
+    for (const Polygon &poly : brim_area)
+        polylines_points.emplace_back(poly.points);
+    grid.create(polylines_points, coord_t(scale_(10.)));
+
+    struct Visitor
+    {
+        explicit Visitor(const EdgeGrid::Grid &grid) : grid(grid) {}
+
+        bool operator()(coord_t iy, coord_t ix)
+        {
+            // Called with a row and colum of the grid cell, which is intersected by a line.
+            auto cell_data_range = grid.cell_data_range(iy, ix);
+            this->intersect      = false;
+            for (auto it_contour_and_segment = cell_data_range.first; it_contour_and_segment != cell_data_range.second; ++it_contour_and_segment) {
+                // End points of the line segment and their vector.
+                auto segment = grid.segment(*it_contour_and_segment);
+                if (Geometry::segments_intersect(segment.first, segment.second, brim_line.a, brim_line.b)) {
+                    this->intersect = true;
+                    return false;
+                }
+            }
+            // Continue traversing the grid along the edge.
+            return true;
+        }
+
+        const EdgeGrid::Grid &grid;
+        Line                  brim_line;
+        bool                  intersect;
+
+    } visitor(grid);
+
+    Polyline *prev = &polylines.front();
+    for (size_t poly_idx = 1; poly_idx < polylines.size(); ++poly_idx) {
+        Polyline &next = polylines[poly_idx];
+
+        double dist = Line(prev->last_point(), next.first_point()).length();
+        if (dist <= max_connection_length) {
+            visitor.brim_line.a = prev->last_point();
+            visitor.brim_line.b = next.first_point();
+            visitor.brim_line.extend(-SCALED_EPSILON);
+            grid.visit_cells_intersecting_line(visitor.brim_line.a, visitor.brim_line.b, visitor);
+            if (!visitor.intersect)
+                append(prev->points, std::move(next.points));
+            else
+                prev = &next;
+        }
+    }
+
+    Polylines polylines_out;
+    polylines_out.reserve(std::count_if(polylines.begin(), polylines.end(), [](const Polyline &pl) { return !pl.empty(); }));
+    for (Polyline &pl : polylines)
+        if (!pl.empty())
+            polylines_out.emplace_back(std::move(pl));
+
+    return polylines_out;
+}
+
 void Print::_make_inner_brim(const PrintObjectPtrs &top_level_objects_with_brim)
 {
     Flow       flow = this->brim_flow();
@@ -2058,7 +2125,8 @@ void Print::_make_brim()
     Flow            flow                         = this->brim_flow();
     PrintObjectPtrs top_level_objects_with_brim  = get_top_level_objects_with_brim(*this);
     Polygons        islands                      = top_level_outer_brim_islands(top_level_objects_with_brim);
-    Polygons        islands_area = to_polygons(top_level_outer_brim_area(*this, top_level_objects_with_brim, flow.scaled_spacing()));
+    ExPolygons      islands_area_ex              = top_level_outer_brim_area(*this, top_level_objects_with_brim, flow.scaled_spacing());
+    Polygons        islands_area                 = to_polygons(islands_area_ex);
     Polygons        loops;
     size_t          num_loops = size_t(floor(max_brim_width(m_objects) / flow.spacing()));
     for (size_t i = 0; i < num_loops; ++i) {
@@ -2090,6 +2158,7 @@ void Print::_make_brim()
     for (Polygon &poly : islands_for_convex_hull) append(m_first_layer_convex_hull.points, std::move(poly.points));
 
     optimize_polylines_by_reversing(&all_loops);
+    all_loops = connect_brim_lines(std::move(all_loops), offset(islands_area_ex,SCALED_EPSILON), flow.scaled_spacing() * 2);
 
     const bool could_brim_intersects_skirt = std::any_of(m_objects.begin(), m_objects.end(), [this](PrintObject *object) {
         const BrimType &bt = object->config().brim_type;
