@@ -1855,48 +1855,61 @@ static float max_brim_width(const PrintObjectPtrs &objects)
                                  }));
 }
 
-static PrintObjectPtrs get_top_level_objects_with_brim(const Print &print) {
-    PrintObjectPtrs contour_idx_to_object;
-    Polygons islands;
+static PrintObjectPtrs get_top_level_objects_with_brim(const Print &print)
+{
+    Polygons        islands;
+    PrintObjectPtrs island_to_object;
     for (PrintObject *object : print.objects()) {
-        Polygons islands_per_object;
-        for (ExPolygon &ex_poly : object->layers().front()->lslices) {
-            islands_per_object.emplace_back(ex_poly.contour);
-            contour_idx_to_object.emplace_back(object);
-        }
+        Polygons islands_object;
+        for (ExPolygon &ex_poly : object->layers().front()->lslices)
+            islands_object.emplace_back(ex_poly.contour);
+
+        islands.reserve(islands.size() + object->instances().size() * islands_object.size());
         for (const PrintInstance &instance : object->instances())
-            for (Polygon &poly : islands_per_object) {
+            for (Polygon &poly : islands_object) {
                 islands.emplace_back(poly);
                 islands.back().translate(instance.shift);
+                island_to_object.emplace_back(object);
             }
     }
+    assert(islands.size() == island_to_object.size());
 
-    assert(contour_idx_to_object.size() == islands.size());
-    Polygons       islands_top_level      = top_level_islands(islands);
-    BoundingBox    islands_top_level_bbox = get_extents(islands_top_level);
-    EdgeGrid::Grid grid;
-    BoundingBox    grid_bbox = get_extents(islands);
-    grid_bbox.offset(SCALED_EPSILON);
-    grid.set_bbox(grid_bbox);
-    grid.create(islands_top_level, scale_(10.));
+    ClipperLib_Z::Paths islands_clip;
+    islands_clip.reserve(islands.size());
+    for (const Polygon &poly : islands) {
+        islands_clip.emplace_back();
+        ClipperLib_Z::Path &island_clip = islands_clip.back();
+        island_clip.reserve(poly.points.size());
+        int island_idx = int(&poly - &islands.front());
+        // The Z coordinate carries index of the island used to get the pointer to the object.
+        for (const Point &pt : poly.points)
+            island_clip.emplace_back(pt.x(), pt.y(), island_idx + 1);
+    }
 
-    PrintObjectPtrs objects_with_brim;
-    for (const Polygon &obj_contour : islands) {
-        PrintObject *object    = contour_idx_to_object[(&obj_contour - islands.data())];
-        BrimType     brim_type = object->config().brim_type;
-        if ((brim_type == BrimType::btOuterOnly || brim_type == BrimType::btOuterAndInner) &&
-            islands_top_level_bbox.contains(obj_contour.first_point()) &&
-            !diff(offset((Polygons) obj_contour, SCALED_EPSILON), islands_top_level).empty()) {
-            for (const Point &pt : obj_contour.points) {
-                EdgeGrid::Grid::ClosestPointResult cp = grid.closest_point(pt, SCALED_EPSILON);
-                if (cp.valid()) {
-                    objects_with_brim.emplace_back(object);
-                    break;
-                }
+    // Init Clipper
+    ClipperLib_Z::Clipper clipper;
+    // Assign the maximum Z from four points. This values is valid index of the island
+    clipper.ZFillFunction([](const ClipperLib_Z::IntPoint &e1bot, const ClipperLib_Z::IntPoint &e1top, const ClipperLib_Z::IntPoint &e2bot,
+                             const ClipperLib_Z::IntPoint &e2top, ClipperLib_Z::IntPoint &pt) {
+        pt.Z = std::max(std::max(e1bot.Z, e1top.Z), std::max(e2bot.Z, e2top.Z));
+    });
+    // Add islands
+    clipper.AddPaths(islands_clip, ClipperLib_Z::ptSubject, true);
+    // Execute union operation to construct polytree
+    ClipperLib_Z::PolyTree islands_polytree;
+    clipper.Execute(ClipperLib_Z::ctUnion, islands_polytree, ClipperLib_Z::pftEvenOdd, ClipperLib_Z::pftEvenOdd);
+
+    std::unordered_set<size_t> processed_objects_idx;
+    PrintObjectPtrs            top_level_objects_with_brim;
+    for (int i = 0; i < islands_polytree.ChildCount(); ++i) {
+        for (const ClipperLib_Z::IntPoint &point : islands_polytree.Childs[i]->Contour) {
+            if (point.Z != 0 && processed_objects_idx.find(island_to_object[point.Z - 1]->id().id) == processed_objects_idx.end()) {
+                top_level_objects_with_brim.emplace_back(island_to_object[point.Z - 1]);
+                processed_objects_idx.insert(island_to_object[point.Z - 1]->id().id);
             }
         }
     }
-    return objects_with_brim;
+    return top_level_objects_with_brim;
 }
 
 static Polygons top_level_outer_brim_islands(const PrintObjectPtrs &top_level_objects_with_brim)
