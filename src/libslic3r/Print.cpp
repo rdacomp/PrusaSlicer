@@ -2088,7 +2088,7 @@ static Polylines connect_brim_lines(Polylines &&polylines, const Polygons &brim_
         Polyline &next = polylines[poly_idx];
 
         double dist = Line(prev->last_point(), next.first_point()).length();
-        if (dist <= max_connection_length) {
+        if (dist <= max_connection_length && !prev->is_closed() && !next.is_closed()) {
             visitor.brim_line.a = prev->last_point();
             visitor.brim_line.b = next.first_point();
             visitor.brim_line.extend(-SCALED_EPSILON);
@@ -2157,7 +2157,8 @@ void Print::_make_brim()
 
     // Reduce down to the ordered list of polylines.
     Polylines all_loops;
-    for (Polylines &polylines : loops_pl_by_levels) { append(all_loops, std::move(polylines)); }
+    for (Polylines &polylines : loops_pl_by_levels)
+        append(all_loops, std::move(polylines));
     loops_pl_by_levels.clear();
 
     Polygons islands_for_convex_hull = union_(this->first_layer_islands(), islands_area);
