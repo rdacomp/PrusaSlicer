@@ -56,7 +56,7 @@ enum class IroningType {
 };
 
 enum SupportMaterialPattern {
-    smpRectilinear, smpRectilinearGrid, smpHoneycomb,
+    smpRectilinear, smpRectilinearGrid, smpHoneycomb, smpSupportCubic,
 };
 
 enum SeamPosition {
@@ -180,6 +180,7 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<SupportMaterialPa
         keys_map["rectilinear"]         = smpRectilinear;
         keys_map["rectilinear-grid"]    = smpRectilinearGrid;
         keys_map["honeycomb"]           = smpHoneycomb;
+        keys_map["supportcubic"]        = smpSupportCubic;
     }
     return keys_map;
 }
