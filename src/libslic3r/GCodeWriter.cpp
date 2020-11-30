@@ -522,6 +522,11 @@ std::string GCodeWriter::unlift()
     std::string gcode;
     if (m_lifted > 0) {
         gcode += this->_travel_to_z(m_pos(2) - m_lifted, "restore layer Z");
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+        gcode += m_post_unlift_custom_gcode;
+        // custom gcode string has been consumed, clear it
+        m_post_unlift_custom_gcode.clear();
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
         m_lifted = 0;
     }
     return gcode;

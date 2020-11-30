@@ -1888,7 +1888,18 @@ void GCode::process_layer(
             print.config().before_layer_gcode.value, m_writer.extruder()->id(), &config)
             + "\n";
     }
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+    std::string custom_gcode_per_print_z = (single_object_instance_idx == size_t(-1)) ?
+        // Normal (non-sequential) print.
+        ProcessLayer::emit_custom_gcode_per_print_z(layer_tools.custom_gcode, first_extruder_id, print.config()) :
+        // other cases
+        "";
+
+    gcode += this->change_layer(print_z, &custom_gcode_per_print_z);  // this will increase m_layer_index
+    m_writer.set_post_unlift_custom_gcode(custom_gcode_per_print_z);
+#else
     gcode += this->change_layer(print_z);  // this will increase m_layer_index
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
     m_layer = &layer;
     if (! print.config().layer_gcode.value.empty()) {
         DynamicConfig config;
@@ -1918,10 +1929,12 @@ void GCode::process_layer(
     // Map from extruder ID to <begin, end> index of skirt loops to be extruded with that extruder.
     std::map<unsigned int, std::pair<size_t, size_t>> skirt_loops_per_extruder;
 
+#if !ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
     if (single_object_instance_idx == size_t(-1)) {
         // Normal (non-sequential) print.
         gcode += ProcessLayer::emit_custom_gcode_per_print_z(layer_tools.custom_gcode, first_extruder_id, print.config());
     }
+#endif // !ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
     // Extrude skirt at the print_z of the raft layers and normal object layers
     // not at the print_z of the interlaced support material layers.
     skirt_loops_per_extruder = first_layer ?
@@ -2277,7 +2290,11 @@ std::string GCode::preamble()
 }
 
 // called by GCode::process_layer()
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+std::string GCode::change_layer(coordf_t print_z, std::string* custom_gcode)
+#else
 std::string GCode::change_layer(coordf_t print_z)
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
 {
     std::string gcode;
     if (m_layer_count > 0)
@@ -2290,7 +2307,19 @@ std::string GCode::change_layer(coordf_t print_z)
     {
         std::ostringstream comment;
         comment << "move to next layer (" << m_layer_index << ")";
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+        std::string travel_to_z = m_writer.travel_to_z(z, comment.str());
+        if (!travel_to_z.empty()) {
+            gcode += travel_to_z;
+            if (custom_gcode != nullptr) {
+                gcode += *custom_gcode;
+                // custom gcode string has been consumed, clear it
+                custom_gcode->clear();
+            }
+        }
+#else
         gcode += m_writer.travel_to_z(z, comment.str());
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
     }
 
     // forget last wiping path as wiping after raising Z is pointless

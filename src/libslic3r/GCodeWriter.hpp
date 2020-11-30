@@ -67,6 +67,9 @@ public:
     std::string lift();
     std::string unlift();
     Vec3d       get_position() const { return m_pos; }
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+    void        set_post_unlift_custom_gcode(const std::string& gcode) { m_post_unlift_custom_gcode = gcode; }
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
 
 private:
 	// Extruders are sorted by their ID, so that binary search is possible.
@@ -83,6 +86,9 @@ private:
     bool            m_last_bed_temperature_reached;
     double          m_lifted;
     Vec3d           m_pos = Vec3d::Zero();
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+    std::string     m_post_unlift_custom_gcode;
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
 
     std::string _travel_to_z(double z, const std::string &comment);
     std::string _retract(double length, double restart_extra, const std::string &comment);

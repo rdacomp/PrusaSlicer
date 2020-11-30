@@ -233,7 +233,11 @@ private:
     bool            last_pos_defined() const { return m_last_pos_defined; }
     void            set_extruders(const std::vector<unsigned int> &extruder_ids);
     std::string     preamble();
+#if ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
+    std::string     change_layer(coordf_t print_z, std::string* custom_gcode = nullptr);
+#else
     std::string     change_layer(coordf_t print_z);
+#endif // ENABLE_FIX_PAUSE_PRINT_Z_PREVIEW
     std::string     extrude_entity(const ExtrusionEntity &entity, std::string description = "", double speed = -1., std::unique_ptr<EdgeGrid::Grid> *lower_layer_edge_grid = nullptr);
     std::string     extrude_loop(ExtrusionLoop loop, std::string description, double speed = -1., std::unique_ptr<EdgeGrid::Grid> *lower_layer_edge_grid = nullptr);
     std::string     extrude_multi_path(ExtrusionMultiPath multipath, std::string description = "", double speed = -1.);
