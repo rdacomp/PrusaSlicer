@@ -38,6 +38,7 @@ Eigen::Quaterniond              transform_to_world();
 // Inverse roation of the above.
 Eigen::Quaterniond              transform_to_octree();
 
+// For object infill.
 FillAdaptive::OctreePtr         build_octree(
     // Mesh is rotated to the coordinate system of the octree.
     const indexed_triangle_set  &triangle_mesh,
@@ -47,6 +48,13 @@ FillAdaptive::OctreePtr         build_octree(
     coordf_t                     line_spacing, 
     // If true, octree is densified below internal overhangs only.
     bool                         support_overhangs_only);
+
+// For supports:
+FillAdaptive::OctreePtr         build_octree(
+    // Polygons with print_z in object coordinate system.
+    // Polygons are scaled, while print_z is unscaled.
+    const std::vector<std::pair<const Polygons*, double>> &polygons,
+    coordf_t                                               line_spacing);
 
 //
 // Some of the algorithms used by class FillAdaptive were inspired by

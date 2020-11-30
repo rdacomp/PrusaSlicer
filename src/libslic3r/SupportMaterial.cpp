@@ -4,6 +4,7 @@
 #include "Print.hpp"
 #include "SupportMaterial.hpp"
 #include "Fill/FillBase.hpp"
+#include "Fill/FillAdaptive.hpp"
 #include "EdgeGrid.hpp"
 #include "Geometry.hpp"
 
@@ -466,6 +467,12 @@ public:
         m_support_polygons(&support_polygons), m_trimming_polygons(&trimming_polygons),
         m_support_spacing(support_spacing), m_support_angle(support_angle)
     {
+//        assert(intersecting_edges(support_polygons).empty());
+//        if (! intersecting_edges(support_polygons).empty())
+//            printf("SupportGridPattern: intersecting edges in support_polygons!\n");
+//        assert(intersecting_edges(trimming_polygons).empty());
+//        if (! intersecting_edges(trimming_polygons).empty())
+//            printf("SupportGridPattern: intersecting edges in trimming_polygons!\n");
         if (m_support_angle != 0.) {
             // Create a copy of the rotated contours.
             m_support_polygons_rotated  = support_polygons;
@@ -474,6 +481,8 @@ public:
             m_trimming_polygons = &m_trimming_polygons_rotated;
             polygons_rotate(m_support_polygons_rotated, - support_angle);
             polygons_rotate(m_trimming_polygons_rotated, - support_angle);
+            assert(intersecting_edges(m_support_polygons_rotated).empty());
+            assert(intersecting_edges(m_trimming_polygons_rotated).empty());
         }
         // Create an EdgeGrid, initialize it with projection, initialize signed distance field.
         coord_t grid_resolution = coord_t(scale_(m_support_spacing));
@@ -734,21 +743,30 @@ private:
         pts.reserve(expolygons.size());
         for (const ExPolygon &expoly : expolygons)
             if (expoly.contour.points.size() > 2) {
-                #if 0
-                    pts.push_back(island_sample(expoly));
-                #else 
+                // Try the cheap method first.
+#if 0
+                Point candidate = island_sample(expoly);
+                if (expoly.contains(candidate))
+                    pts.push_back(candidate);
+                else 
+#endif
+                {
+                    // The cheap method of finding a polygon sample failed. Do an expensive one.
                     Polygons polygons = offset(expoly, - 20.f);
                     for (const Polygon &poly : polygons)
                         if (! poly.points.empty()) {
-                            pts.push_back(poly.points.front());
-                            break;
+                            Point candidate = poly.points.front();
+                            if (expoly.contains(candidate)) {
+                                pts.push_back(candidate);
+                                break;
+                            }
                         }
-                #endif
+                }
             }
         // Sort the points lexicographically, so a binary search could be used to locate points inside a bounding box.
         std::sort(pts.begin(), pts.end());
         return pts;
-    } 
+    }
 
     static Points island_samples(const Polygons &polygons)
     {
@@ -1040,9 +1058,11 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                     overhang_polygons = collect_slices_outer(layer);
                     // Extend by SUPPORT_MATERIAL_MARGIN, which is 1.5mm
                     contact_polygons = offset(overhang_polygons, scale_(SUPPORT_MATERIAL_MARGIN));
+//                    assert(! has_duplicate_points(contact_polygons));
                 } else {
                     // Generate overhang / contact_polygons for non-raft layers.
                     const Layer &lower_layer = *object.layers()[layer_id-1];
+//                    size_t num_regions = 0;
                     for (LayerRegion *layerm : layer.regions()) {
                         // Extrusion width accounts for the roundings of the extrudates.
                         // It is the maximum widh of the extrudate.
@@ -1075,6 +1095,7 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
     #if 1
                                 diff_polygons = offset2(
                                     diff(layerm_polygons,
+                                        //FIXME offset2 is unstable!
                                          offset2(lower_layer_polygons, - 0.5f * fw, lower_layer_offset + 0.5f * fw, SUPPORT_SURFACES_OFFSET_PARAMETERS)), 
                                     //FIXME This offset2 is targeted to reduce very thin regions to support, but it may lead to
                                     // no support at all for not so steep overhangs.
@@ -1176,11 +1197,14 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                                 slices_margin_cached_offset = slices_margin_offset;
                                 slices_margin_cached = (slices_margin_offset == 0.f) ? 
                                     lower_layer_polygons :
+                                    //FIXME offset2 is unstable!
                                     offset2(to_polygons(lower_layer.lslices), - no_interface_offset * 0.5f, slices_margin_offset + no_interface_offset * 0.5f, SUPPORT_SURFACES_OFFSET_PARAMETERS);
+//                                assert(! has_duplicate_points(slices_margin_cached));
                                 if (! buildplate_covered.empty()) {
                                     // Trim the inflated contact surfaces by the top surfaces as well.
                                     polygons_append(slices_margin_cached, buildplate_covered[layer_id]);
                                     slices_margin_cached = union_(slices_margin_cached);
+//                                    assert(! has_duplicate_points(slices_margin_cached));
                                 }
                             }
                             // Offset the contact polygons outside.
@@ -1195,8 +1219,13 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                                     slices_margin_cached);
                             }
                         }
+//                        assert(! has_duplicate_points(diff_polygons));
                         polygons_append(contact_polygons, diff_polygons);
+//                        ++ num_regions;
                     } // for each layer.region
+//                    if (num_regions > 1)
+//                        contact_polygons = union_(contact_polygons);
+//                    assert(! has_duplicate_points(contact_polygons));
                 } // end of Generate overhang/contact_polygons for non-raft layers.
                 
                 // Now apply the contact areas to the layer where they need to be made.
@@ -1271,6 +1300,8 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
 
                     // Achtung! The contact_polygons need to be trimmed by slices_margin_cached, otherwise
                     // the selection by island_samples (see the SupportGridPattern::island_samples() method) will not work!
+//                    assert(! has_duplicate_points(contact_polygons));
+//                    assert(! has_duplicate_points(slices_margin_cached));
                     SupportGridPattern support_grid_pattern(
                         // Support islands, to be stretched into a grid.
                         contact_polygons, 
@@ -1288,6 +1319,7 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                     } else  {
                         // Reduce the amount of dense interfaces: Do not generate dense interfaces below overhangs with 60% overhang of the extrusions.
                         Polygons dense_interface_polygons = diff(overhang_polygons, 
+                            //FIXME offset2 is unstable
                             offset2(lower_layer_polygons, - no_interface_offset * 0.5f, no_interface_offset * (0.6f + 0.5f), SUPPORT_SURFACES_OFFSET_PARAMETERS));
                         if (! dense_interface_polygons.empty()) {
                             dense_interface_polygons =
@@ -2956,12 +2988,32 @@ void PrintObjectSupportMaterial::generate_toolpaths(
     // Prepare fillers.
     SupportMaterialPattern  support_pattern = m_object_config->support_material_pattern;
     bool                    with_sheath     = m_object_config->support_material_with_sheath;
-    InfillPattern           infill_pattern = (support_pattern == smpHoneycomb ? ipHoneycomb : ipRectilinear);
+    InfillPattern           infill_pattern;
+    switch (support_pattern) {
+        case smpHoneycomb:          infill_pattern = ipHoneycomb;       break;
+        case smpSupportCubic:       infill_pattern = ipSupportCubic;    break;
+        case smpRectilinear:        infill_pattern = ipRectilinear;     break;
+        case smpRectilinearGrid:    infill_pattern = ipRectilinear;     break;
+    }
     std::vector<float>      angles;
     angles.push_back(base_angle);
 
     if (support_pattern == smpRectilinearGrid)
         angles.push_back(interface_angle);
+
+    FillAdaptive::OctreePtr adaptive_fill_octree;
+    if (support_pattern == smpSupportCubic) {
+        std::vector<std::pair<const Polygons*, double>> polygons;
+        polygons.reserve(top_contacts.size());
+        for (const MyLayer* layer : top_contacts)
+            if (! layer->overhang_polygons->empty())
+                polygons.emplace_back(layer->overhang_polygons, layer->print_z);
+        if (! polygons.empty())
+            adaptive_fill_octree = FillAdaptive::build_octree(polygons, support_spacing);
+        if (! adaptive_fill_octree)
+            // No octree -> genereate a non-adaptive cubic infill.
+            infill_pattern = ipCubic;
+    }
 
     BoundingBox bbox_object(Point(-scale_(1.), -scale_(1.0)), Point(scale_(1.), scale_(1.)));
 
@@ -2999,7 +3051,7 @@ void PrintObjectSupportMaterial::generate_toolpaths(
     size_t n_raft_layers = size_t(std::max(0, int(m_slicing_params.raft_layers()) - 1));
     tbb::parallel_for(tbb::blocked_range<size_t>(0, n_raft_layers),
         [this, &object, &raft_layers, 
-            infill_pattern, &bbox_object, support_density, interface_density, raft_angle_1st_layer, raft_angle_base, raft_angle_interface, link_max_length_factor, with_sheath]
+            infill_pattern, &bbox_object, support_density, interface_density, raft_angle_1st_layer, raft_angle_base, raft_angle_interface, link_max_length_factor, with_sheath, &adaptive_fill_octree]
             (const tbb::blocked_range<size_t>& range) {
         for (size_t support_layer_id = range.begin(); support_layer_id < range.end(); ++ support_layer_id)
         {
@@ -3012,6 +3064,8 @@ void PrintObjectSupportMaterial::generate_toolpaths(
             std::unique_ptr<Fill> filler_support   = std::unique_ptr<Fill>(Fill::new_from_type(infill_pattern));
             filler_interface->set_bounding_box(bbox_object);
             filler_support->set_bounding_box(bbox_object);
+            filler_support->adapt_fill_octree = adaptive_fill_octree.get();
+            filler_support->z                 = support_layer.print_z;
 
             // Print the support base below the support columns, or the support base for the support columns plus the contacts.
             if (support_layer_id > 0) {
@@ -3104,7 +3158,7 @@ void PrintObjectSupportMaterial::generate_toolpaths(
 
     tbb::parallel_for(tbb::blocked_range<size_t>(n_raft_layers, object.support_layers().size()),
         [this, &object, &bottom_contacts, &top_contacts, &intermediate_layers, &interface_layers, &layer_caches, &loop_interface_processor, 
-            infill_pattern, &bbox_object, support_density, interface_density, interface_angle, &angles, link_max_length_factor, with_sheath]
+            infill_pattern, &bbox_object, support_density, interface_density, interface_angle, &angles, link_max_length_factor, with_sheath, &adaptive_fill_octree]
             (const tbb::blocked_range<size_t>& range) {
         // Indices of the 1st layer in their respective container at the support layer height.
         size_t idx_layer_bottom_contact   = size_t(-1);
@@ -3115,10 +3169,12 @@ void PrintObjectSupportMaterial::generate_toolpaths(
         std::unique_ptr<Fill> filler_support   = std::unique_ptr<Fill>(Fill::new_from_type(infill_pattern));
         filler_interface->set_bounding_box(bbox_object);
         filler_support->set_bounding_box(bbox_object);
+        filler_support->adapt_fill_octree = adaptive_fill_octree.get();
         for (size_t support_layer_id = range.begin(); support_layer_id < range.end(); ++ support_layer_id)
         {
             SupportLayer &support_layer = *object.support_layers()[support_layer_id];
             LayerCache   &layer_cache   = layer_caches[support_layer_id];
+            filler_support->z           = support_layer.print_z;
 
             // Find polygons with the same print_z.
             MyLayerExtruded &bottom_contact_layer = layer_cache.bottom_contact_layer;

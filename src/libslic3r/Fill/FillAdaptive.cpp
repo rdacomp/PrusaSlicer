@@ -5,6 +5,7 @@
 #include "../Layer.hpp"
 #include "../Print.hpp"
 #include "../ShortestPath.hpp"
+#include "../Tesselate.hpp"
 
 #include "FillAdaptive.hpp"
 
@@ -1496,6 +1497,61 @@ OctreePtr build_octree(
         }
         for (size_t i = 0; i < overhang_triangles.size(); i += 3)
             process_triangle(overhang_triangles[i], overhang_triangles[i + 1], overhang_triangles[i + 2]);
+        {
+            // Transform the octree to world coordinates to reduce computation when extracting infill lines.
+            auto rot = transform_to_world().toRotationMatrix();
+            transform_center(octree->root_cube, rot);
+            octree->origin = rot * octree->origin;
+        }
+    }
+
+    return octree;
+}
+
+OctreePtr build_octree(
+    // Polygons with print_z in object coordinate system.
+    // Polygons are scaled, while print_z is unscaled.
+    const std::vector<std::pair<const Polygons*, double>> &polygons,
+    coordf_t                                               line_spacing)
+{
+    assert(line_spacing > 0);
+    assert(! std::isnan(line_spacing));
+
+    Eigen::Quaterniond          to_octree = transform_to_octree();
+    BoundingBox3Base<Vec3f>     bbox;
+    {
+        BoundingBox3Base<Vec3d> bb;
+        for (const std::pair<const Polygons*, double> &poly : polygons)
+            for (const Polygon &polygon : *poly.first)
+                for (const Point &pt : polygon.points) {
+                    Vec3d p(unscale<double>(pt.x()), unscale<double>(pt.y()), poly.second);
+                    bb.merge(to_octree * p);
+                    // Also merge projection of this contour to Z=0.
+                    p.z() = 0.;
+                    bb.merge(to_octree * p);
+                }
+        bbox.min = bb.min.cast<float>();
+        bbox.max = bb.max.cast<float>();
+    }
+    Vec3d                       cube_center      = bbox.center().cast<double>();
+    std::vector<CubeProperties> cubes_properties = make_cubes_properties(double(bbox.size().maxCoeff()), line_spacing);
+    auto                        octree           = OctreePtr(new Octree(cube_center, cubes_properties));
+
+    if (cubes_properties.size() > 1) {
+        Octree *octree_ptr = octree.get();
+        double edge_length_half = 0.5 * cubes_properties.back().edge_length;
+        Vec3d  diag_half(edge_length_half, edge_length_half, edge_length_half);
+        int    max_depth = int(cubes_properties.size()) - 1;
+        for (const std::pair<const Polygons*, double> &poly : polygons)
+            for (const ExPolygon& expoly : union_ex(*poly.first)) {
+                std::vector<Vec3d> triangles = triangulate_expolygon_3d(expoly, poly.second, false);
+                for (size_t i = 0; i < triangles.size(); i += 3)
+                    octree_ptr->insert_triangle(
+                        to_octree * triangles[i], to_octree * triangles[i + 1], to_octree * triangles[i + 2],
+                        octree_ptr->root_cube,
+                        BoundingBoxf3(octree_ptr->root_cube->center - diag_half, octree_ptr->root_cube->center + diag_half),
+                        max_depth);
+            }
         {
             // Transform the octree to world coordinates to reduce computation when extracting infill lines.
             auto rot = transform_to_world().toRotationMatrix();
