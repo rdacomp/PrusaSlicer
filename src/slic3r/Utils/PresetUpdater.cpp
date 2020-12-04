@@ -170,6 +170,8 @@ struct PresetUpdater::priv
 	Updates get_config_updates(const Semver& old_slic3r_version) const;
 	void perform_updates(Updates &&updates, bool snapshot = true) const;
 	void set_waiting_updates(Updates u);
+	// Enumerate all assets stated in all bundle and download missing ones
+	void update_assets();
 };
 
 PresetUpdater::priv::priv()
@@ -278,6 +280,55 @@ void PresetUpdater::priv::sync_version() const
 		.perform_sync();
 }
 
+void PresetUpdater::priv::update_assets()
+{
+	// for each index in cache
+	for (const auto& idx : index_db) {
+		const fs::path bundle_vendor_path = vendor_path / (idx.vendor() + ".ini");
+		const fs::path bundle_cache_path = cache_path / (idx.vendor() + ".ini");
+		//fs::path bundle_rsrc_path = rsrc_path / (idx.vendor() + ".ini");
+		fs::path bundle_path; 
+		if (fs::exists(bundle_vendor_path)) {
+			bundle_path = fs::path(std::move(bundle_vendor_path));
+		} else if (fs::exists(bundle_cache_path)) {
+			bundle_path = fs::path(std::move(bundle_cache_path));
+			//check also bundles in resorces?
+		/*} else if (fs::exists(bundle_rsrc_path)) {
+			bundle_path = fs::path(std::move(bundle_rsrc_path));*/
+		} else
+			continue;
+		// Load full profile to get asset names
+		auto vp = VendorProfile::from_ini(bundle_path, true);
+		// Search for missing assets
+		auto check_asset = [this, idx, vp](const std::string& asset){
+			const fs::path asset_rsrc = rsrc_path / idx.vendor() / asset;
+			const fs::path asset_vndr = vendor_path / idx.vendor() / asset;
+			if (fs::exists(asset_rsrc) || fs::exists(asset_vndr))
+				return;
+			// Download missing asset
+			const std::string asset_url  = vp.config_update_url + asset;
+			const std::string asset_path = (cache_path / idx.vendor() / asset).string();
+			//check if asset_url is leading to our site 
+			if (!boost::starts_with(asset_url, "http://files.prusa3d.com/wp-content/uploads/repository/") &&
+				!boost::starts_with(asset_url, "https://files.prusa3d.com/wp-content/uploads/repository/")) {
+				BOOST_LOG_TRIVIAL(warning) << "unsafe url path for vendor \"" << idx.vendor() << "\" rejected: " << asset_url;
+				return;
+			}
+			if (!get_file(asset_url, asset_path)) { 
+				BOOST_LOG_TRIVIAL(warning) << "Download of asset failed: " << asset_url;
+			}
+		};
+		for (const auto& model : vp.models) {
+			//bed_model and bed_texture are varaibles of model
+			// thumbnail is model id + "_thumbnail.png"
+			check_asset(model.id + "_thumbnail.png");
+			if (!model.bed_model.empty())
+				check_asset(model.bed_model);
+			if (!model.bed_texture.empty())
+				check_asset(model.bed_texture);
+		}
+	}
+}
 // Download vendor indices. Also download new bundles if an index indicates there's a new one available.
 // Both are saved in cache.
 void PresetUpdater::priv::sync_config(const VendorMap vendors)
@@ -316,7 +367,8 @@ void PresetUpdater::priv::sync_config(const VendorMap vendors)
 			continue;
 		}
 		if (!get_file(idx_url, idx_path_temp)) { continue; }
-		if (cancel) { return; }
+		if (cancel
+			) { return; }
 
 		// Load the fresh index up
 		{
@@ -683,6 +735,7 @@ void PresetUpdater::sync(PresetBundle *preset_bundle)
 		this->p->prune_tmps();
 		this->p->sync_version();
 		this->p->sync_config(std::move(vendors));
+		this->p->update_assets();
 	}));
 }
 
