@@ -466,6 +466,7 @@ static bool need_wipe(const GCode          &gcodegen,
         // The original layer is intersected with defined boundaries. Then it is necessary to make a detailed test.
         // If the z-lift is enabled, then a wipe is needed when the original travel leads above the holes.
         if (z_lift_enabled) {
+#if 0
             if (any_expolygon_contains(lslices, lslices_bboxes, grid_lslice, original_travel)) {
                 // Check if original_travel and result_travel are not same.
                 // If both are the same, then it is possible to skip testing of result_travel
@@ -474,6 +475,11 @@ static bool need_wipe(const GCode          &gcodegen,
             } else {
                 wipe_needed = true;
             }
+#endif
+            // Check if original_travel and result_travel are not same.
+            // If both are the same, then it is possible to skip testing of result_travel
+            wipe_needed = !(result_travel.size() > 2 && result_travel.first_point() == original_travel.a && result_travel.last_point() == original_travel.b) &&
+                          !any_expolygon_contains(lslices, lslices_bboxes, grid_lslice, result_travel);
         } else {
             wipe_needed = !any_expolygon_contains(lslices, lslices_bboxes, grid_lslice, result_travel);
         }
