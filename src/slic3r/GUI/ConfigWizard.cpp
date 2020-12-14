@@ -2694,7 +2694,12 @@ bool ConfigWizard::run(RunReason reason, StartPage start_page)
     p->set_start_page(start_page);
 
     if (ShowModal() == wxID_OK) {
-        p->apply_config(app.app_config, app.preset_bundle, app.preset_updater);
+        try {
+            p->apply_config(app.app_config, app.preset_bundle, app.preset_updater);
+        }
+        catch (const  Slic3r::CriticalException& ex) {
+            show_error(nullptr, ex.what());
+        }
         app.app_config->set_legacy_datadir(false);
         app.update_mode();
         app.obj_manipul()->update_ui_from_settings();

@@ -195,7 +195,7 @@ struct PresetUpdater::priv
 
 	void check_install_indices() const;
 	Updates get_config_updates(const Semver& old_slic3r_version) const;
-	void perform_updates(Updates &&updates, bool snapshot = true) const;
+	bool perform_updates(Updates &&updates, bool snapshot = true) const;
 	void set_waiting_updates(Updates u);
 };
 
@@ -409,7 +409,12 @@ void PresetUpdater::priv::check_install_indices() const
 
 			if (! fs::exists(path_in_cache)) {
 				BOOST_LOG_TRIVIAL(info) << "Install index from resources: " << path.filename();
-				copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
+				try {
+					copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
+				} catch (const  Slic3r::CriticalException& ex) {
+					GUI::show_error(nullptr, ex.what());
+					continue;
+				}
 			} else {
 				Index idx_rsrc, idx_cache;
 				idx_rsrc.load(path);
@@ -417,7 +422,12 @@ void PresetUpdater::priv::check_install_indices() const
 
 				if (idx_cache.version() < idx_rsrc.version()) {
 					BOOST_LOG_TRIVIAL(info) << "Update index from resources: " << path.filename();
-					copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
+					try	{
+						copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
+					} catch (const  Slic3r::CriticalException& ex) {
+						GUI::show_error(nullptr, ex.what());
+						continue;
+					}
 				}
 			}
 		}
@@ -594,10 +604,23 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 				}
 			}
 
-			updates.updates.emplace_back(std::move(new_update));
+			
 			// 'Install' the index in the vendor directory. This is used to memoize
 			// offered updates and to not offer the same update again if it was cancelled by the user.
-			copy_file_fix(bundle_path_idx_to_install, bundle_path_idx, _utf8(L("getting config updates")));
+			try
+			{
+				copy_file_fix(bundle_path_idx_to_install, bundle_path_idx, _utf8(L("getting config updates")));
+			}
+			catch (const  Slic3r::CriticalException& ex) {
+				BOOST_LOG_TRIVIAL(error) << format("Copying new index for vendor %1% failed. Error message: %2%",
+					idx.vendor(),
+					ex.what());
+				GUI::show_error(nullptr, ex.what());
+				continue;
+			}
+
+			updates.updates.emplace_back(std::move(new_update));
+			
 		} else {
 			BOOST_LOG_TRIVIAL(warning) << format("Index for vendor %1% indicates update (%2%) but the new bundle was found neither in cache nor resources",
 				idx.vendor(),
@@ -608,8 +631,10 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 	return updates;
 }
 
-void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) const
+// return true if all updates were successful
+bool PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) const
 {
+	bool ret = true;
 	if (updates.incompats.size() > 0) {
 		if (snapshot) {
 			BOOST_LOG_TRIVIAL(info) << "Taking a snapshot...";
@@ -635,9 +660,16 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 
 		for (const auto &update : updates.updates) {
 			BOOST_LOG_TRIVIAL(info) << '\t' << update;
-
-			update.install();
-
+			try
+			{
+				update.install();
+			}
+			catch (const  Slic3r::CriticalException& ex) {
+				GUI::show_error(nullptr, ex.what());
+				ret = false;
+				continue;
+			}
+			 
 			PresetBundle bundle;
 			bundle.load_configbundle(update.source.string(), PresetBundle::LOAD_CFGBNDLE_SYSTEM);
 
@@ -671,6 +703,7 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			for (const auto &name : bundle.obsolete_presets.printers)  { obsolete_remover("printer", name); }
 		}
 	}
+	return ret;
 }
 
 void PresetUpdater::priv::set_waiting_updates(Updates u)
@@ -771,7 +804,8 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 
 			// This effectively removes the incompatible bundles:
 			// (snapshot is taken beforehand)
-			p->perform_updates(std::move(updates));
+			if(!p->perform_updates(std::move(updates)))
+				return R_INCOMPAT_EXIT;
 
 			if (!GUI::wxGetApp().run_wizard(GUI::ConfigWizard::RR_DATA_INCOMPAT)) {
 				return R_INCOMPAT_EXIT;
@@ -810,7 +844,8 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 			if (res == wxID_OK) {
 				BOOST_LOG_TRIVIAL(info) << "User wants to update...";
 
-				p->perform_updates(std::move(updates));
+				if(!p->perform_updates(std::move(updates)))
+					return R_INCOMPAT_EXIT;
 
 				// Reload global configuration
 				auto* app_config = GUI::wxGetApp().app_config;
@@ -840,6 +875,7 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 			const auto res = dlg.ShowModal();
 			if (res == wxID_OK) {
 				BOOST_LOG_TRIVIAL(debug) << "User agreed to perform the update";
+				// Continue even if some updates fail, global config still should be reloaded if some succeeded
 				p->perform_updates(std::move(updates));
 
 				// Reload global configuration
@@ -897,6 +933,7 @@ void PresetUpdater::on_update_notification_confirm()
 	const auto res = dlg.ShowModal();
 	if (res == wxID_OK) {
 		BOOST_LOG_TRIVIAL(debug) << "User agreed to perform the update";
+		// Continue even if some updates fail, global config still should be reloaded if some succeeded
 		p->perform_updates(std::move(p->waiting_updates));
 
 		// Reload global configuration

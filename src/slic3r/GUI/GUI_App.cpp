@@ -882,8 +882,8 @@ bool GUI_App::on_init_inner()
     Slic3r::I18N::set_translate_callback(libslic3r_translate_callback);
 
     // application frame
-    if (scrn && is_editor())
-        scrn->SetText(_L("Preparing settings tabs") + dots);
+    //if (scrn && is_editor())
+    //    scrn->SetText(_L("Preparing settings tabs") + dots);
 
     mainframe = new MainFrame();
     // hide settings tabs after first Layout
@@ -2205,7 +2205,7 @@ void GUI_App::check_updates(const bool verbose)
 			dlg.ShowModal();
 		}
 	}
-	catch (const std::exception & ex) {
+    catch (const std::exception & ex) {
 		show_error(nullptr, ex.what());
 	}
 }
