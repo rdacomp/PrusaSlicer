@@ -61,31 +61,49 @@ void copy_file_fix(const fs::path& source, const fs::path& target,const std::str
 
 	BOOST_LOG_TRIVIAL(debug) << format("PresetUpdater: Copying %1% -> %2%", source, target);
 
-	// Make sure the file has correct permission both before and after we copy over it
 	boost::system::error_code ec;
 	if (fs::exists(target)) {
-		fs::permissions(target, perms, ec);
+		// Retry removing the file a few times to defeat badly-behaved file system scanners. 
+		// If it requires more than 200 tries, it's more likely that there is a reaal error.
+        for (size_t retry = 0; retry != 200; ++ retry) {
+            ec.clear();
+            fs::remove(target);
+            if (!ec)
+                break;
+        }
+
 		if (ec) {
-			std::string msg = GUI::format(
-				_L("Copying of file %1% to %2% failed. Permissions fail at target file before copying.\n"
-				   "Error message : %3%\n This error happend during %4% phase."),
-				source, target, ec.message(), caller_function_name);
-#if defined(__APPLE__) || defined(_WIN32)
-			throw Slic3r::CriticalException(msg);
-#else
-			BOOST_LOG_TRIVIAL(debug) << msg;
-#endif
+			throw Slic3r::CriticalException(GUI::format(
+				_L("Copying of file %1% to %2% failed. The file %2% exists, and it cannot be removed.\n"
+					"Error message : %3%\n This error happend during %4% phase."),
+				source, target, ec.message(), caller_function_name));
 		}
 	}
-	ec.clear();
-	fs::copy_file(source, target, fs::copy_option::overwrite_if_exists, ec);
+
+	// Retry copying the file a few times to defeat badly-behaved file system scanners. 
+	// If it requires more than 200 tries, it's more likely that there is a reaal error.
+	for (size_t retry = 0; retry != 200; ++retry) {
+		ec.clear();
+		fs::copy_file(source, target, fs::copy_option::overwrite_if_exists, ec);
+		if (!ec)
+			break;
+	}
+	
 	if (ec)
 		throw Slic3r::CriticalException(GUI::format(
 			_L("Copying of file %1% to %2% failed.\n"
 			   "Error message : %3%\nCopying was triggered by function: %4%"),
 			source, target, ec.message(), caller_function_name));
-	ec.clear();
-	fs::permissions(target, perms, ec);
+
+	// Retry setting permissions of the file a few times to defeat badly-behaved file system scanners. 
+	// If it requires more than 200 tries, it's more likely that there is a reaal error.
+	for (size_t retry = 0; retry != 200; ++retry) {
+		ec.clear();
+		fs::permissions(target, perms, ec);
+		if (!ec)
+			break;
+	}
+
 	if (ec)
 		throw Slic3r::CriticalException(GUI::format(
 			_L("Copying of file %1% to %2% failed. Permissions fail at target file after copying.\n"
@@ -402,6 +420,7 @@ void PresetUpdater::priv::check_install_indices() const
 {
 	BOOST_LOG_TRIVIAL(info) << "Checking if indices need to be installed from resources...";
 
+	bool copy_file_error_occurred = false;
     for (auto &dir_entry : boost::filesystem::directory_iterator(rsrc_path))
 		if (is_idx_file(dir_entry)) {
 			const auto &path = dir_entry.path();
@@ -411,8 +430,9 @@ void PresetUpdater::priv::check_install_indices() const
 				BOOST_LOG_TRIVIAL(info) << "Install index from resources: " << path.filename();
 				try {
 					copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
-				} catch (const  Slic3r::CriticalException& ex) {
-					GUI::show_error(nullptr, ex.what());
+				} catch (const Slic3r::CriticalException& ex) {
+					BOOST_LOG_TRIVIAL(error) << ex.what();
+					copy_file_error_occurred = true;
 					continue;
 				}
 			} else {
@@ -424,13 +444,16 @@ void PresetUpdater::priv::check_install_indices() const
 					BOOST_LOG_TRIVIAL(info) << "Update index from resources: " << path.filename();
 					try	{
 						copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
-					} catch (const  Slic3r::CriticalException& ex) {
-						GUI::show_error(nullptr, ex.what());
+					} catch (const Slic3r::CriticalException& ex) {
+						BOOST_LOG_TRIVIAL(info) << ex.what();
+						copy_file_error_occurred = true;
 						continue;
 					}
 				}
 			}
 		}
+	if (copy_file_error_occurred)
+		GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be installed because PrusaSlicer is unable to write to the folder %1%"), cache_path));
 }
 
 // Generates a list of bundle updates that are to be performed.
@@ -442,6 +465,7 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 
 	BOOST_LOG_TRIVIAL(info) << "Checking for cached configuration updates...";
 
+	bool copy_file_error_occurred = false;
 	// Over all indices from the cache directory:
     for (const Index& idx : index_db) {
 		auto bundle_path = vendor_path / (idx.vendor() + ".ini");
@@ -607,15 +631,11 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 			
 			// 'Install' the index in the vendor directory. This is used to memoize
 			// offered updates and to not offer the same update again if it was cancelled by the user.
-			try
-			{
+			try {
 				copy_file_fix(bundle_path_idx_to_install, bundle_path_idx, _utf8(L("getting config updates")));
-			}
-			catch (const  Slic3r::CriticalException& ex) {
-				BOOST_LOG_TRIVIAL(error) << format("Copying new index for vendor %1% failed. Error message: %2%",
-					idx.vendor(),
-					ex.what());
-				GUI::show_error(nullptr, ex.what());
+			} catch (const  Slic3r::CriticalException& ex) {
+				BOOST_LOG_TRIVIAL(error) << ex.what();
+				copy_file_error_occurred = true;
 				continue;
 			}
 
@@ -627,6 +647,9 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 				recommended->config_version.to_string());
 		}
 	}
+
+	if (copy_file_error_occurred)
+		GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be updated because PrusaSlicer is unable to write to the folder %1%"), cache_path));
 
 	return updates;
 }
@@ -660,12 +683,10 @@ bool PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 
 		for (const auto &update : updates.updates) {
 			BOOST_LOG_TRIVIAL(info) << '\t' << update;
-			try
-			{
+			try {
 				update.install();
-			}
-			catch (const  Slic3r::CriticalException& ex) {
-				GUI::show_error(nullptr, ex.what());
+			} catch (const  Slic3r::CriticalException& ex) {
+				BOOST_LOG_TRIVIAL(error) << ex.what();
 				ret = false;
 				continue;
 			}
@@ -702,7 +723,11 @@ bool PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			for (const auto &name : bundle.obsolete_presets.sla_materials/*filaments*/) { obsolete_remover("sla_material", name); } 
 			for (const auto &name : bundle.obsolete_presets.printers)  { obsolete_remover("printer", name); }
 		}
+	
+		if (!ret)
+			GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be installed because PrusaSlicer is unable to write to the folder %1%"), cache_path));
 	}
+
 	return ret;
 }
 
