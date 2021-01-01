@@ -352,6 +352,8 @@ class Print : public PrintBaseWithState<PrintStep, psCount>
 {
 private: // Prevents erroneous use by other classes.
     typedef PrintBaseWithState<PrintStep, psCount> Inherited;
+    // Bool indicates if supports of PrintObject are top-level contour.
+    typedef std::pair<PrintObject *, bool>         PrintObjectInfo;
 
 public:
     Print() = default;
@@ -463,7 +465,7 @@ private:
 
     void                _make_skirt();
     void                _make_brim();
-    void                _make_inner_brim(const PrintObjectPtrs &top_level_objects_with_brim);
+    void                _make_inner_brim(const std::vector<PrintObjectInfo> &top_level_objects_with_brim);
     void                _make_wipe_tower();
     void                finalize_first_layer_convex_hull();
 

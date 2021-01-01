@@ -250,6 +250,24 @@ inline Polygons to_polygons(ExPolygons &&src)
     return polygons;
 }
 
+inline ExPolygons to_expolygons(const Polygons &polys)
+{
+    ExPolygons ex_polys;
+    ex_polys.assign(polys.size(), ExPolygon());
+    for (size_t idx = 0; idx < polys.size(); ++idx)
+        ex_polys[idx].contour = polys[idx];
+    return ex_polys;
+}
+
+inline ExPolygons to_expolygons(Polygons &&polys)
+{
+    ExPolygons ex_polys;
+    ex_polys.assign(polys.size(), ExPolygon());
+    for (size_t idx = 0; idx < polys.size(); ++idx)
+        ex_polys[idx].contour = std::move(polys[idx]);
+    return ex_polys;
+}
+
 inline void polygons_append(Polygons &dst, const ExPolygon &src) 
 { 
     dst.reserve(dst.size() + src.holes.size() + 1);

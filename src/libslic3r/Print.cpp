@@ -1861,22 +1861,33 @@ static float max_brim_width(const PrintObjectPtrs &objects)
                                  }));
 }
 
-static PrintObjectPtrs get_top_level_objects_with_brim(const Print &print)
+typedef std::pair<PrintObject *, bool> PrintObjectInfo;
+
+static std::vector<PrintObjectInfo> get_top_level_objects_with_brim(const Print &print)
 {
-    Polygons        islands;
-    PrintObjectPtrs island_to_object;
+    Polygons                     islands;
+    std::vector<PrintObjectInfo> island_to_object;
     for (PrintObject *object : print.objects()) {
         Polygons islands_object;
+        Polygons supports_islands_object;
         for (ExPolygon &ex_poly : object->layers().front()->lslices)
             islands_object.emplace_back(ex_poly.contour);
+        if (!object->support_layers().empty())
+            object->support_layers().front()->support_fills.polygons_covered_by_spacing(supports_islands_object, float(SCALED_EPSILON));
 
-        islands.reserve(islands.size() + object->instances().size() * islands_object.size());
-        for (const PrintInstance &instance : object->instances())
+        islands.reserve(islands.size() + object->instances().size() * (islands_object.size() + supports_islands_object.size()));
+        for (const PrintInstance &instance : object->instances()) {
             for (Polygon &poly : islands_object) {
                 islands.emplace_back(poly);
                 islands.back().translate(instance.shift);
-                island_to_object.emplace_back(object);
+                island_to_object.emplace_back(object, false);
             }
+            for (Polygon &poly : supports_islands_object) {
+                islands.emplace_back(poly);
+                islands.back().translate(instance.shift);
+                island_to_object.emplace_back(object, true);
+            }
+        }
     }
     assert(islands.size() == island_to_object.size());
 
@@ -1905,53 +1916,67 @@ static PrintObjectPtrs get_top_level_objects_with_brim(const Print &print)
     ClipperLib_Z::PolyTree islands_polytree;
     clipper.Execute(ClipperLib_Z::ctUnion, islands_polytree, ClipperLib_Z::pftEvenOdd, ClipperLib_Z::pftEvenOdd);
 
-    std::unordered_set<size_t> processed_objects_idx;
-    PrintObjectPtrs            top_level_objects_with_brim;
+    std::unordered_set<std::pair<size_t, bool>, boost::hash<std::pair<size_t, bool>>> processed_objects_idx;
+    std::vector<PrintObjectInfo>                                                      top_level_objects_with_brim;
     for (int i = 0; i < islands_polytree.ChildCount(); ++i) {
         for (const ClipperLib_Z::IntPoint &point : islands_polytree.Childs[i]->Contour) {
-            if (point.Z != 0 && processed_objects_idx.find(island_to_object[point.Z - 1]->id().id) == processed_objects_idx.end()) {
+            if (point.Z != 0 && processed_objects_idx.find(std::make_pair(island_to_object[point.Z - 1].first->id().id, island_to_object[point.Z - 1].second)) == processed_objects_idx.end()) {
                 top_level_objects_with_brim.emplace_back(island_to_object[point.Z - 1]);
-                processed_objects_idx.insert(island_to_object[point.Z - 1]->id().id);
+                processed_objects_idx.emplace(island_to_object[point.Z - 1].first->id().id, island_to_object[point.Z - 1].second);
             }
         }
     }
     return top_level_objects_with_brim;
 }
 
-static Polygons top_level_outer_brim_islands(const PrintObjectPtrs &top_level_objects_with_brim)
+static Polygons top_level_outer_brim_islands(const std::vector<PrintObjectInfo> &top_level_objects_with_brim)
 {
     Polygons islands;
-    for (PrintObject *object : top_level_objects_with_brim) {
-        float    brim_offset = float(scale_(object->config().brim_offset.value));
+    for (const PrintObjectInfo &object : top_level_objects_with_brim) {
+        float    brim_offset = float(scale_(object.first->config().brim_offset.value));
         Polygons islands_object;
-        for (ExPolygon &ex_poly : object->layers().front()->lslices) {
-            Polygons contour_offset = offset(ex_poly.contour, brim_offset);
-            for (Polygon &poly : contour_offset)
-                poly.douglas_peucker(SCALED_RESOLUTION);
+        if (object.second) {
+            // Top level brim around supports
+            assert(!object.first->support_layers().empty());
+            // FIXME Lukas H.: Do we want to allow offset for brim also for supports?
+            object.first->support_layers().front()->support_fills.polygons_covered_by_spacing(islands_object, float(SCALED_EPSILON));
+        } else {
+            // Top level brim around islands
+            for (ExPolygon &ex_poly : object.first->layers().front()->lslices) {
+                Polygons contour_offset = offset(ex_poly.contour, brim_offset);
+                for (Polygon &poly : contour_offset)
+                    poly.douglas_peucker(SCALED_RESOLUTION);
 
-            polygons_append(islands_object, std::move(contour_offset));
+                polygons_append(islands_object, std::move(contour_offset));
+            }
         }
 
-        for (const PrintInstance &instance : object->instances())
+        for (const PrintInstance &instance : object.first->instances())
             append_and_translate(islands, islands_object, instance);
     }
     return islands;
 }
 
-static ExPolygons top_level_outer_brim_area(const Print &print, const PrintObjectPtrs &top_level_objects_with_brim, const float no_brim_offset)
+static ExPolygons top_level_outer_brim_area(const Print &print, const std::vector<PrintObjectInfo> &top_level_objects_with_brim, const float no_brim_offset)
 {
     std::unordered_set<size_t> top_level_objects_idx;
+    std::unordered_set<size_t> top_level_objects_supports_idx;
     top_level_objects_idx.reserve(top_level_objects_with_brim.size());
-    for (PrintObject *object : top_level_objects_with_brim)
-        top_level_objects_idx.insert(object->id().id);
+    top_level_objects_supports_idx.reserve(top_level_objects_with_brim.size());
+    for (const PrintObjectInfo &object : top_level_objects_with_brim)
+        if (object.second) // Top level brim around supports
+            top_level_objects_supports_idx.insert(object.first->id().id);
+        else               // Top level brim around islands
+            top_level_objects_idx.insert(object.first->id().id);
 
     ExPolygons brim_area;
     Polygons   no_brim_area;
     for (PrintObject *object : print.objects()) {
-        const BrimType brim_type         = object->config().brim_type.value;
-        const float    brim_offset       = scale_(object->config().brim_offset.value);
-        const float    brim_width        = scale_(object->config().brim_width.value);
-        const bool     is_top_outer_brim = top_level_objects_idx.find(object->id().id) != top_level_objects_idx.end();
+        const BrimType brim_type                 = object->config().brim_type.value;
+        const float    brim_offset               = scale_(object->config().brim_offset.value);
+        const float    brim_width                = scale_(object->config().brim_width.value);
+        const bool     is_top_outer_brim         = top_level_objects_idx.find(object->id().id) != top_level_objects_idx.end();
+        const bool     is_top_outer_support_brim = top_level_objects_supports_idx.find(object->id().id) != top_level_objects_supports_idx.end();
 
         ExPolygons brim_area_object;
         Polygons   no_brim_area_object;
@@ -1966,6 +1991,13 @@ static ExPolygons top_level_outer_brim_area(const Print &print, const PrintObjec
                 append(no_brim_area_object, offset(ex_poly.contour, brim_offset));
 
             no_brim_area_object.emplace_back(ex_poly.contour);
+
+            if ((brim_type == BrimType::btOuterOnly || brim_type == BrimType::btOuterAndInner) && is_top_outer_support_brim) {
+                Polygons support_islands;
+                object->support_layers().front()->support_fills.polygons_covered_by_spacing(support_islands, float(SCALED_EPSILON));
+                // FIXME Lukas H.: Do we want to allow offset for brim also for supports?
+                append(brim_area_object, diff_ex(offset_ex(support_islands, brim_width), support_islands));
+            }
         }
 
         for (const PrintInstance &instance : object->instances()) {
@@ -1977,28 +2009,34 @@ static ExPolygons top_level_outer_brim_area(const Print &print, const PrintObjec
     return diff_ex(brim_area, no_brim_area);
 }
 
-static ExPolygons inner_brim_area(const Print &print, const PrintObjectPtrs &top_level_objects_with_brim, const float no_brim_offset)
+static ExPolygons inner_brim_area(const Print &print, const std::vector<PrintObjectInfo> &top_level_objects_with_brim, const float no_brim_offset)
 {
     std::unordered_set<size_t> top_level_objects_idx;
+    std::unordered_set<size_t> top_level_objects_supports_idx;
     top_level_objects_idx.reserve(top_level_objects_with_brim.size());
-    for (PrintObject *object : top_level_objects_with_brim)
-        top_level_objects_idx.insert(object->id().id);
+    top_level_objects_supports_idx.reserve(top_level_objects_with_brim.size());
+    for (const PrintObjectInfo &object : top_level_objects_with_brim)
+        if (object.second) // Top level brim around supports
+            top_level_objects_supports_idx.insert(object.first->id().id);
+        else               // Top level brim around islands
+            top_level_objects_idx.insert(object.first->id().id);
 
     ExPolygons brim_area;
     ExPolygons no_brim_area;
     Polygons   holes;
     for (PrintObject *object : print.objects()) {
-        const BrimType brim_type      = object->config().brim_type.value;
-        const float    brim_offset    = scale_(object->config().brim_offset.value);
-        const float    brim_width     = scale_(object->config().brim_width.value);
-        const bool     top_outer_brim = top_level_objects_idx.find(object->id().id) != top_level_objects_idx.end();
+        const BrimType brim_type                 = object->config().brim_type.value;
+        const float    brim_offset               = scale_(object->config().brim_offset.value);
+        const float    brim_width                = scale_(object->config().brim_width.value);
+        const bool     is_top_outer_brim         = top_level_objects_idx.find(object->id().id) != top_level_objects_idx.end();
+        const bool     is_top_outer_support_brim = top_level_objects_supports_idx.find(object->id().id) != top_level_objects_supports_idx.end();
 
         ExPolygons brim_area_object;
         ExPolygons no_brim_area_object;
         Polygons   holes_object;
         for (ExPolygon &ex_poly : object->layers().front()->lslices) {
             if (brim_type == BrimType::btOuterOnly || brim_type == BrimType::btOuterAndInner) {
-                if (top_outer_brim)
+                if (is_top_outer_brim)
                     no_brim_area_object.emplace_back(ex_poly);
                 else
                     append(brim_area_object, diff_ex(offset_ex(ex_poly.contour, brim_width + brim_offset), offset_ex(ex_poly.contour, brim_offset)));
@@ -2016,6 +2054,18 @@ static ExPolygons inner_brim_area(const Print &print, const PrintObjectPtrs &top
             append(holes_object, ex_poly.holes);
         }
         append(no_brim_area_object, offset_ex(object->layers().front()->lslices, brim_offset));
+
+        if (!object->support_layers().empty()) {
+            Polygons support_islands;
+            object->support_layers().front()->support_fills.polygons_covered_by_spacing(support_islands, float(SCALED_EPSILON));
+            if (brim_type == BrimType::btOuterOnly || brim_type == BrimType::btOuterAndInner) {
+                if (is_top_outer_support_brim)
+                    append(no_brim_area_object, to_expolygons(std::move(support_islands)));
+                else
+                    append(brim_area_object, diff_ex(offset_ex(support_islands, brim_width), support_islands));
+                // FIXME Lukas H.: Do we want to allow offset (or no_brim_offset) for brim also for supports?
+            }
+        }
 
         for (const PrintInstance &instance : object->instances()) {
             append_and_translate(brim_area, brim_area_object, instance);
@@ -2109,7 +2159,7 @@ static Polylines connect_brim_lines(Polylines &&polylines, const Polygons &brim_
     return polylines_out;
 }
 
-void Print::_make_inner_brim(const PrintObjectPtrs &top_level_objects_with_brim)
+void Print::_make_inner_brim(const std::vector<PrintObjectInfo> &top_level_objects_with_brim)
 {
     Flow       flow = this->brim_flow();
     ExPolygons islands_ex = inner_brim_area(*this, top_level_objects_with_brim, flow.scaled_spacing());
@@ -2128,13 +2178,15 @@ void Print::_make_inner_brim(const PrintObjectPtrs &top_level_objects_with_brim)
 
 void Print::_make_brim()
 {
-    Flow            flow                         = this->brim_flow();
-    PrintObjectPtrs top_level_objects_with_brim  = get_top_level_objects_with_brim(*this);
-    Polygons        islands                      = top_level_outer_brim_islands(top_level_objects_with_brim);
-    ExPolygons      islands_area_ex              = top_level_outer_brim_area(*this, top_level_objects_with_brim, flow.scaled_spacing());
-    Polygons        islands_area                 = to_polygons(islands_area_ex);
-    Polygons        loops;
-    size_t          num_loops = size_t(floor(max_brim_width(m_objects) / flow.spacing()));
+    Flow                         flow                        = this->brim_flow();
+    std::vector<PrintObjectInfo> top_level_objects_with_brim = get_top_level_objects_with_brim(*this);
+    // Islands from which brims are generated. Polygons could intersect.
+    Polygons                     islands                     = top_level_outer_brim_islands(top_level_objects_with_brim);
+    // An area in which brims could be generated. Brims can't be outside this area.
+    ExPolygons                   islands_area_ex             = top_level_outer_brim_area(*this, top_level_objects_with_brim, flow.scaled_spacing());
+    Polygons                     islands_area                = to_polygons(islands_area_ex);
+    Polygons                     loops;
+    size_t                       num_loops = size_t(floor(max_brim_width(m_objects) / flow.spacing()));
     for (size_t i = 0; i < num_loops; ++i) {
         this->throw_if_canceled();
         islands = offset(islands, float(flow.scaled_spacing()), jtSquare);
@@ -2151,7 +2203,7 @@ void Print::_make_brim()
     tbb::parallel_for(tbb::blocked_range<size_t>(0, loops_pl.size()),
                       [&loops_pl_by_levels, &loops_pl, &islands_area](const tbb::blocked_range<size_t> &range) {
                           for (size_t i = range.begin(); i < range.end(); ++i) {
-                              loops_pl_by_levels[i] = chain_polylines(intersection_pl(loops_pl[i], islands_area));
+                              loops_pl_by_levels[i] = chain_polylines(intersection_pl(static_cast<Polylines>(loops_pl[i]), islands_area));
                           }
                       });
 
