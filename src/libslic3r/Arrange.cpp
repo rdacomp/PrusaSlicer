@@ -205,17 +205,13 @@ protected:
             // This branch is for big items in a mixed (big and small) scene
             // OR for all items in a small-only scene.
             BIG_ITEM,
-            
-            // This branch is for the last big item in a mixed scene
-            LAST_BIG_ITEM,
-            
+
             // For small items in a mixed scene.
             SMALL_ITEM
         } compute_case;
         
         bool bigitems = isBig(item.area()) || spatindex.empty();
         if(bigitems && !m_remaining.empty()) compute_case = BIG_ITEM;
-        else if (bigitems && m_remaining.empty()) compute_case = LAST_BIG_ITEM;
         else compute_case = SMALL_ITEM;
         
         switch (compute_case) {
@@ -286,10 +282,6 @@ protected:
                 score = 0.50 * dist + (1.0 - R) * 0.20 * density +
                         0.30 * alignment_score;
 
-            break;
-        }
-        case LAST_BIG_ITEM: {
-            score = norm(pl::distance(ibb.center(), m_pilebb.center()));
             break;
         }
         case SMALL_ITEM: {
