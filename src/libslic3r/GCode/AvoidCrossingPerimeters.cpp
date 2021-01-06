@@ -237,6 +237,7 @@ static Direction get_shortest_direction(const AvoidCrossingPerimeters::Boundary 
 // Straighten the travel path as long as it does not collide with the contours stored in edge_grid.
 static std::vector<TravelPoint> simplify_travel(const AvoidCrossingPerimeters::Boundary &boundary, const std::vector<TravelPoint> &travel)
 {
+    assert(!travel.empty());
     FirstIntersectionVisitor visitor(boundary.grid);
     std::vector<TravelPoint> simplified_path;
     simplified_path.reserve(travel.size());
@@ -320,8 +321,8 @@ namespace bgi = boost::geometry::index;
 
 using rtree_point_t   = bgm::point<float, 2, boost::geometry::cs::cartesian>;
 using rtree_segment_t = bgm::segment<rtree_point_t>;
-using rtree_s_t       = bgi::rtree<std::pair<rtree_segment_t, size_t>, bgi::rstar<16, 4>>;
-using rtree_p_t       = bgi::rtree<std::pair<rtree_point_t, size_t>, bgi::rstar<16, 4>>;
+using rtree_s_t       = bgi::rtree<std::pair<rtree_segment_t, size_t>, bgi::quadratic<16, 4>>;
+using rtree_p_t       = bgi::rtree<std::pair<rtree_point_t, size_t>, bgi::quadratic<16, 4>>;
 
 static inline rtree_point_t mk_rtree_point(const Point &pt) { return rtree_point_t(float(pt.x()), float(pt.y())); }
 
@@ -367,7 +368,7 @@ static std::pair<Polygon, Polygon> add_nearest_points_between_polygons(const Pol
 
         // Lines in the first polygon are processed sequentially, so additional points can be added without searching for the right position.
         out_first_poly.points.emplace_back(first_line.a);
-        if (first_line.a != min_distance_line.a & first_line.b != min_distance_line.a)
+        if (first_line.a != min_distance_line.a && first_line.b != min_distance_line.a)
             out_first_poly.points.emplace_back(min_distance_line.a);
 
         // New points are appended to the end of second_poly_points.
@@ -461,7 +462,11 @@ Graph build_graph(const EdgeGrid::Grid &grid,
     for (size_t point_idx = 0; point_idx < first_poly.size(); ++point_idx) {
         visitor.pt_current = &start;
         visitor.pt_next    = &graph.first_poly_nodes[point_idx].point.point;
-        grid.visit_cells_intersecting_line(*visitor.pt_current, *visitor.pt_next, visitor);
+        if(*visitor.pt_current != *visitor.pt_next)
+            grid.visit_cells_intersecting_line(*visitor.pt_current, *visitor.pt_next, visitor);
+        else
+            visitor.intersect = false;
+
         // Add to the graph only arcs for a path with doesn't cross any borders.
         if (!visitor.intersect) {
             double distance = (start - graph.first_poly_nodes[point_idx].point.point).cast<double>().norm();
@@ -473,7 +478,11 @@ Graph build_graph(const EdgeGrid::Grid &grid,
     for (size_t point_idx = 0; point_idx < second_poly.size(); ++point_idx) {
         visitor.pt_current = &end;
         visitor.pt_next    = &graph.second_poly_nodes[point_idx].point.point;
-        grid.visit_cells_intersecting_line(*visitor.pt_current, *visitor.pt_next, visitor);
+        if(*visitor.pt_current != *visitor.pt_next)
+            grid.visit_cells_intersecting_line(*visitor.pt_current, *visitor.pt_next, visitor);
+        else
+            visitor.intersect = false;
+
         // Add to the graph only arcs for a path with doesn't cross any borders.
         if (!visitor.intersect) {
             double distance = (end - graph.second_poly_nodes[point_idx].point.point).cast<double>().norm();
@@ -588,75 +597,89 @@ static size_t avoid_perimeters_inner(const AvoidCrossingPerimeters::Boundary &bo
         return poly_line.normalized().dot(intersection_vec.normalized()) >= 0;
     };
 
-    if (intersections.size() >= 2 && intersections.front().border_idx != intersections.back().border_idx) {
-        auto it_first = std::find_if(intersections.begin(), intersections.end(),
-                                     [&boundaries](const Intersection &i) { return boundaries[i.border_idx].is_counter_clockwise(); });
+    auto offset_intersection_point = [&boundaries](const Intersection &intersection) {
+        size_t left_idx  = intersection.line_idx;
+        size_t right_idx = intersection.line_idx + 1 == boundaries[intersection.border_idx].points.size() ? 0 : intersection.line_idx + 1;
+        // Offset of the polygon's point using get_middle_point_offset is used to simplify the calculation of intersection between the
+        // boundary and the travel. The appended point is translated in the direction of inward normal. This translation ensures that the
+        // appended point will be inside the polygon and not on the polygon border.
+        return get_middle_point_offset(boundaries[intersection.border_idx], left_idx, right_idx, intersection.point, coord_t(SCALED_EPSILON));
+    };
 
-        auto it_last = std::find_if(intersections.rbegin(), intersections.rend(),
-                                    [&boundaries](const Intersection &i) { return boundaries[i.border_idx].is_counter_clockwise(); });
+    for (auto it_first = intersections.begin(); it_first != intersections.end(); ++it_first) {
+        assert(!result.empty());
+        // The entry point to the boundary polygon if it_first and it_second have some border_idx. Otherwise, it is just a starting point for the travel between two different boundaries.
+        const Intersection &intersection_first = *it_first;
+        // Skip the it_first from the search for the farthest exit point from the boundary polygon
+        auto it_last_item = std::make_reverse_iterator(it_first) - 1;
+        // Search for the farthest intersection different from it_first but with the same border_idx
+        auto it_second_r  = std::find_if(intersections.rbegin(), it_last_item, [&intersection_first](const Intersection &intersection) {
+            return intersection_first.border_idx == intersection.border_idx;
+        });
 
-        if (it_first != intersections.end() && it_last != intersections.rend() && it_first->border_idx != it_last->border_idx) {
-            auto [first_poly, second_poly] = add_nearest_points_between_polygons(add_nearest_points(boundaries[it_first->border_idx], start),
-                                                                                 add_nearest_points(boundaries[it_last->border_idx], end));
+        // Append the first intersection into the path
+        Point first_intersection_point = offset_intersection_point(intersection_first);
+        // Check if the same point wasn't added in the previous iteration.
+        if (result.back().point == first_intersection_point)
+            result.push_back({first_intersection_point, int(intersection_first.border_idx)});
+
+        auto it_next = (it_first + 1);
+        if (it_second_r != it_last_item && crossing_boundary_from_inside(start, intersection_first)) {
+            // Transform reverse iterator to forward
+            auto it_second = it_second_r.base() - 1;
+            // The exit point from the boundary polygon
+            const Intersection &intersection_second = *it_second;
+            // Check if intersection line also exit the boundary polygon
+            Direction           shortest_direction  = get_shortest_direction(boundary, intersection_first, intersection_second,
+                                                                             boundary.boundaries_params[intersection_first.border_idx].back());
+            // Append the path around the border into the path
+            if (shortest_direction == Direction::Forward)
+                for (int line_idx = int(intersection_first.line_idx); line_idx != int(intersection_second.line_idx);
+                    line_idx      = line_idx + 1 < int(boundaries[intersection_first.border_idx].size()) ? line_idx + 1 : 0)
+                    result.push_back({get_polygon_vertex_offset(boundaries[intersection_first.border_idx],
+                                                                (line_idx + 1 == int(boundaries[intersection_first.border_idx].points.size())) ? 0 : (line_idx + 1), coord_t(SCALED_EPSILON)), int(intersection_first.border_idx)});
+            else
+                for (int line_idx = int(intersection_first.line_idx); line_idx != int(intersection_second.line_idx);
+                    line_idx      = line_idx - 1 >= 0 ? line_idx - 1 : int(boundaries[intersection_first.border_idx].size()) - 1)
+                    result.push_back({get_polygon_vertex_offset(boundaries[intersection_second.border_idx], line_idx + 0, coord_t(SCALED_EPSILON)), int(intersection_first.border_idx)});
+
+            // Append the farthest intersection into the path
+            result.push_back({offset_intersection_point(intersection_second), int(intersection_second.border_idx)});
+            // Skip intersections in between
+            it_first = (it_second - 1);
+        } else if (it_next != intersections.end() && it_first->border_idx != it_next->border_idx) {
+            it_second_r = std::find_if(intersections.rbegin(), it_last_item,
+                                       [&it_next](const Intersection &intersection) { return it_next->border_idx == intersection.border_idx; });
+            assert(it_second_r != it_last_item);
+            // Transform reverse iterator to forward
+            auto it_second = it_second_r.base() - 1;
+            // The ending point for the travel between two different boundaries.
+            const Intersection &intersection_second       = *it_second;
+            Point               second_intersection_point = offset_intersection_point(intersection_second);
+
+            // If it_first points to the first intersection, then use as the beginning of the travel point in the variable start
+            if (&(*it_first) == &intersections.front())
+                first_intersection_point = start;
+            // If it_second points to the last intersection, then use as the ending of the travel point in the variable end.
+            if (&(*it_second) == &intersections.back())
+                second_intersection_point = end;
+
+            auto [first_poly, second_poly] = add_nearest_points_between_polygons(add_nearest_points(boundaries[it_first->border_idx], first_intersection_point),
+                                                                     add_nearest_points(boundaries[it_second->border_idx], second_intersection_point));
             // We what to minimize the distance between borders higher value of cost_between_borders tries to ensure this.
-            Graph graph = build_graph(edge_grid, first_poly, it_first->border_idx, second_poly, it_last->border_idx, start, end, 1., 1., 5.);
+            Graph graph = build_graph(edge_grid, first_poly, it_first->border_idx, second_poly, it_second->border_idx, first_intersection_point,
+                                      second_intersection_point, 1., 1., 8.);
             // Searching for the shortest path is called the only case there is a path in the graph from start to end of the travel.
             if (graph.is_valid) {
-                std::vector<TravelPoint> points_final_path = find_shortest_path(graph);
-                assert(points_final_path.size() > 2);
-                result.insert(result.end(), points_final_path.begin() + 1, points_final_path.end() - 1);
+                std::vector<TravelPoint> shortest_travel = find_shortest_path(graph);
+                assert(shortest_travel.size() > 2);
+                result.insert(result.end(), shortest_travel.begin() + 1, shortest_travel.end() - 1);
+                // Append the farthest intersection into the path
+                result.push_back({second_intersection_point, int(intersection_second.border_idx)});
+                it_first = it_second - 1;
             }
         }
     }
-
-    if (result.size() == 1)
-        for (auto it_first = intersections.begin(); it_first != intersections.end(); ++it_first) {
-            // The entry point to the boundary polygon
-            const Intersection &intersection_first = *it_first;
-            if(!crossing_boundary_from_inside(start, intersection_first) && !external)
-                continue;
-            // Skip the it_first from the search for the farthest exit point from the boundary polygon
-            auto it_last_item = std::make_reverse_iterator(it_first) - 1;
-            // Search for the farthest intersection different from it_first but with the same border_idx
-            auto it_second_r  = std::find_if(intersections.rbegin(), it_last_item, [&intersection_first](const Intersection &intersection) {
-                return intersection_first.border_idx == intersection.border_idx;
-            });
-
-            // Append the first intersection into the path
-            size_t left_idx  = intersection_first.line_idx;
-            size_t right_idx = intersection_first.line_idx + 1 == boundaries[intersection_first.border_idx].points.size() ? 0 : intersection_first.line_idx + 1;
-            // Offset of the polygon's point using get_middle_point_offset is used to simplify the calculation of intersection between the
-            // boundary and the travel. The appended point is translated in the direction of inward normal. This translation ensures that the
-            // appended point will be inside the polygon and not on the polygon border.
-            result.push_back({get_middle_point_offset(boundaries[intersection_first.border_idx], left_idx, right_idx, intersection_first.point, coord_t(SCALED_EPSILON)), int(intersection_first.border_idx)});
-
-            // Check if intersection line also exit the boundary polygon
-            if (it_second_r != it_last_item) {
-                // Transform reverse iterator to forward
-                auto it_second = it_second_r.base() - 1;
-                // The exit point from the boundary polygon
-                const Intersection &intersection_second = *it_second;
-                Direction           shortest_direction  = get_shortest_direction(boundary, intersection_first, intersection_second,
-                                                                                 boundary.boundaries_params[intersection_first.border_idx].back());
-                // Append the path around the border into the path
-                if (shortest_direction == Direction::Forward)
-                    for (int line_idx = int(intersection_first.line_idx); line_idx != int(intersection_second.line_idx);
-                        line_idx      = line_idx + 1 < int(boundaries[intersection_first.border_idx].size()) ? line_idx + 1 : 0)
-                        result.push_back({get_polygon_vertex_offset(boundaries[intersection_first.border_idx],
-                                                                    (line_idx + 1 == int(boundaries[intersection_first.border_idx].points.size())) ? 0 : (line_idx + 1), coord_t(SCALED_EPSILON)), int(intersection_first.border_idx)});
-                else
-                    for (int line_idx = int(intersection_first.line_idx); line_idx != int(intersection_second.line_idx);
-                        line_idx      = line_idx - 1 >= 0 ? line_idx - 1 : int(boundaries[intersection_first.border_idx].size()) - 1)
-                        result.push_back({get_polygon_vertex_offset(boundaries[intersection_second.border_idx], line_idx + 0, coord_t(SCALED_EPSILON)), int(intersection_first.border_idx)});
-
-                // Append the farthest intersection into the path
-                left_idx  = intersection_second.line_idx;
-                right_idx = (intersection_second.line_idx >= (boundaries[intersection_second.border_idx].points.size() - 1)) ? 0 : (intersection_second.line_idx + 1);
-                result.push_back({get_middle_point_offset(boundaries[intersection_second.border_idx], left_idx, right_idx, intersection_second.point, coord_t(SCALED_EPSILON)), int(intersection_second.border_idx)});
-                // Skip intersections in between
-                it_first = it_second;
-            }
-        }
 
     result.push_back({end, -1});
 
