@@ -16,7 +16,6 @@ add_subdirectory(Shiny)
 add_subdirectory(semver)
 add_subdirectory(libigl)
 
-
 # Adding libnest2d project for bin packing...
 add_subdirectory(libnest2d)
 
@@ -164,7 +163,7 @@ if (WIN32)
     target_compile_definitions(PrusaSlicer_app_gui PRIVATE -DSLIC3R_WRAPPER_NOCONSOLE)
     add_dependencies(PrusaSlicer_app_gui PrusaSlicer)
     set_target_properties(PrusaSlicer_app_gui PROPERTIES OUTPUT_NAME "prusa-slicer")
-    target_link_libraries(PrusaSlicer_app_gui PUBLIC boost_headeronly)
+    target_link_libraries(PrusaSlicer_app_gui PRIVATE boost_headeronly)
 
     add_executable(PrusaSlicer_app_console PrusaSlicer_app_msvc.cpp ${CMAKE_CURRENT_BINARY_DIR}/PrusaSlicer.rc)
     # Generate debug symbols even in release mode.
@@ -174,8 +173,8 @@ if (WIN32)
     target_compile_definitions(PrusaSlicer_app_console PRIVATE -DSLIC3R_WRAPPER_CONSOLE)
     add_dependencies(PrusaSlicer_app_console PrusaSlicer)
     set_target_properties(PrusaSlicer_app_console PROPERTIES OUTPUT_NAME "prusa-slicer-console")
-    target_link_libraries(PrusaSlicer_app_console PUBLIC boost_headeronly)
-    
+    target_link_libraries(PrusaSlicer_app_console PRIVATE boost_headeronly)
+
     add_executable(PrusaSlicer_app_gcodeviewer WIN32 PrusaSlicer_app_msvc.cpp ${CMAKE_CURRENT_BINARY_DIR}/PrusaSlicer-gcodeviewer.rc)
     # Generate debug symbols even in release mode.
     if (MSVC)
@@ -184,8 +183,7 @@ if (WIN32)
     target_compile_definitions(PrusaSlicer_app_gcodeviewer PRIVATE -DSLIC3R_WRAPPER_NOCONSOLE -DSLIC3R_WRAPPER_GCODEVIEWER)
     add_dependencies(PrusaSlicer_app_gcodeviewer PrusaSlicer)
     set_target_properties(PrusaSlicer_app_gcodeviewer PROPERTIES OUTPUT_NAME "prusa-gcodeviewer")
-    target_link_libraries(PrusaSlicer_app_gcodeviewer PUBLIC boost_headeronly )
-
+    target_link_libraries(PrusaSlicer_app_gcodeviewer PRIVATE boost_headeronly )
 endif ()
 
 # Link the resources dir to where Slic3r GUI expects it
