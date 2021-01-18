@@ -16,7 +16,7 @@
 #include <wx/fontutil.h>
 
 #include "libslic3r/Config.hpp"
-
+#include "libslic3r/DetoursFunctions.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -67,7 +67,7 @@ wxDEFINE_EVENT(EVT_DPI_CHANGED_SLICER, DpiChangedEvent);
 
 #ifdef _WIN32
 template<class F> typename F::FN winapi_get_function(const wchar_t *dll, const char *fn_name) {
-    static HINSTANCE dll_handle = LoadLibraryExW(dll, nullptr, 0);
+    static HINSTANCE dll_handle = TrueLoadLibraryExW(dll, nullptr, 0);
 
     if (dll_handle == nullptr) { return nullptr; }
     return (typename F::FN)GetProcAddress(dll_handle, fn_name);

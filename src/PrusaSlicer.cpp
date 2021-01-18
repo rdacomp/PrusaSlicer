@@ -48,6 +48,7 @@
 #include "libslic3r/Format/SL1.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Thread.hpp"
+#include "libslic3r/DetoursFunctions.hpp"
 
 #include "PrusaSlicer.hpp"
 
@@ -584,6 +585,9 @@ int CLI::run(int argc, char **argv)
 #endif // SLIC3R_GUI
     }
 
+#ifdef  WIN32
+    //FreeLibrary(hinstLib);
+#endif
     return 0;
 }
 
@@ -600,9 +604,18 @@ bool CLI::setup(int argc, char **argv)
         }
     }
 
+<<<<<<< HEAD
     // See Invoking prusa-slicer from $PATH environment variable crashes #5542
     // boost::filesystem::path path_to_binary = boost::filesystem::system_complete(argv[0]);
     boost::filesystem::path path_to_binary = boost::dll::program_location();
+=======
+#ifdef WIN32
+    // Detour win32 LoadLibrary functions to prevent dll injection 
+    detourLoadLibrary();
+#endif
+
+    boost::filesystem::path path_to_binary = boost::filesystem::system_complete(argv[0]);
+>>>>>>> f44350f7e3... Hook LoadLibrary win32 functions to prevent hostile dll injection - WIP - need to fix calls from deps and wxwidgets
 
     // Path from the Slic3r binary to its resources.
 #ifdef __APPLE__

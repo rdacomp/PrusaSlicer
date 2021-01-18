@@ -25,6 +25,8 @@ add_library(libslic3r STATIC
     ClipperUtils.hpp
     Config.cpp
     Config.hpp
+    DetoursFunctions.cpp
+    DetoursFunctions.hpp
     EdgeGrid.cpp
     EdgeGrid.hpp
     ElephantFootCompensation.cpp
