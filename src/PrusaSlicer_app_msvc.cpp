@@ -34,7 +34,10 @@ extern "C"
 
 #include <stdio.h>
 
+#include "detours.h"
+
 #ifdef SLIC3R_GUI
+
 class OpenGLVersionCheck
 {
 public:
@@ -208,7 +211,63 @@ extern "C" {
 }
 
 extern "C" {
+    // Hooking LoadLibrary at very first line to see what libaries are loaded.
+    /*
+    static HMODULE(WINAPI* TrueLoadLibraryA)  (LPCSTR  lpLibFileName) = LoadLibraryA;
+    static HMODULE(WINAPI* TrueLoadLibraryW)  (LPCWSTR lpLibFileName) = LoadLibraryW;
+    static HMODULE(WINAPI* TrueLoadLibraryExA)(LPCSTR  lpLibFileName, HANDLE hFile, DWORD dwFlags) = LoadLibraryExA;
+    static HMODULE(WINAPI* TrueLoadLibraryExW)(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) = LoadLibraryExW;
 
+    HMODULE WINAPI FakeLoadLibraryA(LPCSTR  lpLibFileName)
+    {
+        std::printf("LoadLibraryA: %s\n", lpLibFileName);
+        return TrueLoadLibraryA(lpLibFileName);
+        //return NULL;
+    }
+    HMODULE WINAPI FakeLoadLibraryW(LPCWSTR lpLibFileName)
+    {
+        std::wprintf(L"LoadLibraryW: %s\n", lpLibFileName);
+        return TrueLoadLibraryW(lpLibFileName);
+        //return NULL;
+    }
+    HMODULE WINAPI FakeLoadLibraryExA(LPCSTR  lpLibFileName, HANDLE hFile, DWORD dwFlags)
+    {
+        std::printf("LoadLibraryExA: %s\n", lpLibFileName);
+        return TrueLoadLibraryExA(lpLibFileName, hFile, dwFlags);
+        //return NULL;
+    }
+    HMODULE WINAPI FakeLoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags)
+    {
+        std::wprintf(L"LoadLibraryExW: %s\n", lpLibFileName);
+        return TrueLoadLibraryExW(lpLibFileName, hFile, dwFlags);
+        //return NULL;
+    }
+    bool detourLL()
+    {
+        DetourRestoreAfterWith();
+
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourAttach(&(PVOID&)TrueLoadLibraryA, FakeLoadLibraryA);
+        DetourTransactionCommit();
+
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourAttach(&(PVOID&)TrueLoadLibraryW, FakeLoadLibraryW);
+        DetourTransactionCommit();
+
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourAttach(&(PVOID&)TrueLoadLibraryExA, FakeLoadLibraryExA);
+        DetourTransactionCommit();
+
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourAttach(&(PVOID&)TrueLoadLibraryExW, FakeLoadLibraryExW);
+        DetourTransactionCommit();
+        return true;
+    }
+    */
 #ifdef SLIC3R_WRAPPER_NOCONSOLE
 int APIENTRY wWinMain(HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, PWSTR /* lpCmdLine */, int /* nCmdShow */)
 {
@@ -218,6 +277,7 @@ int APIENTRY wWinMain(HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, 
 int wmain(int argc, wchar_t **argv)
 {
 #endif
+    //detourLL();
     std::vector<wchar_t*> argv_extended;
     argv_extended.emplace_back(argv[0]);
 

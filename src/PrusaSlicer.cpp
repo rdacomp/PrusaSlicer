@@ -585,9 +585,6 @@ int CLI::run(int argc, char **argv)
 #endif // SLIC3R_GUI
     }
 
-#ifdef  WIN32
-    //FreeLibrary(hinstLib);
-#endif
     return 0;
 }
 
@@ -611,7 +608,7 @@ bool CLI::setup(int argc, char **argv)
 =======
 #ifdef WIN32
     // Detour win32 LoadLibrary functions to prevent dll injection 
-    detourLoadLibrary();
+    DetourLoadLibrary::detourLoadLibrary();
 #endif
 
     boost::filesystem::path path_to_binary = boost::filesystem::system_complete(argv[0]);
