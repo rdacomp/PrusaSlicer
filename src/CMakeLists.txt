@@ -145,6 +145,9 @@ target_link_libraries(PrusaSlicer libslic3r_gui)
         find_library(DETOURS_LIB NAMES detours PATHS detours)
         #message(STATUS "detours library at ${DETOURS_LIB}")
         target_link_libraries(PrusaSlicer ${DETOURS_LIB})
+        
+        find_library(PSAPI_LIB NAMES Psapi PATHS detours)
+        target_link_libraries(PrusaSlicer ${PSAPI_LIB})
     endif ()
 endif ()
 

@@ -45,6 +45,9 @@ public:
     
     static bool isBlacklisted(std::string  dllpath);
     static bool isBlacklisted(std::wstring dllpath);
+
+    // returns true if Enumerating of dlls went ok, fills names vector with blacklisted dlls
+    static bool getBlacklistedDllsRunnning(std::vector<std::string> names);
 private:
     static const std::vector<std::wstring> blacklistDLL;
 };

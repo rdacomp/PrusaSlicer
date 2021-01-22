@@ -6,6 +6,7 @@
     #define NOMINMAX
     #include <Windows.h>
     #include <wchar.h>
+    #include <psapi.h>
     #ifdef SLIC3R_GUI
     extern "C"
     {
@@ -567,6 +568,7 @@ int CLI::run(int argc, char **argv)
         }
     }
 
+
     if (start_gui) {
 #ifdef SLIC3R_GUI
         Slic3r::GUI::GUI_InitParams params;
@@ -588,6 +590,51 @@ int CLI::run(int argc, char **argv)
     return 0;
 }
 
+
+// To ensure correct resolution of symbols, add Psapi.lib to TARGETLIBS
+// and compile with -DPSAPI_VERSION=1
+int PrintModules(DWORD processID)
+{
+   
+    HMODULE hMods[1024];
+    HANDLE hProcess;
+    DWORD cbNeeded;
+    unsigned int i;
+    std::vector<std::wstring> names;
+    // Print the process identifier.
+    printf("\nProcess ID: %u\n", processID);
+    // Get a handle to the process.
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
+        PROCESS_VM_READ,
+        FALSE, processID);
+    if (NULL == hProcess)
+        return 1;
+    // Get a list of all the modules in this process.
+    if (EnumProcessModulesEx(hProcess, hMods, sizeof(hMods), &cbNeeded, LIST_MODULES_ALL))
+    {
+        for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+        {
+            TCHAR szModName[MAX_PATH];
+            // Get the full path to the module's file.
+            if (GetModuleFileNameEx(hProcess, hMods[i], szModName,
+                sizeof(szModName) / sizeof(TCHAR)))
+            {
+                // Print the module name and handle value.
+                //wprintf(L"\t%s (0x%08X)\n", szModName, hMods[i]);
+                names.emplace_back(boost::filesystem::path(szModName).filename().wstring());
+            }
+        }
+    }
+    std::sort(names.begin(), names.end(), [](const std::wstring &a, const std::wstring& b){ return a < b; });
+    for (const auto& name : names)
+    {
+        wprintf(L"%s\n", name.c_str());
+    }
+    // Release the handle to the process.
+    CloseHandle(hProcess);
+    return 0;
+}
+
 bool CLI::setup(int argc, char **argv)
 {
     {
@@ -603,7 +650,10 @@ bool CLI::setup(int argc, char **argv)
 
 #ifdef WIN32
     // Detour win32 LoadLibrary functions to prevent dll injection 
+    //
     DetourLoadLibrary::detourLoadLibrary();
+    //PrintModules(GetCurrentProcessId());
+    //DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
 #endif
 
     // See Invoking prusa-slicer from $PATH environment variable crashes #5542
@@ -673,6 +723,10 @@ bool CLI::setup(int argc, char **argv)
         boost::nowide::cerr << "error: " << validity << std::endl;
         return false;
     }
+
+#ifdef WIN32
+   // PrintModules(GetCurrentProcessId());
+#endif
 
     return true;
 }

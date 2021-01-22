@@ -69,7 +69,9 @@ enum class NotificationType
 	// Notification, when Color Change G-code is empty and user try to add color change on DoubleSlider.
     EmptyColorChangeCode,
     // Notification that custom supports/seams were deleted after mesh repair.
-    CustomSupportsAndSeamRemovedAfterRepair
+    CustomSupportsAndSeamRemovedAfterRepair,
+	// Tells user that hostile dlls are connected (f.e. Nahimic that crashes slicer on second monitor) 
+	HostileDllConnected
 };
 
 class NotificationManager
