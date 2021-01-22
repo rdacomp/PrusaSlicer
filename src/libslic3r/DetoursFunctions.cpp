@@ -13,7 +13,7 @@ HMODULE(WINAPI* DetourLoadLibrary::TrueLoadLibraryExW)(LPCWSTR lpLibFileName, HA
 */
 
 //only dll name with .dll suffix
-const std::vector<std::wstring> DetourLoadLibrary::blacklistDLL ({ /*L"ASProxy64.dll",*/ L"NahimicOSD.dll" });
+const std::vector<std::wstring> DetourLoadLibrary::blacklistDLL ({/*L"ASProxy64.dll",*/ L"NahimicOSD.dll" });
 
 bool DetourLoadLibrary::detourLoadLibrary()
 {
@@ -60,6 +60,7 @@ bool DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string> name
     // Get a list of all the modules in this process.
     if (EnumProcessModulesEx(hProcess, hMods, sizeof(hMods), &cbNeeded, LIST_MODULES_ALL))
     {
+        printf("Total Dlls: %d\n", cbNeeded / sizeof(HMODULE));
         for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
         {
             TCHAR szModName[MAX_PATH];
@@ -70,21 +71,22 @@ bool DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string> name
                 // Print the module name and handle value.
                 //wprintf(L"\t%s (0x%08X)\n", szModName, hMods[i]);
                 
-                //if(DetourLoadLibrary::isBlacklisted(szModName))
-                    names.emplace_back(/*boost::nowide::narrow(szModName));*/boost::filesystem::path(szModName).filename().string());
+                if(DetourLoadLibrary::isBlacklisted(szModName))
+                    wprintf(L"Contains library: %s\n", szModName);
+                    //names.emplace_back(/*boost::nowide::narrow(szModName));*/boost::filesystem::path(szModName).filename().string());
             }
         }
     }
-    std::sort(names.begin(), names.end(), [](const std::string& a, const std::string& b) { return a < b; });
-    printf("Total Dlls: %d\n", names.size());
-    for (const auto& name : names)
+    //std::sort(names.begin(), names.end(), [](const std::string& a, const std::string& b) { return a < b; });
+    //printf("Total Dlls: %d\n", names.size());
+    /*for (const auto& name : names)
     {
         //printf("%s\n", name.c_str());
         if (DetourLoadLibrary::isBlacklisted(name))
         {
             printf("Contains library: %s\n", name.c_str());
         }
-    }
+    }*/
     // Release the handle to the process.
     CloseHandle(hProcess);
     printf("\n");
