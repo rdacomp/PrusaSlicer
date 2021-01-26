@@ -30,6 +30,16 @@ private:
     void onCloseDialog(wxEvent &);
 };
 
+class LibraryFoundDialog : public wxDialog
+{
+    wxCheckBox* m_remember_choice;
+public:
+    LibraryFoundDialog(wxWindow* parent, const std::vector<std::wstring>& libs);
+    ~LibraryFoundDialog() {}
+
+    bool remember_choice() const { return m_remember_choice->GetValue(); }
+};
+
 } // namespace GUI
 } // namespace Slic3r
 

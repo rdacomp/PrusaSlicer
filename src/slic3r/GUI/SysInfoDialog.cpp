@@ -14,6 +14,7 @@
 #include "GUI_App.hpp"
 #include "MainFrame.hpp"
 #include "wxExtensions.hpp"
+#include "../libslic3r/LibraryCheck.hpp"
 
 #ifdef _WIN32
 	// The standard Windows includes.
@@ -149,7 +150,8 @@ SysInfoDialog::SysInfoDialog()
             "</font>"
             "</body>"
             "</html>", bgr_clr_str, text_clr_str, text_clr_str,
-            get_mem_info(true) + "<br>" + wxGetApp().get_gl_info(true, true) + "<br>Eigen vectorization supported: " + Eigen::SimdInstructionSetsInUse());
+            get_mem_info(true) + "<br>" + wxGetApp().get_gl_info(true, true) + "<br>Eigen vectorization supported: " + Eigen::SimdInstructionSetsInUse()
+            + "<br><br><b>Blacklisted loaded libraries:</b><br>" + LibraryCheck::get_instance().get_blacklisted_string().c_str());
         m_opengl_info_html->SetPage(text);
         main_sizer->Add(m_opengl_info_html, 1, wxEXPAND | wxBOTTOM, 15);
     }
@@ -210,6 +212,41 @@ void SysInfoDialog::onCopyToClipboard(wxEvent &)
 void SysInfoDialog::onCloseDialog(wxEvent &)
 {
     this->EndModal(wxID_CLOSE);
+}
+
+LibraryFoundDialog::LibraryFoundDialog(wxWindow* parent, const std::vector<std::wstring>& libs)
+    : wxDialog(parent, wxID_ANY, "Incopatible library found", wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxICON_INFORMATION)
+{
+    this->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    this->SetEscapeId(wxID_CLOSE);
+
+    wxBoxSizer* topSizer = new wxBoxSizer(wxVERTICAL);
+
+    m_remember_choice = new wxCheckBox(this, wxID_ANY, _L("Don't show again"));
+    m_remember_choice->SetValue(false);
+
+    // Add dialog's buttons
+    wxStdDialogButtonSizer* btns = this->CreateStdDialogButtonSizer(wxOK);
+    wxButton* btnYES = static_cast<wxButton*>(this->FindWindowById(wxID_OK, this));
+    //wxButton* btnNO = static_cast<wxButton*>(this->FindWindowById(wxID_NO, this));
+    btnYES->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { this->EndModal(wxID_OK); });
+    //btnNO->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { this->EndModal(wxID_NO); });
+
+    std::wstring text = L"These libraries has been detected inside of the PrusaSlicer process.\n"
+        L"We suggest stopping or uninstalling these services if you experience crashes while using PrusaSlicer.\n\n";
+    for (const auto& lib : libs)
+    {
+        text += lib;
+        text += L"\n";
+    }
+    topSizer->Add(new wxStaticText(this, wxID_ANY, text), 0, wxEXPAND | wxALL, 10);
+    topSizer->Add(m_remember_choice, 0, wxEXPAND | wxALL, 10);
+    topSizer->Add(btns, 0, wxEXPAND | wxALL, 10);
+
+    this->SetSizer(topSizer);
+    topSizer->SetSizeHints(this);
+
+    this->CenterOnScreen();
 }
 
 } // namespace GUI

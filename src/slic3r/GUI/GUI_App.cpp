@@ -41,7 +41,7 @@
 #include "libslic3r/Model.hpp"
 #include "libslic3r/I18N.hpp"
 #include "libslic3r/PresetBundle.hpp"
-#include "libslic3r/DetoursFunctions.hpp"
+#include "libslic3r/LibraryCheck.hpp"
 
 #include "GUI.hpp"
 #include "GUI_Utils.hpp"
@@ -777,9 +777,15 @@ bool GUI_App::on_init_inner()
 //     Slic3r::debugf "wxWidgets version %s, Wx version %s\n", wxVERSION_STRING, wxVERSION;
 
 
-    // DK: HERE 1
-    printf("control point 1\n");
-    DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
+    // Notify user if blacklisted library is already loaded (Nahimic)
+    /*
+    std::vector<std::wstring> bl;
+    if (LibraryCheck::get_instance().perform_check()) {
+        LibraryCheck::get_instance().get_blacklisted(bl);
+        auto dialog = LibraryFoundDialog(nullptr, bl);
+        dialog.ShowModal();
+        bool rem = dialog.remember_choice();
+    }*/
 
     if (is_editor()) {
         std::string msg = Http::tls_global_init();
@@ -800,8 +806,6 @@ bool GUI_App::on_init_inner()
                 dlg.IsCheckBoxChecked() ? Http::tls_system_cert_store() : "");
         }
     }
-    printf("control point 2\n");
-    DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
 
     app_config->set("version", SLIC3R_VERSION);
     app_config->save();
@@ -821,10 +825,6 @@ bool GUI_App::on_init_inner()
             if (metrics)
                 splashscreen_pos = metrics->get_rect().GetPosition();
         }
-
-        // DK: HERE2
-        printf("control point 3\n");
-        DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
 
         // create splash screen with updated bmp
         scrn = new SplashScreen(bmp.IsOk() ? bmp : create_scaled_bitmap("prusa_slicer_logo", nullptr, 400), 
@@ -880,9 +880,6 @@ bool GUI_App::on_init_inner()
     // If load_language() fails, the application closes.
     load_language(wxString(), true);
 
-    // DK: HERE3
-    printf("control point 4\n");
-    DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
     try {
@@ -904,8 +901,6 @@ bool GUI_App::on_init_inner()
     // application frame
     if (scrn && is_editor())
         scrn->SetText(_L("Preparing settings tabs") + dots);
-    printf("control point 5\n");
-    DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
 
     mainframe = new MainFrame();
     // hide settings tabs after first Layout
@@ -992,9 +987,6 @@ bool GUI_App::on_init_inner()
 #endif //WIN32
         }
     });
-
-    printf("control point 6\n");
-    DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string>());
 
     m_initialized = true;
     return true;

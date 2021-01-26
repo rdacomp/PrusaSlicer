@@ -1,21 +1,12 @@
 #include "DetoursFunctions.hpp"
-
+#include "LibraryCheck.hpp"
 #include <cstdio>
-#include <boost/nowide/convert.hpp>
-#include <psapi.h>
 
+
+namespace Slic3r {
 #ifdef  WIN32
-/*
-HMODULE(WINAPI* DetourLoadLibrary::TrueLoadLibraryA)(LPCSTR lpLibFileName) = LoadLibraryA;
-HMODULE(WINAPI* DetourLoadLibrary::TrueLoadLibraryW)(LPCWSTR lpLibFileName) = LoadLibraryW;
-HMODULE(WINAPI* DetourLoadLibrary::TrueLoadLibraryExA)(LPCSTR  lpLibFileName, HANDLE hFile, DWORD dwFlags) = LoadLibraryExA;
-HMODULE(WINAPI* DetourLoadLibrary::TrueLoadLibraryExW)(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) = LoadLibraryExW;
-*/
 
-//only dll name with .dll suffix
-const std::vector<std::wstring> DetourLoadLibrary::blacklistDLL ({/*L"ASProxy64.dll",*/ L"NahimicOSD.dll" });
-
-bool DetourLoadLibrary::detourLoadLibrary()
+bool DetourLoadLibrary::detour_load_library()
 {
     DetourRestoreAfterWith();
 
@@ -41,106 +32,34 @@ bool DetourLoadLibrary::detourLoadLibrary()
     return true;
 }
 
-bool DetourLoadLibrary::getBlacklistedDllsRunnning(std::vector<std::string> names)
-{
-    
-    DWORD processID = GetCurrentProcessId();
-    HMODULE hMods[1024];
-    HANDLE hProcess;
-    DWORD cbNeeded;
-    unsigned int i;
-    // Print the process identifier.
-    //printf("\nProcess ID: %u\n", processID);
-    // Get a handle to the process.
-    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
-        PROCESS_VM_READ,
-        FALSE, processID);
-    if (NULL == hProcess)
-        return false;
-    // Get a list of all the modules in this process.
-    if (EnumProcessModulesEx(hProcess, hMods, sizeof(hMods), &cbNeeded, LIST_MODULES_ALL))
-    {
-        printf("Total Dlls: %d\n", cbNeeded / sizeof(HMODULE));
-        for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
-        {
-            TCHAR szModName[MAX_PATH];
-            // Get the full path to the module's file.
-            if (GetModuleFileNameEx(hProcess, hMods[i], szModName,
-                sizeof(szModName) / sizeof(TCHAR)))
-            {
-                // Print the module name and handle value.
-                //wprintf(L"\t%s (0x%08X)\n", szModName, hMods[i]);
-                
-                if(DetourLoadLibrary::isBlacklisted(szModName))
-                    wprintf(L"Contains library: %s\n", szModName);
-                    //names.emplace_back(/*boost::nowide::narrow(szModName));*/boost::filesystem::path(szModName).filename().string());
-            }
-        }
-    }
-    //std::sort(names.begin(), names.end(), [](const std::string& a, const std::string& b) { return a < b; });
-    //printf("Total Dlls: %d\n", names.size());
-    /*for (const auto& name : names)
-    {
-        //printf("%s\n", name.c_str());
-        if (DetourLoadLibrary::isBlacklisted(name))
-        {
-            printf("Contains library: %s\n", name.c_str());
-        }
-    }*/
-    // Release the handle to the process.
-    CloseHandle(hProcess);
-    printf("\n");
-    return true;
-    
-}
-
-//returns
-bool DetourLoadLibrary::isBlacklisted(std::wstring dllpath)
-{
-    std::wstring dllname = boost::filesystem::path(dllpath).filename().wstring();
-    //std::transform(dllname.begin(), dllname.end(), dllname.begin(), std::tolower);
-    if (std::find(DetourLoadLibrary::blacklistDLL.begin(), DetourLoadLibrary::blacklistDLL.end(), dllname) != DetourLoadLibrary::blacklistDLL.end()) {
-        //std::wprintf(L"%s is blacklisted\n", dllname.c_str());
-        return true;
-    }
-    //std::wprintf(L"%s is NOT blacklisted\n", dllname.c_str());
-    return false;
-}
-bool DetourLoadLibrary::isBlacklisted(std::string dllpath)
-{
-    return DetourLoadLibrary::isBlacklisted(boost::nowide::widen(dllpath));
-}
-
 HMODULE WINAPI FakeLoadLibraryA(LPCSTR  lpLibFileName)
 {
     //std::printf("LoadLibraryA: %s\n", lpLibFileName);
-    if (DetourLoadLibrary::isBlacklisted(std::string(lpLibFileName)))
+    if (LibraryCheck::is_blacklisted(std::string(lpLibFileName)))
         return NULL;
     return DetourLoadLibrary::TrueLoadLibraryA(lpLibFileName);
-    //return NULL;
 }
 HMODULE WINAPI FakeLoadLibraryW(LPCWSTR lpLibFileName)
 {
     //std::wprintf(L"LoadLibraryW: %s\n", lpLibFileName);
-    if (DetourLoadLibrary::isBlacklisted(std::wstring(lpLibFileName)))
+    if (LibraryCheck::is_blacklisted(std::wstring(lpLibFileName)))
         return NULL;
     return DetourLoadLibrary::TrueLoadLibraryW(lpLibFileName);
-    //return NULL;
 }
 HMODULE WINAPI FakeLoadLibraryExA(LPCSTR  lpLibFileName, HANDLE hFile, DWORD dwFlags)
 {
     //std::printf("LoadLibraryExA: %s\n", lpLibFileName);
-    if (DetourLoadLibrary::isBlacklisted(std::string(lpLibFileName)))
+    if (LibraryCheck::is_blacklisted(std::string(lpLibFileName)))
         return NULL;
     return DetourLoadLibrary::TrueLoadLibraryExA(lpLibFileName, hFile, dwFlags);
-    //return NULL;
 }
 HMODULE WINAPI FakeLoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags)
 {
     //std::wprintf(L"LoadLibraryExW: %s\n", lpLibFileName);
-    if (DetourLoadLibrary::isBlacklisted(std::wstring(lpLibFileName)))
+    if (LibraryCheck::is_blacklisted(std::wstring(lpLibFileName)))
         return NULL;
     return DetourLoadLibrary::TrueLoadLibraryExW(lpLibFileName, hFile, dwFlags);
-    //return NULL;
 }
 #endif //WIN32
+
+} // namespace Slic3r 
