@@ -1994,7 +1994,7 @@ namespace Slic3r {
             unsigned int first_triangle_id;
             unsigned int last_triangle_id;
 
-            Offsets(unsigned int first_vertex_id)
+            explicit Offsets(unsigned int first_vertex_id)
                 : first_vertex_id(first_vertex_id)
                 , first_triangle_id(-1)
                 , last_triangle_id(-1)
@@ -2192,9 +2192,9 @@ namespace Slic3r {
         std::stringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
         stream << "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n";
-        stream << " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\" />\n";
-        stream << " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\" />\n";
-        stream << " <Default Extension=\"png\" ContentType=\"image/png\" />\n";
+        stream << " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n";
+        stream << " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n";
+        stream << " <Default Extension=\"png\" ContentType=\"image/png\"/>\n";
         stream << "</Types>";
 
         std::string out = stream.str();
@@ -2231,8 +2231,8 @@ namespace Slic3r {
         std::stringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
         stream << "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n";
-        stream << " <Relationship Target=\"/" << MODEL_FILE << "\" Id=\"rel-1\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\" />\n";
-        stream << " <Relationship Target=\"/" << THUMBNAIL_FILE << "\" Id=\"rel-2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail\" />\n";
+        stream << " <Relationship Target=\"/" << MODEL_FILE << "\" Id=\"rel-1\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n";
+        stream << " <Relationship Target=\"/" << THUMBNAIL_FILE << "\" Id=\"rel-2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail\"/>\n";
         stream << "</Relationships>";
 
         std::string out = stream.str();
@@ -2985,13 +2985,11 @@ namespace Slic3r {
 
                             // stores volume's local matrix
                             stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << VOLUME_TYPE << "\" " << KEY_ATTR << "=\"" << MATRIX_KEY << "\" " << VALUE_ATTR << "=\"";
-                            Transform3d matrix = volume->get_matrix() * volume->source.transform.get_matrix();
-                            for (int r = 0; r < 4; ++r)
-                            {
-                                for (int c = 0; c < 4; ++c)
-                                {
+                            const Transform3d matrix = volume->get_matrix() * volume->source.transform.get_matrix();
+                            for (int r = 0; r < 4; ++r) {
+                                for (int c = 0; c < 4; ++c) {
                                     stream << matrix(r, c);
-                                    if ((r != 3) || (c != 3))
+                                    if (r != 3 || c != 3)
                                         stream << " ";
                                 }
                             }
