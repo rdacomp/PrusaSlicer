@@ -113,6 +113,7 @@
 //====================
 #define ENABLE_2_3_1_ALPHA1 1
 
+#define ENABLE_SPLITTED_VERTEX_BUFFER (1 && ENABLE_2_3_1_ALPHA1)
 #define ENABLE_ENHANCED_3MF_EXPORT (1 && ENABLE_2_3_1_ALPHA1)
 
 
