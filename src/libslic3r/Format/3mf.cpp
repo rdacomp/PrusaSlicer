@@ -2006,10 +2006,10 @@ namespace Slic3r {
 
         struct ObjectData
         {
-            ModelObject* object;
+            const ModelObject* object;
             VolumeToOffsetsMap volumes_offsets;
 
-            explicit ObjectData(ModelObject* object)
+            explicit ObjectData(const ModelObject* object)
                 : object(object)
             {
             }
@@ -2029,9 +2029,15 @@ namespace Slic3r {
         bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data);
         bool _add_relationships_file_to_archive(mz_zip_archive& archive);
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
+#if ENABLE_ENHANCED_3MF_EXPORT
+        bool _add_object_to_model_file(FILE* file, unsigned int& object_id, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
+        bool _add_mesh_to_model_file(FILE* file, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
+        bool _add_build_to_model_file(FILE* file, const BuildItemsList& build_items);
+#else
         bool _add_object_to_model_stream(std::stringstream& stream, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
         bool _add_mesh_to_object_stream(std::stringstream& stream, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
         bool _add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items);
+#endif // ENABLE_ENHANCED_3MF_EXPORT
         bool _add_layer_height_profile_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_layer_config_ranges_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_sla_support_points_file_to_archive(mz_zip_archive& archive, Model& model);
@@ -2240,6 +2246,82 @@ namespace Slic3r {
         return true;
     }
 
+#if ENABLE_ENHANCED_3MF_EXPORT
+    bool _3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data)
+    {
+        boost::filesystem::path tmp_path(filename);
+        tmp_path = tmp_path.parent_path();
+        tmp_path /= boost::filesystem::path(MODEL_FILE).filename();
+
+        FILE* file = boost::nowide::fopen(tmp_path.string().c_str(), "w");
+        if (file == nullptr) {
+            add_error("Unable to open temporary model file");
+            return false;
+        }
+
+        std::string out = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        fprintf(file, "%s", out.c_str());
+        fprintf(file, "<%s unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:slic3rpe=\"http://schemas.slic3r.org/3mf/2017/06\">\n", MODEL_TAG);
+        fprintf(file, " <%s name=\"%s\">%d</%s>\n", METADATA_TAG, SLIC3RPE_3MF_VERSION, VERSION_3MF, METADATA_TAG);
+        out = xml_escape(boost::filesystem::path(filename).stem().string());
+        fprintf(file, " <%s name=\"Title\">%s</%s>\n", METADATA_TAG, out.c_str(), METADATA_TAG);
+        fprintf(file, " <%s name=\"Designer\"></%s>\n", METADATA_TAG, METADATA_TAG);
+        fprintf(file, " <%s name=\"Description\">%s</%s>\n", METADATA_TAG, out.c_str(), METADATA_TAG);
+        fprintf(file, " <%s name=\"Copyright\"></%s>\n", METADATA_TAG, METADATA_TAG);
+        fprintf(file, " <%s name=\"LicenseTerms\"></%s>\n", METADATA_TAG, METADATA_TAG);
+        fprintf(file, " <%s name=\"Rating\"></%s>\n", METADATA_TAG, METADATA_TAG);
+        out = Slic3r::Utils::utc_timestamp(Slic3r::Utils::get_current_time_utc());
+        // keep only the date part of the string
+        out = out.substr(0, 10);
+        fprintf(file, " <%s name=\"CreationDate\">%s</%s>\n", METADATA_TAG, out.c_str(), METADATA_TAG);
+        fprintf(file, " <%s name=\"ModificationDate\">%s</%s>\n", METADATA_TAG, out.c_str(), METADATA_TAG);
+        fprintf(file, " <%s name=\"Application\">%s-%s</%s>\n", METADATA_TAG, SLIC3R_APP_KEY, SLIC3R_VERSION, METADATA_TAG);
+        fprintf(file, " <%s>\n", RESOURCES_TAG);
+
+        // Instance transformations, indexed by the 3MF object ID (which is a linear serialization of all instances of all ModelObjects).
+        BuildItemsList build_items;
+
+        // The object_id here is a one based identifier of the first instance of a ModelObject in the 3MF file, where
+        // all the object instances of all ModelObjects are stored and indexed in a 1 based linear fashion.
+        // Therefore the list of object_ids here may not be continuous.
+        unsigned int object_id = 1;
+        for (const ModelObject* obj : model.objects) {
+            if (obj == nullptr)
+                continue;
+
+            // Index of an object in the 3MF file corresponding to the 1st instance of a ModelObject.
+            unsigned int curr_id = object_id;
+            IdToObjectDataMap::iterator object_it = objects_data.insert({ curr_id, ObjectData(obj) }).first;
+            // Store geometry of all ModelVolumes contained in a single ModelObject into a single 3MF indexed triangle set object.
+            // object_it->second.volumes_offsets will contain the offsets of the ModelVolumes in that single indexed triangle set.
+            // object_id will be increased to point to the 1st instance of the next ModelObject.
+            if (!_add_object_to_model_file(file, object_id, *obj, build_items, object_it->second.volumes_offsets)) {
+                add_error("Unable to add object to archive");
+                return false;
+            }
+        }
+
+        fprintf(file, " </%s>\n", RESOURCES_TAG);
+
+        // Store the transformations of all the ModelInstances of all ModelObjects, indexed in a linear fashion.
+        if (!_add_build_to_model_file(file, build_items)) {
+            add_error("Unable to add build to archive");
+            return false;
+        }
+
+        fprintf(file, "</%s>\n", MODEL_TAG);
+        fclose(file);
+
+        if (!mz_zip_writer_add_file(&archive, MODEL_FILE.c_str(), tmp_path.string().c_str(), nullptr, 0, MZ_DEFAULT_COMPRESSION)) {
+            add_error("Unable to add model file to archive");
+            return false;
+        }
+
+        boost::nowide::remove(tmp_path.string().c_str());
+
+        return true;
+    }
+#else
     bool _3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data)
     {
         std::stringstream stream;
@@ -2312,7 +2394,46 @@ namespace Slic3r {
 
         return true;
     }
+#endif // ENABLE_ENHANCED_3MF_EXPORT
 
+#if ENABLE_ENHANCED_3MF_EXPORT
+    bool _3MF_Exporter::_add_object_to_model_file(FILE* file, unsigned int& object_id, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets)
+    {
+        unsigned int id = 0;
+        for (const ModelInstance* instance : object.instances) {
+            assert(instance != nullptr);
+            if (instance == nullptr)
+                continue;
+
+            unsigned int instance_id = object_id + id;
+            fprintf(file, "  <%s id=\"%u\" type=\"model\">\n", OBJECT_TAG, instance_id);
+
+            if (id == 0) {
+                if (!_add_mesh_to_model_file(file, object, volumes_offsets)) {
+                    add_error("Unable to add mesh to archive");
+                    return false;
+                }
+            }
+            else {
+                fprintf(file, "   <%s>\n", COMPONENTS_TAG);
+                fprintf(file, "    <%s objectid=\"%u\"/>\n", COMPONENT_TAG, object_id);
+                fprintf(file, "   </%s>\n", COMPONENTS_TAG);
+            }
+
+            const Transform3d t = instance->get_matrix();
+            // instance_id is just a 1 indexed index in build_items.
+            assert(instance_id == build_items.size() + 1);
+            build_items.emplace_back(instance_id, t, instance->printable);
+
+            fprintf(file, "  </%s>\n", OBJECT_TAG);
+
+            ++id;
+        }
+
+        object_id += id;
+        return true;
+    }
+#else
     bool _3MF_Exporter::_add_object_to_model_stream(std::stringstream& stream, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets)
     {
         unsigned int id = 0;
@@ -2353,7 +2474,96 @@ namespace Slic3r {
         object_id += id;
         return true;
     }
+#endif // ENABLE_ENHANCED_3MF_EXPORT
 
+#if ENABLE_ENHANCED_3MF_EXPORT
+    bool _3MF_Exporter::_add_mesh_to_model_file(FILE* file, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets)
+    {
+        fprintf(file, "   <%s>\n", MESH_TAG);
+        fprintf(file, "    <%s>\n", VERTICES_TAG);
+
+        unsigned int vertices_count = 0;
+        for (const ModelVolume* volume : object.volumes) {
+            if (volume == nullptr)
+                continue;
+
+            if (!volume->mesh().repaired)
+                throw Slic3r::FileIOError("store_3mf() requires repair()");
+            if (!volume->mesh().has_shared_vertices())
+                throw Slic3r::FileIOError("store_3mf() requires shared vertices");
+
+            volumes_offsets.insert({ volume, Offsets(vertices_count) }).first;
+
+            const indexed_triangle_set& its = volume->mesh().its;
+            if (its.vertices.empty()) {
+                add_error("Found invalid mesh");
+                return false;
+            }
+
+            vertices_count += static_cast<unsigned int>(its.vertices.size());
+
+            const Transform3f matrix = volume->get_matrix().cast<float>();
+
+            for (const Vec3f& vertex : its.vertices) {
+                const Vec3f v = matrix * vertex;
+                std::stringstream stream;
+                // https://en.cppreference.com/w/cpp/types/numeric_limits/max_digits10
+                // Conversion of a floating-point value to text and back is exact as long as at least max_digits10 were used (9 for float, 17 for double).
+                // It is guaranteed to produce the same floating-point value, even though the intermediate text representation is not exact.
+                // The default value of std::stream precision is 6 digits only!
+                stream << std::setprecision(std::numeric_limits<float>::max_digits10);
+                stream << "     <" << VERTEX_TAG;
+                stream << " x=\"" << v(0) << "\"";
+                stream << " y=\"" << v(1) << "\"";
+                stream << " z=\"" << v(2) << "\"/>\n";
+                fprintf(file, "%s", stream.str().c_str());
+            }
+        }
+
+        fprintf(file, "    </%s>\n", VERTICES_TAG);
+        fprintf(file, "    <%s>\n", TRIANGLES_TAG);
+
+        unsigned int triangles_count = 0;
+        for (const ModelVolume* volume : object.volumes) {
+            if (volume == nullptr)
+                continue;
+
+            VolumeToOffsetsMap::iterator volume_it = volumes_offsets.find(volume);
+            assert(volume_it != volumes_offsets.end());
+
+            const indexed_triangle_set& its = volume->mesh().its;
+
+            // updates triangle offsets
+            volume_it->second.first_triangle_id = triangles_count;
+            triangles_count += static_cast<unsigned int>(its.indices.size());
+            volume_it->second.last_triangle_id = triangles_count - 1;
+
+            for (int i = 0; i < int(its.indices.size()); ++i) {
+                std::stringstream stream;
+                stream << "     <" << TRIANGLE_TAG;
+                for (int j = 0; j < 3; ++j) {
+                    stream << " v" << j + 1 << "=\"" << its.indices[i][j] + volume_it->second.first_vertex_id << "\"";
+                }
+
+                std::string custom_supports_data_string = volume->supported_facets.get_triangle_as_string(i);
+                if (!custom_supports_data_string.empty())
+                    stream << " " << CUSTOM_SUPPORTS_ATTR << "=\"" << custom_supports_data_string << "\"";
+
+                std::string custom_seam_data_string = volume->seam_facets.get_triangle_as_string(i);
+                if (!custom_seam_data_string.empty())
+                    stream << " " << CUSTOM_SEAM_ATTR << "=\"" << custom_seam_data_string << "\"";
+
+                stream << "/>\n";
+                fprintf(file, "%s", stream.str().c_str());
+            }
+        }
+
+        fprintf(file, "    </%s>\n", TRIANGLES_TAG);
+        fprintf(file, "   </%s>\n", MESH_TAG);
+
+        return true;
+    }
+#else
     bool _3MF_Exporter::_add_mesh_to_object_stream(std::stringstream& stream, ModelObject& object, VolumeToOffsetsMap& volumes_offsets)
     {
         stream << "   <" << MESH_TAG << ">\n";
@@ -2437,7 +2647,42 @@ namespace Slic3r {
 
         return true;
     }
+#endif // ENABLE_ENHANCED_3MF_EXPORT
 
+#if ENABLE_ENHANCED_3MF_EXPORT
+    bool _3MF_Exporter::_add_build_to_model_file(FILE* file, const BuildItemsList& build_items)
+    {
+        if (build_items.size() == 0) {
+            add_error("No build item found");
+            return false;
+        }
+
+        fprintf(file, " <%s>\n", BUILD_TAG);
+
+        for (const BuildItem& item : build_items) {
+            std::stringstream stream;
+            // https://en.cppreference.com/w/cpp/types/numeric_limits/max_digits10
+            // Conversion of a floating-point value to text and back is exact as long as at least max_digits10 were used (9 for float, 17 for double).
+            // It is guaranteed to produce the same floating-point value, even though the intermediate text representation is not exact.
+            // The default value of std::stream precision is 6 digits only!
+            stream << std::setprecision(std::numeric_limits<float>::max_digits10);
+            stream << "  <" << ITEM_TAG << " " << OBJECTID_ATTR << "=\"" << item.id << "\" " << TRANSFORM_ATTR << "=\"";
+            for (unsigned c = 0; c < 4; ++c) {
+                for (unsigned r = 0; r < 3; ++r) {
+                    stream << item.transform(r, c);
+                    if (r != 2 || c != 3)
+                        stream << " ";
+                }
+            }
+            stream << "\" " << PRINTABLE_ATTR << "=\"" << item.printable << "\"/>\n";
+            fprintf(file, "%s", stream.str().c_str());
+        }
+
+        fprintf(file, " </%s>\n", BUILD_TAG);
+
+        return true;
+    }
+#else
     bool _3MF_Exporter::_add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items)
     {
         if (build_items.size() == 0)
@@ -2467,6 +2712,7 @@ namespace Slic3r {
 
         return true;
     }
+#endif // ENABLE_ENHANCED_3MF_EXPORT
 
     bool _3MF_Exporter::_add_layer_height_profile_file_to_archive(mz_zip_archive& archive, Model& model)
     {
