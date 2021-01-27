@@ -210,7 +210,7 @@ private:
 
     void add_support_points(Structure& structure, PointGrid3D &grid3d);
 
-    void project_onto_mesh(std::vector<SupportPoint>& points) const;
+    void project_onto_mesh(std::vector<SupportPoint> &points, const double &allowed_move = std::numeric_limits<float>::epsilon()) const;
 
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
     static void output_expolygons(const ExPolygons& expolys, const std::string &filename);

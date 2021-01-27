@@ -84,35 +84,53 @@ void SupportPointGenerator::execute(const std::vector<ExPolygons> &slices,
                                     const std::vector<float> &     heights)
 {
     process(slices, heights);
-    project_onto_mesh(m_output);
+    
+    // Maximal move of support point to mesh surface,
+    // no more than height of layer
+    assert(heights.size() > 1);
+    double allowed_move = (heights[1] - heights[0]) + std::numeric_limits<float>::epsilon();
+    project_onto_mesh(m_output, allowed_move);
 }
 
-void SupportPointGenerator::project_onto_mesh(std::vector<sla::SupportPoint>& points) const
+void SupportPointGenerator::project_onto_mesh(std::vector<sla::SupportPoint> &points, const double& allowed_move) const
 {
     // The function  makes sure that all the points are really exactly placed on the mesh.
 
     // Use a reasonable granularity to account for the worker thread synchronization cost.
     static constexpr size_t gransize = 64;
 
-    ccr_par::for_each(size_t(0), points.size(), [this, &points](size_t idx)
+    ccr_par::for_each(size_t(0), points.size(), [this, &points, &allowed_move](size_t idx)
     {
         if ((idx % 16) == 0)
             // Don't call the following function too often as it flushes CPU write caches due to synchronization primitves.
             m_throw_on_cancel();
 
         Vec3f& p = points[idx].pos;
+        Vec3d  p_double = p.cast<double>();
+        const Vec3d up_vec(0., 0., 1.);
+        const Vec3d down_vec(0., 0., -1.);
         // Project the point upward and downward and choose the closer intersection with the mesh.
-        sla::IndexedMesh::hit_result hit_up   = m_emesh.query_ray_hit(p.cast<double>(), Vec3d(0., 0., 1.));
-        sla::IndexedMesh::hit_result hit_down = m_emesh.query_ray_hit(p.cast<double>(), Vec3d(0., 0., -1.));
-
+        sla::IndexedMesh::hit_result hit_up = m_emesh.query_ray_hit(p_double, up_vec);
+        sla::IndexedMesh::hit_result hit_down = m_emesh.query_ray_hit(p_double, down_vec);
+        
         bool up   = hit_up.is_hit();
         bool down = hit_down.is_hit();
-
-        if (!up && !down)
+        // no hit means support points lay exactly on triangle surface
+        if (!up && !down) return;
+        
+        sla::IndexedMesh::hit_result& hit = (!down || hit_up.distance() < hit_down.distance()) ? hit_up : hit_down;
+        if (hit.distance() <= allowed_move) {
+            p[2] += static_cast<float>(hit.distance() *
+                                        hit.direction()[2]);
             return;
-
-        sla::IndexedMesh::hit_result& hit = (!down || (hit_up.distance() < hit_down.distance())) ? hit_up : hit_down;
-        p = p + (hit.distance() * hit.direction()).cast<float>();
+        }
+        
+        // big distance means that ray fly over triangle side (space between triangles)
+        int    triangle_index;
+        Vec3d  closest_point;
+        double distance = m_emesh.squared_distance(p_double, triangle_index, closest_point);
+        if (distance <= std::numeric_limits<float>::epsilon()) return; // correct coordinate
+        p = closest_point.cast<float>();
     }, gransize);
 }
 
