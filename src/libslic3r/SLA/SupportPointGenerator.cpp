@@ -142,17 +142,14 @@ static std::vector<SupportPointGenerator::MyLayer> make_layers(
 
         SupportPointGenerator::MyLayer &layer   = layers[layer_id];
         const ExPolygons &              islands = slices[layer_id];
-        // FIXME WTF?
-        const float height = (layer_id > 2 ?
-                                  heights[layer_id - 3] :
-                                  heights[0] - (heights[1] - heights[0]));
         layer.islands.reserve(islands.size());
         for (const ExPolygon &island : islands) {
             float area = float(island.area() * SCALING_FACTOR * SCALING_FACTOR);
             if (area >= pixel_area)
                 // FIXME this is not a correct centroid of a polygon with holes.
                 layer.islands.emplace_back(layer, island, get_extents(island.contour),
-                                           unscaled<float>(island.contour.centroid()), area, height);
+                                           unscaled<float>(island.contour.centroid()),
+                                           area, heights[layer_id]);
         }
     }, 32 /*gransize*/);
 
