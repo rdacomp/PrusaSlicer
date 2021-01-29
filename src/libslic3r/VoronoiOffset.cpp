@@ -24,9 +24,11 @@ namespace detail {
 	{
 		const Vec2d 	d = pt - center;
 #ifndef NDEBUG
+        // Start point should be inside, end point should be outside the circle.
         double          d0 = (pt - center).norm();
         double          d1 = (pt + v - center).norm();
-        assert(r < std::max(d0, d1) + EPSILON);
+        assert(d0 < r + SCALED_EPSILON);
+        assert(d1 > r - SCALED_EPSILON);
 #endif /* NDEBUG */
         const double	a = v.squaredNorm();
 		const double 	b = 2. * d.dot(v);
@@ -1086,7 +1088,8 @@ std::vector<Vec2d> edge_offset_contour_intersections(
                     assert(! edge.is_secondary());
                     const Point &pt0 = contour_point(*cell, line0);
                     const Point &pt1 = contour_point(*cell2, line1);
-                    Vec2d dir(double(pt0.y() - pt1.y()), double(pt1.x() - pt0.x()));
+                    // pt is inside the circle (pt0, offset_distance), (pt + dir) is certainly outside the same circle.
+                    Vec2d dir = Vec2d(double(pt0.y() - pt1.y()), double(pt1.x() - pt0.x())) * (2. * offset_distance);
                     Vec2d pt(v0->x(), v0->y());
                     double t = detail::first_circle_segment_intersection_parameter(Vec2d(pt0.x(), pt0.y()), offset_distance, pt, dir);
                     assert(t > 0.);

@@ -1750,17 +1750,16 @@ TEST_CASE("Voronoi offset with edge collapse", "[VoronoiOffset4]")
   for (const OffsetTest &ot : {
             OffsetTest { scale_(0.2), 2, 2 },
             OffsetTest { scale_(0.4), 2, 2 },
-            OffsetTest { scale_(0.49), 2, 2 },
-            OffsetTest { scale_(0.5), 2, 2 },
+            OffsetTest { scale_(0.49), 2, 3 },
             OffsetTest { scale_(0.51), 2, 2 },
             OffsetTest { scale_(0.56), 2, 2 },
             OffsetTest { scale_(0.6), 2, 2 },
             OffsetTest { scale_(0.7), 2, 2 },
-            OffsetTest { scale_(0.8), 1, 6 },
-            OffsetTest { scale_(0.9), 1, 6 },
-            OffsetTest { scale_(0.99), 1, 6 },
-            OffsetTest { scale_(1.0), 1, 0 },
-            OffsetTest { scale_(1.01), 1, 0 },
+            OffsetTest { scale_(0.8), 2, 2 },
+            OffsetTest { scale_(0.9), 2, 2 },
+            OffsetTest { scale_(0.99), 1, 2 },
+            OffsetTest { scale_(1.0), 1, 2 },
+            OffsetTest { scale_(1.01), 1, 2 },
       }) {
 
       Polygons offsetted_polygons_out = Slic3r::Voronoi::offset(vd, lines, ot.distance, scale_(0.005));
