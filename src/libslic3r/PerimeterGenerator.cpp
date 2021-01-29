@@ -445,7 +445,7 @@ void PerimeterGenerator::process()
         ++ irun;
 #endif
 
-#if 1
+#if 0
         for (ExPolygon &expoly : last) {
             if (! intersecting_edges(to_polygons(expoly)).empty()) {
                 printf("Input contours are self intersecting\n");
