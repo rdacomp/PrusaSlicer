@@ -467,7 +467,7 @@ void PerimeterGenerator::process()
             Lines lines = to_lines(expoly);
             boost::polygon::construct_voronoi(lines.begin(), lines.end(), &vd);
             Voronoi::annotate_inside_outside(vd, lines);
-            std::vector<Vec2d> skeleton_edges = Voronoi::skeleton_edges_rough(vd, lines, M_PI / 12.); // 30 degrees
+            std::vector<Vec2d> skeleton_edges = Voronoi::skeleton_edges_rough(vd, lines, 55. * M_PI / 180.);
             bool has_invalid_cell = std::find_if(vd.cells().begin(), vd.cells().end(), [](auto &cell){ return cell.incident_edge() == nullptr; }) != vd.cells().end();
 #ifdef VORONOI_DEBUG_OUT
             if (has_invalid_cell)
@@ -497,6 +497,28 @@ void PerimeterGenerator::process()
                 ilines.emplace_back(edge(ie.first));
                 ilines.emplace_back(edge(ie.second));
             }
+#if 1
+            if (! has_self_intersections) {
+                for (const auto &edge : vd.edges())
+                    if (&edge < edge.twin() && edge.is_finite()) {
+                        const Vec2d &skeleton_pt      = skeleton_edges[&edge - &vd.edges().front()];
+                        const Vec2d &skeleton_pt2     = skeleton_edges[edge.twin() - &vd.edges().front()];
+                        bool         has_skeleton_pt  = ! std::isnan(skeleton_pt.x());
+                        bool         has_skeleton_pt2 = ! std::isnan(skeleton_pt2.x());
+                        const Vec2d &vertex_pt        = Voronoi::vertex_point(edge.vertex0());
+                        const Vec2d &vertex_pt2       = Voronoi::vertex_point(edge.vertex1());
+                        if (has_skeleton_pt && has_skeleton_pt2) {
+                            // Complete edge is part of the skeleton.
+                            ilines.emplace_back(Line(Point(vertex_pt.x(), vertex_pt.y()), Point(vertex_pt2.x(), vertex_pt2.y())));
+                        } else {
+                            if (has_skeleton_pt)
+                                ilines.emplace_back(Line(Point(vertex_pt2.x(), vertex_pt2.y()), Point(skeleton_pt.x(), skeleton_pt.y())));
+                            if (has_skeleton_pt2)
+                                ilines.emplace_back(Line(Point(vertex_pt.x(), vertex_pt.y()), Point(skeleton_pt2.x(), skeleton_pt2.y())));
+                        }
+                    }
+                }
+#endif
             dump_voronoi_to_svg(debug_out_path(has_self_intersections ? "perimeter-voronoi-bad-%d.svg" : "perimeter-voronoi-ok-%d.svg", irun).c_str(),
                 vd, Points(), lines, offsets, ilines);
 #endif
