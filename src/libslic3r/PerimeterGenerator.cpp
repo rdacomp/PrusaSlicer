@@ -10,7 +10,9 @@
 #include <cassert>
 #include <chrono>
 
- #define VORONOI_DEBUG_OUT
+#ifndef NDEBUG
+#define VORONOI_DEBUG_OUT
+#endif // NDEBUG
 
 #ifdef VORONOI_DEBUG_OUT
 #include <libslic3r/VoronoiVisualUtils.hpp>
