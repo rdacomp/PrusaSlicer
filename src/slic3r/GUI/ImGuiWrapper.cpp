@@ -37,12 +37,31 @@ namespace GUI {
 
 
 static const std::map<const char, std::string> font_icons = {
-    {ImGui::PrintIconMarker     , "cog"        },
-    {ImGui::PrinterIconMarker   , "printer"    },
-    {ImGui::PrinterSlaIconMarker, "sla_printer"},
-    {ImGui::FilamentIconMarker  , "spool"      },
-    {ImGui::MaterialIconMarker  , "resin"      }
+    {ImGui::PrintIconMarker       , "cog"                           },
+    {ImGui::PrinterIconMarker     , "printer"                       },
+    {ImGui::PrinterSlaIconMarker  , "sla_printer"                   },
+    {ImGui::FilamentIconMarker    , "spool"                         },
+    {ImGui::MaterialIconMarker    , "resin"                         },
+    {ImGui::MinimalizeButton      , "notification_minimalize"       },
+    {ImGui::MinimalizeHoverButton , "notification_minimalize_hover" }
 };
+static const std::map<const char, std::string> font_icons_large = {
+    {ImGui::CloseNotifButton       , "notification_close"            },
+    {ImGui::CloseNotifHoverButton  , "notification_close_hover"      },
+    {ImGui::EjectButton            , "notification_eject_sd"         },
+    {ImGui::EjectHoverButton       , "notification_eject_sd_hover"   },
+    {ImGui::WarningMarker          , "notification_warning"          },
+    {ImGui::ErrorMarker            , "notification_error"            }
+};
+
+const ImVec4 ImGuiWrapper::COL_GREY_DARK         = { 0.333f, 0.333f, 0.333f, 1.0f };
+const ImVec4 ImGuiWrapper::COL_GREY_LIGHT        = { 0.4f, 0.4f, 0.4f, 1.0f };
+const ImVec4 ImGuiWrapper::COL_ORANGE_DARK       = { 0.757f, 0.404f, 0.216f, 1.0f };
+const ImVec4 ImGuiWrapper::COL_ORANGE_LIGHT      = { 1.0f, 0.49f, 0.216f, 1.0f };
+const ImVec4 ImGuiWrapper::COL_WINDOW_BACKGROUND = { 0.133f, 0.133f, 0.133f, 0.8f };
+const ImVec4 ImGuiWrapper::COL_BUTTON_BACKGROUND = COL_ORANGE_DARK;
+const ImVec4 ImGuiWrapper::COL_BUTTON_HOVERED    = COL_ORANGE_LIGHT;
+const ImVec4 ImGuiWrapper::COL_BUTTON_ACTIVE     = ImGuiWrapper::COL_BUTTON_HOVERED;
 
 ImGuiWrapper::ImGuiWrapper()
     : m_glyph_ranges(nullptr)
@@ -176,6 +195,9 @@ bool ImGuiWrapper::update_mouse_data(wxMouseEvent& evt)
     io.MouseDown[0] = evt.LeftIsDown();
     io.MouseDown[1] = evt.RightIsDown();
     io.MouseDown[2] = evt.MiddleIsDown();
+    float wheel_delta = static_cast<float>(evt.GetWheelDelta());
+    if (wheel_delta != 0.0f)
+        io.MouseWheel = static_cast<float>(evt.GetWheelRotation()) / wheel_delta;
 
     unsigned buttons = (evt.LeftIsDown() ? 1 : 0) | (evt.RightIsDown() ? 2 : 0) | (evt.MiddleIsDown() ? 4 : 0);
     m_mouse_buttons = buttons;
@@ -262,6 +284,11 @@ void ImGuiWrapper::set_next_window_bg_alpha(float alpha)
     ImGui::SetNextWindowBgAlpha(alpha);
 }
 
+void ImGuiWrapper::set_next_window_size(float x, float y, ImGuiCond cond)
+{
+	ImGui::SetNextWindowSize(ImVec2(x, y), cond);
+}
+
 bool ImGuiWrapper::begin(const std::string &name, int flags)
 {
     return ImGui::Begin(name.c_str(), nullptr, (ImGuiWindowFlags)flags);
@@ -293,10 +320,21 @@ bool ImGuiWrapper::button(const wxString &label)
     return ImGui::Button(label_utf8.c_str());
 }
 
+bool ImGuiWrapper::button(const wxString& label, float width, float height)
+{
+	auto label_utf8 = into_u8(label);
+	return ImGui::Button(label_utf8.c_str(), ImVec2(width, height));
+}
+
 bool ImGuiWrapper::radio_button(const wxString &label, bool active)
 {
     auto label_utf8 = into_u8(label);
     return ImGui::RadioButton(label_utf8.c_str(), active);
+}
+
+bool ImGuiWrapper::image_button()
+{
+	return false;
 }
 
 bool ImGuiWrapper::input_double(const std::string &label, const double &value, const std::string &format)
@@ -337,7 +375,7 @@ bool ImGuiWrapper::checkbox(const wxString &label, bool &value)
 
 void ImGuiWrapper::text(const char *label)
 {
-    ImGui::Text(label, NULL);
+    ImGui::Text("%s", label);
 }
 
 void ImGuiWrapper::text(const std::string &label)
@@ -349,6 +387,22 @@ void ImGuiWrapper::text(const wxString &label)
 {
     auto label_utf8 = into_u8(label);
     this->text(label_utf8.c_str());
+}
+
+void ImGuiWrapper::text_colored(const ImVec4& color, const char* label)
+{
+    ImGui::TextColored(color, "%s", label);
+}
+
+void ImGuiWrapper::text_colored(const ImVec4& color, const std::string& label)
+{
+    this->text_colored(color, label.c_str());
+}
+
+void ImGuiWrapper::text_colored(const ImVec4& color, const wxString& label)
+{
+    auto label_utf8 = into_u8(label);
+    this->text_colored(color, label_utf8.c_str());
 }
 
 bool ImGuiWrapper::slider_float(const char* label, float* v, float v_min, float v_max, const char* format/* = "%.3f"*/, float power/* = 1.0f*/)
@@ -373,10 +427,10 @@ bool ImGuiWrapper::combo(const wxString& label, const std::vector<std::string>& 
     text(label);
     ImGui::SameLine();
 
-    int selection_out = -1;
+    int selection_out = selection;
     bool res = false;
 
-    const char *selection_str = selection < (int)options.size() ? options[selection].c_str() : "";
+    const char *selection_str = selection < int(options.size()) && selection >= 0 ? options[selection].c_str() : "";
     if (ImGui::BeginCombo("", selection_str)) {
         for (int i = 0; i < (int)options.size(); i++) {
             if (ImGui::Selectable(options[i].c_str(), i == selection)) {
@@ -570,7 +624,7 @@ static bool selectable(const char* label, bool selected, ImGuiSelectableFlags fl
     }
 
     // mark a label with a ImGui::ColorMarkerHovered, if item is hovered
-    char* marked_label = new char[255];
+    char* marked_label = new char[512]; //255 symbols is not enough for translated string (e.t. to Russian)
     if (hovered)
         sprintf(marked_label, "%c%s", ImGui::ColorMarkerHovered, label);
     else
@@ -666,7 +720,7 @@ void ImGuiWrapper::search_list(const ImVec2& size_, bool (*items_getter)(int, co
         // The press on Esc key invokes editing of InputText (removes last changes)
         // So we should save previous value...
         std::string str = search_str;
-        ImGui::InputTextEx("", NULL, search_str, 20, search_size, ImGuiInputTextFlags_AutoSelectAll, NULL, NULL);
+        ImGui::InputTextEx("", NULL, search_str, 40, search_size, ImGuiInputTextFlags_AutoSelectAll, NULL, NULL);
         edited = ImGui::IsItemEdited();
         if (edited)
             hovered_id = 0;
@@ -744,11 +798,19 @@ void ImGuiWrapper::search_list(const ImVec2& size_, bool (*items_getter)(int, co
         }
     };
 
+    ImGui::AlignTextToFramePadding();
+
     // add checkboxes for show/hide Categories and Groups
     text(_L("Use for search")+":");
     check_box(_L("Category"),   view_params.category);
     if (is_localized)
         check_box(_L("Search in English"), view_params.english);
+}
+
+void ImGuiWrapper::title(const std::string& str)
+{
+    text(str);
+    ImGui::Separator();
 }
 
 void ImGuiWrapper::disabled_begin(bool disabled)
@@ -869,7 +931,7 @@ void ImGuiWrapper::init_font(bool compress)
     if (font == nullptr) {
         font = io.Fonts->AddFontDefault();
         if (font == nullptr) {
-            throw std::runtime_error("ImGui: Could not load deafult font");
+            throw Slic3r::RuntimeError("ImGui: Could not load deafult font");
         }
     }
 
@@ -890,6 +952,8 @@ void ImGuiWrapper::init_font(bool compress)
     // add rectangles for the icons to the font atlas
     for (auto& icon : font_icons)
         io.Fonts->AddCustomRectFontGlyph(font, icon.first, icon_sz, icon_sz, 3.0 * font_scale + icon_sz);
+    for (auto& icon : font_icons_large)
+        io.Fonts->AddCustomRectFontGlyph(font, icon.first, icon_sz * 2, icon_sz * 2, 3.0 * font_scale + icon_sz * 2);
 
     // Build texture atlas
     unsigned char* pixels;
@@ -899,6 +963,24 @@ void ImGuiWrapper::init_font(bool compress)
     // Fill rectangles from the SVG-icons
     for (auto icon : font_icons) {
         if (const ImFontAtlas::CustomRect* rect = io.Fonts->GetCustomRectByIndex(rect_id)) {
+            assert(rect->Width == icon_sz);
+            assert(rect->Height == icon_sz);
+            std::vector<unsigned char> raw_data = load_svg(icon.second, icon_sz, icon_sz);
+            const ImU32* pIn = (ImU32*)raw_data.data();
+            for (int y = 0; y < icon_sz; y++) {
+                ImU32* pOut = (ImU32*)pixels + (rect->Y + y) * width + (rect->X);
+                for (int x = 0; x < icon_sz; x++)
+                    *pOut++ = *pIn++;
+            }
+        }
+        rect_id++;
+    }
+
+    icon_sz *= 2; // default size of large icon is 32 px
+    for (auto icon : font_icons_large) {
+        if (const ImFontAtlas::CustomRect* rect = io.Fonts->GetCustomRectByIndex(rect_id)) {
+            assert(rect->Width == icon_sz);
+            assert(rect->Height == icon_sz);
             std::vector<unsigned char> raw_data = load_svg(icon.second, icon_sz, icon_sz);
             const ImU32* pIn = (ImU32*)raw_data.data();
             for (int y = 0; y < icon_sz; y++) {
@@ -970,23 +1052,13 @@ void ImGuiWrapper::init_style()
 {
     ImGuiStyle &style = ImGui::GetStyle();
 
-    auto set_color = [&](ImGuiCol_ col, unsigned hex_color) {
-        style.Colors[col] = ImVec4(
-            ((hex_color >> 24) & 0xff) / 255.0f,
-            ((hex_color >> 16) & 0xff) / 255.0f,
-            ((hex_color >> 8) & 0xff) / 255.0f,
-            (hex_color & 0xff) / 255.0f);
+    auto set_color = [&](ImGuiCol_ entity, ImVec4 color) {
+        style.Colors[entity] = color;
     };
-
-    static const unsigned COL_WINDOW_BACKGROND = 0x222222cc;
-    static const unsigned COL_GREY_DARK = 0x555555ff;
-    static const unsigned COL_GREY_LIGHT = 0x666666ff;
-    static const unsigned COL_ORANGE_DARK = 0xc16737ff;
-    static const unsigned COL_ORANGE_LIGHT = 0xff7d38ff;
 
     // Window
     style.WindowRounding = 4.0f;
-    set_color(ImGuiCol_WindowBg, COL_WINDOW_BACKGROND);
+    set_color(ImGuiCol_WindowBg, COL_WINDOW_BACKGROUND);
     set_color(ImGuiCol_TitleBgActive, COL_ORANGE_DARK);
 
     // Generics
@@ -998,9 +1070,9 @@ void ImGuiWrapper::init_style()
     set_color(ImGuiCol_TextSelectedBg, COL_ORANGE_DARK);
 
     // Buttons
-    set_color(ImGuiCol_Button, COL_ORANGE_DARK);
-    set_color(ImGuiCol_ButtonHovered, COL_ORANGE_LIGHT);
-    set_color(ImGuiCol_ButtonActive, COL_ORANGE_LIGHT);
+    set_color(ImGuiCol_Button, COL_BUTTON_BACKGROUND);
+    set_color(ImGuiCol_ButtonHovered, COL_BUTTON_HOVERED);
+    set_color(ImGuiCol_ButtonActive, COL_BUTTON_ACTIVE);
 
     // Checkbox
     set_color(ImGuiCol_CheckMark, COL_ORANGE_LIGHT);
@@ -1016,6 +1088,13 @@ void ImGuiWrapper::init_style()
 
     // Separator
     set_color(ImGuiCol_Separator, COL_ORANGE_LIGHT);
+
+    // Tabs
+    set_color(ImGuiCol_Tab, COL_ORANGE_DARK);
+    set_color(ImGuiCol_TabHovered, COL_ORANGE_LIGHT);
+    set_color(ImGuiCol_TabActive, COL_ORANGE_LIGHT);
+    set_color(ImGuiCol_TabUnfocused, COL_GREY_DARK);
+    set_color(ImGuiCol_TabUnfocusedActive, COL_GREY_LIGHT);
 }
 
 void ImGuiWrapper::render_draw_data(ImDrawData *draw_data)

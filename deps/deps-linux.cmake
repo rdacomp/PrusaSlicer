@@ -3,20 +3,21 @@ set(DEP_CMAKE_OPTS "-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
 
 include("deps-unix-common.cmake")
 
-find_package(PNG QUIET)
-if (NOT PNG_FOUND)
-    message(WARNING "No PNG dev package found in system, building static library. You should install the system package.")
-endif ()
+# Some Linuxes may have very old libpng, so it's best to bundle it instead of relying on the system version.
+# find_package(PNG QUIET)
+# if (NOT PNG_FOUND)
+#     message(WARNING "No PNG dev package found in system, building static library. You should install the system package.")
+# endif ()
 
 #TODO UDEV
 
 ExternalProject_Add(dep_boost
     EXCLUDE_FROM_ALL 1
-    URL "https://dl.bintray.com/boostorg/release/1.70.0/source/boost_1_70_0.tar.gz"
-    URL_HASH SHA256=882b48708d211a5f48e60b0124cf5863c1534cd544ecd0664bb534a4b5d506e9
+    URL "https://dl.bintray.com/boostorg/release/1.75.0/source/boost_1_75_0.tar.gz"
+    URL_HASH SHA256=aeb26f80e80945e82ee93e5939baebdca47b9dee80a07d3144be1e1a6a66dd6a
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND ./bootstrap.sh
-        --with-libraries=system,iostreams,filesystem,thread,log,locale,regex
+        --with-libraries=system,iostreams,filesystem,thread,log,locale,regex,date_time
         "--prefix=${DESTDIR}/usr/local"
     BUILD_COMMAND ./b2
         -j ${NPROC}
@@ -79,7 +80,6 @@ ExternalProject_Add(dep_libcurl
         --disable-smb
         --disable-smtp
         --disable-gopher
-        --disable-crypto-auth
         --without-gssapi
         --without-libpsl
         --without-libidn2

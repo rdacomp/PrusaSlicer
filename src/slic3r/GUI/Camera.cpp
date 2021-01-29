@@ -1,10 +1,11 @@
 #include "libslic3r/libslic3r.h"
+#include "libslic3r/AppConfig.hpp"
 
 #include "Camera.hpp"
 #include "GUI_App.hpp"
-#include "AppConfig.hpp"
 #if ENABLE_CAMERA_STATISTICS
 #include "Mouse3DController.hpp"
+#include "Plater.hpp"
 #endif // ENABLE_CAMERA_STATISTICS
 
 #include <GL/glew.h>
@@ -31,15 +32,6 @@ double Camera::MaxFovDeg = 60.0;
 
 Camera::Camera()
     : requires_zoom_to_bed(false)
-    , m_type(Perspective)
-    , m_target(Vec3d::Zero())
-    , m_zenit(45.0f)
-    , m_zoom(1.0)
-    , m_distance(DefaultDistance)
-    , m_gui_scale(1.0)
-    , m_view_matrix(Transform3d::Identity())
-    , m_view_rotation(1., 0., 0., 0.)
-    , m_projection_matrix(Transform3d::Identity())
 {
     set_default_orientation();
 }
@@ -57,11 +49,12 @@ std::string Camera::get_type_as_string() const
 
 void Camera::set_type(EType type)
 {
-    if (m_type != type)
-    {
+    if (m_type != type) {
         m_type = type;
-        wxGetApp().app_config->set("use_perspective_camera", (m_type == Perspective) ? "1" : "0");
-        wxGetApp().app_config->save();
+        if (m_update_config_on_type_change_enabled) {
+            wxGetApp().app_config->set("use_perspective_camera", (m_type == Perspective) ? "1" : "0");
+            wxGetApp().app_config->save();
+        }
     }
 }
 

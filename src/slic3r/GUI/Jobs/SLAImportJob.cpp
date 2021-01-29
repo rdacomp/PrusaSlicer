@@ -1,14 +1,14 @@
 #include "SLAImportJob.hpp"
 
+#include "libslic3r/Format/SL1.hpp"
+
 #include "slic3r/GUI/GUI.hpp"
 #include "slic3r/GUI/GUI_App.hpp"
-#include "slic3r/GUI/AppConfig.hpp"
 #include "slic3r/GUI/Plater.hpp"
-#include "slic3r/GUI/PresetBundle.hpp"
 #include "slic3r/GUI/GUI_ObjectList.hpp"
-#include "slic3r/Utils/SLAImport.hpp"
 
 #include "libslic3r/Model.hpp"
+#include "libslic3r/PresetBundle.hpp"
 
 #include <wx/dialog.h>
 #include <wx/stattext.h>
@@ -36,7 +36,7 @@ public:
                                             "SL1 archive files (*.sl1, *.zip)|*.sl1;*.SL1;*.zip;*.ZIP",
                                             wxDefaultPosition, wxDefaultSize, wxFLP_DEFAULT_STYLE | wxFD_OPEN | wxFD_FILE_MUST_EXIST);
         
-        szfilepck->Add(new wxStaticText(this, wxID_ANY, _(L("Import file: "))), 0, wxALIGN_CENTER);
+        szfilepck->Add(new wxStaticText(this, wxID_ANY, _L("Import file") + ": "), 0, wxALIGN_CENTER);
         szfilepck->Add(m_filepicker, 1);
         szvert->Add(szfilepck, 0, wxALL | wxEXPAND, 5);
         
@@ -53,7 +53,7 @@ public:
             inp_choices.size(), inp_choices.data(), wxCB_READONLY | wxCB_DROPDOWN);
         
         szchoices->Add(m_import_dropdown);
-        szchoices->Add(new wxStaticText(this, wxID_ANY, _(L("Quality: "))), 0, wxALIGN_CENTER | wxALL, 5);
+        szchoices->Add(new wxStaticText(this, wxID_ANY, _L("Quality") + ": "), 0, wxALIGN_CENTER | wxALL, 5);
         
         static const std::vector<wxString> qual_choices = {
             _(L("Accurate")),
@@ -124,7 +124,7 @@ public:
 };
 
 SLAImportJob::SLAImportJob(std::shared_ptr<ProgressIndicator> pri, Plater *plater)
-    : Job{std::move(pri)}, p{std::make_unique<priv>(plater)}
+    : PlaterJob{std::move(pri), plater}, p{std::make_unique<priv>(plater)}
 {}
 
 SLAImportJob::~SLAImportJob() = default;
@@ -219,8 +219,10 @@ void SLAImportJob::finalize()
         wxGetApp().load_current_presets();
     }
     
-    if (!p->mesh.empty())
-        p->plater->sidebar().obj_list()->load_mesh_object(p->mesh, name);
+    if (!p->mesh.empty()) {
+        bool is_centered = false;
+        p->plater->sidebar().obj_list()->load_mesh_object(p->mesh, name, is_centered);
+    }
     
     reset();
 }

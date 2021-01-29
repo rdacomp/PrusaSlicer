@@ -175,7 +175,7 @@ TEST_CASE("Voronoi missing edges - Alessandro gapfill 12707", "[Voronoi]")
 #endif
 
     std::mt19937 gen;
-    std::uniform_int_distribution<size_t> dist(-100, 100);
+    std::uniform_int_distribution<coord_t> dist(-100, 100);
     for (Point &p : poly.points) {
 #if 0
       // Wiggle the points a bit to find out whether this fixes the voronoi diagram for this particular polygon.

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.13)
 project(libslic3r_gui)
 
 include(PrecompiledHeader)
@@ -12,8 +12,6 @@ set(SLIC3R_GUI_SOURCES
     GUI/SysInfoDialog.hpp
     GUI/KBShortcutsDialog.cpp
     GUI/KBShortcutsDialog.hpp
-    GUI/AppConfig.cpp
-    GUI/AppConfig.hpp
     GUI/BackgroundSlicingProcess.cpp
     GUI/BackgroundSlicingProcess.hpp
     GUI/BitmapCache.cpp
@@ -23,6 +21,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/3DScene.cpp
     GUI/3DScene.hpp
     GUI/format.hpp
+    GUI/GLShadersManager.hpp
+    GUI/GLShadersManager.cpp
     GUI/GLShader.cpp
     GUI/GLShader.hpp    
     GUI/GLCanvas3D.hpp
@@ -53,22 +53,28 @@ set(SLIC3R_GUI_SOURCES
     GUI/Gizmos/GLGizmoCut.hpp
     GUI/Gizmos/GLGizmoHollow.cpp
     GUI/Gizmos/GLGizmoHollow.hpp
+    GUI/Gizmos/GLGizmoPainterBase.cpp
+    GUI/Gizmos/GLGizmoPainterBase.hpp
+    GUI/Gizmos/GLGizmoSeam.cpp
+    GUI/Gizmos/GLGizmoSeam.hpp
     GUI/GLSelectionRectangle.cpp
     GUI/GLSelectionRectangle.hpp
+    GUI/GLModel.hpp
+    GUI/GLModel.cpp
     GUI/GLTexture.hpp
     GUI/GLTexture.cpp
     GUI/GLToolbar.hpp
     GUI/GLToolbar.cpp
+    GUI/GCodeViewer.hpp
+    GUI/GCodeViewer.cpp    
     GUI/Preferences.cpp
     GUI/Preferences.hpp
-    GUI/Preset.cpp
-    GUI/Preset.hpp
-    GUI/PresetBundle.cpp
-    GUI/PresetBundle.hpp
     GUI/PresetHints.cpp
     GUI/PresetHints.hpp
     GUI/GUI.cpp
     GUI/GUI.hpp
+    GUI/GUI_Init.cpp
+    GUI/GUI_Init.hpp
     GUI/GUI_Preview.cpp
     GUI/GUI_Preview.hpp
     GUI/GUI_App.cpp
@@ -81,6 +87,12 @@ set(SLIC3R_GUI_SOURCES
     GUI/MainFrame.hpp
     GUI/Plater.cpp
     GUI/Plater.hpp
+    GUI/PresetComboBoxes.hpp
+    GUI/PresetComboBoxes.cpp
+    GUI/SavePresetDialog.hpp
+    GUI/SavePresetDialog.cpp
+    GUI/PhysicalPrinterDialog.hpp
+    GUI/PhysicalPrinterDialog.cpp
     GUI/GUI_ObjectList.cpp
     GUI/GUI_ObjectList.hpp
     GUI/GUI_ObjectManipulation.cpp
@@ -99,6 +111,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/Field.hpp
     GUI/OptionsGroup.cpp
     GUI/OptionsGroup.hpp
+    GUI/OG_CustomCtrl.cpp
+    GUI/OG_CustomCtrl.hpp
     GUI/BedShapeDialog.cpp
     GUI/BedShapeDialog.hpp
     GUI/2DBed.cpp
@@ -144,10 +158,14 @@ set(SLIC3R_GUI_SOURCES
     GUI/PrintHostDialogs.hpp
     GUI/Jobs/Job.hpp
     GUI/Jobs/Job.cpp
+    GUI/Jobs/PlaterJob.hpp
+    GUI/Jobs/PlaterJob.cpp
     GUI/Jobs/ArrangeJob.hpp
     GUI/Jobs/ArrangeJob.cpp
     GUI/Jobs/RotoptimizeJob.hpp
     GUI/Jobs/RotoptimizeJob.cpp
+    GUI/Jobs/FillBedJob.hpp
+    GUI/Jobs/FillBedJob.cpp
     GUI/Jobs/SLAImportJob.hpp
     GUI/Jobs/SLAImportJob.cpp
     GUI/Jobs/ProgressIndicator.hpp
@@ -163,6 +181,12 @@ set(SLIC3R_GUI_SOURCES
     GUI/InstanceCheck.hpp
     GUI/Search.cpp
     GUI/Search.hpp
+    GUI/NotificationManager.cpp
+    GUI/NotificationManager.hpp
+    GUI/UnsavedChangesDialog.cpp
+    GUI/UnsavedChangesDialog.hpp
+    GUI/ExtraRenderers.cpp
+    GUI/ExtraRenderers.hpp
     Utils/Http.cpp
     Utils/Http.hpp
     Utils/FixModelByWin10.cpp
@@ -175,19 +199,21 @@ set(SLIC3R_GUI_SOURCES
     Utils/FlashAir.hpp
     Utils/AstroBox.cpp
     Utils/AstroBox.hpp
+    Utils/Repetier.cpp
+    Utils/Repetier.hpp
     Utils/PrintHost.cpp
     Utils/PrintHost.hpp
     Utils/Bonjour.cpp
     Utils/Bonjour.hpp
     Utils/PresetUpdater.cpp
     Utils/PresetUpdater.hpp
+    Utils/Process.cpp
+    Utils/Process.hpp
+    Utils/Profile.hpp
     Utils/UndoRedo.cpp
     Utils/UndoRedo.hpp
     Utils/HexFile.cpp
     Utils/HexFile.hpp
-    Utils/Thread.hpp
-    Utils/SLAImport.hpp
-    Utils/SLAImport.cpp
 )
 
 if (APPLE)
@@ -230,4 +256,13 @@ endif ()
 
 if (SLIC3R_PCH AND NOT SLIC3R_SYNTAXONLY)
     add_precompiled_header(libslic3r_gui pchheader.hpp FORCEINCLUDE)
+endif ()
+
+# We need to implement some hacks for wxWidgets and touch the underlying GTK
+# layer and sub-libraries. This forces us to use the include locations and
+# link these libraries.
+if (UNIX AND NOT APPLE)
+    find_package(GTK${SLIC3R_GTK} REQUIRED)
+    target_include_directories(libslic3r_gui PRIVATE ${GTK${SLIC3R_GTK}_INCLUDE_DIRS})
+    target_link_libraries(libslic3r_gui ${GTK${SLIC3R_GTK}_LIBRARIES})
 endif ()

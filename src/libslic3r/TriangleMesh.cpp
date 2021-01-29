@@ -1,3 +1,4 @@
+#include "Exception.hpp"
 #include "TriangleMesh.hpp"
 #include "ClipperUtils.hpp"
 #include "Geometry.hpp"
@@ -70,7 +71,7 @@ TriangleMesh::TriangleMesh(const Pointf3s &points, const std::vector<Vec3i> &fac
     stl_get_size(&stl);
 }
 
-TriangleMesh::TriangleMesh(const indexed_triangle_set &M)
+TriangleMesh::TriangleMesh(const indexed_triangle_set &M) : repaired(false)
 {
     stl.stats.type = inmemory;
     
@@ -420,7 +421,7 @@ std::deque<uint32_t> TriangleMesh::find_unvisited_neighbors(std::vector<unsigned
 {
     // Make sure we're not operating on a broken mesh.
     if (!this->repaired)
-        throw std::runtime_error("find_unvisited_neighbors() requires repair()");
+        throw Slic3r::RuntimeError("find_unvisited_neighbors() requires repair()");
 
     // If the visited list is empty, populate it with false for every facet.
     if (facet_visited.empty())
@@ -683,7 +684,7 @@ void TriangleMeshSlicer::init(const TriangleMesh *_mesh, throw_on_cancel_callbac
 {
     mesh = _mesh;
     if (! mesh->has_shared_vertices())
-        throw std::invalid_argument("TriangleMeshSlicer was passed a mesh without shared vertices.");
+        throw Slic3r::InvalidArgument("TriangleMeshSlicer was passed a mesh without shared vertices.");
 
     throw_on_cancel();
     facets_edges.assign(_mesh->stl.stats.number_of_facets * 3, -1);
@@ -774,9 +775,10 @@ void TriangleMeshSlicer::set_up_direction(const Vec3f& up)
     m_use_quaternion = true;
 }
 
-
-
-void TriangleMeshSlicer::slice(const std::vector<float> &z, SlicingMode mode, std::vector<Polygons>* layers, throw_on_cancel_callback_type throw_on_cancel) const
+void TriangleMeshSlicer::slice(
+    const std::vector<float> &z, 
+    SlicingMode mode, size_t alternate_mode_first_n_layers, SlicingMode alternate_mode,
+    std::vector<Polygons>* layers, throw_on_cancel_callback_type throw_on_cancel) const
 {
     BOOST_LOG_TRIVIAL(debug) << "TriangleMeshSlicer::slice";
 
@@ -831,20 +833,21 @@ void TriangleMeshSlicer::slice(const std::vector<float> &z, SlicingMode mode, st
     layers->resize(z.size());
     tbb::parallel_for(
         tbb::blocked_range<size_t>(0, z.size()),
-        [&lines, &layers, mode, throw_on_cancel, this](const tbb::blocked_range<size_t>& range) {
+        [&lines, &layers, mode, alternate_mode_first_n_layers, alternate_mode, throw_on_cancel, this](const tbb::blocked_range<size_t>& range) {
             for (size_t line_idx = range.begin(); line_idx < range.end(); ++ line_idx) {
                 if ((line_idx & 0x0ffff) == 0)
                     throw_on_cancel();
 
-                Polygons &polygons = (*layers)[line_idx];
+                Polygons   &polygons  = (*layers)[line_idx];
                 this->make_loops(lines[line_idx], &polygons);
 
+                auto this_mode = line_idx < alternate_mode_first_n_layers ? alternate_mode : mode;
                 if (! polygons.empty()) {
-                    if (mode == SlicingMode::Positive) {
+                    if (this_mode == SlicingMode::Positive) {
                         // Reorient all loops to be CCW.
                         for (Polygon& p : polygons)
                             p.make_counter_clockwise();
-                    } else if (mode == SlicingMode::PositiveLargestContour) {
+                    } else if (this_mode == SlicingMode::PositiveLargestContour) {
                         // Keep just the largest polygon, make it CCW.
                         double   max_area = 0.;
                         Polygon* max_area_polygon = nullptr;
@@ -940,16 +943,23 @@ void TriangleMeshSlicer::_slice_do(size_t facet_idx, std::vector<IntersectionLin
     }
 }
 
-void TriangleMeshSlicer::slice(const std::vector<float> &z, SlicingMode mode, const float closing_radius, std::vector<ExPolygons>* layers, throw_on_cancel_callback_type throw_on_cancel) const
+void TriangleMeshSlicer::slice(
+    const std::vector<float> &z, SlicingMode mode, size_t alternate_mode_first_n_layers, SlicingMode alternate_mode, const float closing_radius, 
+    std::vector<ExPolygons>* layers, throw_on_cancel_callback_type throw_on_cancel) const
 {
     std::vector<Polygons> layers_p;
-    this->slice(z, (mode == SlicingMode::PositiveLargestContour) ? SlicingMode::Positive : mode, &layers_p, throw_on_cancel);
+    this->slice(z, 
+        (mode == SlicingMode::PositiveLargestContour) ? SlicingMode::Positive : mode, 
+        alternate_mode_first_n_layers,
+        (alternate_mode == SlicingMode::PositiveLargestContour) ? SlicingMode::Positive : alternate_mode,
+        &layers_p, throw_on_cancel);
     
 	BOOST_LOG_TRIVIAL(debug) << "TriangleMeshSlicer::make_expolygons in parallel - start";
 	layers->resize(z.size());
 	tbb::parallel_for(
 		tbb::blocked_range<size_t>(0, z.size()),
-		[&layers_p, mode, closing_radius, layers, throw_on_cancel, this](const tbb::blocked_range<size_t>& range) {
+		[&layers_p, mode, alternate_mode_first_n_layers, alternate_mode, closing_radius, layers, throw_on_cancel, this]
+        (const tbb::blocked_range<size_t>& range) {
     		for (size_t layer_id = range.begin(); layer_id < range.end(); ++ layer_id) {
 #ifdef SLIC3R_TRIANGLEMESH_DEBUG
                 printf("Layer %zu (slice_z = %.2f):\n", layer_id, z[layer_id]);
@@ -957,7 +967,8 @@ void TriangleMeshSlicer::slice(const std::vector<float> &z, SlicingMode mode, co
                 throw_on_cancel();
                 ExPolygons &expolygons = (*layers)[layer_id];
     			this->make_expolygons(layers_p[layer_id], closing_radius, &expolygons);
-    			if (mode == SlicingMode::PositiveLargestContour)
+                const auto this_mode = layer_id < alternate_mode_first_n_layers ? alternate_mode : mode;
+    			if (this_mode == SlicingMode::PositiveLargestContour)
 					keep_largest_contour_only(expolygons);
     		}
     	});

@@ -9,10 +9,10 @@
 #include "wx/dataview.h"
 
 #include "libslic3r/PrintConfig.hpp"
+#include "libslic3r/PresetBundle.hpp"
 #include "GUI_App.hpp"
 #include "Plater.hpp"
 #include "Tab.hpp"
-#include "PresetBundle.hpp"
 
 #define FTS_FUZZY_MATCH_IMPLEMENTATION
 #include "fts_fuzzy_match.h"
@@ -27,12 +27,6 @@ using GUI::from_u8;
 using GUI::into_u8;
 
 namespace Search {
-
-// Does our wxWidgets version support markup?
-// https://github.com/prusa3d/PrusaSlicer/issues/4282#issuecomment-634676371
-#if wxUSE_MARKUP && wxCHECK_VERSION(3, 1, 1)
-    #define SEARCH_SUPPORTS_MARKUP
-#endif
 
 static char marker_by_type(Preset::Type type, PrinterTechnology pt)
 {
@@ -89,7 +83,7 @@ void OptionsSearcher::append_options(DynamicPrintConfig* config, Preset::Type ty
             options.emplace_back(Option{ boost::nowide::widen(opt_key), type,
                                         (label + suffix).ToStdWstring(), (_(label) + suffix_local).ToStdWstring(),
                                         gc.group.ToStdWstring(), _(gc.group).ToStdWstring(),
-                                        gc.category.ToStdWstring(), _(gc.category).ToStdWstring() });
+                                        gc.category.ToStdWstring(), GUI::Tab::translate_category(gc.category, type).ToStdWstring() });
     };
 
     for (std::string opt_key : config->keys())
@@ -100,7 +94,7 @@ void OptionsSearcher::append_options(DynamicPrintConfig* config, Preset::Type ty
 
         int cnt = 0;
 
-        if ( (type == Preset::TYPE_SLA_MATERIAL || type == Preset::TYPE_PRINTER) && opt_key != "bed_shape")
+        if ( (type == Preset::TYPE_SLA_MATERIAL || type == Preset::TYPE_PRINTER) && opt_key != "bed_shape" && opt_key != "thumbnails")
             switch (config->option(opt_key)->type())
             {
             case coInts:	change_opt_key<ConfigOptionInts		>(opt_key, config, cnt);	break;
@@ -123,18 +117,13 @@ void OptionsSearcher::append_options(DynamicPrintConfig* config, Preset::Type ty
     }
 }
 
-// Wrap a string with ColorMarkerStart and ColorMarkerEnd symbols
-static wxString wrap_string(const wxString& str)
-{
-    return wxString::Format("%c%s%c", ImGui::ColorMarkerStart, str, ImGui::ColorMarkerEnd);
-}
-
 // Mark a string using ColorMarkerStart and ColorMarkerEnd symbols
-static std::wstring mark_string(const std::wstring &str, const std::vector<uint16_t> &matches)
+static std::wstring mark_string(const std::wstring &str, const std::vector<uint16_t> &matches, Preset::Type type, PrinterTechnology pt)
 {
 	std::wstring out;
+    out += marker_by_type(type, pt);
 	if (matches.empty())
-		out = str;
+		out += str;
 	else {
 		out.reserve(str.size() * 2);
 		if (matches.front() > 0)
@@ -187,10 +176,11 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
     bool full_list = search.empty();
     std::wstring sep = L" : ";
 
-    auto get_label = [this, &sep](const Option& opt)
+    auto get_label = [this, &sep](const Option& opt, bool marked = true)
     {
         std::wstring out;
-        out += marker_by_type(opt.type, printer_technology);
+        if (marked)
+            out += marker_by_type(opt.type, printer_technology);
     	const std::wstring *prev = nullptr;
     	for (const std::wstring * const s : {
 	        view_params.category 	? &opt.category_local 		: nullptr,
@@ -204,10 +194,11 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
         return out;
     };
 
-    auto get_label_english = [this, &sep](const Option& opt)
+    auto get_label_english = [this, &sep](const Option& opt, bool marked = true)
     {
         std::wstring out;
-        out += marker_by_type(opt.type, printer_technology);
+        if (marked)
+            out += marker_by_type(opt.type, printer_technology);
     	const std::wstring*prev = nullptr;
     	for (const std::wstring * const s : {
 	        view_params.category 	? &opt.category 			: nullptr,
@@ -240,8 +231,8 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
 
         std::wstring wsearch       = boost::nowide::widen(search);
         boost::trim_left(wsearch);
-        std::wstring label         = get_label(opt);
-        std::wstring label_english = get_label_english(opt);
+        std::wstring label         = get_label(opt, false);
+        std::wstring label_english = get_label_english(opt, false);
         int score = std::numeric_limits<int>::min();
         int score2;
         matches.clear();
@@ -258,13 +249,13 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
         	matches = std::move(matches2);
         	score   = score2;
         }
-        if (score > std::numeric_limits<int>::min()) {
-		    label = mark_string(label, matches);            
+        if (score > 90/*std::numeric_limits<int>::min()*/) {
+		    label = mark_string(label, matches, opt.type, printer_technology);
             label += L"  [" + std::to_wstring(score) + L"]";// add score value
 	        std::string label_u8 = into_u8(label);
 	        std::string label_plain = label_u8;
 
-#ifdef SEARCH_SUPPORTS_MARKUP
+#ifdef SUPPORTS_MARKUP
             boost::replace_all(label_plain, std::string(1, char(ImGui::ColorMarkerStart)), "<b>");
             boost::replace_all(label_plain, std::string(1, char(ImGui::ColorMarkerEnd)),   "</b>");
 #else
@@ -327,84 +318,17 @@ const Option& OptionsSearcher::get_option(size_t pos_in_filter) const
     return options[found[pos_in_filter].option_idx];
 }
 
+const Option& OptionsSearcher::get_option(const std::string& opt_key) const
+{
+    auto it = std::lower_bound(options.begin(), options.end(), Option({ boost::nowide::widen(opt_key) }));
+    assert(it != options.end());
+
+    return options[it - options.begin()];
+}
+
 void OptionsSearcher::add_key(const std::string& opt_key, const wxString& group, const wxString& category)
 {
     groups_and_categories[opt_key] = GroupAndCategory{group, category};
-}
-
-
-//------------------------------------------
-//          SearchComboPopup
-//------------------------------------------
-
-
-void SearchComboPopup::Init()
-{
-    this->Bind(wxEVT_MOTION,    &SearchComboPopup::OnMouseMove,     this);
-    this->Bind(wxEVT_LEFT_UP,   &SearchComboPopup::OnMouseClick,    this);
-    this->Bind(wxEVT_KEY_DOWN,  &SearchComboPopup::OnKeyDown,       this);
-}
-
-bool SearchComboPopup::Create(wxWindow* parent)
-{
-    return wxListBox::Create(parent, 1, wxPoint(0, 0), wxDefaultSize);
-}
-
-void SearchComboPopup::SetStringValue(const wxString& s)
-{
-    int n = wxListBox::FindString(s);
-    if (n >= 0 && n < int(wxListBox::GetCount()))
-        wxListBox::Select(n);
-
-    // save a combo control's string
-    m_input_string = s;
-}
-
-void SearchComboPopup::ProcessSelection(int selection) 
-{
-    wxCommandEvent event(wxEVT_LISTBOX, GetId());
-    event.SetInt(selection);
-    event.SetEventObject(this);
-    ProcessEvent(event);
-
-    Dismiss();
-}
-
-void SearchComboPopup::OnMouseMove(wxMouseEvent& event)
-{
-    wxPoint pt = wxGetMousePosition() - this->GetScreenPosition();
-    int selection = this->HitTest(pt);
-    wxListBox::Select(selection);
-}
-
-void SearchComboPopup::OnMouseClick(wxMouseEvent&)
-{
-    int selection = wxListBox::GetSelection();
-    SetSelection(wxNOT_FOUND);
-    ProcessSelection(selection);
-}
-
-void SearchComboPopup::OnKeyDown(wxKeyEvent& event)
-{
-    int key = event.GetKeyCode();
-
-    // change selected item in the list
-    if (key == WXK_UP || key == WXK_DOWN)
-    {
-        int selection = wxListBox::GetSelection();
-
-        if (key == WXK_UP && selection > 0)
-            selection--;
-        if (key == WXK_DOWN && selection < int(wxListBox::GetCount() - 1))
-            selection++;
-
-        wxListBox::Select(selection);
-    }
-    // send wxEVT_LISTBOX event if "Enter" was pushed
-    else if (key == WXK_NUMPAD_ENTER || key == WXK_RETURN)
-        ProcessSelection(wxListBox::GetSelection());
-    else
-        event.Skip(); // !Needed to have EVT_CHAR generated as well
 }
 
 
@@ -428,7 +352,7 @@ SearchDialog::SearchDialog(OptionsSearcher* searcher)
     wxColour bgr_clr = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
     SetBackgroundColour(bgr_clr);
 
-    default_string = _L("Type here to search");
+    default_string = _L("Enter a search term");
     int border = 10;
     int em = em_unit();
 
@@ -442,7 +366,7 @@ SearchDialog::SearchDialog(OptionsSearcher* searcher)
 
     wxDataViewTextRenderer* const markupRenderer = new wxDataViewTextRenderer();
 
-#ifdef SEARCH_SUPPORTS_MARKUP
+#ifdef SUPPORTS_MARKUP
     markupRenderer->EnableMarkup();
 #endif
 
@@ -617,8 +541,9 @@ void SearchDialog::update_list()
     for (const FoundOption& item : filters)
         search_list_model->Prepend(item.label);
 
-    // select first item 
-    search_list->Select(search_list_model->GetItem(0));
+    // select first item, if search_list
+    if (search_list_model->GetCount() > 0)
+        search_list->Select(search_list_model->GetItem(0));
     prevent_list_events = false;
 }
 

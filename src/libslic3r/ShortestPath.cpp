@@ -21,7 +21,7 @@ template<typename EndPointType, typename KDTreeType, typename CouldReverseFunc>
 std::vector<std::pair<size_t, bool>> chain_segments_closest_point(std::vector<EndPointType> &end_points, KDTreeType &kdtree, CouldReverseFunc &could_reverse_func, EndPointType &first_point)
 {
 	assert((end_points.size() & 1) == 0);
-	size_t num_segments = end_points.size() / 2;
+    size_t num_segments = end_points.size() / 2;
 	assert(num_segments >= 2);
 	for (EndPointType &ep : end_points)
 		ep.chain_id = 0;
@@ -1553,9 +1553,7 @@ static inline void reorder_by_two_exchanges_with_segment_flipping(std::vector<Fl
 		size_t crossover1_pos_final = std::numeric_limits<size_t>::max();
 		size_t crossover2_pos_final = std::numeric_limits<size_t>::max();
 		size_t crossover_flip_final = 0;
-		for (const std::pair<double, size_t> &first_crossover_candidate : connection_lengths) {
-			double longest_connection_length = first_crossover_candidate.first;
-			size_t longest_connection_idx    = first_crossover_candidate.second;
+        for (const auto& [longest_connection_length, longest_connection_idx] : connection_lengths) {
 			connection_tried[longest_connection_idx] = true;
 			// Find the second crossover connection with the lowest total chain cost.
 			size_t crossover_pos_min  = std::numeric_limits<size_t>::max();
@@ -1630,12 +1628,9 @@ static inline void reorder_by_three_exchanges_with_segment_flipping(std::vector<
 		size_t crossover2_pos_final = std::numeric_limits<size_t>::max();
 		size_t crossover3_pos_final = std::numeric_limits<size_t>::max();
 		size_t crossover_flip_final = 0;
-		for (const std::pair<double, size_t> &first_crossover_candidate : connection_lengths) {
-			double longest_connection_length = first_crossover_candidate.first;
-			size_t longest_connection_idx    = first_crossover_candidate.second;
-			connection_tried[longest_connection_idx] = true;
+        for (const auto& [longest_connection_length, longest_connection_idx] : connection_lengths) {
+            connection_tried[longest_connection_idx] = true;
 			// Find the second crossover connection with the lowest total chain cost.
-			size_t crossover_pos_min  = std::numeric_limits<size_t>::max();
 			double crossover_cost_min = connections.back().cost;
 			for (size_t j = 1; j < connections.size(); ++ j)
 				if (! connection_tried[j]) {
@@ -1789,12 +1784,9 @@ static inline void reorder_by_three_exchanges_with_segment_flipping2(std::vector
 #else /* NDEBUG */
 		Matrixd segment_end_point_distance_matrix = Matrixd::Constant(4 * 4, 4 * 4, std::numeric_limits<double>::max());
 #endif /* NDEBUG */
-		for (const std::pair<double, size_t> &first_crossover_candidate : connection_lengths) {
-			double longest_connection_length = first_crossover_candidate.first;
-			size_t longest_connection_idx    = first_crossover_candidate.second;
-			connection_tried[longest_connection_idx] = true;
-			// Find the second crossover connection with the lowest total chain cost.
-			size_t crossover_pos_min  = std::numeric_limits<size_t>::max();
+        for (const auto& [longest_connection_length, longest_connection_idx] : connection_lengths) {
+            connection_tried[longest_connection_idx] = true;
+            // Find the second crossover connection with the lowest total chain cost.
 			double crossover_cost_min = connections.back().cost;
 			for (size_t j = 1; j < connections.size(); ++ j)
 				if (! connection_tried[j]) {
@@ -1971,6 +1963,61 @@ std::vector<const PrintInstance*> chain_print_object_instances(const Print &prin
 		out.emplace_back(&print.objects()[inst.first]->instances()[inst.second]);
 	}
 	return out;
+}
+
+Polylines chain_lines(const std::vector<Line> &lines, const double point_distance_epsilon)
+{
+    // Create line end point lookup.
+    struct LineEnd {
+        LineEnd(const Line *line, bool start) : line(line), start(start) {}
+        const Line      *line;
+        // Is it the start or end point?
+        bool             start;
+        const Point&     point() const { return start ? line->a : line->b; }
+        const Point&     other_point() const { return start ? line->b : line->a; }
+        LineEnd          other_end() const { return LineEnd(line, ! start); }
+        bool operator==(const LineEnd &rhs) const { return this->line == rhs.line && this->start == rhs.start; }
+    };
+    struct LineEndAccessor {
+        const Point* operator()(const LineEnd &pt) const { return &pt.point(); }
+    };
+    typedef ClosestPointInRadiusLookup<LineEnd, LineEndAccessor> ClosestPointLookupType;
+    ClosestPointLookupType closest_end_point_lookup(point_distance_epsilon);
+    for (const Line &line : lines) {
+        closest_end_point_lookup.insert(LineEnd(&line, true));
+        closest_end_point_lookup.insert(LineEnd(&line, false));
+    }
+
+    // Chain the lines.
+    std::vector<char> line_consumed(lines.size(), false);
+    static const double point_distance_epsilon2 = point_distance_epsilon * point_distance_epsilon;
+    Polylines out;
+    for (const Line &seed : lines)
+        if (! line_consumed[&seed - lines.data()]) {
+            line_consumed[&seed - lines.data()] = true;
+            closest_end_point_lookup.erase(LineEnd(&seed, false));
+            closest_end_point_lookup.erase(LineEnd(&seed, true));
+            Polyline pl { seed.a, seed.b };
+            for (size_t round = 0; round < 2; ++ round) {
+                for (;;) {
+                    auto [line_end, dist2] = closest_end_point_lookup.find(pl.last_point());
+                    if (line_end == nullptr || dist2 >= point_distance_epsilon2)
+                        // Cannot extent in this direction.
+                        break;
+                    // Average the last point.
+                    pl.points.back() = (0.5 * (pl.points.back().cast<double>() + line_end->point().cast<double>())).cast<coord_t>();
+                    // and extend with the new line segment.
+                    pl.points.emplace_back(line_end->other_point());
+                    closest_end_point_lookup.erase(*line_end);
+                    closest_end_point_lookup.erase(line_end->other_end());
+                    line_consumed[line_end->line - lines.data()] = true;
+                }
+                // reverse and try the oter direction.
+                pl.reverse();
+            }
+            out.emplace_back(std::move(pl));
+        }
+    return out;
 }
 
 } // namespace Slic3r

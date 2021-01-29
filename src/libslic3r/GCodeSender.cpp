@@ -134,7 +134,7 @@ GCodeSender::set_baud_rate(unsigned int baud_rate)
         speed_t newSpeed = baud_rate;
         ioctl(handle, IOSSIOSPEED, &newSpeed);
         ::tcsetattr(handle, TCSANOW, &ios);
-#elif __linux
+#elif __linux__
         termios2 ios;
         if (ioctl(handle, TCGETS2, &ios))
             printf("Error in TCGETS2: %s\n", strerror(errno));
@@ -153,7 +153,7 @@ GCodeSender::set_baud_rate(unsigned int baud_rate)
 		if (::tcsetattr(handle, TCSAFLUSH, &ios) != 0)
 			printf("Failed to set baud rate: %s\n", strerror(errno));
 #else
-        //throw invalid_argument ("OS does not currently support custom bauds");
+        //throw Slic3r::InvalidArgument("OS does not currently support custom bauds");
 #endif
     }
 }

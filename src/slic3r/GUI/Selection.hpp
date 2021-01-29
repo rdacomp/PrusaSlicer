@@ -3,7 +3,7 @@
 
 #include <set>
 #include "libslic3r/Geometry.hpp"
-
+#include "GLModel.hpp"
 
 #if ENABLE_RENDER_SELECTION_CENTER
 class GLUquadric;
@@ -19,6 +19,7 @@ class GLVolume;
 class GLArrow;
 class GLCurvedArrow;
 class DynamicPrintConfig;
+class GLShaderProgram;
 
 using GLVolumePtrs = std::vector<GLVolume*>;
 using ModelObjectPtrs = std::vector<ModelObject*>;
@@ -218,10 +219,8 @@ private:
     GLUquadricObj* m_quadric;
 #endif // ENABLE_RENDER_SELECTION_CENTER
 
-    // Arrows are saved through pointers to avoid including 3DScene.hpp.
-    // It also allows mutability.
-    std::unique_ptr<GLArrow> m_arrow;
-    std::unique_ptr<GLCurvedArrow> m_curved_arrow;
+    GLModel m_arrow;
+    GLModel m_curved_arrow;
 
     mutable float m_scale_factor;
 
@@ -336,7 +335,7 @@ public:
 #if ENABLE_RENDER_SELECTION_CENTER
     void render_center(bool gizmo_is_dragging) const;
 #endif // ENABLE_RENDER_SELECTION_CENTER
-    void render_sidebar_hints(const std::string& sidebar_field, const Shader& shader) const;
+    void render_sidebar_hints(const std::string& sidebar_field) const;
 
     bool requires_local_axes() const;
 
@@ -377,12 +376,7 @@ private:
     void render_sidebar_position_hints(const std::string& sidebar_field) const;
     void render_sidebar_rotation_hints(const std::string& sidebar_field) const;
     void render_sidebar_scale_hints(const std::string& sidebar_field) const;
-    void render_sidebar_size_hints(const std::string& sidebar_field) const;
     void render_sidebar_layers_hints(const std::string& sidebar_field) const;
-    void render_sidebar_position_hint(Axis axis) const;
-    void render_sidebar_rotation_hint(Axis axis) const;
-    void render_sidebar_scale_hint(Axis axis) const;
-    void render_sidebar_size_hint(Axis axis, double length) const;
 
 public:
     enum SyncRotationType {

@@ -14,8 +14,8 @@
 #include <wx/dialog.h>
 
 #include "GUI_Utils.hpp"
-#include "Preset.hpp"
 #include "wxExtensions.hpp"
+#include "libslic3r/Preset.hpp"
 
 
 namespace Slic3r {
@@ -37,8 +37,8 @@ struct GroupAndCategory {
 };
 
 struct Option {
-    bool operator<(const Option& other) const { return other.label > this->label; }
-    bool operator>(const Option& other) const { return other.label < this->label; }
+//    bool operator<(const Option& other) const { return other.label > this->label; }
+    bool operator<(const Option& other) const { return other.opt_key > this->opt_key; }
 
     // Fuzzy matching works at a character level. Thus matching with wide characters is a safer bet than with short characters,
     // though for some languages (Chinese?) it may not work correctly.
@@ -116,46 +116,20 @@ public:
 
     const FoundOption& operator[](const size_t pos) const noexcept { return found[pos]; }
     const Option& get_option(size_t pos_in_filter) const;
+    const Option& get_option(const std::string& opt_key) const;
 
     const std::vector<FoundOption>& found_options() { return found; }
     const GroupAndCategory&         get_group_and_category (const std::string& opt_key) { return groups_and_categories[opt_key]; }
     std::string& search_string() { return search_line; }
 
     void set_printer_technology(PrinterTechnology pt) { printer_technology = pt; }
-};
 
-
-class SearchComboPopup : public wxListBox, public wxComboPopup
-{
-public:
-    // Initialize member variables
-    void Init();
-
-    // Create popup control
-    virtual bool Create(wxWindow* parent);
-    // Return pointer to the created control
-    virtual wxWindow* GetControl() { return this; }
-
-    // Translate string into a list selection
-    virtual void SetStringValue(const wxString& s);
-    // Get list selection as a string
-    virtual wxString GetStringValue() const {
-        // we shouldn't change a combo control's string
-        return m_input_string;
+    void sort_options_by_opt_key() {
+        std::sort(options.begin(), options.end(), [](const Option& o1, const Option& o2) {
+            return o1.opt_key < o2.opt_key; });
     }
-
-    void ProcessSelection(int selection);
-
-    // Do mouse hot-tracking (which is typical in list popups)
-    void OnMouseMove(wxMouseEvent& event);
-    // On mouse left up, set the value and close the popup
-    void OnMouseClick(wxMouseEvent& WXUNUSED(event));
-    // process Up/Down arrows and Enter press
-    void OnKeyDown(wxKeyEvent& event);
-
-protected:
-    wxString m_input_string;
 };
+
 
 //------------------------------------------
 //          SearchDialog
@@ -198,7 +172,7 @@ public:
 
 protected:
     void on_dpi_changed(const wxRect& suggested_rect) override;
-    virtual void on_sys_color_changed() override;
+    void on_sys_color_changed() override;
 };
 
 
@@ -228,11 +202,11 @@ public:
 
     // implementation of base class virtuals to define model
 
-    virtual unsigned int GetColumnCount() const override { return colMax; }
-    virtual wxString GetColumnType(unsigned int col) const override;
-    virtual void GetValueByRow(wxVariant& variant, unsigned int row, unsigned int col) const override;
-    virtual bool GetAttrByRow(unsigned int row, unsigned int col, wxDataViewItemAttr& attr) const override { return true; }
-    virtual bool SetValueByRow(const wxVariant& variant, unsigned int row, unsigned int col) override { return false; }
+    unsigned int GetColumnCount() const override { return colMax; }
+    wxString GetColumnType(unsigned int col) const override;
+    void GetValueByRow(wxVariant& variant, unsigned int row, unsigned int col) const override;
+    bool GetAttrByRow(unsigned int row, unsigned int col, wxDataViewItemAttr& attr) const override { return true; }
+    bool SetValueByRow(const wxVariant& variant, unsigned int row, unsigned int col) override { return false; }
 };
 
 

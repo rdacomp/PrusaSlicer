@@ -2,8 +2,10 @@
 #define JOB_HPP
 
 #include <atomic>
+#include <exception>
 
-#include <slic3r/Utils/Thread.hpp>
+#include "libslic3r/libslic3r.h"
+
 #include <slic3r/GUI/I18N.hpp>
 
 #include "ProgressIndicator.hpp"
@@ -31,8 +33,9 @@ class Job : public wxEvtHandler
     std::atomic<bool> m_running{false}, m_canceled{false};
     bool              m_finalized = false;
     std::shared_ptr<ProgressIndicator> m_progress;
+    std::exception_ptr                 m_worker_error = nullptr;
     
-    void run();
+    void run(std::exception_ptr &);
     
 protected:
     // status range for a particular job
@@ -48,6 +51,8 @@ protected:
     
     // Launched when the job is finished. It refreshes the 3Dscene by def.
     virtual void finalize() { m_finalized = true; }
+
+    virtual void on_exception(const std::exception_ptr &) {}
    
 public:
     Job(std::shared_ptr<ProgressIndicator> pri);

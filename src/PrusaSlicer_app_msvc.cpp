@@ -208,7 +208,6 @@ extern "C" {
 }
 
 extern "C" {
-
 #ifdef SLIC3R_WRAPPER_NOCONSOLE
 int APIENTRY wWinMain(HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, PWSTR /* lpCmdLine */, int /* nCmdShow */)
 {
@@ -220,6 +219,11 @@ int wmain(int argc, wchar_t **argv)
 #endif
     std::vector<wchar_t*> argv_extended;
     argv_extended.emplace_back(argv[0]);
+
+#ifdef SLIC3R_WRAPPER_GCODEVIEWER
+    wchar_t gcodeviewer_param[] = L"--gcodeviewer";
+    argv_extended.emplace_back(gcodeviewer_param);
+#endif /* SLIC3R_WRAPPER_GCODEVIEWER */
 
 #ifdef SLIC3R_GUI
     // Here one may push some additional parameters based on the wrapper type.

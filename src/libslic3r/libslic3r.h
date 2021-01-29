@@ -2,9 +2,13 @@
 #define _libslic3r_h_
 
 #include "libslic3r_version.h"
+#define GCODEVIEWER_APP_NAME "PrusaSlicer G-code Viewer"
+#define GCODEVIEWER_APP_KEY  "PrusaSlicerGcodeViewer"
+#define GCODEVIEWER_BUILD_ID std::string("PrusaSlicer G-code Viewer-") + std::string(SLIC3R_VERSION) + std::string("-UNKNOWN")
 
 // this needs to be included early for MSVC (listing it in Build.PL is not enough)
 #include <memory>
+#include <array>
 #include <algorithm>
 #include <ostream>
 #include <iostream>
@@ -99,12 +103,6 @@ enum Axis {
 	NUM_AXES_WITH_UNKNOWN,
 };
 
-template <class T>
-inline void append_to(std::vector<T> &dst, const std::vector<T> &src)
-{
-    dst.insert(dst.end(), src.begin(), src.end());
-}
-
 template <typename T>
 inline void append(std::vector<T>& dest, const std::vector<T>& src)
 {
@@ -119,8 +117,34 @@ inline void append(std::vector<T>& dest, std::vector<T>&& src)
 {
     if (dest.empty())
         dest = std::move(src);
-    else
+    else {
+        dest.reserve(dest.size() + src.size());
         std::move(std::begin(src), std::end(src), std::back_inserter(dest));
+    }
+    src.clear();
+    src.shrink_to_fit();
+}
+
+// Append the source in reverse.
+template <typename T>
+inline void append_reversed(std::vector<T>& dest, const std::vector<T>& src)
+{
+    if (dest.empty())
+        dest = src;
+    else
+        dest.insert(dest.end(), src.rbegin(), src.rend());
+}
+
+// Append the source in reverse.
+template <typename T>
+inline void append_reversed(std::vector<T>& dest, std::vector<T>&& src)
+{
+    if (dest.empty())
+        dest = std::move(src);
+    else {
+        dest.reserve(dest.size() + src.size());
+        std::move(std::rbegin(src), std::rend(src), std::back_inserter(dest));
+    }
     src.clear();
     src.shrink_to_fit();
 }
@@ -160,7 +184,7 @@ inline std::unique_ptr<T> make_unique(Args&&... args) {
 // Variant of std::lower_bound() with compare predicate, but without the key.
 // This variant is very useful in case that the T type is large or it does not even have a public constructor.
 template<class ForwardIt, class LowerThanKeyPredicate>
-ForwardIt lower_bound_by_predicate(ForwardIt first, ForwardIt last, LowerThanKeyPredicate lower_thank_key)
+ForwardIt lower_bound_by_predicate(ForwardIt first, ForwardIt last, LowerThanKeyPredicate lower_than_key)
 {
     ForwardIt it;
     typename std::iterator_traits<ForwardIt>::difference_type count, step;
@@ -170,7 +194,7 @@ ForwardIt lower_bound_by_predicate(ForwardIt first, ForwardIt last, LowerThanKey
         it = first;
         step = count / 2;
         std::advance(it, step);
-        if (lower_thank_key(*it)) {
+        if (lower_than_key(*it)) {
             first = ++it;
             count -= step + 1;
         }
@@ -269,6 +293,20 @@ using IntegerOnly = std::enable_if_t<std::is_integral<T>::value, O>;
 
 template<class T, class O = T>
 using ArithmeticOnly = std::enable_if_t<std::is_arithmetic<T>::value, O>;
+
+template<class T, class O = T>
+using IteratorOnly = std::enable_if_t<
+    !std::is_same_v<typename std::iterator_traits<T>::value_type, void>, O
+>;
+
+template<class T, class I, class... Args> // Arbitrary allocator can be used
+IntegerOnly<I, std::vector<T, Args...>> reserve_vector(I capacity)
+{
+    std::vector<T, Args...> ret;
+    if (capacity > I(0)) ret.reserve(size_t(capacity));
+
+    return ret;
+}
 
 } // namespace Slic3r
 

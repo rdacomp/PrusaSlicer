@@ -1,5 +1,6 @@
 #include <exception>
 
+#include "Exception.hpp"
 #include "Zipper.hpp"
 #include "miniz_extension.hpp"
 #include <boost/log/trivial.hpp>
@@ -24,12 +25,12 @@ public:
     std::string formatted_errorstr() const
     {
         return L("Error with zip archive") + " " + m_zipname + ": " +
-               get_errorstr() + "!";
+               get_errorstr();
     }
 
     SLIC3R_NORETURN void blow_up() const
     {
-        throw std::runtime_error(formatted_errorstr());
+        throw Slic3r::ExportError(formatted_errorstr());
     }
 
     bool is_alive()

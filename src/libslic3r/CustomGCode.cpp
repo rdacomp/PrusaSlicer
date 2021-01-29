@@ -1,6 +1,6 @@
 #include "CustomGCode.hpp"
 #include "Config.hpp"
-#include "GCode/PreviewData.hpp"
+#include "GCode.hpp"
 #include "GCodeWriter.hpp"
 
 namespace Slic3r {
@@ -17,8 +17,8 @@ extern void update_custom_gcode_per_print_z_from_config(Info& info, DynamicPrint
         return;
     if (info.gcodes.empty() && ! colorprint_heights->values.empty()) {
 		// Convert the old colorprint_heighs only if there is no equivalent data in a new format.
-	    const std::vector<std::string>& colors = GCodePreviewData::ColorPrintColors();
-	    const auto& colorprint_values = colorprint_heights->values;
+        const std::vector<std::string>& colors = ColorPrintColors::get();
+        const auto& colorprint_values = colorprint_heights->values;
         info.gcodes.clear();
         info.gcodes.reserve(colorprint_values.size());
         int i = 0;

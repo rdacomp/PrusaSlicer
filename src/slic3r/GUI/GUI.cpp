@@ -182,8 +182,14 @@ void change_opt_value(DynamicPrintConfig& config, const t_config_option_key& opt
 				config.set_key_value(opt_key, new ConfigOptionEnum<InfillPattern>(boost::any_cast<InfillPattern>(value))); 
 			else if (opt_key.compare("ironing_type") == 0)
 				config.set_key_value(opt_key, new ConfigOptionEnum<IroningType>(boost::any_cast<IroningType>(value))); 
+			else if (opt_key.compare("fuzzy_skin_perimeter_mode") == 0)
+				config.set_key_value(opt_key, new ConfigOptionEnum<FuzzySkinPerimeterMode>(boost::any_cast<FuzzySkinPerimeterMode>(value))); 
+//			else if (opt_key.compare("fuzzy_skin_shape") == 0)
+//				config.set_key_value(opt_key, new ConfigOptionEnum<FuzzySkinShape>(boost::any_cast<FuzzySkinShape>(value))); 
 			else if (opt_key.compare("gcode_flavor") == 0)
 				config.set_key_value(opt_key, new ConfigOptionEnum<GCodeFlavor>(boost::any_cast<GCodeFlavor>(value))); 
+			else if (opt_key.compare("machine_limits_usage") == 0)
+				config.set_key_value(opt_key, new ConfigOptionEnum<MachineLimitsUsage>(boost::any_cast<MachineLimitsUsage>(value))); 
 			else if (opt_key.compare("support_material_pattern") == 0)
 				config.set_key_value(opt_key, new ConfigOptionEnum<SupportMaterialPattern>(boost::any_cast<SupportMaterialPattern>(value)));
 			else if (opt_key.compare("seam_position") == 0)
@@ -194,10 +200,12 @@ void change_opt_value(DynamicPrintConfig& config, const t_config_option_key& opt
 				config.set_key_value(opt_key, new ConfigOptionEnum<SLADisplayOrientation>(boost::any_cast<SLADisplayOrientation>(value)));
             else if(opt_key.compare("support_pillar_connection_mode") == 0)
                 config.set_key_value(opt_key, new ConfigOptionEnum<SLAPillarConnectionMode>(boost::any_cast<SLAPillarConnectionMode>(value)));
+            else if(opt_key == "printhost_authorization_type")
+                config.set_key_value(opt_key, new ConfigOptionEnum<AuthorizationType>(boost::any_cast<AuthorizationType>(value)));
 			}
 			break;
 		case coPoints:{
-			if (opt_key.compare("bed_shape") == 0) {
+			if (opt_key == "bed_shape" || opt_key == "thumbnails") {
 				config.option<ConfigOptionPoints>(opt_key)->values = boost::any_cast<std::vector<Vec2d>>(value);
 				break;
 			}
@@ -217,16 +225,16 @@ void change_opt_value(DynamicPrintConfig& config, const t_config_option_key& opt
 	}
 }
 
-void show_error(wxWindow* parent, const wxString& message)
+void show_error(wxWindow* parent, const wxString& message, bool monospaced_font)
 {
-	ErrorDialog msg(parent, message);
+	ErrorDialog msg(parent, message, monospaced_font);
 	msg.ShowModal();
 }
 
-void show_error(wxWindow* parent, const char* message)
+void show_error(wxWindow* parent, const char* message, bool monospaced_font)
 {
 	assert(message);
-	show_error(parent, wxString::FromUTF8(message));
+	show_error(parent, wxString::FromUTF8(message), monospaced_font);
 }
 
 void show_error_id(int id, const std::string& message)
@@ -237,7 +245,7 @@ void show_error_id(int id, const std::string& message)
 
 void show_info(wxWindow* parent, const wxString& message, const wxString& title)
 {
-	wxMessageDialog msg_wingow(parent, message, wxString(SLIC3R_APP_NAME " - ") + (title.empty() ? _(L("Notice")) : title), wxOK | wxICON_INFORMATION);
+	wxMessageDialog msg_wingow(parent, message, wxString(SLIC3R_APP_NAME " - ") + (title.empty() ? _L("Notice") : title), wxOK | wxICON_INFORMATION);
 	msg_wingow.ShowModal();
 }
 
@@ -249,60 +257,74 @@ void show_info(wxWindow* parent, const char* message, const char* title)
 
 void warning_catcher(wxWindow* parent, const wxString& message)
 {
-	wxMessageDialog msg(parent, message, _(L("Warning")), wxOK | wxICON_WARNING);
+	wxMessageDialog msg(parent, message, _L("Warning"), wxOK | wxICON_WARNING);
 	msg.ShowModal();
 }
 
-void create_combochecklist(wxComboCtrl* comboCtrl, std::string text, std::string items, bool initial_value)
+void create_combochecklist(wxComboCtrl* comboCtrl, const std::string& text, const std::string& items)
 {
     if (comboCtrl == nullptr)
         return;
 
     wxCheckListBoxComboPopup* popup = new wxCheckListBoxComboPopup;
-    if (popup != nullptr)
-    {
-        // FIXME If the following line is removed, the combo box popup list will not react to mouse clicks.
+    if (popup != nullptr) {
+		// FIXME If the following line is removed, the combo box popup list will not react to mouse clicks.
         //  On the other side, with this line the combo box popup cannot be closed by clicking on the combo button on Windows 10.
         comboCtrl->UseAltPopupWindow();
 
-        comboCtrl->EnablePopupAnimation(false);
-        comboCtrl->SetPopupControl(popup);
-        popup->SetStringValue(from_u8(text));
-        popup->Bind(wxEVT_CHECKLISTBOX, [popup](wxCommandEvent& evt) { popup->OnCheckListBox(evt); });
-        popup->Bind(wxEVT_LISTBOX, [popup](wxCommandEvent& evt) { popup->OnListBoxSelection(evt); });
+		int max_width = 0;
+
+		// the following line messes up the popup size the first time it is shown on wxWidgets 3.1.3
+//		comboCtrl->EnablePopupAnimation(false);
+		comboCtrl->SetPopupControl(popup);
+		wxString title = from_u8(text);
+		max_width = std::max(max_width, 60 + comboCtrl->GetTextExtent(title).x);
+		popup->SetStringValue(title);
+		popup->Bind(wxEVT_CHECKLISTBOX, [popup](wxCommandEvent& evt) { popup->OnCheckListBox(evt); });
+		popup->Bind(wxEVT_LISTBOX, [popup](wxCommandEvent& evt) { popup->OnListBoxSelection(evt); });
         popup->Bind(wxEVT_KEY_DOWN, [popup](wxKeyEvent& evt) { popup->OnKeyEvent(evt); });
         popup->Bind(wxEVT_KEY_UP, [popup](wxKeyEvent& evt) { popup->OnKeyEvent(evt); });
 
         std::vector<std::string> items_str;
         boost::split(items_str, items, boost::is_any_of("|"), boost::token_compress_off);
 
-        for (const std::string& item : items_str)
-        {
-            popup->Append(from_u8(item));
-        }
+		// each item must be composed by 2 parts
+		assert(items_str.size() %2 == 0);
 
-        for (unsigned int i = 0; i < popup->GetCount(); ++i)
-        {
-            popup->Check(i, initial_value);
-        }
-    }
+		for (size_t i = 0; i < items_str.size(); i += 2) {
+			wxString label = from_u8(items_str[i]);
+			max_width = std::max(max_width, 60 + popup->GetTextExtent(label).x);
+			popup->Append(label);
+			popup->Check(i / 2, items_str[i + 1] == "1");
+		}
+
+		comboCtrl->SetMinClientSize(wxSize(max_width, -1));
+	}
 }
 
-int combochecklist_get_flags(wxComboCtrl* comboCtrl)
+unsigned int combochecklist_get_flags(wxComboCtrl* comboCtrl)
 {
-    int flags = 0;
+	unsigned int flags = 0;
 
-    wxCheckListBoxComboPopup* popup = wxDynamicCast(comboCtrl->GetPopupControl(), wxCheckListBoxComboPopup);
-    if (popup != nullptr)
-    {
-        for (unsigned int i = 0; i < popup->GetCount(); ++i)
-        {
-            if (popup->IsChecked(i))
-                flags |= 1 << i;
-        }
-    }
+	wxCheckListBoxComboPopup* popup = wxDynamicCast(comboCtrl->GetPopupControl(), wxCheckListBoxComboPopup);
+	if (popup != nullptr) {
+		for (unsigned int i = 0; i < popup->GetCount(); ++i) {
+			if (popup->IsChecked(i))
+				flags |= 1 << i;
+		}
+	}
 
-    return flags;
+	return flags;
+}
+
+void combochecklist_set_flags(wxComboCtrl* comboCtrl, unsigned int flags)
+{
+	wxCheckListBoxComboPopup* popup = wxDynamicCast(comboCtrl->GetPopupControl(), wxCheckListBoxComboPopup);
+	if (popup != nullptr) {
+		for (unsigned int i = 0; i < popup->GetCount(); ++i) {
+			popup->Check(i, (flags & (1 << i)) != 0);
+		}
+	}
 }
 
 AppConfig* get_app_config()
