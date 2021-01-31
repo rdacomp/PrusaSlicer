@@ -30,6 +30,8 @@
 namespace Slic3r {
 namespace instance_check_internal
 {
+	static bool        s_created_lockfile = false;
+
 	struct CommandLineAnalysis
 	{
 		std::optional<bool>	should_send;
@@ -145,13 +147,34 @@ namespace instance_check_internal
                 BOOST_LOG_TRIVIAL(debug) << "get_lock(): unable to create datadir !!!";
         }
 
-		if ((fdlock = open(dest_dir.c_str(), O_WRONLY | O_CREAT, 0666)) == -1)
+		if ((fdlock = open(dest_dir.c_str(), O_WRONLY | O_CREAT, 0666)) == -1) {
+			BOOST_LOG_TRIVIAL(debug) << "Not creating lockfile.";
 			return true;
+		}
 
-		if (fcntl(fdlock, F_SETLK, &fl) == -1)
+		if (fcntl(fdlock, F_SETLK, &fl) == -1) {
+			BOOST_LOG_TRIVIAL(debug) << "Not creating lockfile.";
 			return true;
+		}
 
+		BOOST_LOG_TRIVIAL(debug) << "Creating lockfile.";
+		s_created_lockfile = true;
 		return false;
+	}
+
+	// Deletes lockfile if it was created by this instance
+	static void delete_lockfile()
+	{
+		
+		//BOOST_LOG_TRIVIAL(debug) << "shuting down with lockfile: " << l_created_lockfile;
+		if (s_created_lockfile)
+		{
+			std::string path = data_dir() + "/cache/" + GUI::wxGetApp().get_instance_hash_string() + ".lock";
+			if( remove( path.c_str() ) != 0 )
+	   			BOOST_LOG_TRIVIAL(error) << "Failed to delete lockfile " << path;
+	  		//else
+	    	//	BOOST_LOG_TRIVIAL(error) << "success delete lockfile " << path;
+		}
 	}
 
 #endif //WIN32
@@ -295,7 +318,7 @@ bool instance_check(int argc, char** argv, bool app_config_single_instance)
 	if (! cla.should_send.has_value())
 		cla.should_send = app_config_single_instance;
 #ifdef _WIN32
-	GUI::wxGetApp().init_single_instance_checker(lock_name + ".lock", data_dir() + "/cache/");
+	GUI::wxGetApp().init_single_instance_checker(lock_name + ".lock", data_dir() + "\\cache\\");
 	if (cla.should_send.value() && GUI::wxGetApp().single_instance_checker()->IsAnotherRunning()) {
 #else // mac & linx
 	// get_lock() creates the lockfile therefore *cla.should_send is checked after
@@ -306,6 +329,7 @@ bool instance_check(int argc, char** argv, bool app_config_single_instance)
 		return true;
 	}
 	BOOST_LOG_TRIVIAL(info) << "instance check: Another instance not found or single-instance not set.";
+	
 	return false;
 }
 
@@ -355,6 +379,9 @@ void OtherInstanceMessageHandler::init(wxEvtHandler* callback_evt_handler)
 void OtherInstanceMessageHandler::shutdown(MainFrame* main_frame)
 {
 	BOOST_LOG_TRIVIAL(debug) << "message handler shutdown().";
+#ifndef _WIN32
+	instance_check_internal::delete_lockfile();
+#endif //!_WIN32
 	assert(m_initialized);
 	if (m_initialized) {
 #ifdef _WIN32
