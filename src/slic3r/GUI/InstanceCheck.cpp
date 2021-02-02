@@ -174,6 +174,9 @@ namespace instance_check_internal
 	   			BOOST_LOG_TRIVIAL(error) << "Failed to delete lockfile " << path;
 	  		//else
 	    	//	BOOST_LOG_TRIVIAL(error) << "success delete lockfile " << path;
+#ifdef __APPLE__
+	   		send_message_mac_closing(GUI::wxGetApp().get_instance_hash_string(),GUI::wxGetApp().get_instance_hash_string());
+#endif	    
 		}
 	}
 
@@ -497,6 +500,11 @@ void OtherInstanceMessageHandler::handle_message(const std::string& message)
 			wxPostEvent(m_callback_evt_handler, LoadFromOtherInstanceEvent(GUI::EVT_LOAD_MODEL_OTHER_INSTANCE, std::vector<boost::filesystem::path>(std::move(paths))));
 		//}
 	}
+}
+
+void OtherInstanceMessageHandler::handle_message_other_closed() 
+{
+	BOOST_LOG_TRIVIAL(error) << "getlock:" << instance_check_internal::get_lock(wxGetApp().get_instance_hash_string() + ".lock", data_dir() + "/cache/");
 }
 
 #ifdef BACKGROUND_MESSAGE_LISTENER
