@@ -26,7 +26,7 @@
 	Slic3r::GUI::wxGetApp().other_instance_message_handler()->handle_message(std::string([msg.userInfo[@"data"] UTF8String]));
 }
 
-(void)closing_update:(NSNotification *)msg
+-(void)closing_update:(NSNotification *)msg
 {
 	//[self bring_forward];
 	//pass message  
@@ -60,7 +60,7 @@ void send_message_mac(const std::string &msg, const std::string &version)
 	[[NSDistributedNotificationCenter defaultCenter] postNotificationName:notifname object:nil userInfo:[NSDictionary dictionaryWithObject:nsmsg forKey:@"data"] deliverImmediately:YES];
 }
 
-void send_message_mac_closing(Const std::string &msg, const std::string &version)
+void send_message_mac_closing(const std::string &msg, const std::string &version)
 {
 	NSString *nsmsg = [NSString stringWithCString:msg.c_str() encoding:[NSString defaultCStringEncoding]];
 	//NSString *nsver = @"OtherPrusaSlicerInstanceMessage" + [NSString stringWithCString:version.c_str() encoding:[NSString defaultCStringEncoding]];
