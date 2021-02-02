@@ -161,6 +161,11 @@ public:
             grid.emplace(cell_id(pt.position), pt);
         }
         
+        void insert(const std::vector<Vec2f> &pos, Structure *island)
+        {
+            for (const auto &p : pos) insert(p, island);
+        }
+
         bool collides_with(const Vec2f &pos, float print_z, float radius) {
             Vec3f pos3d(pos.x(), pos.y(), print_z);
             Vec3i cell = cell_id(pos3d);
@@ -204,8 +209,9 @@ private:
 public:
     enum IslandCoverageFlags : uint8_t { icfNone = 0x0, icfIsNew = 0x1, icfWithBoundary = 0x2 };
 
+public: // for testing
+    std::vector<Vec2f> uniform_cover_island(SupportPointGenerator::Structure &structure);
 private:
-
     void uniformly_cover(const ExPolygons& islands, Structure& structure, float deficit, PointGrid3D &grid3d, IslandCoverageFlags flags = icfNone);
 
     void add_support_points(Structure& structure, PointGrid3D &grid3d);

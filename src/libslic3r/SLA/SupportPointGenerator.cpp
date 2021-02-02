@@ -312,6 +312,30 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
     }
 }
 
+std::vector<Vec2f> SupportPointGenerator::uniform_cover_island(
+        SupportPointGenerator::Structure &structure)
+{
+    // X is maximal distance between 2 support points on island
+    float            x                = 10;
+    float            one_support_area = M_PI * x;
+    const ExPolygon &island           = *structure.polygon;
+    float            area             = structure.area;
+    const Point &    bb_size          = structure.bbox.size();
+
+    // only one support point?
+    if (area < one_support_area && 
+        bb_size[0] < x && 
+        bb_size[1] < x ) {
+        structure.centroid
+    }
+
+    // longest distance in area
+        float size = getSize()
+    // calculate island moments
+
+    // unit support force 11.1f / density_relative(1.)
+}
+
 void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure &s, SupportPointGenerator::PointGrid3D &grid3d)
 {
     // Select each type of surface (overrhang, dangling, slope), derive the support
@@ -324,6 +348,7 @@ void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure 
         // completely new island - needs support no doubt
         // deficit is full, there is nothing below that would hold this island
         uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
+        grid3d.insert(uniform_cover_island(s), s);
         return;
     }
 
@@ -558,7 +583,6 @@ static inline std::vector<Vec2f> poisson_disk_from_samples(const std::vector<Vec
             out.emplace_back(it.second.poisson_samples[i]);
     return out;
 }
-
 
 void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure& structure, float deficit, PointGrid3D &grid3d, IslandCoverageFlags flags)
 {
