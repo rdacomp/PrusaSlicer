@@ -163,8 +163,8 @@ public:
     const PrintInstances&        instances() const      { return m_instances; }
 
     // Whoever will get a non-const pointer to PrintObject will be able to modify its layers.
-    LayerPtrs                    layers()               { return m_layers; }
-    SupportLayerPtrs             support_layers()       { return m_support_layers; }
+    LayerPtrs&                   layers()               { return m_layers; }
+    SupportLayerPtrs&            support_layers()       { return m_support_layers; }
 
     // Bounding box is used to align the object infill patterns, and to calculate attractor for the rear seam.
     // The bounding box may not be quite snug.
