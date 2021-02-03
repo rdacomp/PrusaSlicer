@@ -325,14 +325,17 @@ ExtrusionEntityCollection make_brim(const Print &print, PrintTryCancel try_cance
     // For Brim, the ordering should be reversed (from inside to outside).
     std::reverse(loops.begin(), loops.end());
 
-    Polylines              loops_pl = to_polylines(loops);
-    std::vector<Polylines> loops_pl_by_levels(loops_pl.size());
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, loops_pl.size()),
-                      [&loops_pl_by_levels, &loops_pl, &islands_area](const tbb::blocked_range<size_t> &range) {
-                          for (size_t i = range.begin(); i < range.end(); ++i) {
-                              loops_pl_by_levels[i] = chain_polylines(intersection_pl(loops_pl[i], islands_area));
-                          }
-                      });
+    std::vector<Polylines> loops_pl_by_levels;
+    {
+        Polylines              loops_pl = to_polylines(loops);
+        loops_pl_by_levels.assign(loops_pl.size(), Polylines());
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, loops_pl.size()),
+            [&loops_pl_by_levels, &loops_pl, &islands_area](const tbb::blocked_range<size_t> &range) {
+                for (size_t i = range.begin(); i < range.end(); ++i) {
+                    loops_pl_by_levels[i] = chain_polylines(intersection_pl({ std::move(loops_pl[i]) }, islands_area));
+                }
+            });
+    }
 
     // output
     ExtrusionEntityCollection brim;
