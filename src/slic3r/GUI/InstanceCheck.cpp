@@ -187,7 +187,6 @@ namespace instance_check_internal
 	// Deletes lockfile if it was created by this instance
 	static void delete_lockfile()
 	{
-		BOOST_LOG_TRIVIAL(error) << "unlock:" << unlock_lockfile(GUI::wxGetApp().get_instance_hash_string() + ".lock", data_dir() + "/cache/");
 		//BOOST_LOG_TRIVIAL(debug) << "shuting down with lockfile: " << l_created_lockfile;
 		if (s_created_lockfile)
 		{
