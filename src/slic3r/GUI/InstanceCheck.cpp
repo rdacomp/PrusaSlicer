@@ -385,7 +385,7 @@ void OtherInstanceMessageHandler::shutdown(MainFrame* main_frame)
 {
 	BOOST_LOG_TRIVIAL(debug) << "message handler shutdown().";
 #ifndef _WIN32
-	//instance_check_internal::delete_lockfile();
+	instance_check_internal::delete_lockfile();
 #endif //!_WIN32
 	assert(m_initialized);
 	if (m_initialized) {
@@ -506,7 +506,7 @@ void OtherInstanceMessageHandler::handle_message(const std::string& message)
 
 void OtherInstanceMessageHandler::handle_message_other_closed() 
 {
-	BOOST_LOG_TRIVIAL(error) << "getlock:" << instance_check_internal::get_lock(wxGetApp().get_instance_hash_string() + ".lock", data_dir() + "/cache/");
+	instance_check_internal::get_lock(wxGetApp().get_instance_hash_string() + ".lock", data_dir() + "/cache/");
 }
 
 #ifdef BACKGROUND_MESSAGE_LISTENER
