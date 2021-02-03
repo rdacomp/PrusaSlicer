@@ -189,10 +189,10 @@ PhysicalPrinterDialog::PhysicalPrinterDialog(wxWindow* parent, wxString printer_
     }
     else
     {
+        m_printer = *printer;
         const std::set<std::string>& preset_names = printer->get_preset_names();
         for (const std::string& preset_name : preset_names)
             m_presets.emplace_back(new PresetForPrinter(this, preset_name));
-        m_printer = *printer;
     }
 
     if (m_presets.size() == 1)
@@ -623,7 +623,7 @@ void PhysicalPrinterDialog::DeletePreset(PresetForPrinter* preset_for_printer)
 {
     if (m_presets.size() == 1) {
         wxString msg_text = _L("It's not possible to delete the last related preset for the printer.");
-        wxMessageDialog dialog(nullptr, msg_text, _L("Infornation"), wxICON_INFORMATION | wxOK);
+        wxMessageDialog dialog(nullptr, msg_text, _L("Information"), wxICON_INFORMATION | wxOK);
         dialog.ShowModal();
         return;
     }

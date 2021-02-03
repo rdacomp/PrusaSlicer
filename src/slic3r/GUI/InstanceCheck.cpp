@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <optional>
+#include <cstdint>
 
 #ifdef _WIN32
 #include <strsafe.h>
@@ -79,13 +80,13 @@ namespace instance_check_internal
 			return true;
 		std::wstring classNameString(className);
 		std::wstring wndTextString(wndText);
-		if (wndTextString.find(L"PrusaSlicer") == 0 && classNameString == L"wxWindowNR") {
+		if (wndTextString.find(L"PrusaSlicer") != std::wstring::npos && classNameString == L"wxWindowNR") {
 			//check if other instances has same instance hash
 			//if not it is not same version(binary) as this version 
-			HANDLE                handle = GetProp(hwnd, L"Instance_Hash_Minor");
-			unsigned long long    other_instance_hash = PtrToUint(handle);
-			unsigned long long    other_instance_hash_major;
-			unsigned long long    my_instance_hash = GUI::wxGetApp().get_instance_hash_int();
+			HANDLE   handle = GetProp(hwnd, L"Instance_Hash_Minor");
+			uint64_t other_instance_hash = PtrToUint(handle);
+			uint64_t other_instance_hash_major;
+			uint64_t my_instance_hash = GUI::wxGetApp().get_instance_hash_int();
 			handle = GetProp(hwnd, L"Instance_Hash_Major");
 			other_instance_hash_major = PtrToUint(handle);
 			other_instance_hash_major = other_instance_hash_major << 32;
@@ -251,11 +252,23 @@ namespace instance_check_internal
 
 bool instance_check(int argc, char** argv, bool app_config_single_instance)
 {
+#ifndef _WIN32
+	boost::system::error_code ec;
+#endif
 	std::size_t hashed_path = 
 #ifdef _WIN32
 		std::hash<std::string>{}(boost::filesystem::system_complete(argv[0]).string());
 #else
-		std::hash<std::string>{}(boost::filesystem::canonical(boost::filesystem::system_complete(argv[0])).string());
+		std::hash<std::string>{}(boost::filesystem::canonical(boost::filesystem::system_complete(argv[0]), ec).string());
+	if (ec.value() > 0) { // canonical was not able to find the executable (can happen with appimage on some systems. Does it fail on Fuse file systems?)
+		ec.clear();
+		// Compose path with boost canonical of folder and filename
+		hashed_path = std::hash<std::string>{}(boost::filesystem::canonical(boost::filesystem::system_complete(argv[0]).parent_path(), ec).string() + "/" + boost::filesystem::system_complete(argv[0]).filename().string());
+		if (ec.value() > 0) {
+			// Still not valid, process without canonical
+			hashed_path = std::hash<std::string>{}(boost::filesystem::system_complete(argv[0]).string());
+		}
+	}
 #endif // win32
 
 	std::string lock_name 	= std::to_string(hashed_path);

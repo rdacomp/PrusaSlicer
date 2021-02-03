@@ -10,6 +10,7 @@
 #include "ShortestPath.hpp"
 #include "Print.hpp"
 #include "Utils.hpp"
+#include "ClipperUtils.hpp"
 #include "libslic3r.h"
 
 #include <algorithm>
@@ -88,94 +89,6 @@ namespace Slic3r {
         }
         return ok;
     }
-
-    void AvoidCrossingPerimeters::init_external_mp(const Print& print)
-    {
-        m_external_mp = Slic3r::make_unique<MotionPlanner>(union_ex(this->collect_contours_all_layers(print.objects())));
-    }
-
-    // Plan a travel move while minimizing the number of perimeter crossings.
-    // point is in unscaled coordinates, in the coordinate system of the current active object
-    // (set by gcodegen.set_origin()).
-    Polyline AvoidCrossingPerimeters::travel_to(const GCode& gcodegen, const Point& point)
-    {
-        // If use_external, then perform the path planning in the world coordinate system (correcting for the gcodegen offset).
-        // Otherwise perform the path planning in the coordinate system of the active object.
-        bool  use_external = this->use_external_mp || this->use_external_mp_once;
-        Point scaled_origin = use_external ? Point::new_scale(gcodegen.origin()(0), gcodegen.origin()(1)) : Point(0, 0);
-        Polyline result = (use_external ? m_external_mp.get() : m_layer_mp.get())->
-            shortest_path(gcodegen.last_pos() + scaled_origin, point + scaled_origin);
-        if (use_external)
-            result.translate(-scaled_origin);
-        return result;
-    }
-
-    // Collect outer contours of all objects over all layers.
-    // Discard objects only containing thin walls (offset would fail on an empty polygon).
-    // Used by avoid crossing perimeters feature.
-    Polygons AvoidCrossingPerimeters::collect_contours_all_layers(ConstPrintObjectPtrsAdaptor &objects)
-    {
-        Polygons islands;
-        for (const PrintObject* object : objects) {
-            // Reducing all the object slices into the Z projection in a logarithimc fashion.
-            // First reduce to half the number of layers.
-            std::vector<Polygons> polygons_per_layer((object->layers().size() + 1) / 2);
-            tbb::parallel_for(tbb::blocked_range<size_t>(0, object->layers().size() / 2),
-                [&object, &polygons_per_layer](const tbb::blocked_range<size_t>& range) {
-                    for (size_t i = range.begin(); i < range.end(); ++i) {
-                        const Layer* layer1 = object->layers()[i * 2];
-                        const Layer* layer2 = object->layers()[i * 2 + 1];
-                        Polygons polys;
-                        polys.reserve(layer1->lslices.size() + layer2->lslices.size());
-                        for (const ExPolygon& expoly : layer1->lslices)
-                            //FIXME no holes?
-                            polys.emplace_back(expoly.contour);
-                        for (const ExPolygon& expoly : layer2->lslices)
-                            //FIXME no holes?
-                            polys.emplace_back(expoly.contour);
-                        polygons_per_layer[i] = union_(polys);
-                    }
-                });
-            if (object->layers().size() & 1) {
-                const Layer* layer = object->layers().back();
-                Polygons polys;
-                polys.reserve(layer->lslices.size());
-                for (const ExPolygon& expoly : layer->lslices)
-                    //FIXME no holes?
-                    polys.emplace_back(expoly.contour);
-                polygons_per_layer.back() = union_(polys);
-            }
-            // Now reduce down to a single layer.
-            size_t cnt = polygons_per_layer.size();
-            while (cnt > 1) {
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, cnt / 2),
-                    [&polygons_per_layer](const tbb::blocked_range<size_t>& range) {
-                        for (size_t i = range.begin(); i < range.end(); ++i) {
-                            Polygons polys;
-                            polys.reserve(polygons_per_layer[i * 2].size() + polygons_per_layer[i * 2 + 1].size());
-                            polygons_append(polys, polygons_per_layer[i * 2]);
-                            polygons_append(polys, polygons_per_layer[i * 2 + 1]);
-                            polygons_per_layer[i * 2] = union_(polys);
-                        }
-                    });
-                for (size_t i = 1; i < cnt / 2; ++i)
-                    polygons_per_layer[i] = std::move(polygons_per_layer[i * 2]);
-                if (cnt & 1)
-                    polygons_per_layer[cnt / 2] = std::move(polygons_per_layer[cnt - 1]);
-                cnt = (cnt + 1) / 2;
-            }
-            // And collect copies of the objects.
-            for (const PrintInstance& instance : object->instances()) {
-                // All the layers were reduced to the 1st item of polygons_per_layer.
-                size_t i = islands.size();
-                polygons_append(islands, polygons_per_layer.front());
-                for (; i < islands.size(); ++i)
-                    islands[i].translate(instance.shift);
-            }
-        }
-        return islands;
-    }
-
 
     std::string OozePrevention::pre_toolchange(GCode& gcodegen)
     {
@@ -256,6 +169,8 @@ namespace Slic3r {
 
             // subdivide the retraction in segments
             if (!wipe_path.empty()) {
+                // add tag for processor
+                gcode += ";" + GCodeProcessor::Wipe_Start_Tag + "\n";
                 for (const Line& line : wipe_path.lines()) {
                     double segment_length = line.length();
                     /*  Reduce retraction length a bit to avoid effective retraction speed to be greater than the configured one
@@ -270,6 +185,8 @@ namespace Slic3r {
                         "wipe and retract"
                     );
                 }
+                // add tag for processor
+                gcode += ";" + GCodeProcessor::Wipe_End_Tag + "\n";
                 gcodegen.set_last_pos(wipe_path.points.back());
             }
 
@@ -318,7 +235,7 @@ namespace Slic3r {
             // Move over the wipe tower.
             // Retract for a tool change, using the toolchange retract value and setting the priming extra length.
             gcode += gcodegen.retract(true);
-            gcodegen.m_avoid_crossing_perimeters.use_external_mp_once = true;
+            gcodegen.m_avoid_crossing_perimeters.use_external_mp_once();
             gcode += gcodegen.travel_to(
                 wipe_tower_point_to_object_point(gcodegen, start_pos),
                 erMixed,
@@ -352,6 +269,7 @@ namespace Slic3r {
         // Otherwise, leave control to the user completely.
         std::string toolchange_gcode_str;
         const std::string& toolchange_gcode = gcodegen.config().toolchange_gcode.value;
+//        m_max_layer_z = std::max(m_max_layer_z, tcr.print_z);
         if (! toolchange_gcode.empty()) {
             DynamicConfig config;
             int previous_extruder_id = gcodegen.writer().extruder() ? (int)gcodegen.writer().extruder()->id() : -1;
@@ -359,6 +277,7 @@ namespace Slic3r {
             config.set_key_value("next_extruder", new ConfigOptionInt((int)new_extruder_id));
             config.set_key_value("layer_num", new ConfigOptionInt(gcodegen.m_layer_index));
             config.set_key_value("layer_z", new ConfigOptionFloat(tcr.print_z));
+//            config.set_key_value("max_layer_z", new ConfigOptionFloat(m_max_layer_z));
             toolchange_gcode_str = gcodegen.placeholder_parser_process("toolchange_gcode", toolchange_gcode, new_extruder_id, &config);
             check_add_eol(toolchange_gcode_str);
         }
@@ -413,7 +332,7 @@ namespace Slic3r {
         }
 
         // Let the planner know we are traveling between objects.
-        gcodegen.m_avoid_crossing_perimeters.use_external_mp_once = true;
+        gcodegen.m_avoid_crossing_perimeters.use_external_mp_once();
         return gcode;
     }
 
@@ -494,14 +413,11 @@ namespace Slic3r {
 
     std::string WipeTowerIntegration::prime(GCode& gcodegen)
     {
-        assert(m_layer_idx == 0);
         std::string gcode;
-
         for (const WipeTower::ToolChangeResult& tcr : m_priming) {
             if (! tcr.extrusions.empty())
                 gcode += append_tcr(gcodegen, tcr, tcr.new_tool);
         }
-
         return gcode;
     }
 
@@ -738,15 +654,17 @@ void GCode::do_export(Print* print, const char* path, GCodeProcessor::Result* re
 
     if (! m_placeholder_parser_failed_templates.empty()) {
         // G-code export proceeded, but some of the PlaceholderParser substitutions failed.
+        //FIXME localize!
         std::string msg = std::string("G-code export to ") + path + " failed due to invalid custom G-code sections:\n\n";
-        for (const std::string &name : m_placeholder_parser_failed_templates)
-            msg += std::string("\t") + name + "\n";
+        for (const auto &name_and_error : m_placeholder_parser_failed_templates)
+            msg += name_and_error.first + "\n" + name_and_error.second + "\n";
         msg += "\nPlease inspect the file ";
         msg += path_tmp + " for error messages enclosed between\n";
         msg += "        !!!!! Failed to process the custom G-code template ...\n";
         msg += "and\n";
         msg += "        !!!!! End of an error report for the custom G-code template ...\n";
-        throw Slic3r::RuntimeError(msg);
+        msg += "for all macro processing errors.";
+        throw Slic3r::PlaceholderParserError(msg);
     }
 
     BOOST_LOG_TRIVIAL(debug) << "Start processing gcode, " << log_memory_info();
@@ -1003,11 +921,17 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
     DoExport::init_gcode_processor(print.config(), m_processor, m_silent_time_estimator_enabled);
 
     // resets analyzer's tracking data
-    m_last_height = 0.0f;
-    m_last_layer_z = 0.0f;
+    m_last_height  = 0.f;
+    m_last_layer_z = 0.f;
+    m_max_layer_z  = 0.f;
+#if ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
+    m_last_width = 0.f;
+#endif // ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
-    m_last_mm3_per_mm = 0.0;
-    m_last_width = 0.0f;
+    m_last_mm3_per_mm = 0.;
+#if !ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
+    m_last_width   = 0.f;
+#endif // !ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
 #endif // ENABLE_GCODE_VIEWER_DATA_CHECKING
 
     // How many times will be change_layer() called?
@@ -1226,13 +1150,6 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
     // Set other general things.
     _write(file, this->preamble());
 
-    // Initialize a motion planner for object-to-object travel moves.
-    m_avoid_crossing_perimeters.reset();
-    if (print.config().avoid_crossing_perimeters.value) {
-        m_avoid_crossing_perimeters.init_external_mp(print);
-        print.throw_if_canceled();
-    }
-
     // Calculate wiping points if needed
     DoExport::init_ooze_prevention(print, m_ooze_prevention);
     print.throw_if_canceled();
@@ -1268,12 +1185,12 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
                 // Move to the origin position for the copy we're going to print.
                 // This happens before Z goes down to layer 0 again, so that no collision happens hopefully.
                 m_enable_cooling_markers = false; // we're not filtering these moves through CoolingBuffer
-                m_avoid_crossing_perimeters.use_external_mp_once = true;
+                m_avoid_crossing_perimeters.use_external_mp_once();
                 _write(file, this->retract());
                 _write(file, this->travel_to(Point(0, 0), erNone, "move to origin position for next object"));
                 m_enable_cooling_markers = true;
                 // Disable motion planner when traveling to first object point.
-                m_avoid_crossing_perimeters.disable_once = true;
+                m_avoid_crossing_perimeters.disable_once();
                 // Ff we are printing the bottom layer of an object, and we have already finished
                 // another one, set first layer temperatures. This happens before the Z move
                 // is triggered, so machine has more time to reach such temperatures.
@@ -1323,18 +1240,30 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
                 bbox_print.merge(get_wipe_tower_extrusions_extents(print, twolayers_printz));
                 BoundingBoxf bbox_prime(get_wipe_tower_priming_extrusions_extents(print));
                 bbox_prime.offset(0.5f);
-                // Beep for 500ms, tone 800Hz. Yet better, play some Morse.
-                _write(file, this->retract());
-                _write(file, "M300 S800 P500\n");
-                if (bbox_prime.overlap(bbox_print)) {
-                    // Wait for the user to remove the priming extrusions, otherwise they would
-                    // get covered by the print.
-                    _write(file, "M1 Remove priming towers and click button.\n");
-                }
-                else {
-                    // Just wait for a bit to let the user check, that the priming succeeded.
-                    //TODO Add a message explaining what the printer is waiting for. This needs a firmware fix.
-                    _write(file, "M1 S10\n");
+                bool overlap = bbox_prime.overlap(bbox_print);
+
+                if (print.config().gcode_flavor == gcfMarlin) {
+                    _write(file, this->retract());
+                    _write(file, "M300 S800 P500\n"); // Beep for 500ms, tone 800Hz.
+                    if (overlap) {
+                        // Wait for the user to remove the priming extrusions.
+                        _write(file, "M1 Remove priming towers and click button.\n");
+                    } else {
+                        // Just wait for a bit to let the user check, that the priming succeeded.
+                        //TODO Add a message explaining what the printer is waiting for. This needs a firmware fix.
+                        _write(file, "M1 S10\n");
+                    }
+                } else {
+                    // This is not Marlin, M1 command is probably not supported.
+                    // (See https://github.com/prusa3d/PrusaSlicer/issues/5441.)
+                    if (overlap) {
+                        print.active_step_add_warning(PrintStateBase::WarningLevel::CRITICAL,
+                            _(L("Your print is very close to the priming regions. "
+                              "Make sure there is no collision.")));
+                    } else {
+                        // Just continue printing, no action necessary.
+                    }
+
                 }
             }
             print.throw_if_canceled();
@@ -1368,6 +1297,7 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
         DynamicConfig config;
         config.set_key_value("layer_num", new ConfigOptionInt(m_layer_index));
         config.set_key_value("layer_z",   new ConfigOptionFloat(m_writer.get_position()(2) - m_config.z_offset.value));
+        config.set_key_value("max_layer_z", new ConfigOptionFloat(m_max_layer_z));
         if (print.config().single_extruder_multi_material) {
             // Process the end_filament_gcode for the active filament only.
             int extruder_id = m_writer.extruder()->id();
@@ -1419,10 +1349,14 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
 std::string GCode::placeholder_parser_process(const std::string &name, const std::string &templ, unsigned int current_extruder_id, const DynamicConfig *config_override)
 {
     try {
-        return m_placeholder_parser.process(templ, current_extruder_id, config_override);
+        return m_placeholder_parser.process(templ, current_extruder_id, config_override, &m_placeholder_parser_context);
     } catch (std::runtime_error &err) {
         // Collect the names of failed template substitutions for error reporting.
-        m_placeholder_parser_failed_templates.insert(name);
+        auto it = m_placeholder_parser_failed_templates.find(name);
+        if (it == m_placeholder_parser_failed_templates.end())
+            // Only if there was no error reported for this template, store the first error message into the map to be reported.
+            // We don't want to collect error message for each and every occurence of a single custom G-code section.
+            m_placeholder_parser_failed_templates.insert(it, std::make_pair(name, std::string(err.what())));
         // Insert the macro error message into the G-code.
         return
             std::string("\n!!!!! Failed to process the custom G-code template ") + name + "\n" +
@@ -1839,6 +1773,7 @@ void GCode::process_layer(
 
     // Check whether it is possible to apply the spiral vase logic for this layer.
     // Just a reminder: A spiral vase mode is allowed for a single object, single material print only.
+    m_enable_loop_clipping = true;
     if (m_spiral_vase && layers.size() == 1 && support_layer == nullptr) {
         bool enable = (layer.id() > 0 || !print.has_brim()) && (layer.id() >= (size_t)print.config().skirt_height.value && ! print.has_infinite_skirt());
         if (enable) {
@@ -1850,15 +1785,15 @@ void GCode::process_layer(
                     break;
                 }
         }
-        m_spiral_vase->enable = enable;
+        m_spiral_vase->enable(enable);
+        // If we're going to apply spiralvase to this layer, disable loop clipping.
+        m_enable_loop_clipping = !enable;
     }
-    // If we're going to apply spiralvase to this layer, disable loop clipping
-    m_enable_loop_clipping = ! m_spiral_vase || ! m_spiral_vase->enable;
 
     std::string gcode;
 
     // add tag for processor
-    gcode += "; " + GCodeProcessor::Layer_Change_Tag + "\n";
+    gcode += ";" + GCodeProcessor::Layer_Change_Tag + "\n";
     // export layer z
     char buf[64];
     sprintf(buf, ";Z:%g\n", print_z);
@@ -1869,13 +1804,15 @@ void GCode::process_layer(
     gcode += buf;
     // update caches
     m_last_layer_z = static_cast<float>(print_z);
+    m_max_layer_z  = std::max(m_max_layer_z, m_last_layer_z);
     m_last_height = height;
 
     // Set new layer - this will change Z and force a retraction if retract_layer_change is enabled.
     if (! print.config().before_layer_gcode.value.empty()) {
         DynamicConfig config;
-        config.set_key_value("layer_num", new ConfigOptionInt(m_layer_index + 1));
-        config.set_key_value("layer_z",   new ConfigOptionFloat(print_z));
+        config.set_key_value("layer_num",   new ConfigOptionInt(m_layer_index + 1));
+        config.set_key_value("layer_z",     new ConfigOptionFloat(print_z));
+        config.set_key_value("max_layer_z", new ConfigOptionFloat(m_max_layer_z));
         gcode += this->placeholder_parser_process("before_layer_gcode",
             print.config().before_layer_gcode.value, m_writer.extruder()->id(), &config)
             + "\n";
@@ -1889,6 +1826,7 @@ void GCode::process_layer(
         gcode += this->placeholder_parser_process("layer_gcode",
             print.config().layer_gcode.value, m_writer.extruder()->id(), &config)
             + "\n";
+        config.set_key_value("max_layer_z", new ConfigOptionFloat(m_max_layer_z));
     }
 
     if (! first_layer && ! m_second_layer_things_done) {
@@ -2091,7 +2029,7 @@ void GCode::process_layer(
         if (auto loops_it = skirt_loops_per_extruder.find(extruder_id); loops_it != skirt_loops_per_extruder.end()) {
             const std::pair<size_t, size_t> loops = loops_it->second;
             this->set_origin(0., 0.);
-            m_avoid_crossing_perimeters.use_external_mp = true;
+            m_avoid_crossing_perimeters.use_external_mp();
             Flow layer_skirt_flow(print.skirt_flow());
             layer_skirt_flow.height = float(m_skirt_done.back() - (m_skirt_done.size() == 1 ? 0. : m_skirt_done[m_skirt_done.size() - 2]));
             double mm3_per_mm = layer_skirt_flow.mm3_per_mm();
@@ -2105,23 +2043,23 @@ void GCode::process_layer(
                 //FIXME using the support_material_speed of the 1st object printed.
                 gcode += this->extrude_loop(loop, "skirt", m_config.support_material_speed.value);
             }
-            m_avoid_crossing_perimeters.use_external_mp = false;
+            m_avoid_crossing_perimeters.use_external_mp(false);
             // Allow a straight travel move to the first object point if this is the first layer (but don't in next layers).
             if (first_layer && loops.first == 0)
-                m_avoid_crossing_perimeters.disable_once = true;
+                m_avoid_crossing_perimeters.disable_once();
         }
 
         // Extrude brim with the extruder of the 1st region.
         if (! m_brim_done) {
             this->set_origin(0., 0.);
-            m_avoid_crossing_perimeters.use_external_mp = true;
+            m_avoid_crossing_perimeters.use_external_mp();
             for (const ExtrusionEntity *ee : print.brim().entities) {
                 gcode += this->extrude_entity(*ee, "brim", m_config.support_material_speed.value);
             }
             m_brim_done = true;
-            m_avoid_crossing_perimeters.use_external_mp = false;
+            m_avoid_crossing_perimeters.use_external_mp(false);
             // Allow a straight travel move to the first object point.
-            m_avoid_crossing_perimeters.disable_once = true;
+            m_avoid_crossing_perimeters.disable_once();
         }
 
 
@@ -2141,15 +2079,14 @@ void GCode::process_layer(
                 m_config.apply(instance_to_print.print_object.config(), true);
                 m_layer = layers[instance_to_print.layer_id].layer();
                 if (m_config.avoid_crossing_perimeters)
-                    m_avoid_crossing_perimeters.init_layer_mp(union_ex(m_layer->lslices, true));
-
+                    m_avoid_crossing_perimeters.init_layer(*m_layer);
                 if (this->config().gcode_label_objects)
                     gcode += std::string("; printing object ") + instance_to_print.print_object.model_object()->name + " id:" + std::to_string(instance_to_print.layer_id) + " copy " + std::to_string(instance_to_print.instance_id) + "\n";
                 // When starting a new object, use the external motion planner for the first travel move.
                 const Point &offset = instance_to_print.print_object.instances()[instance_to_print.instance_id].shift;
                 std::pair<const PrintObject*, Point> this_object_copy(&instance_to_print.print_object, offset);
                 if (m_last_obj_copy != this_object_copy)
-                    m_avoid_crossing_perimeters.use_external_mp_once = true;
+                    m_avoid_crossing_perimeters.use_external_mp_once();
                 m_last_obj_copy = this_object_copy;
                 this->set_origin(unscale(offset));
                 if (instance_to_print.object_by_extruder.support != nullptr && !print_wipe_extrusions) {
@@ -2335,7 +2272,7 @@ std::string GCode::extrude_loop(ExtrusionLoop loop, std::string description, dou
         const EdgeGrid::Grid* edge_grid_ptr = (lower_layer_edge_grid && *lower_layer_edge_grid)
                                                 ? lower_layer_edge_grid->get()
                                                 : nullptr;
-        Point seam = m_seam_placer.get_seam(m_layer->id(), seam_position, loop,
+        Point seam = m_seam_placer.get_seam(*m_layer, seam_position, loop,
                          last_pos, EXTRUDER_CONFIG(nozzle_diameter),
                          (m_layer == NULL ? nullptr : m_layer->object()),
                          was_clockwise, edge_grid_ptr);
@@ -2684,6 +2621,14 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         gcode += buf;
     }
 
+#if ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
+    if (last_was_wipe_tower || m_last_width != path.width) {
+        m_last_width = path.width;
+        sprintf(buf, ";%s%g\n", GCodeProcessor::Width_Tag.c_str(), m_last_width);
+        gcode += buf;
+    }
+#endif // ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
+
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
     if (last_was_wipe_tower || (m_last_mm3_per_mm != path.mm3_per_mm)) {
         m_last_mm3_per_mm = path.mm3_per_mm;
@@ -2691,11 +2636,13 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
         gcode += buf;
     }
 
+#if !ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
     if (last_was_wipe_tower || m_last_width != path.width) {
         m_last_width = path.width;
         sprintf(buf, ";%s%g\n", GCodeProcessor::Width_Tag.c_str(), m_last_width);
         gcode += buf;
     }
+#endif // !ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
 #endif // ENABLE_GCODE_VIEWER_DATA_CHECKING
 
     if (last_was_wipe_tower || std::abs(m_last_height - path.height) > EPSILON) {
@@ -2741,43 +2688,51 @@ std::string GCode::travel_to(const Point &point, ExtrusionRole role, std::string
     /*  Define the travel move as a line between current position and the taget point.
         This is expressed in print coordinates, so it will need to be translated by
         this->origin in order to get G-code coordinates.  */
-    Polyline travel;
-    travel.append(this->last_pos());
-    travel.append(point);
+    Polyline travel { this->last_pos(), point };
 
     // check whether a straight travel move would need retraction
-    bool needs_retraction = this->needs_retraction(travel, role);
+    bool needs_retraction       = this->needs_retraction(travel, role);
+    // check whether wipe could be disabled without causing visible stringing
+    bool could_be_wipe_disabled = false;
 
     // if a retraction would be needed, try to use avoid_crossing_perimeters to plan a
     // multi-hop travel path inside the configuration space
     if (needs_retraction
         && m_config.avoid_crossing_perimeters
-        && ! m_avoid_crossing_perimeters.disable_once) {
-        travel = m_avoid_crossing_perimeters.travel_to(*this, point);
-
+        && ! m_avoid_crossing_perimeters.disabled_once()) {
+        travel = m_avoid_crossing_perimeters.travel_to(*this, point, &could_be_wipe_disabled);
         // check again whether the new travel path still needs a retraction
         needs_retraction = this->needs_retraction(travel, role);
         //if (needs_retraction && m_layer_index > 1) exit(0);
     }
 
     // Re-allow avoid_crossing_perimeters for the next travel moves
-    m_avoid_crossing_perimeters.disable_once = false;
-    m_avoid_crossing_perimeters.use_external_mp_once = false;
+    m_avoid_crossing_perimeters.reset_once_modifiers();
 
     // generate G-code for the travel move
     std::string gcode;
-    if (needs_retraction)
+    if (needs_retraction) {
+        if (m_config.avoid_crossing_perimeters && could_be_wipe_disabled)
+            m_wipe.reset_path();
+
+        Point last_post_before_retract = this->last_pos();
         gcode += this->retract();
-    else
+        // When "Wipe while retracting" is enabled, then extruder moves to another position, and travel from this position can cross perimeters.
+        // Because of it, it is necessary to call avoid crossing perimeters for the path between previous last_post and last_post after calling retraction()
+        if (last_post_before_retract != this->last_pos() && m_config.avoid_crossing_perimeters) {
+            Polyline retract_travel = m_avoid_crossing_perimeters.travel_to(*this, last_post_before_retract);
+            append(retract_travel.points, travel.points);
+            travel = std::move(retract_travel);
+        }
+    } else
         // Reset the wipe path when traveling, so one would not wipe along an old path.
         m_wipe.reset_path();
 
     // use G1 because we rely on paths being straight (G0 may make round paths)
-    Lines lines = travel.lines();
-    if (! lines.empty()) {
-        for (const Line &line : lines)
-            gcode += m_writer.travel_to_xy(this->point_to_gcode(line.b), comment);
-        this->set_last_pos(lines.back().b);
+    if (travel.size() >= 2) {
+        for (size_t i = 1; i < travel.size(); ++ i)
+            gcode += m_writer.travel_to_xy(this->point_to_gcode(travel.points[i]), comment);
+        this->set_last_pos(travel.points.back());
     }
     return gcode;
 }
@@ -2890,6 +2845,7 @@ std::string GCode::set_extruder(unsigned int extruder_id, double print_z)
         config.set_key_value("next_extruder",     new ConfigOptionInt((int)extruder_id));
         config.set_key_value("layer_num",         new ConfigOptionInt(m_layer_index));
         config.set_key_value("layer_z",           new ConfigOptionFloat(print_z));
+        config.set_key_value("max_layer_z",       new ConfigOptionFloat(m_max_layer_z));
         toolchange_gcode_parsed = placeholder_parser_process("toolchange_gcode", toolchange_gcode, extruder_id, &config);
         gcode += toolchange_gcode_parsed;
         check_add_eol(gcode);

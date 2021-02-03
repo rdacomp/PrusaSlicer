@@ -17,9 +17,9 @@ typedef std::vector<ExPolygon> ExPolygons;
 class ExPolygon
 {
 public:
-    ExPolygon() {}
-	ExPolygon(const ExPolygon &other) : contour(other.contour), holes(other.holes) {}
-    ExPolygon(ExPolygon &&other) noexcept : contour(std::move(other.contour)), holes(std::move(other.holes)) {}
+    ExPolygon() = default;
+	ExPolygon(const ExPolygon &other) = default;
+    ExPolygon(ExPolygon &&other) = default;
 	explicit ExPolygon(const Polygon &contour) : contour(contour) {}
 	explicit ExPolygon(Polygon &&contour) : contour(std::move(contour)) {}
 	explicit ExPolygon(const Points &contour) : contour(contour) {}
@@ -31,10 +31,10 @@ public:
 	ExPolygon(std::initializer_list<Point> contour) : contour(contour) {}
 	ExPolygon(std::initializer_list<Point> contour, std::initializer_list<Point> hole) : contour(contour), holes({ hole }) {}
 
-    ExPolygon& operator=(const ExPolygon &other) { contour = other.contour; holes = other.holes; return *this; }
-    ExPolygon& operator=(ExPolygon &&other) noexcept { contour = std::move(other.contour); holes = std::move(other.holes); return *this; }
+    ExPolygon& operator=(const ExPolygon &other) = default;
+    ExPolygon& operator=(ExPolygon &&other) = default;
 
-    Polygon contour;
+    Polygon  contour;
     Polygons holes;
 
     operator Points() const;
@@ -42,7 +42,8 @@ public:
     operator Polylines() const;
     void clear() { contour.points.clear(); holes.clear(); }
     void scale(double factor);
-    void translate(double x, double y);
+    void translate(double x, double y) { this->translate(Point(coord_t(x), coord_t(y))); }
+    void translate(const Point &vector);
     void rotate(double angle);
     void rotate(double angle, const Point &center);
     double area() const;
@@ -247,6 +248,24 @@ inline Polygons to_polygons(ExPolygons &&src)
         it->holes.clear();
     }
     return polygons;
+}
+
+inline ExPolygons to_expolygons(const Polygons &polys)
+{
+    ExPolygons ex_polys;
+    ex_polys.assign(polys.size(), ExPolygon());
+    for (size_t idx = 0; idx < polys.size(); ++idx)
+        ex_polys[idx].contour = polys[idx];
+    return ex_polys;
+}
+
+inline ExPolygons to_expolygons(Polygons &&polys)
+{
+    ExPolygons ex_polys;
+    ex_polys.assign(polys.size(), ExPolygon());
+    for (size_t idx = 0; idx < polys.size(); ++idx)
+        ex_polys[idx].contour = std::move(polys[idx]);
+    return ex_polys;
 }
 
 inline void polygons_append(Polygons &dst, const ExPolygon &src) 

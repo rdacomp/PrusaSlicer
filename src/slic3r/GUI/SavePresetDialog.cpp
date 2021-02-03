@@ -133,13 +133,23 @@ void SavePresetDialog::Item::update()
         if (existing->is_compatible)
             info_line = from_u8((boost::format(_u8L("Preset with name \"%1%\" already exists.")) % m_preset_name).str());
         else
-            info_line = from_u8((boost::format(_u8L("Preset with name \"%1%\" already exists and is imcopatible with selected printer.")) % m_preset_name).str());
+            info_line = from_u8((boost::format(_u8L("Preset with name \"%1%\" already exists and is incompatible with selected printer.")) % m_preset_name).str());
         info_line += "\n" + _L("Note: This preset will be replaced after saving");
         m_valid_type = Warning;
     }
 
     if (m_valid_type == Valid && m_preset_name.empty()) {
         info_line = _L("The name cannot be empty.");
+        m_valid_type = NoValid;
+    }
+
+    if (m_valid_type == Valid && m_preset_name.find_first_of(' ') == 0) {
+        info_line = _L("The name cannot start with space character.");
+        m_valid_type = NoValid;
+    }
+
+    if (m_valid_type == Valid && m_preset_name.find_last_of(' ') == m_preset_name.length()-1) {
+        info_line = _L("The name cannot end with space character.");
         m_valid_type = NoValid;
     }
 

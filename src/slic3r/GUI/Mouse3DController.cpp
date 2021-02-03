@@ -99,7 +99,7 @@ void Mouse3DController::State::append_button(unsigned int id, size_t /* input_qu
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 #if ENABLE_CTRL_M_ON_WINDOWS
 static std::string format_device_string(int vid, int pid)
 {
@@ -319,7 +319,7 @@ bool Mouse3DController::State::process_mouse_wheel()
     m_mouse_wheel_counter = 0;
     return true;
 }
-#endif // WIN32
+#endif // _WIN32
 
 bool Mouse3DController::State::apply(const Mouse3DController::Params &params, Camera& camera)
 {
@@ -346,7 +346,6 @@ bool Mouse3DController::State::apply(const Mouse3DController::Params &params, Ca
             if (params.swap_yz)
                 rot = Vec3d(rot.x(), -rot.z(), rot.y());
             camera.rotate_local_around_target(Vec3d(rot.x(), - rot.z(), rot.y()));
-	        break;
 	    } else {
 	    	assert(input_queue_item.is_buttons());
 	        switch (input_queue_item.type_or_buttons) {
@@ -602,7 +601,7 @@ void Mouse3DController::disconnected()
         m_params_by_device[m_device_str] = m_params_ui;
 	    m_device_str.clear();
 	    m_connected = false;
-		wxGetApp().plater()->get_notification_manager()->push_notification(NotificationType::Mouse3dDisconnected, *(wxGetApp().plater()->get_current_canvas3D()));
+		wxGetApp().plater()->get_notification_manager()->push_notification(NotificationType::Mouse3dDisconnected);
 
         wxGetApp().plater()->CallAfter([]() {
         	Plater *plater = wxGetApp().plater();
@@ -700,10 +699,10 @@ void Mouse3DController::shutdown()
 	}
 
 #if ENABLE_CTRL_M_ON_WINDOWS
-#ifdef WIN32
+#ifdef _WIN32
     if (!m_device_str.empty())
         m_params_by_device[m_device_str] = m_params_ui;
-#endif // WIN32
+#endif // _WIN32
 #endif // ENABLE_CTRL_M_ON_WINDOWS
 }
 
@@ -895,7 +894,10 @@ bool Mouse3DController::connect_device()
         if (device.second.size() == 1) {
 #if defined(__linux__)
             hid_device* test_device = hid_open(device.first.first, device.first.second, nullptr);
-            if (test_device != nullptr) {
+            if (test_device == nullptr) {
+                BOOST_LOG_TRIVIAL(error) << "3DConnexion device cannot be opened: " << device.second.front().path <<
+                    " You may need to update /etc/udev/rules.d";
+            } else {
                 hid_close(test_device);
 #else
             if (device.second.front().has_valid_usage()) {
@@ -940,10 +942,13 @@ bool Mouse3DController::connect_device()
                     break;
                 }
 #endif // __linux__
+                else {
+                    BOOST_LOG_TRIVIAL(error) << "3DConnexion device cannot be opened: " << data.path <<
+                        " You may need to update /etc/udev/rules.d";
 #if ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
-                else
                     std::cout << "-> NOT PASSED" << std::endl;
 #endif // ENABLE_3DCONNEXION_DEVICES_DEBUG_OUTPUT
+                }
             }
 
             if (found)

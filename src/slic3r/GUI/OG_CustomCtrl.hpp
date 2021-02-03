@@ -39,13 +39,15 @@ class OG_CustomCtrl :public wxPanel
         const Line&       og_line;
 
         bool draw_just_act_buttons  { false };
+        bool draw_mode_bitmap       { true };
         bool is_visible             { true };
         bool is_focused             { false };
 
         CtrlLine(   wxCoord         height,
                     OG_CustomCtrl*  ctrl,
                     const Line&     og_line,
-                    bool            draw_just_act_buttons = false);
+                    bool            draw_just_act_buttons = false,
+                    bool            draw_mode_bitmap = true);
         ~CtrlLine() { ctrl = nullptr; }
 
         void    correct_items_positions();
@@ -93,6 +95,20 @@ public:
 
     OptionsGroup*  opt_group;
 
+};
+
+//-----------------------------------------------
+//          RememberChoiceDialog
+//-----------------------------------------------
+
+class RememberChoiceDialog : public wxDialog
+{
+    wxCheckBox* m_remember_choice;
+public:
+    RememberChoiceDialog(wxWindow* parent, const wxString& msg_text, const wxString& caption);
+    ~RememberChoiceDialog() {}
+
+    bool remember_choice() const { return m_remember_choice->GetValue(); }
 };
 
 }}
