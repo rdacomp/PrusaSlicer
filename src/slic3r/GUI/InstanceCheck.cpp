@@ -343,7 +343,11 @@ bool instance_check(int argc, char** argv, bool app_config_single_instance)
 		cla.should_send = app_config_single_instance;
 //#ifdef _WIN32
 	GUI::wxGetApp().init_single_instance_checker(lock_name + ".lock", data_dir() + "/cache/");
+#ifdef _WIN32
 	if (cla.should_send.value() && GUI::wxGetApp().single_instance_checker()->IsAnotherRunning()) {
+#else // mac & linx
+	if (cla.should_send && GUI::wxGetApp().single_instance_checker()->IsAnotherRunning()) {
+#endif
 //#else // mac & linx
 //	// get_lock() creates the lockfile therefore *cla.should_send is checked after
 //	if (instance_check_internal::get_lock(lock_name + ".lock", data_dir() + "/cache/") && *cla.should_send) {
@@ -504,10 +508,12 @@ void OtherInstanceMessageHandler::handle_message(const std::string& message)
 	}
 }
 
+#if __APPLE__
 void OtherInstanceMessageHandler::handle_message_other_closed() 
 {
 	instance_check_internal::get_lock(wxGetApp().get_instance_hash_string() + ".lock", data_dir() + "/cache/");
 }
+#endif //__APPLE__
 
 #ifdef BACKGROUND_MESSAGE_LISTENER
 

@@ -68,7 +68,9 @@ public:
 	//						mac - anybody who posts notification with name:@"OtherPrusaSlicerTerminating"
 	//						linux - instrospectable on dbus
 	void           handle_message(const std::string& message);
+#if __APPLE__
 	void           handle_message_other_closed();
+#endif //__APPLE__
 #ifdef _WIN32
 	static void    init_windows_properties(MainFrame* main_frame, size_t instance_hash);
 #endif //WIN32
