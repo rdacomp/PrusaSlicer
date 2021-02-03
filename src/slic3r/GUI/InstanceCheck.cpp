@@ -28,6 +28,28 @@
 #endif //__linux__
 
 namespace Slic3r {
+
+#ifdef __APPLE__
+	bool unlock_lockfile(const std::string& name, const std::string& path)
+	{
+		std::string dest_dir = path + name;
+		//BOOST_LOG_TRIVIAL(debug) << "full lock path: " << dest_dir;
+		struct      flock fl;
+		int         fdlock;
+		fl.l_type = F_UNLCK;
+		fl.l_whence = SEEK_SET;
+		fl.l_start = 0;
+		fl.l_len = 1;
+		if ((fdlock = open(dest_dir.c_str(), O_WRONLY | O_CREAT, 0666)) == -1)
+			return false;
+
+		if (fcntl(fdlock, F_SETLK, &fl) == -1)
+			return false;
+
+		return true;
+	}
+#endif //__APPLE__
+
 namespace instance_check_internal
 {
 	static bool        s_created_lockfile = false;
@@ -165,7 +187,7 @@ namespace instance_check_internal
 	// Deletes lockfile if it was created by this instance
 	static void delete_lockfile()
 	{
-		
+		BOOST_LOG_TRIVIAL(error) << "unlock:" << unlock_lockfile(GUI::wxGetApp().get_instance_hash_string() + ".lock", data_dir() + "/cache/");
 		//BOOST_LOG_TRIVIAL(debug) << "shuting down with lockfile: " << l_created_lockfile;
 		if (s_created_lockfile)
 		{
@@ -336,26 +358,7 @@ bool instance_check(int argc, char** argv, bool app_config_single_instance)
 	return false;
 }
 
-#ifdef __APPLE__
-bool unlock_lockfile(const std::string& name, const std::string& path)
-{
-	std::string dest_dir = path + name;
-	//BOOST_LOG_TRIVIAL(debug) << "full lock path: " << dest_dir;
-	struct      flock fl;
-	int         fdlock;
-	fl.l_type = F_UNLCK;
-	fl.l_whence = SEEK_SET;
-	fl.l_start = 0;
-	fl.l_len = 1;
-	if ((fdlock = open(dest_dir.c_str(), O_WRONLY | O_CREAT, 0666)) == -1)
-		return false;
 
-	if (fcntl(fdlock, F_SETLK, &fl) == -1)
-		return false;
-
-	return true;
-}
-#endif //__APPLE__
 namespace GUI {
 
 wxDEFINE_EVENT(EVT_LOAD_MODEL_OTHER_INSTANCE, LoadFromOtherInstanceEvent);
