@@ -341,13 +341,13 @@ bool instance_check(int argc, char** argv, bool app_config_single_instance)
 	instance_check_internal::CommandLineAnalysis cla = instance_check_internal::process_command_line(argc, argv);
 	if (! cla.should_send.has_value())
 		cla.should_send = app_config_single_instance;
-#ifdef _WIN32
-	GUI::wxGetApp().init_single_instance_checker(lock_name + ".lock", data_dir() + "\\cache\\");
+//#ifdef _WIN32
+	GUI::wxGetApp().init_single_instance_checker(lock_name + ".lock", data_dir() + "/cache/");
 	if (cla.should_send.value() && GUI::wxGetApp().single_instance_checker()->IsAnotherRunning()) {
-#else // mac & linx
-	// get_lock() creates the lockfile therefore *cla.should_send is checked after
-	if (instance_check_internal::get_lock(lock_name + ".lock", data_dir() + "/cache/") && *cla.should_send) {
-#endif
+//#else // mac & linx
+//	// get_lock() creates the lockfile therefore *cla.should_send is checked after
+//	if (instance_check_internal::get_lock(lock_name + ".lock", data_dir() + "/cache/") && *cla.should_send) {
+//#endif
 		instance_check_internal::send_message(cla.cl_string, lock_name);
 		BOOST_LOG_TRIVIAL(info) << "instance check: Another instance found. This instance will terminate.";
 		return true;
@@ -385,7 +385,7 @@ void OtherInstanceMessageHandler::shutdown(MainFrame* main_frame)
 {
 	BOOST_LOG_TRIVIAL(debug) << "message handler shutdown().";
 #ifndef _WIN32
-	instance_check_internal::delete_lockfile();
+	//instance_check_internal::delete_lockfile();
 #endif //!_WIN32
 	assert(m_initialized);
 	if (m_initialized) {
