@@ -32,7 +32,7 @@ class GCode;
 
 namespace { struct Item; }
 struct PrintInstance;
-using PrintObjectPtrs = std::vector<PrintObject*>;
+class ConstPrintObjectPtrsAdaptor;
 
 class AvoidCrossingPerimeters {
 public:
@@ -56,7 +56,7 @@ public:
 
 private:
     // For initializing the regions to avoid.
-	static Polygons collect_contours_all_layers(const PrintObjectPtrs& objects);
+	static Polygons collect_contours_all_layers(ConstPrintObjectPtrsAdaptor &objects);
 
     std::unique_ptr<MotionPlanner> m_external_mp;
     std::unique_ptr<MotionPlanner> m_layer_mp;

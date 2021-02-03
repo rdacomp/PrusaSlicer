@@ -110,12 +110,6 @@ diff_ex(const Slic3r::Polygons &subject, const Slic3r::Polygons &clip, bool safe
 }
 
 inline Slic3r::ExPolygons
-diff_ex(const Slic3r::ExPolygons &subject, const Slic3r::Polygons &clip, bool safety_offset_ = false)
-{
-    return _clipper_ex(ClipperLib::ctDifference, to_polygons(subject), clip, safety_offset_);
-}
-
-inline Slic3r::ExPolygons
 diff_ex(const Slic3r::ExPolygons &subject, const Slic3r::ExPolygons &clip, bool safety_offset_ = false)
 {
     return _clipper_ex(ClipperLib::ctDifference, to_polygons(subject), to_polygons(clip), safety_offset_);
@@ -156,12 +150,6 @@ inline Slic3r::ExPolygons
 intersection_ex(const Slic3r::Polygons &subject, const Slic3r::Polygons &clip, bool safety_offset_ = false)
 {
     return _clipper_ex(ClipperLib::ctIntersection, subject, clip, safety_offset_);
-}
-
-inline Slic3r::ExPolygons
-intersection_ex(const Slic3r::ExPolygons &subject, const Slic3r::Polygons &clip, bool safety_offset_ = false)
-{
-    return _clipper_ex(ClipperLib::ctIntersection, to_polygons(subject), clip, safety_offset_);
 }
 
 inline Slic3r::ExPolygons

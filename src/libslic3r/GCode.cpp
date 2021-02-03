@@ -113,7 +113,7 @@ namespace Slic3r {
     // Collect outer contours of all objects over all layers.
     // Discard objects only containing thin walls (offset would fail on an empty polygon).
     // Used by avoid crossing perimeters feature.
-    Polygons AvoidCrossingPerimeters::collect_contours_all_layers(const PrintObjectPtrs& objects)
+    Polygons AvoidCrossingPerimeters::collect_contours_all_layers(ConstPrintObjectPtrsAdaptor &objects)
     {
         Polygons islands;
         for (const PrintObject* object : objects) {
