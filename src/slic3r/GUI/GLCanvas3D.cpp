@@ -1331,7 +1331,7 @@ void GLCanvas3D::toggle_model_objects_visibility(bool visible, const ModelObject
 {
     for (GLVolume* vol : m_volumes.volumes) {
         if (vol->composite_id.object_id == 1000) { // wipe tower
-                vol->is_active = (visible && mo == nullptr);
+            vol->is_active = (visible && mo == nullptr);
         }
         else {
             if ((mo == nullptr || m_model->objects[vol->composite_id.object_id] == mo)
@@ -1377,7 +1377,7 @@ void GLCanvas3D::update_instance_printable_state_for_object(const size_t obj_idx
     }
 }
 
-void GLCanvas3D::update_instance_printable_state_for_objects(std::vector<size_t>& object_idxs)
+void GLCanvas3D::update_instance_printable_state_for_objects(const std::vector<size_t>& object_idxs)
 {
     for (size_t obj_idx : object_idxs)
         update_instance_printable_state_for_object(obj_idx);
@@ -2996,6 +2996,7 @@ void GLCanvas3D::on_render_timer(wxTimerEvent& evt)
     }
     //render();
     m_dirty = true;
+    wxWakeUpIdle();
 }
 
 void GLCanvas3D::request_extra_frame_delayed(int miliseconds)
@@ -3865,7 +3866,11 @@ void GLCanvas3D::update_tooltip_for_settings_item_in_main_toolbar()
 
 bool GLCanvas3D::has_toolpaths_to_export() const
 {
+#if ENABLE_SPLITTED_VERTEX_BUFFER
+    return m_gcode_viewer.can_export_toolpaths();
+#else
     return m_gcode_viewer.has_data();
+#endif // ENABLE_SPLITTED_VERTEX_BUFFER
 }
 
 void GLCanvas3D::export_toolpaths_to_obj(const char* filename) const
@@ -4151,9 +4156,13 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
     shader->start_using();
     shader->set_uniform("print_box.volume_detection", 0);
 
-    for (const GLVolume* vol : visible_volumes) {
+    for (GLVolume* vol : visible_volumes) {
         shader->set_uniform("uniform_color", (vol->printable && !vol->is_outside) ? orange : gray);
+        // the volume may have been deactivated by an active gizmo
+        bool is_active = vol->is_active;
+        vol->is_active = true;
         vol->render();
+        vol->is_active = is_active;
     }
 
     shader->stop_using();
@@ -5813,7 +5822,7 @@ void GLCanvas3D::_load_print_object_toolpaths(const PrintObject& print_object, c
         int get_color_idx_for_tool_change(std::vector<CustomGCode::Item>::const_iterator it, const int extruder) const
         {
             const int current_extruder = it->extruder == 0 ? extruder : it->extruder;
-            if (number_tools() == extruders_cnt + 1) // there is no one "M600"
+            if (number_tools() == size_t(extruders_cnt + 1)) // there is no one "M600"
                 return std::min<int>(extruders_cnt - 1, std::max<int>(current_extruder - 1, 0));
 
             auto it_n = it;

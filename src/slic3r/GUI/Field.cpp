@@ -888,6 +888,7 @@ void SpinCtrl::msw_rescale()
 }
 
 #ifdef __WXOSX__
+static_assert(wxMAJOR_VERSION >= 3, "Use of wxBitmapComboBox on Settings Tabs requires wxWidgets 3.0 and newer");
 using choice_ctrl = wxBitmapComboBox;
 #else
 using choice_ctrl = wxComboBox;
@@ -941,22 +942,6 @@ void Choice::BUILD() {
 		}
 		set_selection();
 	}
-
-#ifdef __WXOSX__
-//#ifndef __WXGTK__
-    /* Workaround for a correct rendering of the control without Bitmap (under MSW and OSX):
-     * 
-     * 1. We should create small Bitmap to fill Bitmaps RefData,
-     *    ! in this case wxBitmap.IsOK() return true.
-     * 2. But then set width to 0 value for no using of bitmap left and right spacing 
-     * 3. Set this empty bitmap to the at list one item and BitmapCombobox will be recreated correct
-     * 
-     * Note: Set bitmap height to the Font size because of OSX rendering.
-     */
-    wxBitmap empty_bmp(1, temp->GetFont().GetPixelSize().y + 2);
-    empty_bmp.SetWidth(0);
-    temp->SetItemBitmap(0, empty_bmp);
-#endif
 
     temp->Bind(wxEVT_MOUSEWHEEL, [this](wxMouseEvent& e) {
         if (m_suppress_scroll && !m_is_dropped)
@@ -1043,7 +1028,7 @@ void Choice::set_selection()
 	}
 
 	if (!text_value.IsEmpty()) {
-		int idx = 0;
+        size_t idx = 0;
 		for (auto el : m_opt.enum_values) {
 			if (el == text_value)
 				break;
@@ -1215,6 +1200,10 @@ boost::any& Choice::get_value()
 		}
 		else if (m_opt_id.compare("ironing_type") == 0)
 			m_value = static_cast<IroningType>(ret_enum);
+        else if (m_opt_id.compare("fuzzy_skin_perimeter_mode") == 0)
+            m_value = static_cast<FuzzySkinPerimeterMode>(ret_enum);
+//        else if (m_opt_id.compare("fuzzy_skin_shape") == 0)
+//            m_value = static_cast<FuzzySkinShape>(ret_enum);
 		else if (m_opt_id.compare("gcode_flavor") == 0)
 			m_value = static_cast<GCodeFlavor>(ret_enum);
 		else if (m_opt_id.compare("machine_limits_usage") == 0)
@@ -1290,10 +1279,6 @@ void Choice::msw_rescale()
             ++ counter;
         }
     }
-
-    wxBitmap empty_bmp(1, field->GetFont().GetPixelSize().y + 2);
-    empty_bmp.SetWidth(0);
-    field->SetItemBitmap(0, empty_bmp);
 
     idx == m_opt.enum_values.size() ?
         field->SetValue(selection) :
@@ -1392,7 +1377,7 @@ void ColourPicker::msw_rescale()
         size.SetHeight(m_opt.height * m_em_unit);
     else if (parent_is_custom_ctrl && opt_height > 0)
         size.SetHeight(lround(opt_height * m_em_unit));
-	if (m_opt.width >= 0) size.SetWidth(m_opt.width * m_em_unit);
+    if (m_opt.width >= 0) size.SetWidth(m_opt.width * m_em_unit);
     if (parent_is_custom_ctrl)
         field->SetSize(size);
     else
@@ -1419,7 +1404,7 @@ void PointCtrl::BUILD()
     if (parent_is_custom_ctrl && m_opt.height < 0)
         opt_height = (double)x_textctrl->GetSize().GetHeight() / m_em_unit;
 
-	x_textctrl->SetFont(Slic3r::GUI::wxGetApp().normal_font());
+    x_textctrl->SetFont(Slic3r::GUI::wxGetApp().normal_font());
 	x_textctrl->SetBackgroundStyle(wxBG_STYLE_PAINT);
 	y_textctrl->SetFont(Slic3r::GUI::wxGetApp().normal_font());
 	y_textctrl->SetBackgroundStyle(wxBG_STYLE_PAINT);

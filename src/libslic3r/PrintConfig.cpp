@@ -1032,6 +1032,70 @@ void PrintConfigDef::init_fff_params()
     def->mode = comExpert;
     def->set_default_value(new ConfigOptionInts { 0 });
 
+    def = this->add("fuzzy_skin_perimeter_mode", coEnum);
+    def->label = L("Fuzzy skin perimeter mode");
+    def->category = L("Fuzzy Skin");
+    def->tooltip = L("Fuzzy skin perimeter mode.");
+
+    def->enum_keys_map = &ConfigOptionEnum<FuzzySkinPerimeterMode>::get_enum_values();
+    def->enum_values.push_back("none");
+    def->enum_values.push_back("external_only");
+    def->enum_values.push_back("external_only_skip_first_layer");
+    def->enum_values.push_back("all");
+    def->enum_labels.push_back(L("None"));
+    def->enum_labels.push_back(L("External"));
+    def->enum_labels.push_back(L("External (skip first layer)"));
+    def->enum_labels.push_back(L("All perimeters"));
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionEnum<FuzzySkinPerimeterMode>(FuzzySkinPerimeterMode::None));
+
+/*
+    def = this->add("fuzzy_skin_shape", coEnum);
+    def->label = L("Fuzzy skin shape");
+    def->category = L("Fuzzy Skin");
+    def->tooltip = L("Fuzzy skin shape.");
+
+    def->enum_keys_map = &ConfigOptionEnum<FuzzySkinShape>::get_enum_values();
+    def->enum_values.push_back("triangle1");
+    def->enum_values.push_back("triangle2");
+    def->enum_values.push_back("triangle3");
+    def->enum_values.push_back("sawtooth1");
+    def->enum_values.push_back("sawtooth2");
+    def->enum_values.push_back("sawtooth3");
+    def->enum_values.push_back("random1");
+    def->enum_values.push_back("random2");
+    def->enum_values.push_back("random3");
+    def->enum_labels.push_back(L("Triangle (1)"));
+    def->enum_labels.push_back(L("Triangle (2)"));
+    def->enum_labels.push_back(L("Triangle (3)"));
+    def->enum_labels.push_back(L("Sawtooth (1)"));
+    def->enum_labels.push_back(L("Sawtooth (2)"));
+    def->enum_labels.push_back(L("Sawtooth (3)"));
+    def->enum_labels.push_back(L("Random (1)"));
+    def->enum_labels.push_back(L("Random (2)"));
+    def->enum_labels.push_back(L("Random (3)"));
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionEnum<FuzzySkinShape>(FuzzySkinShape::Triangle1));
+*/
+
+    def = this->add("fuzzy_skin_thickness", coFloat);
+    def->label = L("Fuzzy skin thickness");
+    def->category = L("Fuzzy Skin");
+    def->tooltip = L("");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.3));
+
+    def = this->add("fuzzy_skin_point_dist", coFloat);
+    def->label = L("Fuzzy skin point distance");
+    def->category = L("Fuzzy Skin");
+    def->tooltip = L("");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.8));
+
     def = this->add("gap_fill_speed", coFloat);
     def->label = L("Gap fill");
     def->category = L("Speed");
@@ -3324,15 +3388,20 @@ DynamicPrintConfig* DynamicPrintConfig::new_from_defaults_keys(const std::vector
 
 double min_object_distance(const ConfigBase &cfg)
 {   
+    const ConfigOptionEnum<PrinterTechnology> *opt_printer_technology = cfg.option<ConfigOptionEnum<PrinterTechnology>>("printer_technology");
+    auto printer_technology = opt_printer_technology ? opt_printer_technology->value : ptUnknown;
+
     double ret = 0.;
-    
-    if (printer_technology(cfg) == ptSLA) ret = 6.;
+
+    if (printer_technology == ptSLA)
+        ret = 6.;
     else {
         auto ecr_opt = cfg.option<ConfigOptionFloat>("extruder_clearance_radius");
         auto dd_opt  = cfg.option<ConfigOptionFloat>("duplicate_distance");
         auto co_opt  = cfg.option<ConfigOptionBool>("complete_objects");
 
-        if (!ecr_opt || !dd_opt || !co_opt) ret = 0.;
+        if (!ecr_opt || !dd_opt || !co_opt) 
+            ret = 0.;
         else {
             // min object distance is max(duplicate_distance, clearance_radius)
             ret = (co_opt->value && ecr_opt->value > dd_opt->value) ?
@@ -3341,21 +3410,6 @@ double min_object_distance(const ConfigBase &cfg)
     }
 
     return ret;
-}
-
-PrinterTechnology printer_technology(const ConfigBase &cfg)
-{
-    const ConfigOptionEnum<PrinterTechnology> *opt = cfg.option<ConfigOptionEnum<PrinterTechnology>>("printer_technology");
-    
-    if (opt) return opt->value;
-    
-    const ConfigOptionBool *export_opt = cfg.option<ConfigOptionBool>("export_sla");
-    if (export_opt && export_opt->getBool()) return ptSLA;
-    
-    export_opt = cfg.option<ConfigOptionBool>("export_gcode");
-    if (export_opt && export_opt->getBool()) return ptFFF;    
-    
-    return ptUnknown;
 }
 
 void DynamicPrintConfig::normalize_fdm()
@@ -3403,6 +3457,8 @@ void DynamicPrintConfig::set_num_extruders(unsigned int num_extruders)
     const auto &defaults = FullPrintConfig::defaults();
     for (const std::string &key : print_config_def.extruder_option_keys()) {
         if (key == "default_filament_profile")
+            // Don't resize this field, as it is presented to the user at the "Dependencies" page of the Printer profile and we don't want to present
+            // empty fields there, if not defined by the system profile.
             continue;
         auto *opt = this->option(key, false);
         assert(opt != nullptr);

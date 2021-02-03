@@ -86,9 +86,8 @@ PresetBundle::PresetBundle() :
             preset.config.optptr(key, true);
         if (i == 0) {
             preset.config.optptr("default_print_profile", true);
-            preset.config.option<ConfigOptionStrings>("default_filament_profile", true)->values = { "" };
-        }
-        else {
+            preset.config.option<ConfigOptionStrings>("default_filament_profile", true);
+        } else {
             preset.config.optptr("default_sla_print_profile", true);
             preset.config.optptr("default_sla_material_profile", true);
         }
@@ -668,7 +667,7 @@ DynamicPrintConfig PresetBundle::full_sla_config() const
 // If the file is loaded successfully, its print / filament / printer profiles will be activated.
 void PresetBundle::load_config_file(const std::string &path)
 {
-	if (boost::iends_with(path, ".gcode") || boost::iends_with(path, ".g")) {
+	if (is_gcode_file(path)) {
 		DynamicPrintConfig config;
 		config.apply(FullPrintConfig::defaults());
         config.load_from_gcode_file(path);
@@ -752,7 +751,7 @@ void PresetBundle::load_config_file_config(const std::string &name_or_path, bool
 	switch (printer_technology) {
 	case ptFFF:
 		config.option<ConfigOptionString>("default_print_profile", true);
-		config.option<ConfigOptionStrings>("default_filament_profile", true)->values.resize(num_extruders, std::string());
+        config.option<ConfigOptionStrings>("default_filament_profile", true);
 		break;
 	case ptSLA:
 		config.option<ConfigOptionString>("default_sla_print_profile", true);
@@ -801,10 +800,9 @@ void PresetBundle::load_config_file_config(const std::string &name_or_path, bool
             compatible_printers_condition = compatible_printers_condition_values[1];
 			compatible_prints_condition   = compatible_prints_condition_values.front();
 			Preset                *loaded = nullptr;
-			if (is_external) {
-				auto [aloaded, modified] = this->filaments.load_external_preset(name_or_path, name, old_filament_profile_names->values.front(), config);
-                loaded = aloaded;
-			} else {
+            if (is_external)
+                loaded = this->filaments.load_external_preset(name_or_path, name, old_filament_profile_names->values.front(), config).first;
+            else {
                 // called from Config Wizard.
 				loaded= &this->filaments.load_preset(this->filaments.path_from_name(name), name, config);
 				loaded->save();
@@ -929,7 +927,11 @@ void PresetBundle::load_config_file_config_bundle(const std::string &path, const
             if (opt_compatible->type() == coStrings)
                 static_cast<ConfigOptionStrings*>(opt_compatible)->values.clear();
         }
-        collection_dst.load_preset(path, preset_name_dst, std::move(preset_src->config), activate).is_external = true;
+        (collection_dst.type() == Preset::TYPE_FILAMENT ? 
+            collection_dst.load_preset(path, preset_name_dst, preset_src->config, activate) :
+            // Only move the source config for non filament profiles, as single filament profile may be referenced multiple times.
+            collection_dst.load_preset(path, preset_name_dst, std::move(preset_src->config), activate))
+            .is_external = true;
         return preset_name_dst;
     };
     load_one(this->prints,        tmp_bundle.prints,        tmp_bundle.prints       .get_selected_preset_name(), true);
@@ -1142,33 +1144,26 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
 
     for (const auto &section : tree) {
         PresetCollection         *presets = nullptr;
-        std::vector<std::string> *loaded  = nullptr;
         std::string               preset_name;
         PhysicalPrinterCollection *ph_printers = nullptr;
         std::string               ph_printer_name;
         if (boost::starts_with(section.first, "print:")) {
             presets = &this->prints;
-            loaded  = &loaded_prints;
             preset_name = section.first.substr(6);
         } else if (boost::starts_with(section.first, "filament:")) {
             presets = &this->filaments;
-            loaded  = &loaded_filaments;
             preset_name = section.first.substr(9);
         } else if (boost::starts_with(section.first, "sla_print:")) {
             presets = &this->sla_prints;
-            loaded  = &loaded_sla_prints;
             preset_name = section.first.substr(10);
         } else if (boost::starts_with(section.first, "sla_material:")) {
             presets = &this->sla_materials;
-            loaded  = &loaded_sla_materials;
             preset_name = section.first.substr(13);
         } else if (boost::starts_with(section.first, "printer:")) {
             presets = &this->printers;
-            loaded  = &loaded_printers;
             preset_name = section.first.substr(8);
         } else if (boost::starts_with(section.first, "physical_printer:")) {
             ph_printers = &this->physical_printers;
-            loaded  = &loaded_physical_printers;
             ph_printer_name = section.first.substr(17);
         } else if (section.first == "presets") {
             // Load the names of the active presets.

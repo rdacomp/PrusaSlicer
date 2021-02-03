@@ -36,11 +36,8 @@ View3D::View3D(wxWindow* parent, Model* model, DynamicPrintConfig* config, Backg
 
 View3D::~View3D()
 {
-    if (m_canvas != nullptr)
-        delete m_canvas;
-
-    if (m_canvas_widget != nullptr)
-        delete m_canvas_widget;
+    delete m_canvas;
+    delete m_canvas_widget;
 }
 
 bool View3D::init(wxWindow* parent, Model* model, DynamicPrintConfig* config, BackgroundSlicingProcess* process)
@@ -373,7 +370,7 @@ void Preview::reload_print(bool keep_volumes)
         m_volumes_cleanup_required = !keep_volumes;
         return;
     }
-#endif /* __linux __ */
+#endif /* __linux__ */
     if (
 #ifdef __linux__
         m_volumes_cleanup_required || 
@@ -411,6 +408,12 @@ void Preview::msw_rescale()
 
     // rescale legend
     refresh_print();
+}
+
+void Preview::sys_color_changed()
+{
+    if (m_layers_slider != nullptr)
+        m_layers_slider->sys_color_changed();
 }
 
 void Preview::jump_layers_slider(wxKeyEvent& evt)
@@ -493,13 +496,6 @@ void Preview::on_combochecklist_features(wxCommandEvent& evt)
 
 void Preview::on_combochecklist_options(wxCommandEvent& evt)
 {
-    auto xored = [](unsigned int flags1, unsigned int flags2, unsigned int flag) {
-        auto is_flag_set = [](unsigned int flags, unsigned int flag) {
-            return (flags & (1 << flag)) != 0;
-        };
-        return !is_flag_set(flags1, flag) != !is_flag_set(flags2, flag);
-    };
-
     unsigned int curr_flags = m_canvas->get_gcode_options_visibility_flags();
     unsigned int new_flags = Slic3r::GUI::combochecklist_get_flags(m_combochecklist_options);
     if (curr_flags == new_flags)
@@ -510,6 +506,13 @@ void Preview::on_combochecklist_options(wxCommandEvent& evt)
 #if ENABLE_RENDER_PATH_REFRESH_AFTER_OPTIONS_CHANGE
     m_canvas->refresh_gcode_preview_render_paths();
 #else
+    auto xored = [](unsigned int flags1, unsigned int flags2, unsigned int flag) {
+        auto is_flag_set = [](unsigned int flags, unsigned int flag) {
+            return (flags & (1 << flag)) != 0;
+        };
+        return !is_flag_set(flags1, flag) != !is_flag_set(flags2, flag);
+    };
+
     bool skip_refresh = xored(curr_flags, new_flags, static_cast<unsigned int>(OptionType::Shells)) ||
         xored(curr_flags, new_flags, static_cast<unsigned int>(OptionType::ToolMarker));
 
@@ -971,6 +974,7 @@ void Preview::load_print_as_sla()
     sort_remove_duplicates(zs);
 
     m_canvas->reset_clipping_planes_cache();
+    m_canvas->set_use_clipping_planes(true);
 
     n_layers = (unsigned int)zs.size();
     if (n_layers == 0) {
@@ -1004,7 +1008,6 @@ void Preview::on_layers_slider_scroll_changed(wxCommandEvent& event)
         else if (tech == ptSLA) {
             m_canvas->set_clipping_plane(0, ClippingPlane(Vec3d::UnitZ(), -m_layers_slider->GetLowerValueD()));
             m_canvas->set_clipping_plane(1, ClippingPlane(-Vec3d::UnitZ(), m_layers_slider->GetHigherValueD()));
-            m_canvas->set_use_clipping_planes(m_layers_slider->GetHigherValue() != 0);
             m_canvas->render();
         }
     }

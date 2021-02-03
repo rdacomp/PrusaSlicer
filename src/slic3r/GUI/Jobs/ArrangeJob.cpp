@@ -6,6 +6,10 @@
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/GLCanvas3D.hpp"
 #include "slic3r/GUI/GUI.hpp"
+#include "slic3r/GUI/GUI_App.hpp"
+#include "slic3r/GUI/GUI_ObjectManipulation.hpp"
+
+#include "libnest2d/common.hpp"
 
 namespace Slic3r { namespace GUI {
 
@@ -140,6 +144,19 @@ void ArrangeJob::prepare()
     wxGetKeyState(WXK_SHIFT) ? prepare_selected() : prepare_all();
 }
 
+void ArrangeJob::on_exception(const std::exception_ptr &eptr)
+{
+    try {
+        if (eptr)
+            std::rethrow_exception(eptr);
+    } catch (libnest2d::GeometryException &) {
+        show_error(m_plater, _(L("Could not arrange model objects! "
+                                 "Some geometries may be invalid.")));
+    } catch (std::exception &e) {
+        PlaterJob::on_exception(eptr);
+    }
+}
+
 void ArrangeJob::process()
 {
     static const auto arrangestr = _(L("Arranging"));
@@ -151,30 +168,23 @@ void ArrangeJob::process()
     params.allow_rotations  = settings.enable_rotation;
     params.min_obj_distance = scaled(settings.distance);
 
-    
     auto count = unsigned(m_selected.size() + m_unprintable.size());
     Points bedpts = get_bed_shape(*m_plater->config());
     
     params.stopcondition = [this]() { return was_canceled(); };
     
-    try {
-        params.progressind = [this, count](unsigned st) {
-            st += m_unprintable.size();
-            if (st > 0) update_status(int(count - st), arrangestr);
-        };
-        
-        arrangement::arrange(m_selected, m_unselected, bedpts, params);
-        
-        params.progressind = [this, count](unsigned st) {
-            if (st > 0) update_status(int(count - st), arrangestr);
-        };
-        
-        arrangement::arrange(m_unprintable, {}, bedpts, params);
-    } catch (std::exception & /*e*/) {
-        GUI::show_error(m_plater,
-                        _(L("Could not arrange model objects! "
-                            "Some geometries may be invalid.")));
-    }
+    params.progressind = [this, count](unsigned st) {
+        st += m_unprintable.size();
+        if (st > 0) update_status(int(count - st), arrangestr);
+    };
+
+    arrangement::arrange(m_selected, m_unselected, bedpts, params);
+
+    params.progressind = [this, count](unsigned st) {
+        if (st > 0) update_status(int(count - st), arrangestr);
+    };
+
+    arrangement::arrange(m_unprintable, {}, bedpts, params);
 
     // finalize just here.
     update_status(int(count),
@@ -206,7 +216,8 @@ void ArrangeJob::finalize() {
     }
     
     m_plater->update();
-    
+    wxGetApp().obj_manipul()->set_dirty();
+
     Job::finalize();
 }
 
