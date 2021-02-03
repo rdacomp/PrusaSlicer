@@ -297,7 +297,9 @@ static void make_inner_brim(const Print &print, const ConstPrintObjectPtrs &top_
         islands_ex = offset_ex(islands_ex, -float(flow.scaled_spacing()), jtSquare);
     }
 
-    extrusion_entities_append_loops(brim.entities, union_pt_chained(to_polygons(loops_ex), false), erSkirt, float(flow.mm3_per_mm()),
+    Polygons loops = union_pt_chained_outside_in(loops, false);
+    std::reverse(loops.begin(), loops.end());
+    extrusion_entities_append_loops(brim.entities, std::move(loops), erSkirt, float(flow.mm3_per_mm()),
                                     float(flow.width), float(print.skirt_first_layer_height()));
 }
 
@@ -320,10 +322,7 @@ ExtrusionEntityCollection make_brim(const Print &print, PrintTryCancel try_cance
             poly.douglas_peucker(SCALED_RESOLUTION);
         polygons_append(loops, offset(islands, -0.5f * float(flow.scaled_spacing())));
     }
-    loops = union_pt_chained(loops, false);
-    // The function above produces ordering well suited for concentric infill (from outside to inside).
-    // For Brim, the ordering should be reversed (from inside to outside).
-    std::reverse(loops.begin(), loops.end());
+    loops = union_pt_chained_outside_in(loops, false);
 
     std::vector<Polylines> loops_pl_by_levels;
     {
