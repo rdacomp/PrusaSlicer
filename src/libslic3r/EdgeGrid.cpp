@@ -1022,7 +1022,7 @@ float EdgeGrid::Grid::signed_distance_bilinear(const Point &pt) const
 	return f;
 }
 
-EdgeGrid::Grid::ClosestPointResult EdgeGrid::Grid::closest_point(const Point &pt, coord_t search_radius) const 
+EdgeGrid::Grid::ClosestPointResult EdgeGrid::Grid::closest_point_signed_distance(const Point &pt, coord_t search_radius) const 
 {
 	BoundingBox bbox;
 	bbox.min = bbox.max = Point(pt(0) - m_bbox.min(0), pt(1) - m_bbox.min(1));
@@ -1062,7 +1062,8 @@ EdgeGrid::Grid::ClosestPointResult EdgeGrid::Grid::closest_point(const Point &pt
 			const Cell &cell = m_cells[r * m_cols + c];
 			for (size_t i = cell.begin; i < cell.end; ++ i) {
 				const size_t   contour_idx = m_cell_data[i].first;
-				const Contour &contour         = m_contours[contour_idx];
+				const Contour &contour     = m_contours[contour_idx];
+				assert(contour.closed());
 				size_t ipt = m_cell_data[i].second;
 				// End points of the line segment.
 				const Slic3r::Point &p1 = contour.segment_start(ipt);
@@ -1191,6 +1192,7 @@ bool EdgeGrid::Grid::signed_distance_edges(const Point &pt, coord_t search_radiu
 			const Cell &cell = m_cells[r * m_cols + c];
 			for (size_t i = cell.begin; i < cell.end; ++ i) {
 				const Contour &contour = m_contours[m_cell_data[i].first];
+				assert(contour.closed());
 				size_t ipt = m_cell_data[i].second;
 				// End points of the line segment.
 				const Slic3r::Point &p1 = contour.segment_start(ipt);
