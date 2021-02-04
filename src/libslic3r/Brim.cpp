@@ -237,7 +237,7 @@ static Polylines connect_brim_lines(Polylines &&polylines, const Polygons &brim_
         polylines_points.emplace_back(poly.points);
 
     EdgeGrid::Grid grid(get_extents(polylines).inflated(SCALED_EPSILON));
-    grid.create(polylines_points, coord_t(scale_(10.)));
+    grid.create(polylines_points, coord_t(scale_(10.)), true); // open polylines
 
     struct Visitor
     {

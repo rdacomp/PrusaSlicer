@@ -12,6 +12,60 @@
 namespace Slic3r {
 namespace EdgeGrid {
 
+
+class Contour {
+public:
+	Contour() = default;
+	Contour(const Slic3r::Point *begin, const Slic3r::Point *end, bool open) : m_begin(begin), m_end(end), m_open(open) {}
+	Contour(const Slic3r::Point *data, size_t size, bool open) : Contour(data, data + size, open) {}
+	Contour(const std::vector<Slic3r::Point> &pts, bool open) : Contour(pts.data(), pts.size(), open) {}
+
+	const Slic3r::Point *begin()  const { return m_begin; }
+	const Slic3r::Point *end()    const { return m_end; }
+	bool                 open()   const { return m_open; }
+	bool                 closed() const { return ! m_open; }
+
+	// Start point of a segment idx.
+	const Slic3r::Point& segment_start(size_t idx) const {
+		assert(idx + (m_open ? 1 : 0) < this->size());
+		return m_begin[idx];
+	}
+
+	// End point of a segment idx.
+	const Slic3r::Point& segment_end(size_t idx) const {
+		assert(idx + (m_open ? 1 : 0) < this->size());
+		const Slic3r::Point *ptr = m_begin + idx + 1;
+		return ptr == m_end ? *m_begin : *ptr;
+	}
+
+	// Start point of a segment preceding idx.
+	const Slic3r::Point& segment_prev(size_t idx) const {
+		assert(idx > 0 || ! m_open);
+		return idx == 0 ? m_end[-1] : m_begin[idx - 1];
+	}
+
+	// Index of a segment preceding idx.
+	const size_t 		 segment_idx_prev(size_t idx) const {
+		assert(idx > 0 || ! m_open);
+		return (idx == 0 ? this->size() : idx) - 1;
+	}
+
+	// Index of a segment preceding idx.
+	const size_t 		 segment_idx_next(size_t idx) const {
+		assert(idx + (m_open ? 1 : 0) < this->size());
+		return m_begin + idx == m_end ? 0 : idx + 1;
+	}
+
+	size_t               num_segments() const { return this->size() - (m_open ? 1 : 0); }
+
+private:
+	size_t  			 size() const { return m_end - m_begin; }
+
+	const Slic3r::Point *m_begin { nullptr };
+	const Slic3r::Point *m_end   { nullptr };
+	bool                 m_open  { false };
+};
+
 class Grid
 {
 public:
@@ -21,14 +75,19 @@ public:
 
 	void set_bbox(const BoundingBox &bbox) { m_bbox = bbox; }
 
+	// Fill in the grid with open or contours.
+	// Most of the Grid functions expect all the contours to be closed, you have been warned!
+	void create(const std::vector<Points> &polygons, coord_t resolution, bool open);
+
+	// Fill in the grid with closed contours.
 	void create(const Polygons &polygons, coord_t resolution);
 	void create(const std::vector<const Polygon*> &polygons, coord_t resolution);
-	void create(const std::vector<Points> &polygons, coord_t resolution);
+	void create(const std::vector<Points> &polygons, coord_t resolution) { this->create(polygons, resolution, false); }
 	void create(const ExPolygon &expoly, coord_t resolution);
 	void create(const ExPolygons &expolygons, coord_t resolution);
 	void create(const ExPolygonCollection &expolygons, coord_t resolution);
 
-	const std::vector<const Slic3r::Points*>& contours() const { return m_contours; }
+	const std::vector<Contour>& contours() const { return m_contours; }
 
 #if 0
 	// Test, whether the edges inside the grid intersect with the polygons provided.
@@ -77,8 +136,8 @@ public:
 	// For supports: Contours enclosing the rasterized edges.
 	Polygons 			contours_simplified(coord_t offset, bool fill_holes) const;
 
-	typedef std::pair<const Slic3r::Points*, size_t> ContourPoint;
-	typedef std::pair<const Slic3r::Points*, size_t> ContourEdge;
+	typedef std::pair<const Contour*, size_t> ContourPoint;
+	typedef std::pair<const Contour*, size_t> ContourEdge;
 	std::vector<std::pair<ContourEdge, ContourEdge>> intersecting_edges() const;
 	bool 											 has_intersecting_edges() const;
 
@@ -256,16 +315,16 @@ public:
 
 	std::pair<const Slic3r::Point&, const Slic3r::Point&> segment(const std::pair<size_t, size_t> &contour_and_segment_idx) const
 	{
-		const Slic3r::Points &ipts = *m_contours[contour_and_segment_idx.first];
-		size_t ipt = contour_and_segment_idx.second;
-		return std::pair<const Slic3r::Point&, const Slic3r::Point&>(ipts[ipt], ipts[ipt + 1 == ipts.size() ? 0 : ipt + 1]);
+		const Contour &contour = m_contours[contour_and_segment_idx.first];
+		size_t iseg = contour_and_segment_idx.second;
+		return std::pair<const Slic3r::Point&, const Slic3r::Point&>(contour.segment_start(iseg), contour.segment_end(iseg));
 	}
 
 	Line line(const std::pair<size_t, size_t> &contour_and_segment_idx) const
 	{
-		const Slic3r::Points &ipts = *m_contours[contour_and_segment_idx.first];
-		size_t ipt = contour_and_segment_idx.second;
-		return Line(ipts[ipt], ipts[ipt + 1 == ipts.size() ? 0 : ipt + 1]);
+		const Contour &contour = m_contours[contour_and_segment_idx.first];
+		size_t iseg = contour_and_segment_idx.second;
+		return Line(contour.segment_start(iseg), contour.segment_end(iseg));
 	}
 
 protected:
@@ -302,7 +361,7 @@ protected:
 	// Referencing the source contours.
 	// This format allows one to work with any Slic3r fixed point contour format
 	// (Polygon, ExPolygon, ExPolygonCollection etc).
-	std::vector<const Slic3r::Points*>			m_contours;
+	std::vector<Contour>						m_contours;
 
 	// Referencing a contour and a line segment of m_contours.
 	std::vector<std::pair<size_t, size_t> >		m_cell_data;
