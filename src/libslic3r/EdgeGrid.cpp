@@ -76,6 +76,32 @@ void EdgeGrid::Grid::create(const std::vector<Points> &polygons, coord_t resolut
 	create_from_m_contours(resolution);
 }
 
+void EdgeGrid::Grid::create(const Polygons &polygons, const Polylines &polylines, coord_t resolution)
+{
+	// Collect the contours.
+	m_contours.reserve(
+		std::count_if(polygons.begin(), polygons.end(), [](const Polygon &p) { return p.size() > 1; }) +
+		std::count_if(polylines.begin(), polylines.end(), [](const Polyline &p) { return p.size() > 1; }));
+
+	for (const Polyline &polyline : polylines)
+		if (polyline.size() > 1) {
+			const Point *begin = polyline.points.data();
+			const Point *end   = polyline.points.data() + polyline.size();
+			bool 		 open  = true;
+			if (*begin == end[-1]) {
+				open = false;
+				-- end;
+			}
+			m_contours.emplace_back(begin, end, open);
+		}
+
+	for (const Polygon &polygon : polygons)
+		if (polygon.size() > 1)
+			m_contours.emplace_back(polygon.points, false);
+
+	create_from_m_contours(resolution);
+}
+
 void EdgeGrid::Grid::create(const ExPolygon &expoly, coord_t resolution)
 {
 	m_contours.reserve((expoly.contour.empty() ? 0 : 1) + std::count_if(expoly.holes.begin(), expoly.holes.end(), [](const Polygon &p) { return ! p.empty(); }));
@@ -123,7 +149,7 @@ void EdgeGrid::Grid::create_from_m_contours(coord_t resolution)
 	// 1) Measure the bounding box.
 	for (const Contour &contour : m_contours) {
 		assert(contour.num_segments() > 0);
-		assert(*contour.begin() != *contour.end());
+		assert(*contour.begin() != contour.end()[-1]);
 		for (const Slic3r::Point &pt : contour) 
 			m_bbox.merge(pt);
 	}

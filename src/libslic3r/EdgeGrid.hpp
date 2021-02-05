@@ -85,6 +85,7 @@ public:
 	// inserted into the EdgeGrid.
 	// Most of the Grid functions expect all the contours to be closed, you have been warned!
 	void create(const std::vector<Points> &polylines_or_polygons, coord_t resolution, bool open);
+	void create(const Polygons &polygons, const Polylines &polylines, coord_t resolution);
 
 	// Fill in the grid with closed contours.
 	void create(const Polygons &polygons, coord_t resolution);
