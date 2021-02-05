@@ -27,33 +27,36 @@ public:
 
 	// Start point of a segment idx.
 	const Slic3r::Point& segment_start(size_t idx) const {
-		assert(idx + (m_open ? 1 : 0) < this->size());
+		assert(idx < this->num_segments());
 		return m_begin[idx];
 	}
 
 	// End point of a segment idx.
 	const Slic3r::Point& segment_end(size_t idx) const {
-		assert(idx + (m_open ? 1 : 0) < this->size());
+		assert(idx < this->num_segments());
 		const Slic3r::Point *ptr = m_begin + idx + 1;
 		return ptr == m_end ? *m_begin : *ptr;
 	}
 
 	// Start point of a segment preceding idx.
 	const Slic3r::Point& segment_prev(size_t idx) const {
+		assert(idx < this->num_segments());
 		assert(idx > 0 || ! m_open);
 		return idx == 0 ? m_end[-1] : m_begin[idx - 1];
 	}
 
 	// Index of a segment preceding idx.
 	const size_t 		 segment_idx_prev(size_t idx) const {
+		assert(idx < this->num_segments());
 		assert(idx > 0 || ! m_open);
 		return (idx == 0 ? this->size() : idx) - 1;
 	}
 
 	// Index of a segment preceding idx.
 	const size_t 		 segment_idx_next(size_t idx) const {
-		assert(idx + (m_open ? 1 : 0) < this->size());
-		return m_begin + idx == m_end ? 0 : idx + 1;
+		assert(idx < this->num_segments());
+		++ idx;
+		return m_begin + idx == m_end ? 0 : idx;
 	}
 
 	size_t               num_segments() const { return this->size() - (m_open ? 1 : 0); }
@@ -75,9 +78,13 @@ public:
 
 	void set_bbox(const BoundingBox &bbox) { m_bbox = bbox; }
 
-	// Fill in the grid with open or contours.
+	// Fill in the grid with open polylines or closed contours.
+	// If open flag is indicated, then polylines_or_polygons are considered to be open by default.
+	// Only if the first point of a polyline is equal to the last point of a polyline, 
+	// then the polyline is considered to be closed and the last repeated point is removed when
+	// inserted into the EdgeGrid.
 	// Most of the Grid functions expect all the contours to be closed, you have been warned!
-	void create(const std::vector<Points> &polygons, coord_t resolution, bool open);
+	void create(const std::vector<Points> &polylines_or_polygons, coord_t resolution, bool open);
 
 	// Fill in the grid with closed contours.
 	void create(const Polygons &polygons, coord_t resolution);
