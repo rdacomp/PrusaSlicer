@@ -292,6 +292,11 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
     toggle_field("support_material_extruder", have_support_material || have_skirt);
     toggle_field("support_material_speed", have_support_material || have_brim || have_skirt);
 
+    for (auto el : { "raft_xy_size_compensation", "raft_size_adjust" })
+        toggle_field(el, have_raft);
+    for (auto el : { "raft_overhangs", "raft_contact_distance" })
+        toggle_field(el, have_raft && !have_support_soluble);
+
     bool has_ironing = config->opt_bool("ironing");
     for (auto el : { "ironing_type", "ironing_flowrate", "ironing_spacing", "ironing_speed" })
     	toggle_field(el, has_ironing);
