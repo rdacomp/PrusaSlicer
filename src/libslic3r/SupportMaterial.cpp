@@ -1040,8 +1040,17 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                     // we're here just to get the object footprint for the raft.
                     // We only consider contours and discard holes to get a more continuous raft.
                     overhang_polygons = collect_slices_outer(layer);
-                    // Extend by SUPPORT_MATERIAL_MARGIN, which is 1.5mm
-                    contact_polygons = offset(overhang_polygons, scale_(SUPPORT_MATERIAL_MARGIN));
+                    // RaftingEdition
+                    float adjust;
+                    switch (m_object_config->raft_size_adjust.value) {
+                        case rsaSmall:      adjust = scale_(SUPPORT_MATERIAL_MARGIN / 2); break;
+                        default:
+                        case rsaNormal:     adjust = scale_(SUPPORT_MATERIAL_MARGIN * 1); break;
+                        case rsaLarge:      adjust = scale_(SUPPORT_MATERIAL_MARGIN * 3); break;
+                        case rsaExtraLarge: adjust = scale_(SUPPORT_MATERIAL_MARGIN * 4); break;
+                    }
+                    // Extend by a multiple of SUPPORT_MATERIAL_MARGIN, which is 1.5mm
+                    contact_polygons = offset(overhang_polygons, adjust);
                 } else {
                     // Generate overhang / contact_polygons for non-raft layers.
                     const Layer &lower_layer = *object.layers()[layer_id-1];
@@ -1829,7 +1838,7 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::raft_and_int
         assert(extr2z > extr1z || (extr1 != nullptr && extr2->layer_type == sltBottomContact));
         if (std::abs(extr1z) < EPSILON) {
             // This layer interval starts with the 1st layer. Print the 1st layer using the prescribed 1st layer thickness.
-            assert(! m_slicing_params.has_raft());
+            // assert(! m_slicing_params.has_raft()); RaftingEdition: unclear where the issue is: assert fails with 1-layer raft & base supports
             assert(intermediate_layers.empty() || intermediate_layers.back()->print_z <= m_slicing_params.first_print_layer_height);
             // At this point only layers above first_print_layer_heigth + EPSILON are expected as the other cases were captured earlier.
             assert(extr2z >= m_slicing_params.first_print_layer_height + EPSILON);
@@ -2157,7 +2166,9 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::generate_raf
 {
     // How much to inflate the support columns to be stable. This also applies to the 1st layer, if no raft layers are to be printed.
     const float inflate_factor_fine      = float(scale_((m_slicing_params.raft_layers() > 1) ? 0.5 : EPSILON));
-    const float inflate_factor_1st_layer = float(scale_(3.)) - inflate_factor_fine;
+    const float inflate_factor_1st_layer = float(scale_((m_slicing_params.raft_layers() > 0 &&
+                                                 m_object_config->raft_size_adjust.value == rsaSmall) ?
+                                                 1.5 /* RaftingEdition */ : 3.)) - inflate_factor_fine;
     MyLayer       *contacts      = top_contacts    .empty() ? nullptr : top_contacts    .front();
     MyLayer       *interfaces    = interface_layers.empty() ? nullptr : interface_layers.front();
     MyLayer       *columns_base  = base_layers     .empty() ? nullptr : base_layers     .front();

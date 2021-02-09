@@ -82,6 +82,13 @@ enum SLAPillarConnectionMode {
     slapcmDynamic
 };
 
+enum RaftSizeAdjust {
+    rsaSmall,
+    rsaNormal,
+    rsaLarge,
+    rsaExtraLarge
+};
+
 template<> inline const t_config_enum_values& ConfigOptionEnum<PrinterTechnology>::get_enum_values() {
     static t_config_enum_values keys_map;
     if (keys_map.empty()) {
@@ -214,6 +221,16 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<SLAPillarConnecti
     return keys_map;
 }
 
+template<> inline const t_config_enum_values& ConfigOptionEnum<RaftSizeAdjust>::get_enum_values() {
+    static const t_config_enum_values keys_map = {
+        { "small",      rsaSmall },
+        { "normal",     rsaNormal },
+        { "large",      rsaLarge },
+        { "extralarge", rsaExtraLarge }
+    };
+
+    return keys_map;
+}
 // Defines each and every confiuration option of Slic3r, including the properties of the GUI dialogs.
 // Does not store the actual values, but defines default values.
 class PrintConfigDef : public ConfigDef
@@ -437,6 +454,10 @@ public:
     ConfigOptionBool                interface_shells;
     ConfigOptionFloat               layer_height;
     ConfigOptionInt                 raft_layers;
+    ConfigOptionBool                raft_overhangs;
+    ConfigOptionFloat               raft_contact_distance;
+    ConfigOptionFloat               raft_xy_size_compensation;
+    ConfigOptionEnum<RaftSizeAdjust> raft_size_adjust;
     ConfigOptionEnum<SeamPosition>  seam_position;
 //    ConfigOptionFloat               seam_preferred_direction;
 //    ConfigOptionFloat               seam_preferred_direction_jitter;
@@ -481,6 +502,10 @@ protected:
         OPT_PTR(interface_shells);
         OPT_PTR(layer_height);
         OPT_PTR(raft_layers);
+        OPT_PTR(raft_overhangs);
+        OPT_PTR(raft_contact_distance);
+        OPT_PTR(raft_xy_size_compensation);
+        OPT_PTR(raft_size_adjust);
         OPT_PTR(seam_position);
         OPT_PTR(slice_closing_radius);
 //        OPT_PTR(seam_preferred_direction);

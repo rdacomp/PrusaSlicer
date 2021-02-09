@@ -530,6 +530,10 @@ bool PrintObject::invalidate_state_by_config_options(const std::vector<t_config_
                opt_key == "layer_height"
             || opt_key == "first_layer_height"
             || opt_key == "raft_layers"
+            || opt_key == "raft_overhangs"
+            || opt_key == "raft_contact_distance"
+            || opt_key == "raft_xy_size_compensation"
+            || opt_key == "raft_size_adjust"
             || opt_key == "slice_closing_radius") {
             steps.emplace_back(posSlice);
 		} else if (
@@ -751,7 +755,8 @@ void PrintObject::detect_surfaces_type()
             [this, idx_region, interface_shells, &surfaces_new](const tbb::blocked_range<size_t>& range) {
                 // If we have raft layers, consider bottom layer as a bridge just like any other bottom surface lying on the void.
                 SurfaceType surface_type_bottom_1st =
-                    (m_config.raft_layers.value > 0 && m_config.support_material_contact_distance.value > 0) ?
+                    (m_config.raft_layers.value > 0 && m_config.support_material_contact_distance.value > 0 &&
+                    /* RaftingEdition */ m_config.raft_overhangs.value) ?
                     stBottomBridge : stBottom;
                 // If we have soluble support material, don't bridge. The overhang will be squished against a soluble layer separating
                 // the support from the print.
@@ -1920,7 +1925,10 @@ end:
     BOOST_LOG_TRIVIAL(debug) << "Slicing objects - make_slices in parallel - begin";
     {
         // Compensation value, scaled.
-        const float xy_compensation_scaled 	 			= float(scale_(m_config.xy_size_compensation.value));
+        const float _xy_compensation_scaled     = float(scale_(m_config.xy_size_compensation.value));
+        const float _xy_compensation_1st_scaled = _xy_compensation_scaled + (m_config.raft_layers > 0) ?
+            // Apply optional compensation / expand the first layer above the raft. (RaftingEdition)
+            float(scale_(m_config.raft_xy_size_compensation.value)) : 0.f;
         const float elephant_foot_compensation_scaled 	= (m_config.raft_layers == 0) ? 
         	// Only enable Elephant foot compensation if printing directly on the print bed.
             float(scale_(m_config.elefant_foot_compensation.value)) :
@@ -1929,13 +1937,14 @@ end:
 	    ExPolygons  lslices_1st_layer;
 	    tbb::parallel_for(
 	        tbb::blocked_range<size_t>(0, m_layers.size()),
-			[this, upscaled, clipped, xy_compensation_scaled, elephant_foot_compensation_scaled, &lslices_1st_layer]
+			[this, upscaled, clipped, _xy_compensation_scaled, _xy_compensation_1st_scaled, elephant_foot_compensation_scaled, &lslices_1st_layer]
 				(const tbb::blocked_range<size_t>& range) {
 	            for (size_t layer_id = range.begin(); layer_id < range.end(); ++ layer_id) {
 	                m_print->throw_if_canceled();
 	                Layer *layer = m_layers[layer_id];
 	                // Apply size compensation and perform clipping of multi-part objects.
 	                float elfoot = (layer_id == 0) ? elephant_foot_compensation_scaled : 0.f;
+	                float xy_compensation_scaled = (layer_id == 0) ? _xy_compensation_1st_scaled : _xy_compensation_scaled; // RaftingEdition
 	                if (layer->m_regions.size() == 1) {
 	                	assert(! upscaled);
 	                	assert(! clipped);

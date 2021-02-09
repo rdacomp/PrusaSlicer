@@ -1720,6 +1720,48 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionInt(0));
 
+    // RaftingEdition
+    def = this->add("raft_overhangs", coBool);
+    def->label = L("Bridge flow above raft");
+    def->category = L("Support material");
+    def->tooltip = L("Use bridge flow and speed for the bottom layer. Quality of the layer improves significantly when this setting is off, however it could be difficult to remove the object from raft. Ignored for soluble interface.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("raft_contact_distance", coFloat);
+    def->label = L("Raft contact Z distance");
+    def->category = L("Support material");
+    def->tooltip = L("The vertical distance between object and raft. Ignored for soluble interface.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.1));
+
+    def = this->add("raft_xy_size_compensation", coFloat);
+    def->label = L("Bottom layer expansion");
+    def->category = L("Support material");
+    def->tooltip = L("XY plane expansion of the bottom layer. This is useful to compensate shrinking, especially for higher contact Z distances and / or specific materials.");
+    def->sidetext = L("mm");
+    def->min = 0;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloat(0.0));
+
+    def = this->add("raft_size_adjust", coEnum);
+    def->label = L("Raft size");
+    def->category = L("Support material");
+    def->tooltip = L("Raft size adjustment. Can be used to improve adhesion or reduce material consumption / save some printing area.");
+    def->enum_keys_map = &ConfigOptionEnum<RaftSizeAdjust>::get_enum_values();
+    def->enum_values.push_back("small");
+    def->enum_values.push_back("normal");
+    def->enum_values.push_back("large");
+    def->enum_values.push_back("extralarge");
+    def->enum_labels.push_back("Small");
+    def->enum_labels.push_back("Normal");
+    def->enum_labels.push_back("Large");
+    def->enum_labels.push_back("Extra large");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionEnum<RaftSizeAdjust>(rsaNormal));
+
     def = this->add("resolution", coFloat);
     def->label = L("Resolution");
     def->tooltip = L("Minimum detail resolution, used to simplify the input file for speeding up "
