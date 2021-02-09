@@ -80,6 +80,13 @@ bool ExPolygon::is_valid() const
     return true;
 }
 
+void ExPolygon::douglas_peucker(double tolerance)
+{
+    this->contour.douglas_peucker(tolerance);
+    for (Polygon &poly : this->holes)
+        poly.douglas_peucker(tolerance);
+}
+
 bool ExPolygon::contains(const Line &line) const
 {
     return this->contains(Polyline(line.a, line.b));
@@ -132,8 +139,7 @@ ExPolygon::has_boundary_point(const Point &point) const
     return false;
 }
 
-bool
-ExPolygon::overlaps(const ExPolygon &other) const
+bool ExPolygon::overlaps(const ExPolygon &other) const
 {
     #if 0
     BoundingBox bbox = get_extents(other);
@@ -150,6 +156,7 @@ ExPolygon::overlaps(const ExPolygon &other) const
     #endif
     if (! pl_out.empty())
         return true; 
+    //FIXME ExPolygon::overlaps() shall be commutative, it is not!
     return ! other.contour.points.empty() && this->contains_b(other.contour.points.front());
 }
 

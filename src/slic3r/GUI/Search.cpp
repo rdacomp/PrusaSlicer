@@ -117,18 +117,13 @@ void OptionsSearcher::append_options(DynamicPrintConfig* config, Preset::Type ty
     }
 }
 
-// Wrap a string with ColorMarkerStart and ColorMarkerEnd symbols
-static wxString wrap_string(const wxString& str)
-{
-    return wxString::Format("%c%s%c", ImGui::ColorMarkerStart, str, ImGui::ColorMarkerEnd);
-}
-
 // Mark a string using ColorMarkerStart and ColorMarkerEnd symbols
-static std::wstring mark_string(const std::wstring &str, const std::vector<uint16_t> &matches)
+static std::wstring mark_string(const std::wstring &str, const std::vector<uint16_t> &matches, Preset::Type type, PrinterTechnology pt)
 {
 	std::wstring out;
+    out += marker_by_type(type, pt);
 	if (matches.empty())
-		out = str;
+		out += str;
 	else {
 		out.reserve(str.size() * 2);
 		if (matches.front() > 0)
@@ -181,10 +176,11 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
     bool full_list = search.empty();
     std::wstring sep = L" : ";
 
-    auto get_label = [this, &sep](const Option& opt)
+    auto get_label = [this, &sep](const Option& opt, bool marked = true)
     {
         std::wstring out;
-        out += marker_by_type(opt.type, printer_technology);
+        if (marked)
+            out += marker_by_type(opt.type, printer_technology);
     	const std::wstring *prev = nullptr;
     	for (const std::wstring * const s : {
 	        view_params.category 	? &opt.category_local 		: nullptr,
@@ -198,10 +194,11 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
         return out;
     };
 
-    auto get_label_english = [this, &sep](const Option& opt)
+    auto get_label_english = [this, &sep](const Option& opt, bool marked = true)
     {
         std::wstring out;
-        out += marker_by_type(opt.type, printer_technology);
+        if (marked)
+            out += marker_by_type(opt.type, printer_technology);
     	const std::wstring*prev = nullptr;
     	for (const std::wstring * const s : {
 	        view_params.category 	? &opt.category 			: nullptr,
@@ -234,8 +231,8 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
 
         std::wstring wsearch       = boost::nowide::widen(search);
         boost::trim_left(wsearch);
-        std::wstring label         = get_label(opt);
-        std::wstring label_english = get_label_english(opt);
+        std::wstring label         = get_label(opt, false);
+        std::wstring label_english = get_label_english(opt, false);
         int score = std::numeric_limits<int>::min();
         int score2;
         matches.clear();
@@ -252,8 +249,8 @@ bool OptionsSearcher::search(const std::string& search, bool force/* = false*/)
         	matches = std::move(matches2);
         	score   = score2;
         }
-        if (score > std::numeric_limits<int>::min()) {
-		    label = mark_string(label, matches);            
+        if (score > 90/*std::numeric_limits<int>::min()*/) {
+		    label = mark_string(label, matches, opt.type, printer_technology);
             label += L"  [" + std::to_wstring(score) + L"]";// add score value
 	        std::string label_u8 = into_u8(label);
 	        std::string label_plain = label_u8;
@@ -327,6 +324,53 @@ const Option& OptionsSearcher::get_option(const std::string& opt_key) const
     assert(it != options.end());
 
     return options[it - options.begin()];
+}
+
+static Option create_option(const std::string& opt_key, const wxString& label, Preset::Type type, const GroupAndCategory& gc)
+{
+    wxString suffix;
+    wxString suffix_local;
+    if (gc.category == "Machine limits") {
+        suffix = opt_key.back() == '1' ? L("Stealth") : L("Normal");
+        suffix_local = " " + _(suffix);
+        suffix = " " + suffix;
+    }
+
+    wxString category = gc.category;
+    if (type == Preset::TYPE_PRINTER && category.Contains("Extruder ")) {
+        std::string opt_idx = opt_key.substr(opt_key.find("#") + 1);
+        category = wxString::Format("%s %d", "Extruder", atoi(opt_idx.c_str()) + 1);
+    }
+
+    return Option{ boost::nowide::widen(opt_key), type,
+                (label + suffix).ToStdWstring(), (_(label) + suffix_local).ToStdWstring(),
+                gc.group.ToStdWstring(), _(gc.group).ToStdWstring(),
+                gc.category.ToStdWstring(), GUI::Tab::translate_category(category, type).ToStdWstring() };
+}
+
+Option OptionsSearcher::get_option(const std::string& opt_key, const wxString& label, Preset::Type type) const
+{
+    auto it = std::lower_bound(options.begin(), options.end(), Option({ boost::nowide::widen(opt_key) }));
+    if(it->opt_key == boost::nowide::widen(opt_key))
+        return options[it - options.begin()];
+    if (groups_and_categories.find(opt_key) == groups_and_categories.end()) {
+        size_t pos = opt_key.find('#');
+        if (pos == std::string::npos)
+            return options[it - options.begin()];
+
+        std::string zero_opt_key = opt_key.substr(0, pos + 1) + "0";
+
+        if(groups_and_categories.find(zero_opt_key) == groups_and_categories.end())
+            return options[it - options.begin()];
+
+        return create_option(opt_key, label, type, groups_and_categories.at(zero_opt_key));
+    }
+
+    const GroupAndCategory& gc = groups_and_categories.at(opt_key);
+    if (gc.group.IsEmpty() || gc.category.IsEmpty())
+        return options[it - options.begin()];
+
+    return create_option(opt_key, label, type, gc);
 }
 
 void OptionsSearcher::add_key(const std::string& opt_key, const wxString& group, const wxString& category)

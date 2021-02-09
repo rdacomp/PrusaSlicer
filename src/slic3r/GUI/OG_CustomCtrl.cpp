@@ -98,7 +98,7 @@ void OG_CustomCtrl::init_ctrl_lines()
             ctrl_lines.emplace_back(CtrlLine(height, this, line, false, opt_group->staticbox));
         }
         else
-            int i = 0;
+            assert(false);
     }
 }
 
@@ -360,6 +360,9 @@ void OG_CustomCtrl::correct_widgets_position(wxSizer* widget, const Line& line, 
 
 void OG_CustomCtrl::msw_rescale()
 {
+#ifdef __WXOSX__
+    return;
+#endif
     m_font      = wxGetApp().normal_font();
     m_em_unit   = em_unit(m_parent);
     m_v_gap     = lround(1.0 * m_em_unit);
@@ -381,7 +384,6 @@ void OG_CustomCtrl::msw_rescale()
 
 void OG_CustomCtrl::sys_color_changed()
 {
-    msw_rescale();
 }
 
 OG_CustomCtrl::CtrlLine::CtrlLine(  wxCoord         height,

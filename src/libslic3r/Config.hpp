@@ -1163,8 +1163,8 @@ public:
     {
         UNUSED(append);
         char dummy;
-        return sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
-               sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2;
+        return sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 3 ||
+               sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 3;
     }
 
 private:
@@ -1344,7 +1344,7 @@ public:
 
     static bool has(T value) 
     {
-        for (const std::pair<std::string, int> &kvp : ConfigOptionEnum<T>::get_enum_values())
+        for (const auto &kvp : ConfigOptionEnum<T>::get_enum_values())
             if (kvp.second == value)
                 return true;
         return false;
@@ -1358,11 +1358,11 @@ public:
             // Initialize the map.
             const t_config_enum_values &enum_keys_map = ConfigOptionEnum<T>::get_enum_values();
             int cnt = 0;
-            for (const std::pair<std::string, int> &kvp : enum_keys_map)
+            for (const auto& kvp : enum_keys_map)
                 cnt = std::max(cnt, kvp.second);
             cnt += 1;
             names.assign(cnt, "");
-            for (const std::pair<std::string, int> &kvp : enum_keys_map)
+            for (const auto& kvp : enum_keys_map)
                 names[kvp.second] = kvp.first;
         }
         return names;
@@ -1946,8 +1946,9 @@ public:
     int&                opt_int(const t_config_option_key &opt_key, unsigned int idx)           { return this->option<ConfigOptionInts>(opt_key)->get_at(idx); }
     int                 opt_int(const t_config_option_key &opt_key, unsigned int idx) const     { return dynamic_cast<const ConfigOptionInts*>(this->option(opt_key))->get_at(idx); }
 
+    // In ConfigManipulation::toggle_print_fff_options, it is called on option with type ConfigOptionEnumGeneric* and also ConfigOptionEnum*.
     template<typename ENUM>
-	ENUM                opt_enum(const t_config_option_key &opt_key) const                      { return (ENUM)dynamic_cast<const ConfigOptionEnumGeneric*>(this->option(opt_key))->value; }
+    ENUM                opt_enum(const t_config_option_key &opt_key) const                      { return this->option<ConfigOptionEnum<ENUM>>(opt_key)->value; }
 
     bool                opt_bool(const t_config_option_key &opt_key) const                      { return this->option<ConfigOptionBool>(opt_key)->value != 0; }
     bool                opt_bool(const t_config_option_key &opt_key, unsigned int idx) const    { return this->option<ConfigOptionBools>(opt_key)->get_at(idx) != 0; }

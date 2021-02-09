@@ -851,7 +851,7 @@ namespace DoExport {
 	            double extruded_volume = extruder.extruded_volume() + (has_wipe_tower ? wipe_tower_data.used_filament[extruder.id()] * 2.4052f : 0.f); // assumes 1.75mm filament diameter
 	            double filament_weight = extruded_volume * extruder.filament_density() * 0.001;
 	            double filament_cost   = filament_weight * extruder.filament_cost()    * 0.001;
-	            auto append = [&extruder, &extruders](std::pair<std::string, unsigned int> &dst, const char *tmpl, double value) {
+                auto append = [&extruder](std::pair<std::string, unsigned int> &dst, const char *tmpl, double value) {
 	                while (dst.second < extruder.id()) {
 	                    // Fill in the non-printing extruders with zeros.
 	                    dst.first += (dst.second > 0) ? ", 0" : "0";
@@ -1790,7 +1790,7 @@ void GCode::process_layer(
     // Just a reminder: A spiral vase mode is allowed for a single object, single material print only.
     m_enable_loop_clipping = true;
     if (m_spiral_vase && layers.size() == 1 && support_layer == nullptr) {
-        bool enable = (layer.id() > 0 || print.config().brim_width.value == 0.) && (layer.id() >= (size_t)print.config().skirt_height.value && ! print.has_infinite_skirt());
+        bool enable = (layer.id() > 0 || !print.has_brim()) && (layer.id() >= (size_t)print.config().skirt_height.value && ! print.has_infinite_skirt());
         if (enable) {
             for (const LayerRegion *layer_region : layer.regions())
                 if (size_t(layer_region->region()->config().bottom_solid_layers.value) > layer.id() ||
@@ -2591,10 +2591,10 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
             throw Slic3r::InvalidArgument("Invalid speed");
         }
     }
-    if (this->on_first_layer())
-        speed = m_config.get_abs_value("first_layer_speed", speed);
     if (m_volumetric_speed != 0. && speed == 0)
         speed = m_volumetric_speed / path.mm3_per_mm;
+    if (this->on_first_layer())
+        speed = m_config.get_abs_value("first_layer_speed", speed);
     if (m_config.max_volumetric_speed.value > 0) {
         // cap speed with max_volumetric_speed anyway (even if user is not using autospeed)
         speed = std::min(

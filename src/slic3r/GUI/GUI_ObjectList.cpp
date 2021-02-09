@@ -13,6 +13,7 @@
 #include "libslic3r/Model.hpp"
 #include "GLCanvas3D.hpp"
 #include "Selection.hpp"
+#include "format.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include "slic3r/Utils/FixModelByWin10.hpp"
@@ -97,7 +98,7 @@ ObjectList::ObjectList(wxWindow* parent) :
         CATEGORY_ICON[L("Extruders")]                = create_scaled_bitmap("funnel");
         CATEGORY_ICON[L("Extrusion Width")]          = create_scaled_bitmap("funnel");
         CATEGORY_ICON[L("Wipe options")]             = create_scaled_bitmap("funnel");
-//         CATEGORY_ICON[L("Skirt and brim")]          = create_scaled_bitmap("skirt+brim"); 
+        CATEGORY_ICON[L("Skirt and brim")]           = create_scaled_bitmap("skirt+brim");
 //         CATEGORY_ICON[L("Speed > Acceleration")]    = create_scaled_bitmap("time");
         CATEGORY_ICON[L("Advanced")]                 = create_scaled_bitmap("wrench");
         // ptSLA
@@ -116,7 +117,9 @@ ObjectList::ObjectList(wxWindow* parent) :
         // detect the current mouse position here, to pass it to list_manipulation() method
         // if we detect it later, the user may have moved the mouse pointer while calculations are performed, and this would mess-up the HitTest() call performed into list_manipulation()
         // see: https://github.com/prusa3d/PrusaSlicer/issues/3802
+#ifndef __WXOSX__
         const wxPoint mouse_pos = this->get_mouse_position_in_control();
+#endif
 
 #ifndef __APPLE__
         // On Windows and Linux, forces a kill focus emulation on the object manipulator fields because this event handler is called
@@ -260,13 +263,27 @@ ObjectList::~ObjectList()
 
 void ObjectList::set_min_height()
 {
-    /* Temporary workaround for the correct behavior of the Scrolled sidebar panel:
-    * change min hight of object list to the normal min value (20 * wxGetApp().em_unit())
-    * after first whole Mainframe updating/layouting
-    */
-    const int list_min_height = 20 * wxGetApp().em_unit();
-    if (this->GetMinSize().GetY() > list_min_height)
-        this->SetMinSize(wxSize(-1, list_min_height));
+    if (m_items_count == size_t(-1))
+        m_items_count = 7;
+    int list_min_height = lround(2.25 * (m_items_count + 1) * wxGetApp().em_unit()); // +1 is for height of control header
+    this->SetMinSize(wxSize(1, list_min_height));
+}
+
+void ObjectList::update_min_height()
+{
+    wxDataViewItemArray all_items;
+    m_objects_model->GetAllChildren(wxDataViewItem(nullptr), all_items);
+    size_t items_cnt = all_items.Count();
+    if (items_cnt < 7)
+        items_cnt = 7;
+    else if (items_cnt >= 15)
+        items_cnt = 15;
+    
+    if (m_items_count == items_cnt)
+        return;
+
+    m_items_count = items_cnt;
+    set_min_height();
 }
 
 
@@ -274,7 +291,7 @@ void ObjectList::create_objects_ctrl()
 {
     /* Temporary workaround for the correct behavior of the Scrolled sidebar panel:
      * 1. set a height of the list to some big value 
-     * 2. change it to the normal min value (20 * wxGetApp().em_unit()) after first whole Mainframe updating/layouting
+     * 2. change it to the normal(meaningful) min value after first whole Mainframe updating/layouting
      */
     SetMinSize(wxSize(-1, 3000));
 
@@ -399,27 +416,27 @@ wxString ObjectList::get_mesh_errors_list(const int obj_idx, const int vol_idx /
         return ""; // hide tooltip
 
     // Create tooltip string, if there are errors 
-    wxString tooltip = wxString::Format(_(L("Auto-repaired (%d errors):")), errors) + "\n";
+    wxString tooltip = format_wxstr(_L_PLURAL("Auto-repaired %1$d error", "Auto-repaired %1$d errors", errors), errors) + ":\n";
 
     const stl_stats& stats = vol_idx == -1 ?
                             (*m_objects)[obj_idx]->get_object_stl_stats() :
                             (*m_objects)[obj_idx]->volumes[vol_idx]->mesh().stl.stats;
 
-    std::map<std::string, int> error_msg = {
-        { L("degenerate facets"),   stats.degenerate_facets },
-        { L("edges fixed"),         stats.edges_fixed       },
-        { L("facets removed"),      stats.facets_removed    },
-        { L("facets added"),        stats.facets_added      },
-        { L("facets reversed"),     stats.facets_reversed   },
-        { L("backwards edges"),     stats.backwards_edges   }
-    };
-
-    for (const auto& error : error_msg)
-        if (error.second > 0)
-            tooltip += from_u8((boost::format("\t%1% %2%\n") % error.second % _utf8(error.first)).str());
+    if (stats.degenerate_facets > 0)
+        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d degenerate facet", "%1$d degenerate facets", stats.degenerate_facets), stats.degenerate_facets) + "\n";
+    if (stats.edges_fixed > 0)
+        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d edge fixed", "%1$d edges fixed", stats.edges_fixed), stats.edges_fixed) + "\n";
+    if (stats.facets_removed > 0)
+        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d facet removed", "%1$d facets removed", stats.facets_removed), stats.facets_removed) + "\n";
+    if (stats.facets_added > 0)
+        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d facet added", "%1$d facets added", stats.facets_added), stats.facets_added) + "\n";
+    if (stats.facets_reversed > 0)
+        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d facet reversed", "%1$d facets reversed", stats.facets_reversed), stats.facets_reversed) + "\n";
+    if (stats.backwards_edges > 0)
+        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d backwards edge", "%1$d backwards edges", stats.backwards_edges), stats.backwards_edges) + "\n";
 
     if (is_windows10())
-        tooltip += _(L("Right button click the icon to fix STL through Netfabb"));
+        tooltip += _L("Right button click the icon to fix STL through Netfabb");
 
     return tooltip;
 }
@@ -672,7 +689,7 @@ void ObjectList::msw_rescale_icons()
         CATEGORY_ICON[L("Extruders")]                = create_scaled_bitmap("funnel");
         CATEGORY_ICON[L("Extrusion Width")]          = create_scaled_bitmap("funnel");
         CATEGORY_ICON[L("Wipe options")]             = create_scaled_bitmap("funnel");
-//         CATEGORY_ICON[L("Skirt and brim")]          = create_scaled_bitmap("skirt+brim"); 
+        CATEGORY_ICON[L("Skirt and brim")]           = create_scaled_bitmap("skirt+brim");
 //         CATEGORY_ICON[L("Speed > Acceleration")]    = create_scaled_bitmap("time");
         CATEGORY_ICON[L("Advanced")]                 = create_scaled_bitmap("wrench");
         // ptSLA
@@ -737,7 +754,7 @@ void ObjectList::copy_layers_to_clipboard()
         return;
     }
 
-    for (const auto layer_item : sel_layers)
+    for (const auto& layer_item : sel_layers)
         if (m_objects_model->GetItemType(layer_item) & itLayer) {
             auto range = m_objects_model->GetLayerRangeByItem(layer_item);
             auto it = ranges.find(range);
@@ -763,7 +780,7 @@ void ObjectList::paste_layers_into_list()
     t_layer_config_ranges& ranges = object(obj_idx)->layer_config_ranges;
 
     // and create Layer item(s) according to the layer_config_ranges
-    for (const auto range : cache_ranges)
+    for (const auto& range : cache_ranges)
         ranges.emplace(range);
 
     layers_item = add_layer_root_item(object_item);
@@ -1827,7 +1844,7 @@ void ObjectList::append_menu_item_export_stl(wxMenu* menu) const
 void ObjectList::append_menu_item_reload_from_disk(wxMenu* menu) const
 {
     append_menu_item(menu, wxID_ANY, _(L("Reload from disk")), _(L("Reload the selected volumes from disk")),
-        [this](wxCommandEvent&) { wxGetApp().plater()->reload_from_disk(); }, "", menu,
+        [](wxCommandEvent&) { wxGetApp().plater()->reload_from_disk(); }, "", menu,
         []() { return wxGetApp().plater()->can_reload_from_disk(); }, wxGetApp().plater());
 }
 
@@ -2048,9 +2065,9 @@ wxMenu* ObjectList::create_settings_popupmenu(wxMenu *parent_menu)
 
     for (auto cat : settings_menu) {
         append_menu_item(menu, wxID_ANY, _(cat.first), "",
-                        [menu, this](wxCommandEvent& event) { get_settings_choice(menu->GetLabel(event.GetId())); }, 
+                        [this, menu](wxCommandEvent& event) { get_settings_choice(menu->GetLabel(event.GetId())); },
                         CATEGORY_ICON.find(cat.first) == CATEGORY_ICON.end() ? wxNullBitmap : CATEGORY_ICON.at(cat.first), parent_menu,
-                        [this]() { return true; }, wxGetApp().plater());
+                        []() { return true; }, wxGetApp().plater());
     }
 
     return menu;
@@ -2069,9 +2086,9 @@ void ObjectList::create_freq_settings_popupmenu(wxMenu *menu, const bool is_obje
             continue;
 
         append_menu_item(menu, wxID_ANY, _(it.first), "",
-                        [menu, this](wxCommandEvent& event) { get_freq_settings_choice(menu->GetLabel(event.GetId())); }, 
+                        [this, menu](wxCommandEvent& event) { get_freq_settings_choice(menu->GetLabel(event.GetId())); },
                         CATEGORY_ICON.find(it.first) == CATEGORY_ICON.end() ? wxNullBitmap : CATEGORY_ICON.at(it.first), menu,
-                        [this]() { return true; }, wxGetApp().plater());
+                        []() { return true; }, wxGetApp().plater());
     }
 #if 0
     // Add "Quick" settings bundles
@@ -2993,6 +3010,8 @@ void ObjectList::part_selection_changed()
     else if (update_and_show_layers)
         wxGetApp().obj_layers()->get_og()->set_name(" " + og_name + " ");
 
+    update_min_height();
+
     Sidebar& panel = wxGetApp().sidebar();
     panel.Freeze();
 
@@ -3659,16 +3678,28 @@ void ObjectList::update_selections()
                 return;
             sels.Add(m_objects_model->GetItemById(selection.get_object_idx()));
         }
-        if (selection.is_single_volume() || selection.is_any_modifier()) {
+        else if (selection.is_single_volume() || selection.is_any_modifier()) {
             const auto gl_vol = selection.get_volume(*selection.get_volume_idxs().begin());
             if (m_objects_model->GetVolumeIdByItem(m_objects_model->GetParent(item)) == gl_vol->volume_idx())
                 return;
         }
-
         // but if there is selected only one of several instances by context menu,
         // then select this instance in ObjectList
-        if (selection.is_single_full_instance())
+        else if (selection.is_single_full_instance())
             sels.Add(m_objects_model->GetItemByInstanceId(selection.get_object_idx(), selection.get_instance_idx()));
+        // Can be the case, when we have selected itSettings | itLayerRoot | itLayer in the ObjectList and selected object/instance in the Scene
+        // and then select some object/instance in 3DScene using Ctrt+left click
+        // see https://github.com/prusa3d/PrusaSlicer/issues/5517
+        else {
+            // Unselect all items in ObjectList
+            m_last_selected_item = wxDataViewItem(nullptr);
+            m_prevent_list_events = true;
+            UnselectAll();
+            m_prevent_list_events = false;
+            // call this function again to update selection from the canvas
+            update_selections();
+            return;
+        }
     }
     else if (selection.is_single_full_object() || selection.is_multiple_full_object())
     {
@@ -4467,9 +4498,9 @@ void ObjectList::update_item_error_icon(const int obj_idx, const int vol_idx) co
 
 void ObjectList::msw_rescale()
 {
+    set_min_height();
+
     const int em = wxGetApp().em_unit();
-    // update min size !!! A width of control shouldn't be a wxDefaultCoord
-    SetMinSize(wxSize(1, 15 * em));
 
     GetColumn(colName    )->SetWidth(20 * em);
     GetColumn(colPrint   )->SetWidth( 3 * em);
@@ -4571,7 +4602,7 @@ void ObjectList::show_multi_selection_menu()
         append_menu_item_change_extruder(menu);
 
     append_menu_item(menu, wxID_ANY, _(L("Reload from disk")), _(L("Reload the selected volumes from disk")),
-        [this](wxCommandEvent&) { wxGetApp().plater()->reload_from_disk(); }, "", menu, []() {
+        [](wxCommandEvent&) { wxGetApp().plater()->reload_from_disk(); }, "", menu, []() {
         return wxGetApp().plater()->can_reload_from_disk();
     }, wxGetApp().plater());
 

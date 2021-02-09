@@ -325,7 +325,7 @@ private:
         size_t cur_len = 0;
 
         wxString longest_sub_string;
-        auto get_longest_sub_string = [longest_sub_string, input](wxString &longest_sub_str, int cur_len, size_t i) {
+        auto get_longest_sub_string = [input](wxString &longest_sub_str, size_t cur_len, size_t i) {
             if (cur_len > longest_sub_str.Len())
                 longest_sub_str = input.SubString(i - cur_len + 1, i);
         };
@@ -775,6 +775,7 @@ bool GUI_App::on_init_inner()
 
 //     Slic3r::debugf "wxWidgets version %s, Wx version %s\n", wxVERSION_STRING, wxVERSION;
 
+
     if (is_editor()) {
         std::string msg = Http::tls_global_init();
         std::string ssl_cert_store = app_config->get("tls_accepted_cert_store_location");
@@ -797,6 +798,9 @@ bool GUI_App::on_init_inner()
 
     app_config->set("version", SLIC3R_VERSION);
     app_config->save();
+
+    // If load_language() fails, the application closes.
+    load_language(wxString(), true);
 
     wxInitAllImageHandlers();
 
@@ -864,9 +868,6 @@ bool GUI_App::on_init_inner()
     // initialize label colors and fonts
     init_label_colours();
     init_fonts();
-
-    // If load_language() fails, the application closes.
-    load_language(wxString(), true);
 
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
@@ -1033,6 +1034,12 @@ void GUI_App::update_label_colours_from_appconfig()
     }
 }
 
+void GUI_App::update_label_colours()
+{
+    for (Tab* tab : tabs_list)
+        tab->update_label_colours();
+}
+
 void GUI_App::init_fonts()
 {
     m_small_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
@@ -1066,7 +1073,10 @@ void GUI_App::update_fonts(const MainFrame *main_frame)
     m_code_font.SetPointSize(m_normal_font.GetPointSize());
 }
 
-void GUI_App::set_label_clr_modified(const wxColour& clr) {
+void GUI_App::set_label_clr_modified(const wxColour& clr) 
+{
+    if (m_color_label_modified == clr)
+        return;
     m_color_label_modified = clr;
     auto clr_str = wxString::Format(wxT("#%02X%02X%02X"), clr.Red(), clr.Green(), clr.Blue());
     std::string str = clr_str.ToStdString();
@@ -1074,7 +1084,10 @@ void GUI_App::set_label_clr_modified(const wxColour& clr) {
     app_config->save();
 }
 
-void GUI_App::set_label_clr_sys(const wxColour& clr) {
+void GUI_App::set_label_clr_sys(const wxColour& clr)
+{
+    if (m_color_label_sys == clr)
+        return;
     m_color_label_sys = clr;
     auto clr_str = wxString::Format(wxT("#%02X%02X%02X"), clr.Red(), clr.Green(), clr.Blue());
     std::string str = clr_str.ToStdString();
@@ -1229,6 +1242,7 @@ void fatal_error(wxWindow* parent)
 // Update the UI based on the current preferences.
 void GUI_App::update_ui_from_settings(bool apply_free_camera_correction)
 {
+    update_label_colours();
     mainframe->update_ui_from_settings(apply_free_camera_correction);
 }
 
@@ -1799,7 +1813,8 @@ bool GUI_App::check_unsaved_changes(const wxString &header)
             // synchronize config.ini with the current selections.
             preset_bundle->export_selections(*app_config);
 
-            wxMessageBox(_L("The preset(s) modifications are successfully saved"));
+            wxMessageBox(_L_PLURAL("The preset modifications are successfully saved", 
+                                   "The presets modifications are successfully saved", dlg.get_names_and_types().size()));
         }
     }
 

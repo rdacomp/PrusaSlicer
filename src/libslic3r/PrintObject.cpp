@@ -501,7 +501,7 @@ SupportLayer* PrintObject::add_support_layer(int id, coordf_t height, coordf_t p
     return m_support_layers.back();
 }
 
-SupportLayerPtrs::const_iterator PrintObject::insert_support_layer(SupportLayerPtrs::const_iterator pos, size_t id, coordf_t height, coordf_t print_z, coordf_t slice_z)
+SupportLayerPtrs::iterator PrintObject::insert_support_layer(SupportLayerPtrs::iterator pos, size_t id, coordf_t height, coordf_t print_z, coordf_t slice_z)
 {
     return m_support_layers.insert(pos, new SupportLayer(id, this, height, print_z, slice_z));
 }
@@ -521,6 +521,10 @@ bool PrintObject::invalidate_state_by_config_options(const std::vector<t_config_
             || opt_key == "gap_fill_speed"
             || opt_key == "overhangs"
             || opt_key == "first_layer_extrusion_width"
+            || opt_key == "fuzzy_skin_perimeter_mode"
+//            || opt_key == "fuzzy_skin_shape"
+            || opt_key == "fuzzy_skin_thickness"
+            || opt_key == "fuzzy_skin_point_dist"
             || opt_key == "perimeter_extrusion_width"
             || opt_key == "infill_overlap"
             || opt_key == "thin_walls"
@@ -909,7 +913,7 @@ void PrintObject::detect_surfaces_type()
         // Fill in layerm->fill_surfaces by trimming the layerm->slices by the cummulative layerm->fill_surfaces.
         tbb::parallel_for(
             tbb::blocked_range<size_t>(0, m_layers.size()),
-            [this, idx_region, interface_shells](const tbb::blocked_range<size_t>& range) {
+            [this, idx_region](const tbb::blocked_range<size_t>& range) {
                 for (size_t idx_layer = range.begin(); idx_layer < range.end(); ++ idx_layer) {
                     m_print->throw_if_canceled();
                     LayerRegion *layerm = m_layers[idx_layer]->m_regions[idx_region];
@@ -1602,6 +1606,12 @@ PrintRegionConfig PrintObject::region_config_from_model_volume(const PrintRegion
     clamp_exturder_to_default(config.infill_extruder,       num_extruders);
     clamp_exturder_to_default(config.perimeter_extruder,    num_extruders);
     clamp_exturder_to_default(config.solid_infill_extruder, num_extruders);
+    if (config.fill_density.value < 0.00011f)
+        // Switch of infill for very low infill rates, also avoid division by zero in infill generator for these very low rates.
+        // See GH issue #5910.
+        config.fill_density.value = 0;
+    else 
+        config.fill_density.value = std::min(config.fill_density.value, 100.);
     return config;
 }
 
@@ -1629,6 +1639,7 @@ SlicingParameters PrintObject::slicing_parameters(const DynamicPrintConfig& full
 			PrintRegion::collect_object_printing_extruders(
 				print_config,
 				region_config_from_model_volume(default_region_config, nullptr, *model_volume, num_extruders),
+                object_config.brim_type != btNoBrim && object_config.brim_width > 0.,
 				object_extruders);
 			for (const std::pair<const t_layer_height_range, ModelConfig> &range_and_config : model_object.layer_config_ranges)
 				if (range_and_config.second.has("perimeter_extruder") ||
@@ -1637,6 +1648,7 @@ SlicingParameters PrintObject::slicing_parameters(const DynamicPrintConfig& full
 					PrintRegion::collect_object_printing_extruders(
 						print_config,
 						region_config_from_model_volume(default_region_config, &range_and_config.second.get(), *model_volume, num_extruders),
+                        object_config.brim_type != btNoBrim && object_config.brim_width > 0.,
 						object_extruders);
 		}
     sort_remove_duplicates(object_extruders);
@@ -1722,7 +1734,7 @@ void PrintObject::_slice(const std::vector<coordf_t> &layer_height_profile)
             }
             // Make sure all layers contain layer region objects for all regions.
             for (size_t region_id = 0; region_id < this->region_volumes.size(); ++ region_id)
-                layer->add_region(this->print()->regions()[region_id]);
+                layer->add_region(this->print()->get_region(region_id));
             prev = layer;
         }
     }
@@ -2148,6 +2160,16 @@ std::vector<ExPolygons> PrintObject::slice_support_volumes(const ModelVolumeType
     return this->slice_volumes(zs, SlicingMode::Regular, volumes);
 }
 
+//FIXME The admesh repair function may break the face connectivity, rather refresh it here as the slicing code relies on it.
+static void fix_mesh_connectivity(TriangleMesh &mesh)
+{
+    auto nr_degenerated = mesh.stl.stats.degenerate_facets;
+    stl_check_facets_exact(&mesh.stl);
+    if (nr_degenerated != mesh.stl.stats.degenerate_facets)
+        // stl_check_facets_exact() removed some newly degenerated faces. Some faces could become degenerate after some mesh transformation.
+        stl_generate_shared_vertices(&mesh.stl, mesh.its);
+}
+
 std::vector<ExPolygons> PrintObject::slice_volumes(
     const std::vector<float> &z, 
     SlicingMode mode, size_t slicing_mode_normal_below_layer, SlicingMode mode_below, 
@@ -2160,10 +2182,8 @@ std::vector<ExPolygons> PrintObject::slice_volumes(
 		TriangleMesh mesh(volumes.front()->mesh());
         mesh.transform(volumes.front()->get_matrix(), true);
 		assert(mesh.repaired);
-		if (volumes.size() == 1 && mesh.repaired) {
-			//FIXME The admesh repair function may break the face connectivity, rather refresh it here as the slicing code relies on it.
-			stl_check_facets_exact(&mesh.stl);
-		}
+		if (volumes.size() == 1 && mesh.repaired)
+            fix_mesh_connectivity(mesh);
         for (size_t idx_volume = 1; idx_volume < volumes.size(); ++ idx_volume) {
             const ModelVolume &model_volume = *volumes[idx_volume];
             TriangleMesh vol_mesh(model_volume.mesh());
@@ -2196,10 +2216,8 @@ std::vector<ExPolygons> PrintObject::slice_volume(const std::vector<float> &z, S
 	    //FIXME better to split the mesh into separate shells, perform slicing over each shell separately and then to use a Boolean operation to merge them.
 	    TriangleMesh mesh(volume.mesh());
 	    mesh.transform(volume.get_matrix(), true);
-		if (mesh.repaired) {
-			//FIXME The admesh repair function may break the face connectivity, rather refresh it here as the slicing code relies on it.
-			stl_check_facets_exact(&mesh.stl);
-		}
+		if (mesh.repaired)
+            fix_mesh_connectivity(mesh);
 	    if (mesh.stl.stats.number_of_facets > 0) {
 	        mesh.transform(m_trafo, true);
 	        // apply XY shift

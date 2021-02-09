@@ -21,6 +21,8 @@ add_library(libslic3r STATIC
     BoundingBox.hpp
     BridgeDetector.cpp
     BridgeDetector.hpp
+    Brim.cpp
+    Brim.hpp
     ClipperUtils.cpp
     ClipperUtils.hpp
     Config.cpp
@@ -120,6 +122,8 @@ add_library(libslic3r STATIC
     "${CMAKE_CURRENT_BINARY_DIR}/libslic3r_version.h"
     Line.cpp
     Line.hpp
+    LibraryCheck.cpp
+    LibraryCheck.hpp
     Model.cpp
     Model.hpp
     ModelArrange.hpp

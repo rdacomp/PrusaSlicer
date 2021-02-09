@@ -43,6 +43,27 @@ enum AuthorizationType {
     atKeyPassword, atUserPassword
 };
 
+enum class FuzzySkinPerimeterMode {
+    None,
+    External,
+    ExternalSkipFirst,
+    All
+};
+
+/*
+enum class FuzzySkinShape {
+    Triangle1,
+    Triangle2,
+    Triangle3,
+    Sawtooth1,
+    Sawtooth2,
+    Sawtooth3,
+    Random1,
+    Random2,
+    Random3
+};
+*/
+
 enum InfillPattern : int {
     ipRectilinear, ipMonotonic, ipAlignedRectilinear, ipGrid, ipTriangles, ipStars, ipCubic, ipLine, ipConcentric, ipHoneycomb, ip3DHoneycomb,
     ipGyroid, ipHilbertCurve, ipArchimedeanChords, ipOctagramSpiral, ipAdaptiveCubic, ipSupportCubic, ipCount,
@@ -80,6 +101,13 @@ enum SLAPillarConnectionMode {
     slapcmZigZag,
     slapcmCross,
     slapcmDynamic
+};
+
+enum BrimType {
+    btNoBrim,
+    btOuterOnly,
+    btInnerOnly,
+    btOuterAndInner,
 };
 
 enum RaftSizeAdjust {
@@ -146,6 +174,35 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<AuthorizationType
     }
     return keys_map;
 }
+
+template<> inline const t_config_enum_values& ConfigOptionEnum<FuzzySkinPerimeterMode>::get_enum_values() {
+    static t_config_enum_values keys_map;
+    if (keys_map.empty()) {
+        keys_map["none"]                           = int(FuzzySkinPerimeterMode::None);
+        keys_map["external_only"]                  = int(FuzzySkinPerimeterMode::External);
+        keys_map["external_only_skip_first_layer"] = int(FuzzySkinPerimeterMode::ExternalSkipFirst);
+        keys_map["all"]                            = int(FuzzySkinPerimeterMode::All);
+    }
+    return keys_map;
+}
+
+/*
+template<> inline const t_config_enum_values& ConfigOptionEnum<FuzzySkinShape>::get_enum_values() {
+    static t_config_enum_values keys_map;
+    if (keys_map.empty()) {
+        keys_map["triangle1"]           = int(FuzzySkinShape::Triangle1);
+        keys_map["triangle2"]           = int(FuzzySkinShape::Triangle2);
+        keys_map["triangle3"]           = int(FuzzySkinShape::Triangle3);
+        keys_map["sawtooth1"]           = int(FuzzySkinShape::Sawtooth1);
+        keys_map["sawtooth2"]           = int(FuzzySkinShape::Sawtooth2);
+        keys_map["sawtooth3"]           = int(FuzzySkinShape::Sawtooth3);
+        keys_map["random1"]             = int(FuzzySkinShape::Random1);
+        keys_map["random2"]             = int(FuzzySkinShape::Random2);
+        keys_map["random3"]             = int(FuzzySkinShape::Random3);
+    }
+    return keys_map;
+}
+*/
 
 template<> inline const t_config_enum_values& ConfigOptionEnum<InfillPattern>::get_enum_values() {
     static t_config_enum_values keys_map;
@@ -221,6 +278,17 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<SLAPillarConnecti
     return keys_map;
 }
 
+template<> inline const t_config_enum_values& ConfigOptionEnum<BrimType>::get_enum_values() {
+    static const t_config_enum_values keys_map = {
+        {"no_brim", btNoBrim},
+        {"outer_only", btOuterOnly},
+        {"inner_only", btInnerOnly},
+        {"outer_and_inner", btOuterAndInner}
+    };
+
+    return keys_map;
+}
+
 template<> inline const t_config_enum_values& ConfigOptionEnum<RaftSizeAdjust>::get_enum_values() {
     static const t_config_enum_values keys_map = {
         { "small",      rsaSmall },
@@ -231,6 +299,8 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<RaftSizeAdjust>::
 
     return keys_map;
 }
+
+
 // Defines each and every confiuration option of Slic3r, including the properties of the GUI dialogs.
 // Does not store the actual values, but defines default values.
 class PrintConfigDef : public ConfigDef
@@ -263,7 +333,7 @@ extern const PrintConfigDef print_config_def;
 
 class StaticPrintConfig;
 
-PrinterTechnology printer_technology(const ConfigBase &cfg);
+// Minimum object distance for arrangement, based on printer technology.
 double min_object_distance(const ConfigBase &cfg);
 
 // Slic3r dynamic configuration, used to override the configuration
@@ -444,11 +514,18 @@ class PrintObjectConfig : public StaticPrintConfig
 {
     STATIC_PRINT_CONFIG_CACHE(PrintObjectConfig)
 public:
+    ConfigOptionFloat               brim_offset;
+    ConfigOptionEnum<BrimType>      brim_type;
+    ConfigOptionFloat               brim_width;
     ConfigOptionBool                clip_multipart_objects;
     ConfigOptionBool                dont_support_bridges;
     ConfigOptionFloat               elefant_foot_compensation;
     ConfigOptionFloatOrPercent      extrusion_width;
     ConfigOptionFloatOrPercent      first_layer_height;
+    ConfigOptionEnum<FuzzySkinPerimeterMode>    fuzzy_skin_perimeter_mode;
+//    ConfigOptionEnum<FuzzySkinShape>            fuzzy_skin_shape;
+    ConfigOptionFloat               fuzzy_skin_thickness;
+    ConfigOptionFloat               fuzzy_skin_point_dist;
     ConfigOptionBool                infill_only_where_needed;
     // Force the generation of solid shells between adjacent materials/volumes.
     ConfigOptionBool                interface_shells;
@@ -493,11 +570,18 @@ public:
 protected:
     void initialize(StaticCacheBase &cache, const char *base_ptr)
     {
+        OPT_PTR(brim_offset);
+        OPT_PTR(brim_type);
+        OPT_PTR(brim_width);
         OPT_PTR(clip_multipart_objects);
         OPT_PTR(dont_support_bridges);
         OPT_PTR(elefant_foot_compensation);
         OPT_PTR(extrusion_width);
         OPT_PTR(first_layer_height);
+        OPT_PTR(fuzzy_skin_perimeter_mode);
+//        OPT_PTR(fuzzy_skin_shape);
+        OPT_PTR(fuzzy_skin_thickness);
+        OPT_PTR(fuzzy_skin_point_dist);
         OPT_PTR(infill_only_where_needed);
         OPT_PTR(interface_shells);
         OPT_PTR(layer_height);
@@ -858,7 +942,6 @@ public:
     ConfigOptionInts                bed_temperature;
     ConfigOptionFloat               bridge_acceleration;
     ConfigOptionInts                bridge_fan_speed;
-    ConfigOptionFloat               brim_width;
     ConfigOptionBool                complete_objects;
     ConfigOptionFloats              colorprint_heights;
     ConfigOptionBools               cooling;
@@ -933,7 +1016,6 @@ protected:
         OPT_PTR(bed_temperature);
         OPT_PTR(bridge_acceleration);
         OPT_PTR(bridge_fan_speed);
-        OPT_PTR(brim_width);
         OPT_PTR(complete_objects);
         OPT_PTR(colorprint_heights);
         OPT_PTR(cooling);
@@ -1065,7 +1147,7 @@ public:
     // The percentage of smaller pillars compared to the normal pillar diameter
     // which are used in problematic areas where a normal pilla cannot fit.
     ConfigOptionPercent support_small_pillar_diameter_percent;
-    
+
     // How much bridge (supporting another pinhead) can be placed on a pillar.
     ConfigOptionInt   support_max_bridges_on_pillar;
 
@@ -1117,7 +1199,7 @@ public:
 
     // The height of the pad from the bottom to the top not considering the pit
     ConfigOptionFloat pad_wall_height /*= 5*/;
-    
+
     // How far should the pad extend around the contained geometry
     ConfigOptionFloat pad_brim_size;
 
@@ -1141,7 +1223,7 @@ public:
 
     // Disable the elevation (ignore its value) and use the zero elevation mode
     ConfigOptionBool pad_around_object;
-    
+
     ConfigOptionBool pad_around_object_everywhere;
 
     // This is the gap between the object bottom and the generated pad
@@ -1155,7 +1237,7 @@ public:
 
     // How much should the tiny connectors penetrate into the model body
     ConfigOptionFloat pad_object_connector_penetration;
-    
+
     // /////////////////////////////////////////////////////////////////////////
     // Model hollowing parameters:
     //   - Models can be hollowed out as part of the SLA print process
@@ -1164,17 +1246,17 @@ public:
     //   - Additional holes will be drilled into the hollow model to allow for
     //   - resin removal.
     // /////////////////////////////////////////////////////////////////////////
-    
+
     ConfigOptionBool hollowing_enable;
-    
-    // The minimum thickness of the model walls to maintain. Note that the 
+
+    // The minimum thickness of the model walls to maintain. Note that the
     // resulting walls may be thicker due to smoothing out fine cavities where
     // resin could stuck.
     ConfigOptionFloat hollowing_min_thickness;
-    
+
     // Indirectly controls the voxel size (resolution) used by openvdb
     ConfigOptionFloat hollowing_quality;
-   
+
     // Indirectly controls the minimum size of created cavities.
     ConfigOptionFloat hollowing_closing_distance;
 
@@ -1396,13 +1478,13 @@ Points get_bed_shape(const SLAPrinterConfig &cfg);
 // ModelConfig is a wrapper around DynamicPrintConfig with an addition of a timestamp.
 // Each change of ModelConfig is tracked by assigning a new timestamp from a global counter.
 // The counter is used for faster synchronization of the background slicing thread
-// with the front end by skipping synchronization of equal config dictionaries. 
-// The global counter is also used for avoiding unnecessary serialization of config 
+// with the front end by skipping synchronization of equal config dictionaries.
+// The global counter is also used for avoiding unnecessary serialization of config
 // dictionaries when taking an Undo snapshot.
 //
 // The global counter is NOT thread safe, therefore it is recommended to use ModelConfig from
 // the main thread only.
-// 
+//
 // As there is a global counter and it is being increased with each change to any ModelConfig,
 // if two ModelConfig dictionaries differ, they should differ with their timestamp as well.
 // Therefore copying the ModelConfig including its timestamp is safe as there is no harm

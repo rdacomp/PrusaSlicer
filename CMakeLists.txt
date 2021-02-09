@@ -35,14 +35,26 @@ option(SLIC3R_ASAN              "Enable ASan on Clang and GCC" 0)
 
 set(SLIC3R_GTK "2" CACHE STRING "GTK version to use with wxWidgets on Linux")
 
+set(IS_CROSS_COMPILE FALSE)
+
 if (APPLE)
     set(CMAKE_FIND_FRAMEWORK LAST)
     set(CMAKE_FIND_APPBUNDLE LAST)
+    list(FIND CMAKE_OSX_ARCHITECTURES ${CMAKE_SYSTEM_PROCESSOR} _arch_idx)
+    if (CMAKE_OSX_ARCHITECTURES AND _arch_idx LESS 0)
+        set(IS_CROSS_COMPILE TRUE)
+    endif ()
 endif ()
 
 # Proposal for C++ unit tests and sandboxes
 option(SLIC3R_BUILD_SANDBOXES   "Build development sandboxes" OFF)
 option(SLIC3R_BUILD_TESTS       "Build unit tests" ON)
+
+if (IS_CROSS_COMPILE)
+    message("Detected cross compilation setup. Tests and encoding checks will be forcedly disabled!")
+    set(SLIC3R_PERL_XS OFF CACHE BOOL "" FORCE)
+    set(SLIC3R_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+endif ()
 
 # Print out the SLIC3R_* cache options
 get_cmake_property(_cache_vars CACHE_VARIABLES)
@@ -188,6 +200,13 @@ if (NOT MSVC AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMP
     # https://eigen.tuxfamily.org/bz/show_bug.cgi?id=1221
     if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang" OR CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.0)
         add_compile_options(-Wno-ignored-attributes) # Tamas: Eigen include dirs are marked as SYSTEM
+    endif()
+
+    # Clang reports legacy OpenGL calls as deprecated. Turn off the warning for now
+    # to reduce the clutter, we know about this one. It should be reenabled after
+    # we finally get rid of the deprecated code.
+    if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+        add_compile_options(-Wno-deprecated-declarations)
     endif()
 
     #GCC generates loads of -Wunknown-pragmas when compiling igl. The fix is not easy due to a bug in gcc, see

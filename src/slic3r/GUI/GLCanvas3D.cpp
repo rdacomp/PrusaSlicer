@@ -631,12 +631,12 @@ void GLCanvas3D::WarningTexture::activate(WarningTexture::Warning warning, bool 
     std::string text;
     bool error = false;
     switch (warning) {
-    case ObjectOutside: text = L("An object outside the print area was detected."); break;
-    case ToolpathOutside: text = L("A toolpath outside the print area was detected."); error = true; break;
-    case SlaSupportsOutside: text = L("SLA supports outside the print area were detected."); error = true; break;
-    case SomethingNotShown: text = L("Some objects are not visible."); break;
+    case ObjectOutside: text = _u8L("An object outside the print area was detected."); break;
+    case ToolpathOutside: text = _u8L("A toolpath outside the print area was detected."); error = true; break;
+    case SlaSupportsOutside: text = _u8L("SLA supports outside the print area were detected."); error = true; break;
+    case SomethingNotShown: text = _u8L("Some objects are not visible."); break;
     case ObjectClashed:
-        text = L( "An object outside the print area was detected.\n"
+        text = _u8L( "An object outside the print area was detected.\n"
                   "Resolve the current problem to continue slicing.");
         error = true;
         break;
@@ -1377,7 +1377,7 @@ void GLCanvas3D::update_instance_printable_state_for_object(const size_t obj_idx
     }
 }
 
-void GLCanvas3D::update_instance_printable_state_for_objects(std::vector<size_t>& object_idxs)
+void GLCanvas3D::update_instance_printable_state_for_objects(const std::vector<size_t>& object_idxs)
 {
     for (size_t obj_idx : object_idxs)
         update_instance_printable_state_for_object(obj_idx);
@@ -3866,7 +3866,11 @@ void GLCanvas3D::update_tooltip_for_settings_item_in_main_toolbar()
 
 bool GLCanvas3D::has_toolpaths_to_export() const
 {
+#if ENABLE_SPLITTED_VERTEX_BUFFER
+    return m_gcode_viewer.can_export_toolpaths();
+#else
     return m_gcode_viewer.has_data();
+#endif // ENABLE_SPLITTED_VERTEX_BUFFER
 }
 
 void GLCanvas3D::export_toolpaths_to_obj(const char* filename) const
@@ -4578,9 +4582,9 @@ bool GLCanvas3D::_init_main_toolbar()
                                                 "\n" + "[" + GUI::shortkey_ctrl_prefix() + "4] - " + _u8L("Printer Settings Tab") ;
     item.sprite_id = 10;
     item.enabling_callback    = GLToolbarItem::Default_Enabling_Callback;
-    item.visibility_callback  = [this]() { return (wxGetApp().app_config->get("new_settings_layout_mode") == "1" ||
-                                                   wxGetApp().app_config->get("dlg_settings_layout_mode") == "1"); };
-    item.left.action_callback = [this]() { wxGetApp().mainframe->select_tab(); };
+    item.visibility_callback  = []() { return (wxGetApp().app_config->get("new_settings_layout_mode") == "1" ||
+                                               wxGetApp().app_config->get("dlg_settings_layout_mode") == "1"); };
+    item.left.action_callback = []() { wxGetApp().mainframe->select_tab(); };
     if (!m_main_toolbar.add_item(item))
         return false;
 
@@ -5676,7 +5680,7 @@ void GLCanvas3D::_load_print_toolpaths()
     if (!print->is_step_done(psSkirt) || !print->is_step_done(psBrim))
         return;
 
-    if (!print->has_skirt() && (print->config().brim_width.value == 0))
+    if (!print->has_skirt() && !print->has_brim())
         return;
 
     const float color[] = { 0.5f, 1.0f, 0.5f, 1.0f }; // greenish
@@ -5688,7 +5692,7 @@ void GLCanvas3D::_load_print_toolpaths()
         total_layer_count = std::max(total_layer_count, print_object->total_layer_count());
     }
     size_t skirt_height = print->has_infinite_skirt() ? total_layer_count : std::min<size_t>(print->config().skirt_height.value, total_layer_count);
-    if ((skirt_height == 0) && (print->config().brim_width.value > 0))
+    if ((skirt_height == 0) && print->has_brim())
         skirt_height = 1;
 
     // Get first skirt_height layers.
@@ -5818,7 +5822,7 @@ void GLCanvas3D::_load_print_object_toolpaths(const PrintObject& print_object, c
         int get_color_idx_for_tool_change(std::vector<CustomGCode::Item>::const_iterator it, const int extruder) const
         {
             const int current_extruder = it->extruder == 0 ? extruder : it->extruder;
-            if (number_tools() == extruders_cnt + 1) // there is no one "M600"
+            if (number_tools() == size_t(extruders_cnt + 1)) // there is no one "M600"
                 return std::min<int>(extruders_cnt - 1, std::max<int>(current_extruder - 1, 0));
 
             auto it_n = it;
@@ -5906,8 +5910,7 @@ void GLCanvas3D::_load_print_object_toolpaths(const PrintObject& print_object, c
         tbb::blocked_range<size_t>(0, ctxt.layers.size(), grain_size),
         [&ctxt, &new_volume, is_selected_separate_extruder, this](const tbb::blocked_range<size_t>& range) {
         GLVolumePtrs 		vols;
-        std::vector<size_t>	color_print_layer_to_glvolume;
-        auto                volume = [&ctxt, &vols, &color_print_layer_to_glvolume, &range](size_t layer_idx, int extruder, int feature) -> GLVolume& {            
+        auto                volume = [&ctxt, &vols](size_t layer_idx, int extruder, int feature) -> GLVolume& {
             return *vols[ctxt.color_by_color_print()?
                 ctxt.color_print_color_idx_by_layer_idx_and_extruder(layer_idx, extruder) :
 				ctxt.color_by_tool() ? 
