@@ -901,6 +901,7 @@ boost::any ConfigOptionsGroup::get_config_value(const DynamicPrintConfig& config
         }
         else if (opt_key == "brim_type") {
             ret  = static_cast<int>(config.option<ConfigOptionEnum<BrimType>>(opt_key)->value);
+		}
         else if (opt_key == "raft_size_adjust") {
             ret  = static_cast<int>(config.option<ConfigOptionEnum<RaftSizeAdjust>>(opt_key)->value);
         }
