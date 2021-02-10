@@ -1815,7 +1815,7 @@ void PrintConfigDef::init_fff_params()
     def->category = L("Support material");
     def->tooltip = L("Use bridge flow and speed for the bottom layer. Quality of the layer improves significantly when this setting is off, however it could be difficult to remove the object from raft. Ignored for soluble interface.");
     def->mode = comAdvanced;
-    def->set_default_value(new ConfigOptionBool(false));
+    def->set_default_value(new ConfigOptionBool(true));
 
     def = this->add("raft_contact_distance", coFloat);
     def->label = L("Raft contact Z distance");
