@@ -154,7 +154,10 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
         
         // detect overhanging/bridging perimeters
         ExtrusionPaths paths;
-        if (perimeter_generator.config->overhangs && perimeter_generator.layer_id > 0
+        if ( (   (perimeter_generator.config->overhangs && perimeter_generator.layer_id > perimeter_generator.object_config->raft_layers)
+              || (perimeter_generator.object_config->raft_overhangs
+                  && perimeter_generator.object_config->raft_layers > 0
+                  && perimeter_generator.layer_id == perimeter_generator.object_config->raft_layers)) // RaftingEdition
             && !(perimeter_generator.object_config->support_material && perimeter_generator.object_config->support_material_contact_distance.value == 0)) {
             // get non-overhang paths by intersecting this loop with the grown lower slices
             extrusion_paths_append(

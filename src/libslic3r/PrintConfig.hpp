@@ -110,6 +110,13 @@ enum BrimType {
     btOuterAndInner,
 };
 
+enum RaftSizeAdjust {
+    rsaSmall,
+    rsaNormal,
+    rsaLarge,
+    rsaExtraLarge
+};
+
 template<> inline const t_config_enum_values& ConfigOptionEnum<PrinterTechnology>::get_enum_values() {
     static t_config_enum_values keys_map;
     if (keys_map.empty()) {
@@ -281,6 +288,18 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<BrimType>::get_en
 
     return keys_map;
 }
+
+template<> inline const t_config_enum_values& ConfigOptionEnum<RaftSizeAdjust>::get_enum_values() {
+    static const t_config_enum_values keys_map = {
+        { "small",      rsaSmall },
+        { "normal",     rsaNormal },
+        { "large",      rsaLarge },
+        { "extralarge", rsaExtraLarge }
+    };
+
+    return keys_map;
+}
+
 
 // Defines each and every confiuration option of Slic3r, including the properties of the GUI dialogs.
 // Does not store the actual values, but defines default values.
@@ -512,6 +531,10 @@ public:
     ConfigOptionBool                interface_shells;
     ConfigOptionFloat               layer_height;
     ConfigOptionInt                 raft_layers;
+    ConfigOptionBool                raft_overhangs;
+    ConfigOptionFloat               raft_contact_distance;
+    ConfigOptionFloat               raft_xy_size_compensation;
+    ConfigOptionEnum<RaftSizeAdjust> raft_size_adjust;
     ConfigOptionEnum<SeamPosition>  seam_position;
 //    ConfigOptionFloat               seam_preferred_direction;
 //    ConfigOptionFloat               seam_preferred_direction_jitter;
@@ -563,6 +586,10 @@ protected:
         OPT_PTR(interface_shells);
         OPT_PTR(layer_height);
         OPT_PTR(raft_layers);
+        OPT_PTR(raft_overhangs);
+        OPT_PTR(raft_contact_distance);
+        OPT_PTR(raft_xy_size_compensation);
+        OPT_PTR(raft_size_adjust);
         OPT_PTR(seam_position);
         OPT_PTR(slice_closing_radius);
 //        OPT_PTR(seam_preferred_direction);
@@ -1120,7 +1147,7 @@ public:
     // The percentage of smaller pillars compared to the normal pillar diameter
     // which are used in problematic areas where a normal pilla cannot fit.
     ConfigOptionPercent support_small_pillar_diameter_percent;
-    
+
     // How much bridge (supporting another pinhead) can be placed on a pillar.
     ConfigOptionInt   support_max_bridges_on_pillar;
 
@@ -1172,7 +1199,7 @@ public:
 
     // The height of the pad from the bottom to the top not considering the pit
     ConfigOptionFloat pad_wall_height /*= 5*/;
-    
+
     // How far should the pad extend around the contained geometry
     ConfigOptionFloat pad_brim_size;
 
@@ -1196,7 +1223,7 @@ public:
 
     // Disable the elevation (ignore its value) and use the zero elevation mode
     ConfigOptionBool pad_around_object;
-    
+
     ConfigOptionBool pad_around_object_everywhere;
 
     // This is the gap between the object bottom and the generated pad
@@ -1210,7 +1237,7 @@ public:
 
     // How much should the tiny connectors penetrate into the model body
     ConfigOptionFloat pad_object_connector_penetration;
-    
+
     // /////////////////////////////////////////////////////////////////////////
     // Model hollowing parameters:
     //   - Models can be hollowed out as part of the SLA print process
@@ -1219,17 +1246,17 @@ public:
     //   - Additional holes will be drilled into the hollow model to allow for
     //   - resin removal.
     // /////////////////////////////////////////////////////////////////////////
-    
+
     ConfigOptionBool hollowing_enable;
-    
-    // The minimum thickness of the model walls to maintain. Note that the 
+
+    // The minimum thickness of the model walls to maintain. Note that the
     // resulting walls may be thicker due to smoothing out fine cavities where
     // resin could stuck.
     ConfigOptionFloat hollowing_min_thickness;
-    
+
     // Indirectly controls the voxel size (resolution) used by openvdb
     ConfigOptionFloat hollowing_quality;
-   
+
     // Indirectly controls the minimum size of created cavities.
     ConfigOptionFloat hollowing_closing_distance;
 
@@ -1451,13 +1478,13 @@ Points get_bed_shape(const SLAPrinterConfig &cfg);
 // ModelConfig is a wrapper around DynamicPrintConfig with an addition of a timestamp.
 // Each change of ModelConfig is tracked by assigning a new timestamp from a global counter.
 // The counter is used for faster synchronization of the background slicing thread
-// with the front end by skipping synchronization of equal config dictionaries. 
-// The global counter is also used for avoiding unnecessary serialization of config 
+// with the front end by skipping synchronization of equal config dictionaries.
+// The global counter is also used for avoiding unnecessary serialization of config
 // dictionaries when taking an Undo snapshot.
 //
 // The global counter is NOT thread safe, therefore it is recommended to use ModelConfig from
 // the main thread only.
-// 
+//
 // As there is a global counter and it is being increased with each change to any ModelConfig,
 // if two ModelConfig dictionaries differ, they should differ with their timestamp as well.
 // Therefore copying the ModelConfig including its timestamp is safe as there is no harm

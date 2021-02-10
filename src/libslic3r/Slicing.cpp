@@ -110,8 +110,9 @@ SlicingParameters SlicingParameters::create_from_config(
     params.min_layer_height = std::min(params.min_layer_height, params.layer_height);
     params.max_layer_height = std::max(params.max_layer_height, params.layer_height);
 
+    // RaftingEdition: independent contact distance for raft, first object layer height not messed up
     if (! soluble_interface) {
-        params.gap_raft_object    = object_config.support_material_contact_distance.value;
+        params.gap_raft_object    = object_config.raft_contact_distance.value;
         params.gap_object_support = object_config.support_material_contact_distance.value;
         params.gap_support_object = object_config.support_material_contact_distance.value;
     }
@@ -127,16 +128,18 @@ SlicingParameters SlicingParameters::create_from_config(
         #if 1
         params.contact_raft_layer_height    = std::max(params.layer_height, 0.75 * support_material_interface_extruder_dmr);
         if (! soluble_interface) {
-            // Compute the average of all nozzles used for printing the object over a raft.
-            //FIXME It is expected, that the 1st layer of the object is printed with a bridging flow over a full raft. Shall it not be vice versa?
-            coordf_t average_object_extruder_dmr = 0.;
-            if (! object_extruders.empty()) {
-                for (unsigned int extruder_id : object_extruders)
-                    average_object_extruder_dmr += print_config.nozzle_diameter.get_at(extruder_id);
-                average_object_extruder_dmr /= coordf_t(object_extruders.size());
+            if (object_config.raft_overhangs.value) {
+                // Compute the average of all nozzles used for printing the object over a raft.
+                //FIXME It is expected, that the 1st layer of the object is printed with a bridging flow over a full raft. Shall it not be vice versa?
+                coordf_t average_object_extruder_dmr = 0.;
+                if (! object_extruders.empty()) {
+                    for (unsigned int extruder_id : object_extruders)
+                        average_object_extruder_dmr += print_config.nozzle_diameter.get_at(extruder_id);
+                    average_object_extruder_dmr /= coordf_t(object_extruders.size());
+                }
+                params.first_object_layer_height   = average_object_extruder_dmr;
+                params.first_object_layer_bridging = true;
             }
-            params.first_object_layer_height   = average_object_extruder_dmr;
-            params.first_object_layer_bridging = true;
         }
         #else
         params.contact_raft_layer_height    = soluble_interface ? support_material_interface_extruder_dmr : 0.75 * support_material_interface_extruder_dmr;
@@ -150,13 +153,13 @@ SlicingParameters SlicingParameters::create_from_config(
         //FIXME The last raft layer is the contact layer, which shall be printed with a bridging flow for ease of separation. Currently it is not the case.
 		if (params.raft_layers() == 1) {
             // There is only the contact layer.
-			params.contact_raft_layer_height = first_layer_height;
-            params.raft_contact_top_z = first_layer_height;
+            params.first_print_layer_height = params.contact_raft_layer_height;
+            params.raft_contact_top_z = params.contact_raft_layer_height;
 		} else {
             assert(params.base_raft_layers > 0);
             assert(params.interface_raft_layers > 0);
-            // Number of the base raft layers is decreased by the first layer.
-            params.raft_base_top_z       = first_layer_height + coordf_t(params.base_raft_layers - 1) * params.base_raft_layer_height;
+            params.first_print_layer_height = params.base_raft_layer_height;
+            params.raft_base_top_z = coordf_t(params.base_raft_layers) * params.base_raft_layer_height;
             // Number of the interface raft layers is decreased by the contact layer.
             params.raft_interface_top_z  = params.raft_base_top_z + coordf_t(params.interface_raft_layers - 1) * params.interface_raft_layer_height;
 			params.raft_contact_top_z    = params.raft_interface_top_z + params.contact_raft_layer_height;
