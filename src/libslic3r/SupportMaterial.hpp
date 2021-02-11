@@ -201,12 +201,17 @@ private:
 	    const MyLayersPtr   &base_layers,
 	    MyLayerStorage      &layer_storage) const;
 
-    // Turn some of the base layers into interface layers.
+	// New method allows base interface support, also
+	// Turn some of the base layers into interface layers for number_base_interface_layers == 0.
+	// Create base type interface layers under soluble interfaces to extend adhesion. 	
+	// Turn some of the base layers into base interface layers for number_base_interface_layers > 0.
 	MyLayersPtr generate_interface_layers(
 	    const MyLayersPtr   &bottom_contacts,
 	    const MyLayersPtr   &top_contacts,
 	    MyLayersPtr         &intermediate_layers,
+		size_t              number_base_interface_layers,
 	    MyLayerStorage      &layer_storage) const;
+	
 
 	// Trim support layers by an object to leave a defined gap between
 	// the support volume and the object.
@@ -222,14 +227,16 @@ private:
 	void clip_with_shape();
 */
 
+	// New method needed for additional base interface support
 	// Produce the actual G-code.
 	void generate_toolpaths(
-        SupportLayerPtrs	&support_layers,
+        const PrintObject	&object,
         const MyLayersPtr 	&raft_layers,
         const MyLayersPtr   &bottom_contacts,
         const MyLayersPtr   &top_contacts,
         const MyLayersPtr   &intermediate_layers,
-        const MyLayersPtr   &interface_layers) const;
+		const MyLayersPtr   &interface_layers,
+        const MyLayersPtr   &base_interface_layers) const;
 
 	// Following objects are not owned by SupportMaterial class.
 	const PrintObject 		*m_object;
@@ -246,7 +253,7 @@ private:
 	bool 				 m_can_merge_support_regions;
 
     coordf_t 			 m_support_layer_height_min;
-    // coordf_t		 	 m_support_layer_height_max;
+	coordf_t		 	 m_support_layer_height_max;
 
 	coordf_t			 m_gap_xy;
 };
