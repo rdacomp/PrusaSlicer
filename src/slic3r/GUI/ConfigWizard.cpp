@@ -2475,7 +2475,15 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
         }
     }
 
-    preset_bundle->load_presets(*app_config, preferred_model);
+    try
+    {
+        preset_bundle->load_presets(*app_config, preferred_model);
+    }
+    catch (const std::exception& e)
+    {
+        BOOST_LOG_TRIVIAL(error) << e.what();
+        GUI::show_error(nullptr, GUI::format(_L("Configuration Wizard were not able to apply your changes and finished with error.")));
+    }
 
     if (page_custom->custom_wanted()) {
         page_firmware->apply_custom_config(*custom_config);

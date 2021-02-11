@@ -765,9 +765,18 @@ void PresetUpdater::sync(PresetBundle *preset_bundle)
 	VendorMap vendors = preset_bundle->vendors;
 
     p->thread = std::thread([this, vendors]() {
-		this->p->prune_tmps();
-		this->p->sync_version();
-		this->p->sync_config(std::move(vendors));
+		try
+		{
+			this->p->prune_tmps();
+			this->p->sync_version();
+			this->p->sync_config(std::move(vendors));
+		}
+		catch (const std::exception& e)
+		{
+			BOOST_LOG_TRIVIAL(error)<<e.what();
+			GUI::show_error(nullptr, GUI::format(_L("Configuration folder was not found or missing access rights.")));
+		}
+		
     });
 }
 
