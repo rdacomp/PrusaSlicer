@@ -2608,13 +2608,24 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
             auto convert_from_imperial_units = [](Model& model, bool only_small_volumes) {
                 model.convert_from_imperial_units(only_small_volumes);
 //                wxGetApp().app_config->set("use_inches", "1");
-                wxGetApp().sidebar().update_ui_from_settings();
+//                wxGetApp().sidebar().update_ui_from_settings();
             };
 
             if (!is_project_file) {
                 if (imperial_units)
                     // Convert even if the object is big.
                     convert_from_imperial_units(model, false);
+                else if (model.looks_like_saved_in_meters()) {
+                    wxMessageDialog msg_dlg(q, format_wxstr(_L_PLURAL(
+                        "The object in file %s looks like saved in meters.\n"
+                        "Should I consider it as a saved in meters and convert it?",
+                        "Some objects in file %s look like saved in meters.\n"
+                        "Should I consider them as a saved in meters and convert them?", model.objects.size()), from_path(filename)) + "\n",
+                        _L("The object appears to be saved in meters"), wxICON_WARNING | wxYES | wxNO);
+                    if (msg_dlg.ShowModal() == wxID_YES)
+                        //FIXME up-scale only the small parts?
+                        model.convert_from_meters(true);
+                }
                 else if (model.looks_like_imperial_units()) {
                     wxMessageDialog msg_dlg(q, format_wxstr(_L_PLURAL(
                         "The object in file %s looks like saved in inches.\n"
@@ -3074,10 +3085,6 @@ void Plater::priv::split_object()
     {
         Plater::TakeSnapshot snapshot(q, _L("Split to Objects"));
 
-        unsigned int counter = 1;
-        for (ModelObject* m : new_objects)
-            m->name = current_model_object->name + "_" + std::to_string(counter++);
-
         remove(obj_idx);
 
         // load all model objects at once, otherwise the plate would be rearranged after each one
@@ -3515,6 +3522,8 @@ void Plater::priv::reload_from_disk()
                     new_volume->translate(new_volume->get_transformation().get_matrix(true) * (new_volume->source.mesh_offset - old_volume->source.mesh_offset));
                     if (old_volume->source.is_converted_from_inches)
                         new_volume->convert_from_imperial_units();
+                    if (old_volume->source.is_converted_from_meters)
+                        new_volume->convert_from_meters();
                     new_volume->supported_facets.assign(old_volume->supported_facets);
                     new_volume->seam_facets.assign(old_volume->seam_facets);
                     std::swap(old_model_object->volumes[sel_v.volume_idx], old_model_object->volumes.back());
@@ -4057,7 +4066,7 @@ void Plater::priv::on_right_click(RBtnEvent& evt)
                 menu_item_convert_unit_position = 2;
         }
 
-        sidebar->obj_list()->append_menu_item_convert_unit(menu, menu_item_convert_unit_position);
+        sidebar->obj_list()->append_menu_items_convert_unit(menu, menu_item_convert_unit_position);
         sidebar->obj_list()->append_menu_item_settings(menu);
 
         if (printer_technology != ptSLA)
@@ -5468,20 +5477,22 @@ void Plater::scale_selection_to_fit_print_volume()
     p->scale_selection_to_fit_print_volume();
 }
 
-void Plater::convert_unit(bool from_imperial_unit)
+void Plater::convert_unit(ConversionType conv_type)
 {
     std::vector<int> obj_idxs, volume_idxs;
     wxGetApp().obj_list()->get_selection_indexes(obj_idxs, volume_idxs);
     if (obj_idxs.empty() && volume_idxs.empty())
         return;
 
-    TakeSnapshot snapshot(this, from_imperial_unit ? _L("Convert from imperial units") : _L("Revert conversion from imperial units"));
+    TakeSnapshot snapshot(this, conv_type == ConversionType::CONV_FROM_INCH  ? _L("Convert from imperial units") :
+                                conv_type == ConversionType::CONV_TO_INCH    ? _L("Revert conversion from imperial units") :
+                                conv_type == ConversionType::CONV_FROM_METER ? _L("Convert from meters") : _L("Revert conversion from meters"));
     wxBusyCursor wait;
 
     ModelObjectPtrs objects;
     for (int obj_idx : obj_idxs) {
         ModelObject *object = p->model.objects[obj_idx];
-        object->convert_units(objects, from_imperial_unit, volume_idxs);
+        object->convert_units(objects, conv_type, volume_idxs);
         remove(obj_idx);
     }
     p->load_model_objects(objects);

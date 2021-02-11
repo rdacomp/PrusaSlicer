@@ -301,7 +301,7 @@ static Polylines connect_brim_lines(Polylines &&polylines, const Polygons &brim_
             polylines.erase(polylines.begin() + end, polylines.end());
     }
 
-    return polylines;
+    return std::move(polylines);
 }
 
 static void make_inner_brim(const Print &print, const ConstPrintObjectPtrs &top_level_objects_with_brim, ExtrusionEntityCollection &brim)
@@ -380,7 +380,7 @@ ExtrusionEntityCollection make_brim(const Print &print, PrintTryCancel try_cance
     }
 #endif // BRIM_DEBUG_TO_SVG
 
-    all_loops = connect_brim_lines(std::move(all_loops), offset(islands_area_ex,SCALED_EPSILON), flow.scaled_spacing() * 2);
+    all_loops = connect_brim_lines(std::move(all_loops), offset(islands_area_ex, float(SCALED_EPSILON)), flow.scaled_spacing() * 2.f);
 
 #ifdef BRIM_DEBUG_TO_SVG
     {
