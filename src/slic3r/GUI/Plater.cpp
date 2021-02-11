@@ -1763,19 +1763,20 @@ struct Plater::priv
             wxGetApp().mainframe->update_title();
         }
 
-        void save_if_dirty() {
+        bool save_if_dirty() {
             MainFrame* mainframe = wxGetApp().mainframe;
-            Plater* plater = wxGetApp().plater();
-            if (m_dirty && mainframe->can_save()) {
+            if (is_dirty() && mainframe->can_save_as()) {
                 wxMessageDialog dlg(mainframe, _L("Do you want to save the changes to the current project ?"), wxString(SLIC3R_APP_NAME), wxYES_NO | wxCANCEL);
-                if (dlg.ShowModal() == wxID_YES) {
-                    wxString filename = plater->get_project_filename();
-                    m_dirty = filename.empty() ? !mainframe->save_project_as() : !mainframe->save_project();
-                    if (filename.empty() && !m_dirty)
-                        reset_after_save();
-                    wxGetApp().mainframe->update_title();
+                int res = dlg.ShowModal();
+                if (res == wxID_YES) {
+                    bool saved = wxGetApp().plater()->get_project_filename().empty() ? mainframe->save_project_as() : mainframe->save_project();
+                    if (saved)
+                        wxGetApp().mainframe->update_title();
                 }
+                else if (res == wxID_CANCEL)
+                    return false;
             }
+            return true;
         }
     };
 
@@ -4968,7 +4969,8 @@ SLAPrint&       Plater::sla_print()         { return p->sla_print; }
 void Plater::new_project()
 {
 #if ENABLE_PROJECT_STATE
-    p->project_state.save_if_dirty();
+    if (!p->project_state.save_if_dirty())
+        return;
 #endif // ENABLE_PROJECT_STATE
 
     p->select_view_3D("3D");
@@ -4984,7 +4986,8 @@ void Plater::new_project()
 void Plater::load_project()
 {
 #if ENABLE_PROJECT_STATE
-    p->project_state.save_if_dirty();
+    if (!p->project_state.save_if_dirty())
+        return;
 #endif // ENABLE_PROJECT_STATE
 
     // Ask user for a project file name.
