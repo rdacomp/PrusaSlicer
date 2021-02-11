@@ -445,7 +445,7 @@ void PresetUpdater::priv::check_install_indices() const
 					try	{
 						copy_file_fix(path, path_in_cache, _utf8(L("checking install indices")));
 					} catch (const Slic3r::CriticalException& ex) {
-						BOOST_LOG_TRIVIAL(info) << ex.what();
+						BOOST_LOG_TRIVIAL(error) << ex.what();
 						copy_file_error_occurred = true;
 						continue;
 					}
@@ -649,7 +649,7 @@ Updates PresetUpdater::priv::get_config_updates(const Semver &old_slic3r_version
 	}
 
 	if (copy_file_error_occurred)
-		GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be updated because PrusaSlicer is unable to write to the folder %1%"), cache_path));
+		GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be updated because PrusaSlicer is unable to write to the folder %1%"), vendor_path));
 
 	return updates;
 }
@@ -725,7 +725,7 @@ bool PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 		}
 	
 		if (!ret)
-			GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be installed because PrusaSlicer is unable to write to the folder %1%"), cache_path));
+			GUI::show_error(nullptr, GUI::format(_L("Some profiles couldn't be installed because PrusaSlicer is unable to write to the folder %1%"), vendor_path));
 	}
 
 	return ret;
