@@ -35,7 +35,7 @@ void disable_screensaver()
 {
     #if __APPLE__
     CFStringRef reasonForActivity = CFSTR("Slic3r");
-    IOReturn success = IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep, 
+    [[maybe_unused]]IOReturn success = IOPMAssertionCreateWithName(kIOPMAssertionTypeNoDisplaySleep,
         kIOPMAssertionLevelOn, reasonForActivity, &assertionID); 
     // ignore result: success == kIOReturnSuccess
     #elif _WIN32
@@ -46,7 +46,7 @@ void disable_screensaver()
 void enable_screensaver()
 {
     #if __APPLE__
-    IOReturn success = IOPMAssertionRelease(assertionID);
+    IOPMAssertionRelease(assertionID);
     #elif _WIN32
     SetThreadExecutionState(ES_CONTINUOUS);
     #endif
@@ -182,10 +182,8 @@ void change_opt_value(DynamicPrintConfig& config, const t_config_option_key& opt
 				config.set_key_value(opt_key, new ConfigOptionEnum<InfillPattern>(boost::any_cast<InfillPattern>(value))); 
 			else if (opt_key.compare("ironing_type") == 0)
 				config.set_key_value(opt_key, new ConfigOptionEnum<IroningType>(boost::any_cast<IroningType>(value))); 
-			else if (opt_key.compare("fuzzy_skin_perimeter_mode") == 0)
-				config.set_key_value(opt_key, new ConfigOptionEnum<FuzzySkinPerimeterMode>(boost::any_cast<FuzzySkinPerimeterMode>(value))); 
-//			else if (opt_key.compare("fuzzy_skin_shape") == 0)
-//				config.set_key_value(opt_key, new ConfigOptionEnum<FuzzySkinShape>(boost::any_cast<FuzzySkinShape>(value))); 
+			else if (opt_key.compare("fuzzy_skin") == 0)
+				config.set_key_value(opt_key, new ConfigOptionEnum<FuzzySkinType>(boost::any_cast<FuzzySkinType>(value))); 
 			else if (opt_key.compare("gcode_flavor") == 0)
 				config.set_key_value(opt_key, new ConfigOptionEnum<GCodeFlavor>(boost::any_cast<GCodeFlavor>(value))); 
 			else if (opt_key.compare("machine_limits_usage") == 0)
