@@ -127,10 +127,19 @@ public:
     Plater(const Plater &) = delete;
     Plater &operator=(Plater &&) = delete;
     Plater &operator=(const Plater &) = delete;
-    ~Plater();
+    ~Plater() = default;
+
+#if ENABLE_PROJECT_STATE
+    bool is_project_dirty() const;
+    void save_project_if_dirty();
+    void reset_project_after_save();
+#endif // ENABLE_PROJECT_STATE
 
     Sidebar& sidebar();
     Model& model();
+#if ENABLE_PROJECT_STATE
+    const Model& model() const;
+#endif // ENABLE_PROJECT_STATE
     const Print& fff_print() const;
     Print& fff_print();
     const SLAPrint& sla_print() const;
@@ -198,7 +207,11 @@ public:
     void export_gcode(bool prefer_removable);
     void export_stl(bool extended = false, bool selection_only = false);
     void export_amf();
+#if ENABLE_PROJECT_STATE
+    bool export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path());
+#else
     void export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path());
+#endif // ENABLE_PROJECT_STATE
     void reload_from_disk();
     void reload_all_from_disk();
     bool has_toolpaths_to_export() const;
@@ -227,6 +240,9 @@ public:
     bool search_string_getter(int idx, const char** label, const char** tooltip);
     // For the memory statistics. 
     const Slic3r::UndoRedo::Stack& undo_redo_stack_main() const;
+#if ENABLE_PROJECT_STATE
+    const Slic3r::UndoRedo::Stack& undo_redo_stack_active() const;
+#endif // ENABLE_PROJECT_STATE
     void clear_undo_redo_stack_main();
     // Enter / leave the Gizmos specific Undo / Redo stack. To be used by the SLA support point editing gizmo.
     void enter_gizmos_stack();

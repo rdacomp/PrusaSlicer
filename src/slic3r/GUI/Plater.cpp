@@ -1604,6 +1604,184 @@ struct Plater::priv
     };
 
     // Data
+#if ENABLE_PROJECT_STATE
+    static bool starts_with(const std::string& s, const std::string& prefix) {
+        return s.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), s.begin());
+    }
+    static std::string extract_gizmo_name(const std::string& s, const std::string& prefix) {
+        return starts_with(s, prefix) ? s.substr(prefix.length() + 1) : "";
+    }
+
+    class ProjectState
+    {
+        bool m_dirty{ false };
+        // keeps track of last save timestamps for undo/redo stacks
+        std::map<const UndoRedo::Stack*, size_t> m_last_save_snapshot_timestamp;
+        // keeps track of latest states for gizmos
+        std::map<std::string, bool> m_gizmos_state;
+
+        struct CurrentGizmo
+        {
+            bool dirty{ false };
+            std::string name;
+        };
+
+        CurrentGizmo m_current_gizmo;
+
+    public:
+        bool is_dirty() const { return m_dirty; }
+
+        void update() {
+            if (!wxGetApp().initialized())
+                return;
+
+            const Plater* plater = wxGetApp().plater();
+            if (plater == nullptr)
+                // this may happen when switching language
+                return;
+
+            const UndoRedo::Stack& main_stack = plater->undo_redo_stack_main();
+            const UndoRedo::Stack& active_stack = plater->undo_redo_stack_active();
+
+            // update dirty states
+            const std::vector<UndoRedo::Snapshot>& main_snapshots = main_stack.snapshots();
+            const UndoRedo::Snapshot* active_main_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(main_stack.active_snapshot_time() - 1)));
+
+            // early exit if active snapshot is from a selection
+            if (starts_with(active_main_snapshot->name, _utf8("Selection")))
+                return;
+
+            if (&main_stack == &active_stack) {
+                if (std::string gizmo_name = extract_gizmo_name(active_main_snapshot->name, _utf8("Entering")); m_current_gizmo.name.empty() && !gizmo_name.empty()) {
+                    // entering a gizmo undo/redo stack
+                    m_current_gizmo.name = gizmo_name;
+                    // recover stored state for the current gizmo, if any
+                    auto it = m_gizmos_state.find(m_current_gizmo.name);
+                    m_current_gizmo.dirty = (it != m_gizmos_state.end()) ? it->second : false;
+                }
+                else if (std::string gizmo_name = extract_gizmo_name(active_main_snapshot->name, _utf8("Leaving")); !m_current_gizmo.name.empty() && !gizmo_name.empty()) {
+                    // leaving a gizmo undo/redo stack
+                    // store state of current gizmo
+                    assert(gizmo_name == m_current_gizmo.name);
+                    m_gizmos_state[m_current_gizmo.name] = m_current_gizmo.dirty;
+                    m_current_gizmo.name.clear();
+                }
+            }
+
+            // check main undo/redo stack
+            auto it = m_last_save_snapshot_timestamp.find(&main_stack);
+            size_t last_main_save_snapshot_timestamp = (it != m_last_save_snapshot_timestamp.end()) ? it->second : 0;
+
+            if (active_main_snapshot->name == _utf8("New Project") ||
+                active_main_snapshot->name == _utf8("Reset Project") ||
+                starts_with(active_main_snapshot->name, _utf8("Load Project:")))
+                m_dirty = false;
+            else {
+                // backtrack to the latest valid snapshot
+                while ((starts_with(active_main_snapshot->name, _utf8("Entering")) ||
+                    starts_with(active_main_snapshot->name, _utf8("Leaving")) ||
+                    starts_with(active_main_snapshot->name, _utf8("Selection"))) &&
+                    last_main_save_snapshot_timestamp != active_main_snapshot->timestamp) {
+                    size_t shift = 1;
+                    const UndoRedo::Snapshot* curr = active_main_snapshot;
+                    do {
+                        active_main_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(active_main_snapshot->timestamp - shift)));
+                        ++shift;
+                    } while (curr == active_main_snapshot);
+                }
+
+//                std::cout << active_main_snapshot->name << " - " << active_main_snapshot->timestamp << "\n";
+                m_dirty = (last_main_save_snapshot_timestamp == 0 || last_main_save_snapshot_timestamp != active_main_snapshot->timestamp);
+            }
+
+//            if (m_dirty) {
+//               std::cout << ">>>>>>> MAIN DIRTY\n";
+//            }
+
+            // check current gizmo undo/redo stack
+            if (&main_stack != &active_stack) {
+                const std::vector<UndoRedo::Snapshot>& active_snapshots = active_stack.snapshots();
+                const UndoRedo::Snapshot* last_active_snapshot = &(*std::lower_bound(active_snapshots.begin(), active_snapshots.end(), UndoRedo::Snapshot(active_stack.active_snapshot_time() - 1)));
+                auto it = m_last_save_snapshot_timestamp.find(&active_stack);
+                size_t last_active_save_snapshot_timestamp = (it != m_last_save_snapshot_timestamp.end()) ? it->second : 0;
+                m_current_gizmo.dirty |= last_active_snapshot->name != _utf8("Gizmos-Initial") &&
+                    (last_active_save_snapshot_timestamp == 0 || last_active_save_snapshot_timestamp != last_active_snapshot->timestamp);
+
+//                if (m_gizmo_dirty) {
+//                    std::cout << ">>>>>>> GIZMO DIRTY\n";
+//                }
+
+                m_dirty |= m_current_gizmo.dirty;
+            }
+
+            // check for stored values
+            bool any_gizmo_dirty = false;
+            for (auto gizmo : m_gizmos_state) {
+                if (gizmo.first != m_current_gizmo.name) {
+                    any_gizmo_dirty |= gizmo.second;
+                    if (any_gizmo_dirty) {
+//                        std::cout << ">>>>>>> GIZMOS UPDATE DIRTY\n";
+                        break;
+                    }
+                }
+            }
+            m_dirty |= any_gizmo_dirty;
+
+//            std::cout << (&main_stack == &active_stack ? "main" : "gizmo");
+//            std::cout << " (" << (void*)(&active_stack) << ") -";
+//            std::cout << " dirty: " << (m_dirty ? "true" : "false");
+//            std::cout << " [" << last_main_save_snapshot_timestamp << "/" << active_main_snapshot->timestamp << "]";
+//            std::cout << "\n";
+
+            wxGetApp().mainframe->update_title();
+        }
+
+        void reset_after_save() {
+            const Plater* plater = wxGetApp().plater();
+            const UndoRedo::Stack& main_stack = plater->undo_redo_stack_main();
+            const UndoRedo::Stack& active_stack = plater->undo_redo_stack_active();
+
+            // update active stack last saved timestamp
+            const std::vector<UndoRedo::Snapshot>& active_snapshots = active_stack.snapshots();
+            const UndoRedo::Snapshot* active_active_snapshot = &(*std::lower_bound(active_snapshots.begin(), active_snapshots.end(), UndoRedo::Snapshot(active_stack.active_snapshot_time() - 1)));
+            m_last_save_snapshot_timestamp[&active_stack] = active_active_snapshot->timestamp;
+
+            // update also the main stack last saved timestamp, if it is not the active stack
+            if (&main_stack != &active_stack) {
+                const std::vector<UndoRedo::Snapshot>& main_snapshots = main_stack.snapshots();
+                const UndoRedo::Snapshot* main_active_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(main_stack.active_snapshot_time() - 1)));
+                m_last_save_snapshot_timestamp[&main_stack] = main_active_snapshot->timestamp + 1;
+            }
+
+            // reset all states
+            m_dirty = false;
+            m_current_gizmo.dirty = false;
+            for (auto& gizmo : m_gizmos_state) {
+                gizmo.second = false;
+            }
+
+            wxGetApp().mainframe->update_title();
+        }
+
+        void save_if_dirty() {
+            MainFrame* mainframe = wxGetApp().mainframe;
+            Plater* plater = wxGetApp().plater();
+            if (m_dirty && mainframe->can_save()) {
+                wxMessageDialog dlg(mainframe, _L("Do you want to save the changes to the current project ?"), wxString(SLIC3R_APP_NAME), wxYES_NO | wxCANCEL);
+                if (dlg.ShowModal() == wxID_YES) {
+                    wxString filename = plater->get_project_filename();
+                    m_dirty = filename.empty() ? !mainframe->save_project_as() : !mainframe->save_project();
+                    if (filename.empty() && !m_dirty)
+                        reset_after_save();
+                    wxGetApp().mainframe->update_title();
+                }
+            }
+        }
+    };
+
+    ProjectState project_state;
+#endif // ENABLE_PROJECT_STATE
+
     Slic3r::DynamicPrintConfig *config;        // FIXME: leak?
     Slic3r::Print               fff_print;
     Slic3r::SLAPrint            sla_print;
@@ -1697,6 +1875,12 @@ struct Plater::priv
 
     priv(Plater *q, MainFrame *main_frame);
     ~priv();
+
+#if ENABLE_PROJECT_STATE
+    bool is_project_dirty() const { return project_state.is_dirty(); }
+    void save_project_if_dirty() { project_state.save_if_dirty(); }
+    void reset_project_after_save() { project_state.reset_after_save(); }
+#endif // ENABLE_PROJECT_STATE
 
     enum class UpdateParams {
         FORCE_FULL_SCREEN_REFRESH          = 1,
@@ -1909,7 +2093,7 @@ private:
     wxString 					m_project_filename;
     Slic3r::UndoRedo::Stack 	m_undo_redo_stack_main;
     Slic3r::UndoRedo::Stack 	m_undo_redo_stack_gizmos;
-    Slic3r::UndoRedo::Stack    *m_undo_redo_stack_active = &m_undo_redo_stack_main;
+    Slic3r::UndoRedo::Stack*    m_undo_redo_stack_active = &m_undo_redo_stack_main;
     int                         m_prevent_snapshots = 0;     /* Used for avoid of excess "snapshoting".
                                                               * Like for "delete selected" or "set numbers of copies"
                                                               * we should call tack_snapshot just ones
@@ -4485,6 +4669,7 @@ void Plater::priv::enter_gizmos_stack()
     if (m_undo_redo_stack_active == &m_undo_redo_stack_main) {
         m_undo_redo_stack_active = &m_undo_redo_stack_gizmos;
         assert(m_undo_redo_stack_active->empty());
+
         // Take the initial snapshot of the gizmos.
         // Not localized on purpose, the text will never be shown to the user.
         this->take_snapshot(std::string("Gizmos-Initial"));
@@ -4543,6 +4728,10 @@ void Plater::priv::take_snapshot(const std::string& snapshot_name)
     }
     this->undo_redo_stack().take_snapshot(snapshot_name, model, view3D->get_canvas3d()->get_selection(), view3D->get_canvas3d()->get_gizmos_manager(), snapshot_data);
     this->undo_redo_stack().release_least_recently_used();
+#if ENABLE_PROJECT_STATE
+    project_state.update();
+#endif // ENABLE_PROJECT_STATE
+
     // Save the last active preset name of a particular printer technology.
     ((this->printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
     BOOST_LOG_TRIVIAL(info) << "Undo / Redo snapshot taken: " << snapshot_name << ", Undo / Redo stack memory: " << Slic3r::format_memsize_MB(this->undo_redo_stack().memsize()) << log_memory_info();
@@ -4673,6 +4862,10 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
         if (! view3D->is_layers_editing_enabled() && this->layers_height_allowed() && new_variable_layer_editing_active)
             view3D->get_canvas3d()->force_main_toolbar_left_action(view3D->get_canvas3d()->get_main_toolbar_item_id("layersediting"));
     }
+
+#if ENABLE_PROJECT_STATE
+    project_state.update();
+#endif // ENABLE_PROJECT_STATE
 }
 
 void Plater::priv::update_after_undo_redo(const UndoRedo::Snapshot& snapshot, bool /* temp_snapshot_was_taken */)
@@ -4756,12 +4949,17 @@ Plater::Plater(wxWindow *parent, MainFrame *main_frame)
     // Initialization performed in the private c-tor
 }
 
-Plater::~Plater()
-{
-}
+#if ENABLE_PROJECT_STATE
+bool Plater::is_project_dirty() const { return p->is_project_dirty(); }
+void Plater::save_project_if_dirty() { p->save_project_if_dirty(); }
+void Plater::reset_project_after_save() { p->reset_project_after_save(); }
+#endif // ENABLE_PROJECT_STATE
 
 Sidebar&        Plater::sidebar()           { return *p->sidebar; }
 Model&          Plater::model()             { return p->model; }
+#if ENABLE_PROJECT_STATE
+const Model&    Plater::model() const       { return p->model; }
+#endif // ENABLE_PROJECT_STATE
 const Print&    Plater::fff_print() const   { return p->fff_print; }
 Print&          Plater::fff_print()         { return p->fff_print; }
 const SLAPrint& Plater::sla_print() const   { return p->sla_print; }
@@ -4769,12 +4967,26 @@ SLAPrint&       Plater::sla_print()         { return p->sla_print; }
 
 void Plater::new_project()
 {
+#if ENABLE_PROJECT_STATE
+    p->project_state.save_if_dirty();
+#endif // ENABLE_PROJECT_STATE
+
     p->select_view_3D("3D");
+#if ENABLE_PROJECT_STATE
+    take_snapshot(_L("New Project"));
+    Plater::SuppressSnapshots suppress(this);
+    reset();
+#else
     wxPostEvent(p->view3D->get_wxglcanvas(), SimpleEvent(EVT_GLTOOLBAR_DELETE_ALL));
+#endif // ENABLE_PROJECT_STATE
 }
 
 void Plater::load_project()
 {
+#if ENABLE_PROJECT_STATE
+    p->project_state.save_if_dirty();
+#endif // ENABLE_PROJECT_STATE
+
     // Ask user for a project file name.
     wxString input_file;
     wxGetApp().load_project(this, input_file);
@@ -5509,22 +5721,37 @@ void Plater::export_amf()
     }
 }
 
+#if ENABLE_PROJECT_STATE
+bool Plater::export_3mf(const boost::filesystem::path& output_path)
+#else
 void Plater::export_3mf(const boost::filesystem::path& output_path)
+#endif // ENABLE_PROJECT_STATE
 {
+#if ENABLE_PROJECT_STATE
+    if (p->model.objects.empty()) { return false; }
+#else
     if (p->model.objects.empty()) { return; }
+#endif // ENABLE_PROJECT_STATE
 
     wxString path;
     bool export_config = true;
-    if (output_path.empty())
-    {
+    if (output_path.empty()) {
         path = p->get_export_file(FT_3MF);
+#if ENABLE_PROJECT_STATE
+        if (path.empty()) { return false; }
+#else
         if (path.empty()) { return; }
+#endif // ENABLE_PROJECT_STATE
     }
     else
         path = from_path(output_path);
 
     if (!path.Lower().EndsWith(".3mf"))
+#if ENABLE_PROJECT_STATE
+        return false;
+#else
         return;
+#endif // ENABLE_PROJECT_STATE
 
     DynamicPrintConfig cfg = wxGetApp().preset_bundle->full_config_secure();
     const std::string path_u8 = into_u8(path);
@@ -5532,6 +5759,19 @@ void Plater::export_3mf(const boost::filesystem::path& output_path)
     bool full_pathnames = wxGetApp().app_config->get("export_sources_full_pathnames") == "1";
     ThumbnailData thumbnail_data;
     p->generate_thumbnail(thumbnail_data, THUMBNAIL_SIZE_3MF.first, THUMBNAIL_SIZE_3MF.second, false, true, true, true);
+#if ENABLE_PROJECT_STATE
+    bool ret = Slic3r::store_3mf(path_u8.c_str(), &p->model, export_config ? &cfg : nullptr, full_pathnames, &thumbnail_data);
+    if (ret) {
+        // Success
+        p->statusbar()->set_status_text(format_wxstr(_L("3MF file exported to %s"), path));
+        p->set_project_filename(path);
+    }
+    else {
+        // Failure
+        p->statusbar()->set_status_text(format_wxstr(_L("Error exporting 3MF file %s"), path));
+    }
+    return ret;
+#else
     if (Slic3r::store_3mf(path_u8.c_str(), &p->model, export_config ? &cfg : nullptr, full_pathnames, &thumbnail_data)) {
         // Success
         p->statusbar()->set_status_text(format_wxstr(_L("3MF file exported to %s"), path));
@@ -5541,6 +5781,7 @@ void Plater::export_3mf(const boost::filesystem::path& output_path)
         // Failure
         p->statusbar()->set_status_text(format_wxstr(_L("Error exporting 3MF file %s"), path));
     }
+#endif // ENABLE_PROJECT_STATE
 }
 
 void Plater::reload_from_disk()
@@ -6396,6 +6637,10 @@ bool Plater::can_undo() const { return p->undo_redo_stack().has_undo_snapshot();
 bool Plater::can_redo() const { return p->undo_redo_stack().has_redo_snapshot(); }
 bool Plater::can_reload_from_disk() const { return p->can_reload_from_disk(); }
 const UndoRedo::Stack& Plater::undo_redo_stack_main() const { return p->undo_redo_stack_main(); }
+#if ENABLE_PROJECT_STATE
+const UndoRedo::Stack& Plater::undo_redo_stack_active() const { return p->undo_redo_stack(); }
+#endif // ENABLE_PROJECT_STATE
+
 void Plater::clear_undo_redo_stack_main() { p->undo_redo_stack_main().clear(); }
 void Plater::enter_gizmos_stack() { p->enter_gizmos_stack(); }
 void Plater::leave_gizmos_stack() { p->leave_gizmos_stack(); }
