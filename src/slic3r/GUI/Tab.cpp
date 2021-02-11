@@ -1232,6 +1232,10 @@ void Tab::on_presets_changed()
     // clear m_dependent_tabs after first update from select_preset()
     // to avoid needless preset loading from update() function
     m_dependent_tabs.clear();
+
+#if ENABLE_PROJECT_STATE
+    wxGetApp().plater()->update_project_dirty_from_preset();
+#endif // ENABLE_PROJECT_STATE
 }
 
 void Tab::build_preset_description_line(ConfigOptionsGroup* optgroup)
@@ -2065,7 +2069,11 @@ wxSizer* Tab::description_line_widget(wxWindow* parent, ogStaticText* *StaticTex
     return sizer;
 }
 
+#if ENABLE_PROJECT_STATE
+bool Tab::current_preset_is_dirty() const
+#else
 bool Tab::current_preset_is_dirty()
+#endif // ENABLE_PROJECT_STATE
 {
     return m_presets->current_is_dirty();
 }

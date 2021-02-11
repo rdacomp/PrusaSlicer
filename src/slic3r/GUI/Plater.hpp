@@ -133,6 +133,7 @@ public:
     bool is_project_dirty() const;
     void save_project_if_dirty();
     void reset_project_after_save();
+    void update_project_dirty_from_preset();
 #endif // ENABLE_PROJECT_STATE
 
     Sidebar& sidebar();

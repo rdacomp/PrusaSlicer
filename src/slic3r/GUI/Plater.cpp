@@ -1614,7 +1614,8 @@ struct Plater::priv
 
     class ProjectState
     {
-        bool m_dirty{ false };
+        bool m_plater_dirty{ false };
+        bool m_preset_dirty{ false };
         // keeps track of last save timestamps for undo/redo stacks
         std::map<const UndoRedo::Stack*, size_t> m_last_save_snapshot_timestamp;
         // keeps track of latest states for gizmos
@@ -1629,7 +1630,7 @@ struct Plater::priv
         CurrentGizmo m_current_gizmo;
 
     public:
-        bool is_dirty() const { return m_dirty; }
+        bool is_dirty() const { return m_plater_dirty || m_preset_dirty; }
 
         void update() {
             if (!wxGetApp().initialized())
@@ -1675,7 +1676,7 @@ struct Plater::priv
             if (active_main_snapshot->name == _utf8("New Project") ||
                 active_main_snapshot->name == _utf8("Reset Project") ||
                 starts_with(active_main_snapshot->name, _utf8("Load Project:")))
-                m_dirty = false;
+                m_plater_dirty = false;
             else {
                 // backtrack to the latest valid snapshot
                 while ((starts_with(active_main_snapshot->name, _utf8("Entering")) ||
@@ -1691,7 +1692,7 @@ struct Plater::priv
                 }
 
 //                std::cout << active_main_snapshot->name << " - " << active_main_snapshot->timestamp << "\n";
-                m_dirty = (last_main_save_snapshot_timestamp == 0 || last_main_save_snapshot_timestamp != active_main_snapshot->timestamp);
+                m_plater_dirty = (last_main_save_snapshot_timestamp == 0 || last_main_save_snapshot_timestamp != active_main_snapshot->timestamp);
             }
 
 //            if (m_dirty) {
@@ -1711,7 +1712,7 @@ struct Plater::priv
 //                    std::cout << ">>>>>>> GIZMO DIRTY\n";
 //                }
 
-                m_dirty |= m_current_gizmo.dirty;
+                m_plater_dirty |= m_current_gizmo.dirty;
             }
 
             // check for stored values
@@ -1725,7 +1726,7 @@ struct Plater::priv
                     }
                 }
             }
-            m_dirty |= any_gizmo_dirty;
+            m_plater_dirty |= any_gizmo_dirty;
 
 //            std::cout << (&main_stack == &active_stack ? "main" : "gizmo");
 //            std::cout << " (" << (void*)(&active_stack) << ") -";
@@ -1733,6 +1734,11 @@ struct Plater::priv
 //            std::cout << " [" << last_main_save_snapshot_timestamp << "/" << active_main_snapshot->timestamp << "]";
 //            std::cout << "\n";
 
+            wxGetApp().mainframe->update_title();
+        }
+
+        void update_from_preset() {
+            m_preset_dirty = wxGetApp().has_unsaved_preset_changes();
             wxGetApp().mainframe->update_title();
         }
 
@@ -1754,7 +1760,8 @@ struct Plater::priv
             }
 
             // reset all states
-            m_dirty = false;
+            m_plater_dirty = false;
+            m_preset_dirty = false;
             m_current_gizmo.dirty = false;
             for (auto& gizmo : m_gizmos_state) {
                 gizmo.second = false;
@@ -1881,6 +1888,7 @@ struct Plater::priv
     bool is_project_dirty() const { return project_state.is_dirty(); }
     void save_project_if_dirty() { project_state.save_if_dirty(); }
     void reset_project_after_save() { project_state.reset_after_save(); }
+    void update_project_dirty_from_preset() { project_state.update_from_preset(); }
 #endif // ENABLE_PROJECT_STATE
 
     enum class UpdateParams {
@@ -4773,8 +4781,13 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
     if (printer_technology_changed) {
         // Switching the printer technology when jumping forwards / backwards in time. Switch to the last active printer profile of the other type.
         std::string s_pt = (it_snapshot->snapshot_data.printer_technology == ptFFF) ? "FFF" : "SLA";
-        if (! wxGetApp().check_unsaved_changes(format_wxstr(_L(
+#if ENABLE_PROJECT_STATE
+        if (!wxGetApp().check_and_save_unsaved_preset_changes(format_wxstr(_L(
             "%1% printer was active at the time the target Undo / Redo snapshot was taken. Switching to %1% printer requires reloading of %1% presets."), s_pt)))
+#else
+        if (!wxGetApp().check_unsaved_changes(format_wxstr(_L(
+            "%1% printer was active at the time the target Undo / Redo snapshot was taken. Switching to %1% printer requires reloading of %1% presets."), s_pt)))
+#endif // ENABLE_PROJECT_STATE
             // Don't switch the profiles.
             return;
     }
@@ -4954,6 +4967,7 @@ Plater::Plater(wxWindow *parent, MainFrame *main_frame)
 bool Plater::is_project_dirty() const { return p->is_project_dirty(); }
 void Plater::save_project_if_dirty() { p->save_project_if_dirty(); }
 void Plater::reset_project_after_save() { p->reset_project_after_save(); }
+void Plater::update_project_dirty_from_preset() { p->update_project_dirty_from_preset(); }
 #endif // ENABLE_PROJECT_STATE
 
 Sidebar&        Plater::sidebar()           { return *p->sidebar; }

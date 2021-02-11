@@ -1671,7 +1671,11 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
 			break;
         case ConfigMenuTakeSnapshot:
             // Take a configuration snapshot.
+#if ENABLE_PROJECT_STATE
+            if (check_and_save_unsaved_preset_changes()) {
+#else
             if (check_unsaved_changes()) {
+#endif // ENABLE_PROJECT_STATE
                 wxTextEntryDialog dlg(nullptr, _L("Taking configuration snapshot"), _L("Snapshot name"));
                 
                 // set current normal font for dialog children, 
@@ -1686,7 +1690,11 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
             }
             break;
         case ConfigMenuSnapshots:
+#if ENABLE_PROJECT_STATE
+            if (check_and_save_unsaved_preset_changes()) {
+#else
             if (check_unsaved_changes()) {
+#endif // ENABLE_PROJECT_STATE
                 std::string on_snapshot;
                 if (Config::SnapshotDB::singleton().is_on_snapshot(*app_config))
                     on_snapshot = app_config->get("on_snapshot");
@@ -1785,8 +1793,25 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
     menu->Append(local_menu, _L("&Configuration"));
 }
 
+#if ENABLE_PROJECT_STATE
+bool GUI_App::has_unsaved_preset_changes() const
+{
+    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    for (const Tab* const tab : tabs_list) {
+        if (tab->supports_printer_technology(printer_technology) && tab->current_preset_is_dirty())
+            return true;
+    }
+    return false;
+}
+#endif // ENABLE_PROJECT_STATE
+
 // This is called when closing the application, when loading a config file or when starting the config wizard
 // to notify the user whether he is aware that some preset changes will be lost.
+#if ENABLE_PROJECT_STATE
+bool GUI_App::check_and_save_unsaved_preset_changes(const wxString& header)
+{
+    if (has_unsaved_preset_changes()) {
+#else
 bool GUI_App::check_unsaved_changes(const wxString &header)
 {
     PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
@@ -1798,8 +1823,9 @@ bool GUI_App::check_unsaved_changes(const wxString &header)
             break;
         }
 
-    if (has_unsaved_changes)
-    {
+
+    if (has_unsaved_changes) {
+#endif // ENABLE_PROJECT_STATE
         UnsavedChangesDialog dlg(header);
         if (wxGetApp().app_config->get("default_action_on_close_application") == "none" && dlg.ShowModal() == wxID_CANCEL)
             return false;
