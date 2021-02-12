@@ -1775,11 +1775,8 @@ struct Plater::priv
             if (is_dirty() && mainframe->can_save_as()) {
                 wxMessageDialog dlg(mainframe, _L("Do you want to save the changes to the current project ?"), wxString(SLIC3R_APP_NAME), wxYES_NO | wxCANCEL);
                 int res = dlg.ShowModal();
-                if (res == wxID_YES) {
-                    bool saved = wxGetApp().plater()->get_project_filename().empty() ? mainframe->save_project_as() : mainframe->save_project();
-                    if (saved)
-                        wxGetApp().mainframe->update_title();
-                }
+                if (res == wxID_YES)
+                    mainframe->save_project_as(wxGetApp().plater()->get_project_filename());
                 else if (res == wxID_CANCEL)
                     return false;
             }

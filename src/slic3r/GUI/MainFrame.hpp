@@ -189,8 +189,8 @@ public:
 #if ENABLE_PROJECT_STATE
     bool can_save() const;
     bool can_save_as() const;
-    bool save_project();
-    bool save_project_as();
+    void save_project();
+    void save_project_as(const wxString& filename = wxString());
 #endif // ENABLE_PROJECT_STATE
 
     void        add_to_recent_projects(const wxString& filename);

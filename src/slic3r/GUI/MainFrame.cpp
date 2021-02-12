@@ -690,21 +690,16 @@ bool MainFrame::can_save_as() const
     return (m_plater != nullptr) && !m_plater->model().objects.empty();
 }
 
-bool MainFrame::save_project()
+void MainFrame::save_project()
 {
-    bool ret = (m_plater != nullptr) ? m_plater->export_3mf(into_path(m_plater->get_project_filename(".3mf"))) : false;
-    if (ret)
-        m_plater->reset_project_after_save();
-    return ret;
+    save_project_as(m_plater->get_project_filename(".3mf"));
 }
 
-bool MainFrame::save_project_as()
+void MainFrame::save_project_as(const wxString& filename)
 {
-    bool need_project_state_reset = m_plater->get_project_filename().empty();
-    bool ret = (m_plater != nullptr) ? m_plater->export_3mf() : false;
-    if (ret && need_project_state_reset)
+    bool ret = (m_plater != nullptr) ? m_plater->export_3mf(into_path(filename)) : false;
+    if (ret)
         m_plater->reset_project_after_save();
-    return ret;
 }
 #else
 bool MainFrame::can_save() const
