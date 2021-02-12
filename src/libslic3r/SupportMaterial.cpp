@@ -800,7 +800,7 @@ namespace SupportMaterialInternal {
     {
         for (const ExtrusionPath &ep : loop.paths)
             if (ep.role() == erOverhangPerimeter && ! ep.polyline.empty())
-                return ep.size() >= (ep.is_closed() ? 3 : 2);
+                return int(ep.size()) >= (ep.is_closed() ? 3 : 2);
         return false;
     }
     static bool has_bridging_perimeters(const ExtrusionEntityCollection &perimeters)
@@ -975,8 +975,7 @@ static int Test()
     return 0;
 }
 static int run_support_test = Test();
-#endif /* SLIC3R_DEBUG
-*/
+#endif /* SLIC3R_DEBUG */
 
 // Generate top contact layers supporting overhangs.
 // For a soluble interface material synchronize the layer heights with the object, otherwise leave the layer height undefined.
@@ -1755,13 +1754,13 @@ void PrintObjectSupportMaterial::trim_top_contacts_by_bottom_contacts(
     const PrintObject &object, const MyLayersPtr &bottom_contacts, MyLayersPtr &top_contacts) const
 {
     tbb::parallel_for(tbb::blocked_range<int>(0, int(top_contacts.size())),
-        [this, &object, &bottom_contacts, &top_contacts](const tbb::blocked_range<int>& range) {
+        [&object, &bottom_contacts, &top_contacts](const tbb::blocked_range<int>& range) {
             int idx_bottom_overlapping_first = -2;
             // For all top contact layers, counting downwards due to the way idx_higher_or_equal caches the last index to avoid repeated binary search.
             for (int idx_top = range.end() - 1; idx_top >= range.begin(); -- idx_top) {
                 MyLayer &layer_top = *top_contacts[idx_top];
                 // Find the first bottom layer overlapping with layer_top.
-                idx_bottom_overlapping_first = idx_lower_or_equal(bottom_contacts.begin(), bottom_contacts.end(), idx_bottom_overlapping_first, [&layer_top](const MyLayer *layer_bottom){ return layer_bottom->bottom_print_z() - EPSILON <= layer_top.bottom_z; });
+                idx_bottom_overlapping_first = idx_lower_or_equal(bottom_contacts, idx_bottom_overlapping_first, [&layer_top](const MyLayer *layer_bottom){ return layer_bottom->bottom_print_z() - EPSILON <= layer_top.bottom_z; });
                 // For all top contact layers overlapping with the thick bottom contact layer:
                 for (int idx_bottom_overlapping = idx_bottom_overlapping_first; idx_bottom_overlapping >= 0; -- idx_bottom_overlapping) {
                     const MyLayer &layer_bottom = *bottom_contacts[idx_bottom_overlapping];
@@ -1984,7 +1983,7 @@ void PrintObjectSupportMaterial::generate_base_layers(
     BOOST_LOG_TRIVIAL(debug) << "PrintObjectSupportMaterial::generate_base_layers() in parallel - start";
     tbb::parallel_for(
         tbb::blocked_range<size_t>(0, intermediate_layers.size()),
-        [this, &object, &bottom_contacts, &top_contacts, &intermediate_layers, &layer_support_areas](const tbb::blocked_range<size_t>& range) {
+        [&object, &bottom_contacts, &top_contacts, &intermediate_layers, &layer_support_areas](const tbb::blocked_range<size_t>& range) {
             // index -2 means not initialized yet, -1 means intialized and decremented to 0 and then -1.
             int idx_top_contact_above           = -2;
             int idx_bottom_contact_overlapping  = -2;
@@ -3395,7 +3394,7 @@ void PrintObjectSupportMaterial::generate_toolpaths(
 
     // Now modulate the support layer height in parallel.
     tbb::parallel_for(tbb::blocked_range<size_t>(n_raft_layers, support_layers.size()),
-        [this, &support_layers, &layer_caches]
+        [&support_layers, &layer_caches]
             (const tbb::blocked_range<size_t>& range) {
         for (size_t support_layer_id = range.begin(); support_layer_id < range.end(); ++ support_layer_id) {
             SupportLayer &support_layer = *support_layers[support_layer_id];
