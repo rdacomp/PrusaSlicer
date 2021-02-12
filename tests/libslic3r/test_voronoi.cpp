@@ -10,7 +10,7 @@
 
 #include <numeric>
 
-// #define VORONOI_DEBUG_OUT
+#define VORONOI_DEBUG_OUT
 
 #ifdef VORONOI_DEBUG_OUT
 #include <libslic3r/VoronoiVisualUtils.hpp>
@@ -1921,4 +1921,415 @@ TEST_CASE("Voronoi skeleton", "[VoronoiSkeleton]")
     std::vector<Vec2d> skeleton_edges = Slic3r::Voronoi::skeleton_edges_rough(vd, lines, threshold_alpha);
 
     REQUIRE(! skeleton_edges.empty());
+}
+
+// hold data about skeleton Graph
+struct VoronoiGraph
+{
+    struct Node;
+    struct Path;
+    std::map<const VD::vertex_type *, Node> data;
+};
+
+/// <summary>
+/// Node data structure for Voronoi Graph.
+/// Extend information about Voronoi vertex.
+/// </summary>
+struct VoronoiGraph::Node
+{
+    // reference to Voronoi diagram VertexCategory::Inside OR
+    // VertexCategory::OnContour but NOT VertexCategory::Outside
+    const VD::vertex_type *vertex;
+    // longest distance to edge sum of line segment size (no euclid because of shape U)
+    double longestDistance;
+
+    // actual distance to edge
+    double distance;
+
+    struct Neighbor;
+    std::vector<Neighbor> neighbors;
+
+    // constructor
+    Node(const VD::vertex_type *vertex, double distance)
+        : vertex(vertex), longestDistance(0.), distance(distance), neighbors()
+    {}
+};
+
+// return node from graph by vertex, when no exists create one
+VoronoiGraph::Node *getNode(
+    VoronoiGraph& graph, 
+    const VD::vertex_type *vertex,
+              const VD::edge_type *  edge,
+              const Lines &          lines)
+{
+    std::map<const VD::vertex_type *, VoronoiGraph::Node> &data  = graph.data;
+    auto &mapItem = data.find(vertex);
+    // return when exists
+    if (mapItem != data.end()) return &mapItem->second;
+
+    // is new vertex (first edge to this vertex)
+    // calculate distance to islad border + fill item0
+    const VD::cell_type *cell = edge->cell();
+    // const VD::cell_type *  cell2     = edge.twin()->cell();
+    const Line &line = lines[cell->source_index()];
+    // const Line &           line1     = lines[cell2->source_index()];
+    Point  point(vertex->x(), vertex->y());
+    double distance = line.distance_to(point);
+
+    auto& [iterator,success] = data.emplace(vertex, VoronoiGraph::Node(vertex, distance));
+    assert(success);
+    return &iterator->second;
+}
+
+/// <summary>
+/// Surrond GraphNode data type.
+/// Extend information about voronoi edge.
+/// </summary>
+struct VoronoiGraph::Node::Neighbor
+{
+    const VD::edge_type *edge;
+    // length edge between vertices(length_2 = length*length), sqrt is slow down and One don't need it
+    double edge_length_2;
+    // Sum of edge length to farest border of island
+    double longest_distance;
+    // pointer on graph node structure
+    Node *graph_node;
+
+    // full fill constructor
+    Neighbor(const VD::edge_type *edge,
+             double edge_length_2,
+             double longest_distance,
+             Node *graph_node)
+        : edge(edge)
+        , edge_length_2(edge_length_2)
+        , longest_distance(longest_distance)
+        , graph_node(graph_node)
+    {}
+};
+
+struct VoronoiGraph::Path
+{
+    // row of Node created path with length
+    std::vector<const VoronoiGraph::Node *> path;
+    // not main path is stored in secondary paths
+    // key is pointer to source node
+    std::map<const VoronoiGraph::Node *, std::vector<VoronoiGraph::Path>> sideBranches;
+
+    //std::vector<const VoronoiGraph::Node *> circles;
+    double length;
+
+    // initial constructor
+    Path(std::vector<const VoronoiGraph::Node *> path, double length)
+        : path(path), length(length), sideBranches()
+    {}
+};
+
+/// <summary>
+/// calculate distances to border of island and length on skeleton
+/// </summary>
+/// <param name="voronoi_diagram">Input anotated voronoi diagram(use function Slic3r::Voronoi::annotate_inside_outside)</param></param>
+/// <param name="lines">Source lines for voronoi diagram</param>
+/// <returns>Extended voronoi graph by distances and length</returns>
+VoronoiGraph getSkeleton(const VD &vd, const Lines &lines)
+{
+    // vd should be annotated.
+    //assert(Voronoi::debug::verify_inside_outside_annotations(vd));
+
+    VoronoiGraph skeleton; 
+    const VD::edge_type *first_edge = &vd.edges().front();
+    for (const VD::edge_type &edge : vd.edges())
+    {
+        size_t edge_idx = &edge - first_edge;
+        if (
+            // Ignore secondary and unbounded edges, they shall never be part
+            // of the skeleton.
+            edge.is_secondary() || edge.is_infinite() ||
+            // Skip the twin edge of an edge, that has already been processed.
+            &edge > edge.twin() ||
+            // Ignore outer edges.
+            (Voronoi::edge_category(edge) != Voronoi::EdgeCategory::PointsInside &&
+             Voronoi::edge_category(edge.twin()) != Voronoi::EdgeCategory::PointsInside))
+            continue;
+
+        const VD::vertex_type *v0        = edge.vertex0();
+        const VD::vertex_type *v1        = edge.vertex1();
+        Voronoi::VertexCategory category0 = Voronoi::vertex_category(*v0);
+        Voronoi::VertexCategory category1 = Voronoi::vertex_category(*v1);
+        if (category0 == Voronoi::VertexCategory::Outside ||
+            category1 == Voronoi::VertexCategory::Outside)
+            continue;
+        // only debug check annotation
+        if (category0 == Voronoi::VertexCategory::Unknown ||
+            category1 == Voronoi::VertexCategory::Unknown)
+            return {}; // vd must be annotated
+
+        // length_2 = length * length 
+        double length_2 = 0;
+        if (edge.is_linear()) {
+            double diffX = v0->x() - v1->x();
+            double diffY = v0->y() - v1->y();
+            length_2       = diffX * diffX + diffY * diffY;
+        } else { // if (edge.is_curved())
+            // TODO: len of parabola
+            length_2 = 1.0;
+        }
+        
+        VoronoiGraph::Node* node0 = getNode(skeleton, v0, &edge, lines);
+        VoronoiGraph::Node* node1 = getNode(skeleton, v1, &edge, lines);
+
+        // add extended Edge to graph, both side
+        VoronoiGraph::Node::Neighbor neighbor0(&edge, length_2, 0., node1);
+        node0->neighbors.push_back(neighbor0);
+        VoronoiGraph::Node::Neighbor neighbor1(edge.twin(), length_2, 0., node0);
+        node1->neighbors.push_back(neighbor1);
+    }
+    return skeleton;
+}
+
+/// <summary>
+/// Configuration fro sampling voronoi diagram for support point generator
+/// </summary>
+struct SampleConfig
+{
+    // Maximal distance from edge
+    double max_distance = 1.; // must be bigger than zero
+    // Maximal distance between samples on skeleton
+    double sample_size = 1.; // must be bigger than zero
+    // distance from edge of skeleton
+    double start_distance = 0; // support head diameter
+
+    // each curve is sampled by this value to test distance to edge of island
+    double curve_sample = 1.; // must be bigger than zero
+};
+
+Point get_start_point(const VoronoiGraph::Node &node, double padding)
+{
+    assert(node.neighbors.size() == 1);
+    const VoronoiGraph::Node::Neighbor &neighbor = node.neighbors.front();
+    const VD::edge_type &edge  = *neighbor.edge;
+    const VD::vertex_type& v0 = *edge.vertex0();
+    const VD::vertex_type &v1 = *edge.vertex1();
+    Point dir(v0.x() - v1.x(), v0.y() - v1.y());
+    if (node.vertex == &v0)
+        dir *= -1;
+    else
+        assert(node.vertex == &v1);
+
+    double size = sqrt(neighbor.edge_length_2) / padding;
+    Point  move(dir[0] / size, dir[1] / size);
+    return Point(node.vertex->x() + move[0], node.vertex->y() + move[1]);
+}
+
+/// <summary>
+/// PRIVATE:
+/// Depth search in Voronoi graph for longest path
+/// 
+/// !! not work on circles(island with holes)
+/// !! need restructuralization by branch from start path
+/// </summary>
+/// <param name="start_path">IN/OUT path in Graph</param>
+void create_longest_path(VoronoiGraph::Path& start_path)
+{
+    const std::vector<const VoronoiGraph::Node *> &path = start_path.path;
+    size_t      path_size = path.size();
+    assert(path_size >= 1);
+
+    const VoronoiGraph::Node &node = *path.back();
+    const std::vector<VoronoiGraph::Node::Neighbor> &neighbors = node.neighbors;
+    size_t neighbor_count = neighbors.size();
+    const VoronoiGraph::Node *prev_node = 
+        (path_size >= 2) ?  path[path_size - 2] :  nullptr;
+
+    auto nextCall = [](VoronoiGraph::Path &                next_path,
+                       const VoronoiGraph::Node::Neighbor &neighbor) {
+        next_path.length += neighbor.edge_length_2;
+        const VoronoiGraph::Node *next_node = neighbor.graph_node;
+        next_path.path.push_back(next_node);
+        // stop when it is leaf
+        if (next_node->neighbors.size() == 1) return;
+        return create_longest_path(next_path);
+    };
+
+    // not first call
+    if (prev_node != nullptr) {
+         // speed up for only 2 neighbors
+        if (neighbor_count == 2) {
+            if (neighbors.front().graph_node == prev_node) {
+                return nextCall(start_path, neighbors.back());
+            } else {
+                assert(neighbors.back().graph_node == prev_node);
+                return nextCall(start_path, neighbors.front());
+            }
+        }
+    } else if (neighbor_count == 1) { // first call and only one neighbor
+        return nextCall(start_path, neighbors.front());
+    }
+
+    std::vector<VoronoiGraph::Path> paths;
+    paths.reserve(neighbor_count - 1); // one neighbor is prev node
+
+    // Depth search
+    for (const VoronoiGraph::Node::Neighbor &neighbor : neighbors) {
+        const VoronoiGraph::Node *neighbor_node = neighbor.graph_node;
+        // skip backward way
+        if (neighbor_node == prev_node) continue;
+        
+        // detection of circle
+        auto &end_find = path.end() - 1; // not neccesary to check last one in path
+        auto circleItem = std::find(path.begin(), end_find, neighbor_node);
+        if (circleItem != end_find) {
+            // circle detected
+            return; ///////////////////
+        }
+
+        VoronoiGraph::Path next_path = start_path; // create copy
+        nextCall(next_path, neighbor);
+        paths.push_back(next_path);
+    }
+    // from longest path
+    std::sort(paths.begin(), paths.end(),
+              [](const VoronoiGraph::Path &p1, const VoronoiGraph::Path &p2) {
+                  return p1.length > p2.length;
+              });
+
+    VoronoiGraph::Path result(std::move(paths.front()));
+    paths.erase(paths.begin());
+
+    // cut off start_path from branch
+    for (VoronoiGraph::Path &path : paths) {
+        path.length -= start_path.length;
+        path.path.erase(path.path.begin(),
+                        path.path.begin() + start_path.path.size());
+    }
+    result.sideBranches[&node] = paths;
+    start_path = std::move(result);
+}
+
+/// <summary>
+/// Sample voronoi skeleton
+/// </summary>
+/// <param name="graph">Inside skeleton of island</param>
+/// <param name="config">Params for sampling</param>
+/// <returns>Vector of sampled points or Empty when distance from edge is bigger than max_distance</returns>
+std::vector<Point> sample_in_center(const VoronoiGraph &graph, const SampleConfig &config)
+{
+    // first vertex on contour:
+    const VoronoiGraph::Node *start_node = nullptr;
+    for (const auto &[key, value]: graph.data) {
+        const VD::vertex_type& vertex = *key;
+        Voronoi::VertexCategory category = Voronoi::vertex_category(vertex);
+        if (category == Voronoi::VertexCategory::OnContour) {
+            start_node = &value;
+            break;
+        }
+    }
+    // every island has to have a point on contour
+    if (start_node == nullptr) return {};
+
+    std::vector<Point> points;
+    points.push_back(get_start_point(*start_node, config.start_distance));
+
+    VoronoiGraph::Path start_path({start_node}, 0.);
+
+    create_longest_path(start_path);
+    
+
+    return points;
+}
+
+void draw(SVG &svg, const VoronoiGraph &graph, coord_t width)
+{
+    for (const auto &[key, value]: graph.data) { 
+        svg.draw(Point(key->x(), key->y()), "lightgray",width);
+        for (const auto& n : value.neighbors) { 
+            if (n.edge->vertex0() > n.edge->vertex1()) continue;
+            auto  v0 = *n.edge->vertex0();
+            Point from(v0.x(), v0.y());
+            auto  v1 = *n.edge->vertex1();
+            Point to(v1.x(), v1.y());
+            svg.draw(Line(from, to), "gray", width);
+
+            Point center = from + to;
+            center *= .5;
+            //svg.draw_text(center, ("L2: " + std::to_string(n.edge_length_2)).c_str(), "lightgray");
+        }
+    }
+}
+
+std::vector<Point> sample_in_center(const ExPolygon &   island,
+                                    const SampleConfig &config)
+{
+    VD    vd;
+    Lines lines = to_lines(island);
+    construct_voronoi(lines.begin(), lines.end(), &vd);
+    Slic3r::Voronoi::annotate_inside_outside(vd, lines);
+    VoronoiGraph skeleton = getSkeleton(vd, lines);
+    std::vector<Point> samples  = sample_in_center(skeleton, config);
+
+    {
+        static int counter = 0;
+        BoundingBox bb;
+        double      scale = bb.size().x();
+        for (const Point &pt : island.contour.points) bb.merge(pt);
+        SVG svg("voronoi-skeleton-" + std::to_string(++counter) + ".svg", bb);
+        svg.draw(island, "blue", 0.5f);
+        draw(svg, skeleton, scale/300);
+        for (auto l : lines) svg.draw(l, "black", coord_t(scale / 200));
+        for (auto p : samples)
+            svg.draw(p, "lightgreen", coord_t(config.start_distance));
+    }
+    // dump_voronoi_to_svg("tt", vd, Points(), lines);
+    return samples;
+}
+
+std::vector<Point> test_island_sampling(const ExPolygon &   island,
+                                        const SampleConfig &config)
+{
+    auto points = sample_in_center(island, config);
+    CHECK(!points.empty());
+
+    // all points must be inside of island
+    for (const auto &point : points) { 
+        CHECK(island.contains(point));
+    }
+    return points;
+}
+
+TEST_CASE("Sample small islands", "[VoronoiSkeleton]")
+{
+    double   size = 1e7;
+    int          count    = 5;
+    ExPolygon triangle(Polygon{{.0, .0}, {size, .0}, {size / 2., sqrt(size * size - size * size / 4)}});
+    ExPolygon sharp_triangle(Polygon{{.0, size/2}, {.0, .0}, {2*size, .0}});
+    ExPolygon square(Polygon{{.0, size}, {.0, .0}, {size, .0}, { size, size}});
+    ExPolygon rect(Polygon{{.0, size}, {.0, .0}, {2 * size, .0}, {2 * size, size}});
+    ExPolygon    rect_with_hole({{-size, size}, // rect CounterClockWise
+                              {-size, -size},
+                              {size, -size},
+                              {size, size}},
+                             {{0., size / 2}, // inside rect ClockWise
+                              {size / 2, 0.},
+                              {0., -size / 2},
+                              {-size / 2, 0.}});
+
+    SampleConfig cfg;
+    cfg.max_distance = size + 0.1;
+    cfg.sample_size    = size / count;
+    cfg.start_distance = 0.2*size; // radius of support head
+    cfg.curve_sample   = 0.1 *size;
+
+    ExPolygons islands = {sharp_triangle, square, triangle, sharp_triangle,
+                          rect,
+                          rect_with_hole};
+    for (auto &island : islands) {
+        auto points = test_island_sampling(island, cfg); 
+        double angle  = 3.14 / 3; // cca 60 degree
+
+        island.rotate(angle);
+        auto pointsR = test_island_sampling(island, cfg);
+        for (Point &p : pointsR) p.rotate(-angle);
+
+        // points should be equal to pointsR
+    }
+    
 }
