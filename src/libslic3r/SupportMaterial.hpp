@@ -205,11 +205,10 @@ private:
 	// Turn some of the base layers into interface layers for number_base_interface_layers == 0.
 	// Create base type interface layers under soluble interfaces to extend adhesion. 	
 	// Turn some of the base layers into base interface layers for number_base_interface_layers > 0.
-	MyLayersPtr generate_interface_layers(
+	std::pair<MyLayersPtr, MyLayersPtr> generate_interface_layers(
 	    const MyLayersPtr   &bottom_contacts,
 	    const MyLayersPtr   &top_contacts,
 	    MyLayersPtr         &intermediate_layers,
-		size_t              number_base_interface_layers,
 	    MyLayerStorage      &layer_storage) const;
 	
 
