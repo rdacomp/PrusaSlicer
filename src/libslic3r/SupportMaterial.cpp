@@ -2371,33 +2371,7 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::generate_int
     return interface_layers;
 }
 
-static inline void fill_expolygons_generate_paths(
-    ExtrusionEntitiesPtr    &dst, 
-    const ExPolygons        &expolygons,
-    Fill                    *filler,
-    float                    density,
-    ExtrusionRole            role, 
-    const Flow              &flow)
-{
-    FillParams fill_params;
-    fill_params.density = density;
-    fill_params.dont_adjust = true;
-    for (const ExPolygon &expoly : expolygons) {
-        Surface surface(stInternal, expoly);
-        Polylines polylines;
-    	try {
-            polylines = filler->fill_surface(&surface, fill_params);
-		} catch (InfillFailedException &) {
-		}
-        extrusion_entities_append_paths(
-            dst,
-            std::move(polylines),
-            role,
-            flow.mm3_per_mm(), flow.width, flow.height);
-    }
-}
-
-static inline void fill_expolygons_generate_paths(
+static void fill_expolygons_generate_paths(
     ExtrusionEntitiesPtr    &dst,
     ExPolygons             &&expolygons,
     Fill                    *filler,
