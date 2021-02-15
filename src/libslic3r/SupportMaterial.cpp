@@ -2311,7 +2311,7 @@ std::pair<PrintObjectSupportMaterial::MyLayersPtr, PrintObjectSupportMaterial::M
             return &layer_new;
         };
         tbb::parallel_for(tbb::blocked_range<int>(0, int(intermediate_layers.size())),
-            [this, &bottom_contacts, &top_contacts, &intermediate_layers, &insert_layer, num_interface_layers, num_base_interface_layers, num_interface_layers_only,
+            [&bottom_contacts, &top_contacts, &intermediate_layers, &insert_layer, num_interface_layers, num_base_interface_layers, num_interface_layers_only,
              &interface_layers, &base_interface_layers](const tbb::blocked_range<int>& range) {                
                 // Gather the top / bottom contact layers intersecting with num_interface_layers resp. num_interface_layers_only intermediate layers above / below
                 // this intermediate layer.
