@@ -2311,11 +2311,10 @@ std::pair<PrintObjectSupportMaterial::MyLayersPtr, PrintObjectSupportMaterial::M
             return &layer_new;
         };
         tbb::parallel_for(tbb::blocked_range<int>(0, int(intermediate_layers.size())),
-            [this, &bottom_contacts, &top_contacts, &intermediate_layers, &insert_layer, num_interface_layers, num_interface_layers_only,
-             &interface_layers, &base_interface_layers](const tbb::blocked_range<int>& range) {
-                
-                // gather the number of layers below/above object 
-                // FIX The algorithm calculates top_z/bottom_z coordinates refered to the conctacts and above them polygons are projected. 
+            [this, &bottom_contacts, &top_contacts, &intermediate_layers, &insert_layer, num_interface_layers, num_base_interface_layers, num_interface_layers_only,
+             &interface_layers, &base_interface_layers](const tbb::blocked_range<int>& range) {                
+                // Gather the top / bottom contact layers intersecting with num_interface_layers resp. num_interface_layers_only intermediate layers above / below
+                // this intermediate layer.
                 // Index of the first top contact layer intersecting the current intermediate layer.
                 auto idx_top_contact_first      = -1;
                 // Index of the first bottom contact layer intersecting the current intermediate layer.
@@ -2324,11 +2323,20 @@ std::pair<PrintObjectSupportMaterial::MyLayersPtr, PrintObjectSupportMaterial::M
                 for (int idx_intermediate_layer = range.begin(); idx_intermediate_layer < range.end(); ++ idx_intermediate_layer) {
                     MyLayer &intermediate_layer = *intermediate_layers[idx_intermediate_layer];
                     // Top / bottom Z coordinate of a slab, over which we are collecting the top / bottom contact surfaces
-                    // Indexing is further corrected by the existing contacts, that are interface layers as well.
                     coordf_t top_z              = intermediate_layers[std::min(num_intermediate - 1, idx_intermediate_layer + num_interface_layers - 1)]->print_z;
-                    coordf_t top_inteface_z     = intermediate_layers[std::min(num_intermediate - 1, idx_intermediate_layer + num_interface_layers_only - 1)]->print_z;
+                    coordf_t top_inteface_z     = std::numeric_limits<coordf_t>::max();
                     coordf_t bottom_z           = intermediate_layers[std::max(0, idx_intermediate_layer - num_interface_layers + 1)]->bottom_z;
-                    coordf_t bottom_interface_z = intermediate_layers[std::max(0, idx_intermediate_layer - num_interface_layers_only + 1)]->bottom_z;
+                    coordf_t bottom_interface_z = - std::numeric_limits<coordf_t>::max();
+                    if (num_base_interface_layers > 0) {
+                        // Some base interface layers will be generated.
+                        if (num_interface_layers_only == 0)
+                            // Only base interface layers to generate.
+                            std::swap(top_inteface_z, bottom_interface_z);
+                        else {
+                            top_inteface_z     = intermediate_layers[std::min(num_intermediate - 1, idx_intermediate_layer + num_interface_layers_only - 1)]->print_z;
+                            bottom_interface_z = intermediate_layers[std::max(0, idx_intermediate_layer - num_interface_layers_only)]->bottom_z;
+                        }
+                    }
                     // Move idx_top_contact_first up until above the current print_z.
                     idx_top_contact_first = idx_higher_or_equal(top_contacts, idx_top_contact_first, [&intermediate_layer](const MyLayer *layer){ return layer->print_z >= intermediate_layer.print_z; }); //  - EPSILON
                     // Collect the top contact areas above this intermediate layer, below top_z.
@@ -2336,7 +2344,7 @@ std::pair<PrintObjectSupportMaterial::MyLayersPtr, PrintObjectSupportMaterial::M
                     Polygons polygons_top_contact_projected_base;
                     for (int idx_top_contact = idx_top_contact_first; idx_top_contact < int(top_contacts.size()); ++ idx_top_contact) {
                         const MyLayer &top_contact_layer = *top_contacts[idx_top_contact];
-                        //FIXME maybe this adds one interface layer in excess? removed?
+                        //FIXME maybe this adds one interface layer in excess?
                         if (top_contact_layer.bottom_z - EPSILON > top_z)
                             break;
                         polygons_append(top_contact_layer.bottom_z - EPSILON > top_inteface_z ? polygons_top_contact_projected_base : polygons_top_contact_projected_interface, top_contact_layer.polygons);
