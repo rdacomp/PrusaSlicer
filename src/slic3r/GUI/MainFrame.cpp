@@ -559,6 +559,26 @@ void MainFrame::init_tabpanel()
             select_tab(size_t(0)); // select Plater
     });
 
+#if ENABLE_VALIDATE_CUSTOM_GCODE
+    m_tabpanel->Bind(wxEVT_NOTEBOOK_PAGE_CHANGING, [this](wxBookCtrlEvent& evt) {
+        wxWindow* panel = m_tabpanel->GetCurrentPage();
+        if (panel != nullptr) {
+            TabPrinter* printer_tab = dynamic_cast<TabPrinter*>(panel);
+            if (printer_tab != nullptr) {
+                if (!printer_tab->validate_custom_gcodes())
+                    evt.Veto();
+                return;
+            }
+            TabFilament* filament_tab = dynamic_cast<TabFilament*>(panel);
+            if (filament_tab != nullptr) {
+                if (!filament_tab->validate_custom_gcodes())
+                    evt.Veto();
+                return;
+            }
+        }
+        });
+#endif // ENABLE_VALIDATE_CUSTOM_GCODE
+
     m_plater = new Plater(this, this);
     m_plater->Hide();
 

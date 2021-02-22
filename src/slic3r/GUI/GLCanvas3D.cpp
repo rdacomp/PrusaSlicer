@@ -1087,11 +1087,7 @@ wxDEFINE_EVENT(EVT_GLCANVAS_MOUSE_DRAGGING_FINISHED, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_UPDATE_BED_SHAPE, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_TAB, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_RESETGIZMOS, SimpleEvent);
-#if ENABLE_ARROW_KEYS_WITH_SLIDERS
 wxDEFINE_EVENT(EVT_GLCANVAS_MOVE_SLIDERS, wxKeyEvent);
-#else
-wxDEFINE_EVENT(EVT_GLCANVAS_MOVE_LAYERS_SLIDER, wxKeyEvent);
-#endif // ENABLE_ARROW_KEYS_WITH_SLIDERS
 wxDEFINE_EVENT(EVT_GLCANVAS_EDIT_COLOR_CHANGE, wxKeyEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_JUMP_TO, wxKeyEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_UNDO, SimpleEvent);
@@ -2332,14 +2328,12 @@ void GLCanvas3D::refresh_gcode_preview(const GCodeProcessor::Result& gcode_resul
     request_extra_frame();
 }
 
-#if ENABLE_RENDER_PATH_REFRESH_AFTER_OPTIONS_CHANGE
 void GLCanvas3D::refresh_gcode_preview_render_paths()
 {
     m_gcode_viewer.refresh_render_paths();
     set_as_dirty();
     request_extra_frame();
 }
-#endif // ENABLE_RENDER_PATH_REFRESH_AFTER_OPTIONS_CHANGE
 
 void GLCanvas3D::load_sla_preview()
 {
@@ -2451,13 +2445,7 @@ void GLCanvas3D::on_idle(wxIdleEvent& evt)
 {
     if (!m_initialized)
         return;
-#if ENABLE_NEW_NOTIFICATIONS_FADE_OUT 
-    /*NotificationManager* notification_mgr = wxGetApp().plater()->get_notification_manager();
-    if (notification_mgr->requires_update())
-        notification_mgr->update_notifications();
 
-    m_dirty |= notification_mgr->requires_render();*/
-#endif // ENABLE_NEW_NOTIFICATIONS_FADE_OUT 
     // FIXME
     m_dirty |= m_main_toolbar.update_items_state();
     m_dirty |= m_undoredo_toolbar.update_items_state();
@@ -2465,13 +2453,6 @@ void GLCanvas3D::on_idle(wxIdleEvent& evt)
     m_dirty |= wxGetApp().plater()->get_collapse_toolbar().update_items_state();
     bool mouse3d_controller_applied = wxGetApp().plater()->get_mouse3d_controller().apply(wxGetApp().plater()->get_camera());
     m_dirty |= mouse3d_controller_applied;
-
-#if ENABLE_NEW_NOTIFICATIONS_FADE_OUT 
-    /*
-    if (notification_mgr->requires_update()) {
-        evt.RequestMore();
-    }*/
-#endif // ENABLE_NEW_NOTIFICATIONS_FADE_OUT 
 
     if (!m_dirty)
         return;
@@ -2928,11 +2909,7 @@ void GLCanvas3D::on_key(wxKeyEvent& evt)
                         keyCode == WXK_UP ||
                         keyCode == WXK_DOWN) {
                         if (dynamic_cast<Preview*>(m_canvas->GetParent()) != nullptr)
-#if ENABLE_ARROW_KEYS_WITH_SLIDERS
                             post_event(wxKeyEvent(EVT_GLCANVAS_MOVE_SLIDERS, evt));
-#else
-                            post_event(wxKeyEvent(EVT_GLCANVAS_MOVE_LAYERS_SLIDER, evt));
-#endif // ENABLE_ARROW_KEYS_WITH_SLIDERS
                     }
                 }
             }

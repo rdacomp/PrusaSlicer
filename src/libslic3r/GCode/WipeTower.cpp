@@ -42,36 +42,32 @@ public:
         {
             // adds tag for analyzer:
             char buf[64];
+#if ENABLE_VALIDATE_CUSTOM_GCODE
+            sprintf(buf, ";%s%f\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Height).c_str(), m_layer_height); // don't rely on GCodeAnalyzer knowing the layer height - it knows nothing at priming
+            m_gcode += buf;
+            sprintf(buf, ";%s%s\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Role).c_str(), ExtrusionEntity::role_to_string(erWipeTower).c_str());
+#else
             sprintf(buf, ";%s%f\n", GCodeProcessor::Height_Tag.c_str(), m_layer_height); // don't rely on GCodeAnalyzer knowing the layer height - it knows nothing at priming
             m_gcode += buf;
             sprintf(buf, ";%s%s\n", GCodeProcessor::Extrusion_Role_Tag.c_str(), ExtrusionEntity::role_to_string(erWipeTower).c_str());
+#endif // ENABLE_VALIDATE_CUSTOM_GCODE
             m_gcode += buf;
-#if ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE || ENABLE_GCODE_VIEWER_DATA_CHECKING
             change_analyzer_line_width(line_width);
-#endif // ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE || ENABLE_GCODE_VIEWER_DATA_CHECKING
-        }
+    }
 
-#if ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
     WipeTowerWriter& change_analyzer_line_width(float line_width) {
         // adds tag for analyzer:
         char buf[64];
+#if ENABLE_VALIDATE_CUSTOM_GCODE
+        sprintf(buf, ";%s%f\n", GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Width).c_str(), line_width);
+#else
         sprintf(buf, ";%s%f\n", GCodeProcessor::Width_Tag.c_str(), line_width);
+#endif // ENABLE_VALIDATE_CUSTOM_GCODE
         m_gcode += buf;
         return *this;
     }
-#endif // ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
 
 #if ENABLE_GCODE_VIEWER_DATA_CHECKING
-#if !ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
-    WipeTowerWriter& change_analyzer_line_width(float line_width) {
-        // adds tag for analyzer:
-        char buf[64];
-        sprintf(buf, ";%s%f\n", GCodeProcessor::Width_Tag.c_str(), line_width);
-        m_gcode += buf;
-        return *this;
-    }
-#endif // !ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE
-
     WipeTowerWriter& change_analyzer_mm3_per_mm(float len, float e) {
         static const float area = float(M_PI) * 1.75f * 1.75f / 4.f;
         float mm3_per_mm = (len == 0.f ? 0.f : area * e / len);
@@ -874,12 +870,8 @@ void WipeTower::toolchange_Unload(
 	const float line_width = m_perimeter_width * m_filpar[m_current_tool].ramming_line_width_multiplicator;       // desired ramming line thickness
 	const float y_step = line_width * m_filpar[m_current_tool].ramming_step_multiplicator * m_extra_spacing; // spacing between lines in mm
 
-#if ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE || ENABLE_GCODE_VIEWER_DATA_CHECKING
     writer.append("; CP TOOLCHANGE UNLOAD\n")
         .change_analyzer_line_width(line_width);
-#else
-    writer.append("; CP TOOLCHANGE UNLOAD\n");
-#endif // ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE || ENABLE_GCODE_VIEWER_DATA_CHECKING
 
 	unsigned i = 0;										// iterates through ramming_speed
 	m_left_to_right = true;								// current direction of ramming
@@ -942,9 +934,7 @@ void WipeTower::toolchange_Unload(
 		}
 	}
 	Vec2f end_of_ramming(writer.x(),writer.y());
-#if ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE || ENABLE_GCODE_VIEWER_DATA_CHECKING
     writer.change_analyzer_line_width(m_perimeter_width);   // so the next lines are not affected by ramming_line_width_multiplier
-#endif // ENABLE_TOOLPATHS_WIDTH_HEIGHT_FROM_GCODE || ENABLE_GCODE_VIEWER_DATA_CHECKING
 
     // Retraction:
     float old_x = writer.x();
