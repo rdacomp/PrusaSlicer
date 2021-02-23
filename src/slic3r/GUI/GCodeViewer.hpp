@@ -649,6 +649,8 @@ private:
     std::vector<Color> m_tool_colors;
     Layers m_layers;
     std::array<unsigned int, 2> m_layers_z_range;
+    unsigned int m_current_layer;
+    double m_current_layer_time;
     std::vector<ExtrusionRole> m_roles;
     size_t m_extruders_count;
     std::vector<unsigned char> m_extruder_ids;
@@ -709,6 +711,16 @@ public:
     unsigned int get_options_visibility_flags() const;
     void set_options_visibility_from_flags(unsigned int flags);
     void set_layers_z_range(const std::array<unsigned int, 2>& layers_z_range);
+
+    void set_current_layer(unsigned int layerNumber)
+    {
+        m_current_layer = layerNumber;
+    }
+
+    void set_current_layer_time(double layerTime)
+    {
+        m_current_layer_time = layerTime;
+    }
 
     bool is_legend_enabled() const { return m_legend_enabled; }
     void enable_legend(bool enable) { m_legend_enabled = enable; }

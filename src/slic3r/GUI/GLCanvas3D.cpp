@@ -1858,6 +1858,19 @@ void GLCanvas3D::set_toolpaths_z_range(const std::array<unsigned int, 2>& range)
         m_gcode_viewer.set_layers_z_range(range);
 }
 
+void GLCanvas3D::set_current_layer(unsigned int layerNumber)
+{
+    if (m_gcode_viewer.has_data())
+        m_gcode_viewer.set_current_layer(layerNumber);
+}
+
+void GLCanvas3D::set_current_layer_time(double layerTime)
+{
+    if (m_gcode_viewer.has_data())
+        m_gcode_viewer.set_current_layer_time(layerTime);
+}
+
+
 std::vector<int> GLCanvas3D::load_object(const ModelObject& model_object, int obj_idx, std::vector<int> instance_idxs)
 {
     if (instance_idxs.empty()) {

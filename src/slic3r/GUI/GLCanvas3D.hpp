@@ -656,6 +656,8 @@ public:
     void set_toolpath_view_type(GCodeViewer::EViewType type);
     void set_volumes_z_range(const std::array<double, 2>& range);
     void set_toolpaths_z_range(const std::array<unsigned int, 2>& range);
+    void set_current_layer(unsigned int layerNumber);
+    void set_current_layer_time(double layerTime);
 
     std::vector<int> load_object(const ModelObject& model_object, int obj_idx, std::vector<int> instance_idxs);
     std::vector<int> load_object(const Model& model, int obj_idx);

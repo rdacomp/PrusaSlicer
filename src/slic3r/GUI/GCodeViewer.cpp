@@ -4425,6 +4425,31 @@ void GCodeViewer::render_legend() const
         ImGui::SameLine();
         imgui.text(short_time(get_time_dhms(time_mode.time)));
 
+        ImGui::AlignTextToFramePadding();
+        switch (m_time_estimate_mode) {
+            case PrintEstimatedTimeStatistics::ETimeMode::Normal: {
+                imgui.text(_u8L("Estimated printing time for Layer #") +
+                           std::to_string(m_current_layer+1)  + " [" +
+                           _u8L("Normal mode") + "]:");
+                break;
+            }
+            case PrintEstimatedTimeStatistics::ETimeMode::Stealth: {
+                imgui.text(_u8L("Estimated printing time for Layer #") +
+                           std::to_string(m_current_layer+1) + " [" +
+                           _u8L("Stealth mode") + "]:");
+                break;
+            }
+            default: {
+                assert(false);
+                break;
+            }
+        }
+
+        ImGui::SameLine();
+        imgui.text(get_time_dhms(m_current_layer_time));
+
+        
+
         auto show_mode_button = [this, &imgui](const wxString& label, PrintEstimatedTimeStatistics::ETimeMode mode) {
             bool show = false;
             for (size_t i = 0; i < m_time_statistics.modes.size(); ++i) {

@@ -400,6 +400,26 @@ void Control::SetLayersTimes(const std::vector<double>& layers_times)
         m_layers_times[i] += m_layers_times[i - 1];
 }
 
+double Control::GetCurrentLayerTime()
+{
+    double previousLayerTime = 0;
+
+    int currentLayer = GetHigherValue();
+    int previousLayer = currentLayer - 1;
+
+    // Since the layer times are accumulated, we need to calculate the effective layer time
+    // and not the layer time including all previous layer times.
+
+    if (currentLayer < m_layers_times.size()) {
+        if (previousLayer > 0) {
+            previousLayerTime = m_layers_times[previousLayer];
+        }
+        return m_layers_times[currentLayer] - previousLayerTime;
+    }
+
+    return 0;
+}
+
 void Control::SetDrawMode(bool is_sla_print, bool is_sequential_print)
 { 
     m_draw_mode = is_sla_print          ? dmSlaPrint            : 
