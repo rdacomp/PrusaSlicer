@@ -212,7 +212,7 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_S
 #endif // ENABLE_PROJECT_STATE
 
 #if ENABLE_PROJECT_STATE
-        if (event.CanVeto() && !wxGetApp().check_and_save_unsaved_preset_changes()) {
+        if (event.CanVeto() && !wxGetApp().check_and_save_current_preset_changes()) {
 #else
         if (event.CanVeto() && !wxGetApp().check_unsaved_changes()) {
 #endif // ENABLE_PROJECT_STATE
@@ -497,7 +497,7 @@ void MainFrame::update_title()
         // Don't try to remove the extension, it would remove part of the file name after the last dot!
         wxString project = from_path(into_path(m_plater->get_project_filename()).filename());
 #if ENABLE_PROJECT_STATE
-        wxString dirty = m_plater->is_project_dirty() ? "*" : "";
+        wxString dirty = (!m_plater->model().objects.empty() && m_plater->is_project_dirty()) ? "*" : "";
         if (!dirty.empty() || !project.empty())
             title = dirty + project + " - ";
 #else
@@ -718,8 +718,10 @@ void MainFrame::save_project()
 void MainFrame::save_project_as(const wxString& filename)
 {
     bool ret = (m_plater != nullptr) ? m_plater->export_3mf(into_path(filename)) : false;
-    if (ret)
+    if (ret) {
+        wxGetApp().update_saved_preset_from_current_preset();
         m_plater->reset_project_after_save();
+    }
 }
 #else
 bool MainFrame::can_save() const
@@ -1574,7 +1576,7 @@ void MainFrame::export_config()
 void MainFrame::load_config_file()
 {
 #if ENABLE_PROJECT_STATE
-    if (!wxGetApp().check_and_save_unsaved_preset_changes())
+    if (!wxGetApp().check_and_save_current_preset_changes())
 #else
     if (!wxGetApp().check_unsaved_changes())
 #endif // ENABLE_PROJECT_STATE
@@ -1607,7 +1609,7 @@ bool MainFrame::load_config_file(const std::string &path)
 void MainFrame::export_configbundle(bool export_physical_printers /*= false*/)
 {
 #if ENABLE_PROJECT_STATE
-    if (!wxGetApp().check_and_save_unsaved_preset_changes())
+    if (!wxGetApp().check_and_save_current_preset_changes())
 #else
     if (!wxGetApp().check_unsaved_changes())
 #endif // ENABLE_PROJECT_STATE
@@ -1643,7 +1645,7 @@ void MainFrame::export_configbundle(bool export_physical_printers /*= false*/)
 void MainFrame::load_configbundle(wxString file/* = wxEmptyString, const bool reset_user_profile*/)
 {
 #if ENABLE_PROJECT_STATE
-    if (!wxGetApp().check_and_save_unsaved_preset_changes())
+    if (!wxGetApp().check_and_save_current_preset_changes())
 #else
     if (!wxGetApp().check_unsaved_changes())
 #endif // ENABLE_PROJECT_STATE

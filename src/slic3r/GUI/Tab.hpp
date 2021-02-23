@@ -339,6 +339,8 @@ public:
 	wxSizer*		description_line_widget(wxWindow* parent, ogStaticText** StaticText, wxString text = wxEmptyString);
 #if ENABLE_PROJECT_STATE
 	bool			current_preset_is_dirty() const;
+	bool			saved_preset_is_dirty() const;
+	void            update_saved_preset_from_current_preset();
 #else
 	bool			current_preset_is_dirty();
 #endif // ENABLE_PROJECT_STATE

@@ -345,6 +345,10 @@ public:
 	// Return the selected preset including the user modifications.
     Preset&         get_edited_preset()         { return m_edited_preset; }
     const Preset&   get_edited_preset() const   { return m_edited_preset; }
+#if ENABLE_PROJECT_STATE
+    // Return the last saved preset.
+    const Preset&   get_saved_preset() const    { return m_saved_preset; }
+#endif // ENABLE_PROJECT_STATE
 
     // Return vendor of the first parent profile, for which the vendor is defined, or null if such profile does not exist.
     PresetWithVendorProfile get_preset_with_vendor_profile(const Preset &preset) const;
@@ -365,7 +369,15 @@ public:
     // Return a preset by an index. If the preset is active, a temporary copy is returned.
     Preset&         preset(size_t idx)          { return (idx == m_idx_selected) ? m_edited_preset : m_presets[idx]; }
     const Preset&   preset(size_t idx) const    { return const_cast<PresetCollection*>(this)->preset(idx); }
-    void            discard_current_changes()   { m_presets[m_idx_selected].reset_dirty(); m_edited_preset = m_presets[m_idx_selected]; }
+#if ENABLE_PROJECT_STATE
+    void            discard_current_changes() {
+        m_presets[m_idx_selected].reset_dirty();
+        m_edited_preset = m_presets[m_idx_selected];
+        update_saved_preset_from_current_preset();
+    }
+#else
+    void            discard_current_changes() { m_presets[m_idx_selected].reset_dirty(); m_edited_preset = m_presets[m_idx_selected]; }
+#endif // ENABLE_PROJECT_STATE
     
     // Return a preset by its name. If the preset is active, a temporary copy is returned.
     // If a preset is not found by its name, null is returned.
@@ -433,12 +445,25 @@ public:
 
     // Compare the content of get_selected_preset() with get_edited_preset() configs, return true if they differ.
     bool                        current_is_dirty() const { return ! this->current_dirty_options().empty(); }
+#if ENABLE_PROJECT_STATE
+    // Compare the content of get_saved_preset() with get_edited_preset() configs, return true if they differ.
+    bool                        saved_is_dirty() const { return !this->saved_dirty_options().empty(); }
+#endif // ENABLE_PROJECT_STATE
+
     // Compare the content of get_selected_preset() with get_edited_preset() configs, return the list of keys where they differ.
     std::vector<std::string>    current_dirty_options(const bool deep_compare = false) const
         { return dirty_options(&this->get_edited_preset(), &this->get_selected_preset(), deep_compare); }
     // Compare the content of get_selected_preset() with get_edited_preset() configs, return the list of keys where they differ.
     std::vector<std::string>    current_different_from_parent_options(const bool deep_compare = false) const
         { return dirty_options(&this->get_edited_preset(), this->get_selected_preset_parent(), deep_compare); }
+#if ENABLE_PROJECT_STATE
+    // Compare the content of get_saved_preset() with get_edited_preset() configs, return the list of keys where they differ.
+    std::vector<std::string>    saved_dirty_options(const bool deep_compare = false) const
+    { return dirty_options(&this->get_edited_preset(), &this->get_saved_preset(), deep_compare); }
+
+    // Copy edited preset into saved preset.
+    void                        update_saved_preset_from_current_preset() { m_saved_preset = m_edited_preset; }
+#endif // ENABLE_PROJECT_STATE
 
     // Return a sorted list of system preset names.
     // Used for validating the "inherits" flag when importing user's config bundles.
@@ -527,6 +552,10 @@ private:
     std::map<std::string, std::string> m_map_system_profile_renamed;
     // Initially this preset contains a copy of the selected preset. Later on, this copy may be modified by the user.
     Preset                  m_edited_preset;
+#if ENABLE_PROJECT_STATE
+    // Contains a copy of the last saved selected preset.
+    Preset                  m_saved_preset;
+#endif // ENABLE_PROJECT_STATE
     // Selected preset.
     size_t                  m_idx_selected;
     // Is the "- default -" preset suppressed?

@@ -1506,14 +1506,8 @@ struct Plater::priv
                         ++shift;
                     } while (curr == active_main_snapshot);
                 }
-
-//                std::cout << active_main_snapshot->name << " - " << active_main_snapshot->timestamp << "\n";
                 m_plater_dirty = (last_main_save_snapshot_timestamp == 0 || last_main_save_snapshot_timestamp != active_main_snapshot->timestamp);
             }
-
-//            if (m_dirty) {
-//               std::cout << ">>>>>>> MAIN DIRTY\n";
-//            }
 
             // check current gizmo undo/redo stack
             if (&main_stack != &active_stack) {
@@ -1524,10 +1518,6 @@ struct Plater::priv
                 m_current_gizmo.dirty |= last_active_snapshot->name != _utf8("Gizmos-Initial") &&
                     (last_active_save_snapshot_timestamp == 0 || last_active_save_snapshot_timestamp != last_active_snapshot->timestamp);
 
-//                if (m_gizmo_dirty) {
-//                    std::cout << ">>>>>>> GIZMO DIRTY\n";
-//                }
-
                 m_plater_dirty |= m_current_gizmo.dirty;
             }
 
@@ -1537,19 +1527,11 @@ struct Plater::priv
                 if (gizmo.first != m_current_gizmo.name) {
                     any_gizmo_dirty |= gizmo.second;
                     if (any_gizmo_dirty) {
-//                        std::cout << ">>>>>>> GIZMOS UPDATE DIRTY\n";
                         break;
                     }
                 }
             }
             m_plater_dirty |= any_gizmo_dirty;
-
-//            std::cout << (&main_stack == &active_stack ? "main" : "gizmo");
-//            std::cout << " (" << (void*)(&active_stack) << ") -";
-//            std::cout << " dirty: " << (m_dirty ? "true" : "false");
-//            std::cout << " [" << last_main_save_snapshot_timestamp << "/" << active_main_snapshot->timestamp << "]";
-//            std::cout << "\n";
-
             wxGetApp().mainframe->update_title();
         }
 
@@ -4593,7 +4575,7 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
         // Switching the printer technology when jumping forwards / backwards in time. Switch to the last active printer profile of the other type.
         std::string s_pt = (it_snapshot->snapshot_data.printer_technology == ptFFF) ? "FFF" : "SLA";
 #if ENABLE_PROJECT_STATE
-        if (!wxGetApp().check_and_save_unsaved_preset_changes(format_wxstr(_L(
+        if (!wxGetApp().check_and_save_current_preset_changes(format_wxstr(_L(
             "%1% printer was active at the time the target Undo / Redo snapshot was taken. Switching to %1% printer requires reloading of %1% presets."), s_pt)))
 #else
         if (!wxGetApp().check_unsaved_changes(format_wxstr(_L(
@@ -4870,7 +4852,13 @@ void Plater::add_model(bool imperial_units/* = false*/)
     }
 
     Plater::TakeSnapshot snapshot(this, snapshot_label);
+#if ENABLE_PROJECT_STATE
+    std::vector<size_t> res = load_files(paths, true, false, imperial_units);
+    if (!res.empty())
+        wxGetApp().mainframe->update_title();
+#else
     load_files(paths, true, false, imperial_units);
+#endif // ENABLE_PROJECT_STATE
 }
 
 void Plater::import_sl1_archive()

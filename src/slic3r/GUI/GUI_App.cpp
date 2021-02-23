@@ -1672,7 +1672,7 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
         case ConfigMenuTakeSnapshot:
             // Take a configuration snapshot.
 #if ENABLE_PROJECT_STATE
-            if (check_and_save_unsaved_preset_changes()) {
+            if (check_and_save_current_preset_changes()) {
 #else
             if (check_unsaved_changes()) {
 #endif // ENABLE_PROJECT_STATE
@@ -1691,7 +1691,7 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
             break;
         case ConfigMenuSnapshots:
 #if ENABLE_PROJECT_STATE
-            if (check_and_save_unsaved_preset_changes()) {
+            if (check_and_save_current_preset_changes()) {
 #else
             if (check_unsaved_changes()) {
 #endif // ENABLE_PROJECT_STATE
@@ -1802,6 +1802,16 @@ bool GUI_App::has_unsaved_preset_changes() const
 {
     PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
     for (const Tab* const tab : tabs_list) {
+        if (tab->supports_printer_technology(printer_technology) && tab->saved_preset_is_dirty())
+            return true;
+    }
+    return false;
+}
+
+bool GUI_App::has_current_preset_changes() const
+{
+    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    for (const Tab* const tab : tabs_list) {
         if (tab->supports_printer_technology(printer_technology) && tab->current_preset_is_dirty())
             return true;
     }
@@ -1812,9 +1822,9 @@ bool GUI_App::has_unsaved_preset_changes() const
 // This is called when closing the application, when loading a config file or when starting the config wizard
 // to notify the user whether he is aware that some preset changes will be lost.
 #if ENABLE_PROJECT_STATE
-bool GUI_App::check_and_save_unsaved_preset_changes(const wxString& header)
+bool GUI_App::check_and_save_current_preset_changes(const wxString& header)
 {
-    if (has_unsaved_preset_changes()) {
+    if (this->plater()->model().objects.empty() && has_current_preset_changes()) {
 #else
 bool GUI_App::check_unsaved_changes(const wxString &header)
 {
@@ -1850,6 +1860,17 @@ bool GUI_App::check_unsaved_changes(const wxString &header)
 
     return true;
 }
+
+#if ENABLE_PROJECT_STATE
+void GUI_App::update_saved_preset_from_current_preset()
+{
+    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    for (Tab* tab : tabs_list) {
+        if (tab->supports_printer_technology(printer_technology))
+            tab->update_saved_preset_from_current_preset();
+    }
+}
+#endif // ENABLE_PROJECT_STATE
 
 bool GUI_App::check_print_host_queue()
 {

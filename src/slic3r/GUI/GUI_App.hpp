@@ -210,7 +210,9 @@ public:
     void            add_config_menu(wxMenuBar *menu);
 #if ENABLE_PROJECT_STATE
     bool            has_unsaved_preset_changes() const;
-    bool            check_and_save_unsaved_preset_changes(const wxString& header = wxString());
+    bool            has_current_preset_changes() const;
+    bool            check_and_save_current_preset_changes(const wxString& header = wxString());
+    void            update_saved_preset_from_current_preset();
 #else
     bool            check_unsaved_changes(const wxString& header = wxString());
 #endif // ENABLE_PROJECT_STATE

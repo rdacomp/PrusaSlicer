@@ -6,6 +6,9 @@
 #include "GUI_App.hpp"
 #include "I18N.hpp"
 #include "Plater.hpp"
+#if ENABLE_PROJECT_STATE
+#include "MainFrame.hpp"
+#endif // ENABLE_PROJECT_STATE
 
 #include "OptionsGroup.hpp"
 #include "Tab.hpp"
@@ -2304,12 +2307,15 @@ void ObjectList::load_shape_object(const std::string& type_name)
     if (obj_idx < 0)
         return;
 
-    take_snapshot(_(L("Add Shape")));
+    take_snapshot(_L("Add Shape"));
 
     // Create mesh
     BoundingBoxf3 bb;
     TriangleMesh mesh = create_mesh(type_name, bb);
-    load_mesh_object(mesh, _(L("Shape")) + "-" + _(type_name));
+    load_mesh_object(mesh, _L("Shape") + "-" + _(type_name));
+#if ENABLE_PROJECT_STATE
+    wxGetApp().mainframe->update_title();
+#endif // ENABLE_PROJECT_STATE
 }
 
 void ObjectList::load_mesh_object(const TriangleMesh &mesh, const wxString &name, bool center)
