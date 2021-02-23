@@ -2031,6 +2031,25 @@ public:
     }
 };
 
+struct OrderLengthFromShortest
+{
+    bool operator()(const VoronoiGraph::Path &path1,
+                    const VoronoiGraph::Path &path2)
+    {
+        return path1.length > path2.length;
+    }
+};
+
+struct OrderLengthFromLongest
+{
+    bool operator()(const VoronoiGraph::Path &path1,
+                    const VoronoiGraph::Path &path2)
+    {
+        return path1.length < path2.length;
+    }
+};
+
+
 /// <summary>
 /// Data object
 /// extends path with circles and side branches
@@ -2039,8 +2058,10 @@ struct VoronoiGraph::ExPath : public VoronoiGraph::Path
 {
     // not main path is stored in secondary paths
     // key is pointer to source node
-    using SideBranches = std::map<const VoronoiGraph::Node *, std::vector<VoronoiGraph::Path>>;
-    SideBranches side_branches;
+    using SideBranches = std::priority_queue<
+        VoronoiGraph::Path, std::vector<VoronoiGraph::Path>, OrderLengthFromLongest>;
+    using SideBranchesMap = std::map<const VoronoiGraph::Node *, SideBranches>;
+    SideBranchesMap side_branches;
     // circles
     std::vector<VoronoiGraph::Circle> circles;
 
@@ -2167,7 +2188,7 @@ double get_neighbor_distance(const VoronoiGraph::Node *from,
 /// <returns>Longest nodes path and its length</returns>
 VoronoiGraph::Path find_longest_path_on_circle(
     const VoronoiGraph::Circle &circle,
-    const VoronoiGraph::ExPath::SideBranches &side_branches)
+    const VoronoiGraph::ExPath::SideBranchesMap &side_branches)
 {   
     double half_circle_length = circle.length / 2.;
     double distance_on_circle = 0;
@@ -2190,7 +2211,7 @@ VoronoiGraph::Path find_longest_path_on_circle(
             // side_branches should be sorted by length
             if (distance_on_circle > half_circle_length)
                 is_short_revers_direction = true;
-            const auto &longest_node_branch = side_branches_item->second.front();
+            const auto &longest_node_branch = side_branches_item->second.top();
             double circle_branch_length = longest_node_branch.length +
                                      ((is_short_revers_direction) ?
                                           (circle.length -
@@ -2231,14 +2252,6 @@ VoronoiGraph::Path find_longest_path_on_circle(
     return {circle_path, longest_branch_length};
 }
 
-struct OrderByLength
-{
-    bool operator()(const VoronoiGraph::Path &path1, const VoronoiGraph::Path &path2)
-    {
-        return path1.length > path2.length;
-    }
-};
- 
 VoronoiGraph::Path find_longest_path_on_circles(
     const VoronoiGraph::Node &input_node,
     size_t finished_circle_index,
@@ -2270,11 +2283,11 @@ VoronoiGraph::Path find_longest_path_on_circles(
     VoronoiGraph::Path longest_path;
 
     // wide search by shortest distance for path over circle's node
-    // !! do NOT use recursion, may cause stack overflow
+    // !! Do NOT use recursion, may cause stack overflow
     std::set<const VoronoiGraph::Node*> done; // all ready checked
     // on top is shortest path
     std::priority_queue<VoronoiGraph::Path, std::vector<VoronoiGraph::Path>,
-                        OrderByLength> search_queue;
+                        OrderLengthFromShortest>  search_queue;
     VoronoiGraph::Path start_path({&input_node}, 0.);
     search_queue.emplace(start_path);
     while (!search_queue.empty()) {
@@ -2297,7 +2310,7 @@ VoronoiGraph::Path find_longest_path_on_circles(
             // exist side from this neighbor node ?
             if (branches_item == ex_path.side_branches.end()) continue; 
             const VoronoiGraph::Path &longest_branch = 
-                branches_item->second.front();
+                branches_item->second.top();
             double length = longest_branch.length + neighbor_path.length;
             if (longest_path.length < length) {
                 longest_path.length = length;
@@ -2308,27 +2321,18 @@ VoronoiGraph::Path find_longest_path_on_circles(
 
     // create result path
     assert(!longest_path.path.empty());
-    longest_path.path.erase(longest_path.path.begin()); // remove start of circle
+    longest_path.path.erase(longest_path.path.begin()); // remove input_node
     assert(!longest_path.path.empty());
     auto branches_item = ex_path.side_branches.find(longest_path.path.back());
     if (branches_item == ex_path.side_branches.end()) { 
         // longest path ends on circle
         return longest_path;
     }
-    const VoronoiGraph::Path &longest_branch = branches_item->second.front();
+    const VoronoiGraph::Path &longest_branch = branches_item->second.top();
     longest_path.path.insert(longest_path.path.end(),
                              longest_branch.path.begin(),
                              longest_branch.path.end());
     return longest_path;
-}
-
-void sort_path_by_length(std::vector<VoronoiGraph::Path> &paths)
-{
-    if (paths.size() <= 1) return;
-    std::sort(paths.begin(), paths.end(),
-              [](const VoronoiGraph::Path &path1, const VoronoiGraph::Path &path2) {
-                  return path1.length > path2.length;
-              });
 }
 
 /// <summary>
@@ -2441,8 +2445,11 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
 
     const std::vector<VoronoiGraph::Node::Neighbor> &neighbors = node.neighbors;
     size_t neighbor_count = neighbors.size();
-    std::vector<VoronoiGraph::Path> side_branches;
-    side_branches.reserve(neighbor_count - 1); // one neighbor is prev node
+    std::priority_queue<VoronoiGraph::Path, std::vector<VoronoiGraph::Path>,
+                        OrderLengthFromLongest>
+        side_branches;
+
+    //side_branches.reserve(neighbor_count - 1); // one neighbor is prev node
 
 
     // skip node on circle when circle start at this node
@@ -2474,7 +2481,7 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
         // is next node leaf ?
         if (next_node.neighbors.size() == 1) {
             VoronoiGraph::Path side_branch({&next_node}, neighbor.edge_length);
-            side_branches.emplace_back(std::move(side_branch));
+            side_branches.push(std::move(side_branch));
             continue;
         }
 
@@ -2509,8 +2516,7 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
 
         append_neighbor_branch(result, next_path);   
 
-        if (!is_circle_neighbor)
-            side_branches.emplace_back(std::move(next_path));                
+        if (!is_circle_neighbor) side_branches.push(std::move(next_path));                
     }
 
     // remember connected circle
@@ -2527,7 +2533,7 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
     if (!end_circle_indexes.empty() &&
         end_circle_indexes.size() == circle_indexes.size()) {
         size_t circle_index = circle_indexes.front(); // possible any of them
-        side_branches.push_back(
+        side_branches.push(
             find_longest_path_on_circles(node, circle_index, result));
 
         circle_indexes.clear(); // resolved circles
@@ -2538,9 +2544,6 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
         return result; 
     }
 
-    // from longest path
-    sort_path_by_length(side_branches);
-
     // is node on unresolved circle?
     if (!circle_indexes.empty()) {
         // not search for longest path, it will eval on end of circle
@@ -2548,8 +2551,8 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
         return result;
     }
     
-    VoronoiGraph::Path longest_path(std::move(side_branches.front()));
-    side_branches.erase(side_branches.begin());
+    VoronoiGraph::Path longest_path(std::move(side_branches.top()));
+    side_branches.pop();
     if (!side_branches.empty()) {
         result.side_branches[&node] = side_branches;
     }
@@ -2596,21 +2599,19 @@ void reshape_longest_path(VoronoiGraph::ExPath& path) {
         auto side_branches_item = path.side_branches.find(node);
         if (side_branches_item == path.side_branches.end())
             continue; // no side branches
-        std::vector<VoronoiGraph::Path> &branches = side_branches_item->second;
-        VoronoiGraph::Path &longest_branch = branches.front(); // branches are sorted
-        if (actual_length >= longest_branch.length) 
+        VoronoiGraph::ExPath::SideBranches &branches = side_branches_item->second;
+        if (actual_length >= branches.top().length) 
             continue; // no longer branch
 
         auto               end_path = path.path.begin() + path_index;
         VoronoiGraph::Path side_branch({path.path.begin(), end_path},
                                        actual_length);
         std::reverse(side_branch.path.begin(), side_branch.path.end());
-        VoronoiGraph::Path new_main_branch(std::move(longest_branch));
+        VoronoiGraph::Path new_main_branch(std::move(branches.top()));
+        branches.pop();
         std::reverse(new_main_branch.path.begin(), new_main_branch.path.end());
         // add old main path store into side branches - may be it is not neccessary
-        branches.erase(branches.begin());
-        branches.emplace_back(std::move(side_branch));
-        sort_path_by_length(branches);
+        branches.push(std::move(side_branch));
 
         // swap side branch with main branch
         path.path.erase(path.path.begin(), end_path);
@@ -2633,6 +2634,9 @@ void reshape_longest_path(VoronoiGraph::ExPath& path) {
 VoronoiGraph::ExPath create_longest_path(const VoronoiGraph::Node *start_node)
 {
     VoronoiGraph::ExPath longest_path = create_longest_branch_from_node(*start_node);
+
+
+
     reshape_longest_path(longest_path); 
     // after reshape it shoud be longest path for whole Voronoi Graph
     return longest_path;
@@ -2809,12 +2813,16 @@ void draw(SVG &svg, const VoronoiGraph::ExPath &path, coord_t width) {
         svg.draw_text(center, ("C"+std::to_string(&circle - &path.circles.front())).c_str(), circlePathColor);
     }
 
-    for (auto& branches : path.side_branches) 
-        for (auto &branch : branches.second) {
+    for (const auto &branches : path.side_branches) {
+        auto tmp = branches.second; // copy
+        while (!tmp.empty()){
+            const auto &branch = tmp.top();
             auto path = branch.path;
             path.insert(path.begin(), branches.first);
             draw(svg, path, width, sideBranchesColor);
+            tmp.pop();
         }
+    }
 
     draw(svg, path.path, width, mainPathColor);
 }
@@ -3017,7 +3025,7 @@ TEST_CASE("Sample small islands", "[VoronoiSkeleton]")
         , triangle_with_hole
         , rect_with_4_hole
         , mountains
-        //, double_circle
+        , double_circle
         //, frog_leg 
     };
     for (auto &island : islands) {
