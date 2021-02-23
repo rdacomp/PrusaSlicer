@@ -76,7 +76,7 @@ static DynamicPrintConfig& printer_config()
 
 static int extruders_count()
 {
-    return wxGetApp().extruders_cnt();
+    return wxGetApp().extruders_edited_cnt();
 }
 
 static void take_snapshot(const wxString& snapshot_name) 
@@ -2493,6 +2493,13 @@ bool ObjectList::del_subobject_from_object(const int obj_idx, const int idx, con
             if (!last_volume->config.empty()) {
                 object->config.apply(last_volume->config);
                 last_volume->config.clear();
+
+                // update extruder color in ObjectList
+                wxDataViewItem obj_item = m_objects_model->GetItemById(obj_idx);
+                if (obj_item) {
+                    wxString extruder = object->config.has("extruder") ? wxString::Format("%d", object->config.extruder()) : _L("default");
+                    m_objects_model->SetExtruder(extruder, obj_item);
+                }
             }
         }
     }

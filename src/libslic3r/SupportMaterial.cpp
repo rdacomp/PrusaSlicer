@@ -5,6 +5,7 @@
 #include "SupportMaterial.hpp"
 #include "Fill/FillBase.hpp"
 #include "Geometry.hpp"
+#include "Point.hpp"
 
 #include <cmath>
 #include <memory>
@@ -496,7 +497,7 @@ void PrintObjectSupportMaterial::generate(PrintObject &object)
     // If raft is to be generated, the 1st top_contact layer will contain the 1st object layer silhouette with holes filled.
     // There is also a 1st intermediate layer containing bases of support columns.
     // Inflate the bases of the support columns and create the raft base under the object.
-    MyLayersPtr raft_layers = this->generate_raft_base(top_contacts, interface_layers, intermediate_layers, layer_storage);
+    MyLayersPtr raft_layers = this->generate_raft_base(object, top_contacts, interface_layers, intermediate_layers, layer_storage);
 
 #ifdef SLIC3R_DEBUG
     for (const MyLayer *l : interface_layers)
@@ -1281,7 +1282,7 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
     // Output layers, sorted by top Z.
     MyLayersPtr contact_out;
 
-    const bool   support_auto  = m_object_config->support_material_auto.value;
+    const bool   support_auto  = m_object_config->support_material.value && m_object_config->support_material_auto.value;
     // If user specified a custom angle threshold, convert it to radians.
     // Zero means automatic overhang detection.
     const double threshold_rad = (m_object_config->support_material_threshold.value > 0) ? 
@@ -1376,6 +1377,7 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                                 // Get the regions needing a suport, collapse very tiny spots.
                                 //FIXME cache the lower layer offset if this layer has multiple regions.
     #if 1
+                                //FIXME this solution will trigger stupid supports for sharp corners, see GH #4874
                                 diff_polygons = offset2(
                                     diff(layerm_polygons,
                                          offset2(lower_layer_polygons, - 0.5f * fw, lower_layer_offset + 0.5f * fw, SUPPORT_SURFACES_OFFSET_PARAMETERS)), 
@@ -1407,8 +1409,18 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                                 const ExPolygons &enforcer = enforcers[layer_id];
                                 if (! enforcer.empty()) {
                                     // Enforce supports (as if with 90 degrees of slope) for the regions covered by the enforcer meshes.
-                                    Polygons new_contacts = diff(intersection(layerm_polygons, to_polygons(std::move(enforcer))),
-                                            offset(lower_layer_polygons, 0.05f * fw, SUPPORT_SURFACES_OFFSET_PARAMETERS));
+#ifdef SLIC3R_DEBUG
+                                    ExPolygons enforcers_united = union_ex(to_polygons(enforcer), false);
+#endif // SLIC3R_DEBUG
+                                    Polygons new_contacts = diff(intersection(layerm_polygons, to_polygons(std::move(enforcer))), 
+                                        offset(lower_layer_polygons, 0.05f * fw, SUPPORT_SURFACES_OFFSET_PARAMETERS));
+#ifdef SLIC3R_DEBUG
+                                    SVG::export_expolygons(debug_out_path("support-top-contacts-enforcers-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z),
+                                        { { { union_ex(layerm_polygons, false) },                { "layerm_polygons",            "gray",   0.2f } },
+                                          { { union_ex(lower_layer_polygons, false) },           { "lower_layer_polygons",       "green",  0.5f } },
+                                          { enforcers_united,                                    { "enforcers",                  "blue",   0.5f } },
+                                          { { union_ex(new_contacts, true) },                    { "new_contacts",               "red",    "black", "", scaled<coord_t>(0.1f), 0.5f } } });
+#endif /* SLIC3R_DEBUG */
                                     if (! new_contacts.empty()) {
                                         if (diff_polygons.empty())
                                             diff_polygons = std::move(new_contacts);
@@ -1602,7 +1614,10 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                                     slices_margin_cached);
                             SupportGridPattern support_grid_pattern(
                                 // Support islands, to be stretched into a grid.
-                                dense_interface_polygons, 
+                                //FIXME The regularization of dense_interface_polygons above may stretch dense_interface_polygons outside of the contact polygons,
+                                // thus some dense interface areas may not get supported. Trim the excess with contact_polygons at the following line.
+                                // See for example GH #4874.
+                                intersection(dense_interface_polygons, *new_layer.contact_polygons), 
                                 // Trimming polygons, to trim the stretched support islands.
                                 slices_margin_cached,
                                 // Grid resolution.
@@ -1611,50 +1626,30 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::top_contact_
                                 m_support_material_flow.spacing());
                             new_layer.polygons = support_grid_pattern.extract_support(m_support_material_flow.scaled_spacing()/2 + 5, false);
                     #ifdef SLIC3R_DEBUG
-                            {
-                                BoundingBox bbox = get_extents(dense_interface_polygons);
-                                bbox.merge(get_extents(slices_margin_cached));
-                                bbox.merge(get_extents(new_layer.polygons));
-                                ::Slic3r::SVG svg(debug_out_path("support-top-contacts-grid-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z), bbox);
-                                svg.draw(union_ex(lower_layer_polygons, false), "gray", 0.2f);
-                                svg.draw(union_ex(*new_layer.contact_polygons, false), "gray", 0.5f);
-                                svg.draw(union_ex(slices_margin_cached, false), "blue", 0.5f);
-                                svg.draw(union_ex(dense_interface_polygons, false), "green", 0.5f);
-                                svg.draw(union_ex(new_layer.polygons, true), "red", 0.5f);
-                                svg.draw_outline(union_ex(new_layer.polygons, true), "black", "black", scale_(0.1f));
-                            }
-                    #endif /* SLIC3R_DEBUG */
-                    #ifdef SLIC3R_DEBUG
-                            {
-                                //support_grid_pattern.serialize(debug_out_path("support-top-contacts-final-run%d-layer%d-z%f.bin", iRun, layer_id, layer.print_z));
-
-                                BoundingBox bbox = get_extents(contact_polygons);
-                                bbox.merge(get_extents(new_layer.polygons));
-                                ::Slic3r::SVG svg(debug_out_path("support-top-contacts-final0-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z), bbox);
-                                svg.draw(union_ex(lower_layer_polygons, false), "gray", 0.2f);
-                                svg.draw(union_ex(*new_layer.contact_polygons, false), "gray", 0.5f);
-                                svg.draw(union_ex(contact_polygons, false), "blue", 0.5f);
-                                svg.draw(union_ex(dense_interface_polygons, false), "green", 0.5f);
-                                svg.draw(union_ex(new_layer.polygons, true), "red", 0.5f);
-                                svg.draw_outline(union_ex(new_layer.polygons, true), "black", "black", scale_(0.1f));
-                            }
+                            SVG::export_expolygons(debug_out_path("support-top-contacts-final0-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z),
+                                { { { union_ex(lower_layer_polygons, false) },        { "lower_layer_polygons",       "gray",   0.2f } },
+                                  { { union_ex(*new_layer.contact_polygons, false) }, { "new_layer.contact_polygons", "yellow", 0.5f } },
+                                  { { union_ex(slices_margin_cached, false) },        { "slices_margin_cached",       "blue",   0.5f } },
+                                  { { union_ex(dense_interface_polygons, false) },    { "dense_interface_polygons",   "green",  0.5f } },
+                                  { { union_ex(new_layer.polygons, true) },           { "new_layer.polygons",         "red",    "black", "", scaled<coord_t>(0.1f), 0.5f } } });
+                            //support_grid_pattern.serialize(debug_out_path("support-top-contacts-final-run%d-layer%d-z%f.bin", iRun, layer_id, layer.print_z));
+                            SVG::export_expolygons(debug_out_path("support-top-contacts-final0-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z),
+                                { { { union_ex(lower_layer_polygons, false) },        { "lower_layer_polygons",       "gray",   0.2f } },
+                                  { { union_ex(*new_layer.contact_polygons, false) }, { "new_layer.contact_polygons", "yellow", 0.5f } },
+                                  { { union_ex(contact_polygons, false) },            { "contact_polygons",           "blue",   0.5f } },
+                                  { { union_ex(dense_interface_polygons, false) },    { "dense_interface_polygons",   "green",  0.5f } },
+                                  { { union_ex(new_layer.polygons, true) },           { "new_layer.polygons",         "red",    "black", "", scaled<coord_t>(0.1f), 0.5f } } });
                     #endif /* SLIC3R_DEBUG */
                         }
                     }
                     #ifdef SLIC3R_DEBUG
-                    {
-                        BoundingBox bbox = get_extents(contact_polygons);
-                        bbox.merge(get_extents(new_layer.polygons));
-                        bbox.merge(get_extents(overhang_polygons));
-                        ::Slic3r::SVG svg(debug_out_path("support-top-contacts-final-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z), bbox);
-                        svg.draw(union_ex(lower_layer_polygons, false), "gray", 0.2f);
-                        svg.draw(union_ex(*new_layer.contact_polygons, false), "gray", 0.5f);
-                        svg.draw(union_ex(contact_polygons, false), "blue", 0.5f);
-                        svg.draw(union_ex(overhang_polygons, false), "green", 0.5f);
-                        svg.draw(union_ex(new_layer.polygons, true), "red", 0.5f);
-                        svg.draw_outline(union_ex(new_layer.polygons, true), "black", "black", scale_(0.1f));
-                    }
-                    #endif /* SLIC3R_DEBUG */
+                    SVG::export_expolygons(debug_out_path("support-top-contacts-final0-run%d-layer%d-z%f.svg", iRun, layer_id, layer.print_z),
+                        { { { union_ex(lower_layer_polygons, false) },        { "lower_layer_polygons",       "gray",   0.2f } },
+                          { { union_ex(*new_layer.contact_polygons, false) }, { "new_layer.contact_polygons", "yellow", 0.5f } },
+                          { { union_ex(contact_polygons, false) },            { "contact_polygons",           "blue",   0.5f } },
+                          { { union_ex(overhang_polygons, false) },           { "overhang_polygons",          "green",  0.5f } },
+                          { { union_ex(new_layer.polygons, true) },           { "new_layer.polygons",         "red",    "black", "", scaled<coord_t>(0.1f), 0.5f } } });
+                #endif /* SLIC3R_DEBUG */
 
                     // Even after the contact layer was expanded into a grid, some of the contact islands may be too tiny to be extruded.
                     // Remove those tiny islands from new_layer.polygons and new_layer.contact_polygons.
@@ -2504,11 +2499,41 @@ void PrintObjectSupportMaterial::trim_support_layers_by_object(
 }
 
 PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::generate_raft_base(
+    const PrintObject   &object,
     const MyLayersPtr   &top_contacts,
     const MyLayersPtr   &interface_layers,
     const MyLayersPtr   &base_layers,
     MyLayerStorage      &layer_storage) const
 {
+    // If there is brim to be generated, calculate the trimming regions.
+    Polygons brim;
+    if (object.has_brim()) {
+        // Calculate the area covered by the brim.
+        const BrimType brim_type   = object.config().brim_type;
+        const bool     brim_outer  = brim_type == btOuterOnly || brim_type == btOuterAndInner;
+        const bool     brim_inner  = brim_type == btInnerOnly || brim_type == btOuterAndInner;
+        const auto     brim_offset = scaled<float>(object.config().brim_offset.value + object.config().brim_width.value);
+        for (const ExPolygon &ex : object.layers().front()->lslices) {
+            if (brim_outer && brim_inner)
+                polygons_append(brim, offset(ex, brim_offset));
+            else {
+                if (brim_outer)
+                    polygons_append(brim, offset(ex.contour, brim_offset, ClipperLib::jtRound, float(scale_(0.1))));
+                else
+                    brim.emplace_back(ex.contour);
+                if (brim_inner) {
+                    Polygons holes = ex.holes;
+                    polygons_reverse(holes);
+                    holes = offset(holes, - brim_offset, ClipperLib::jtRound, float(scale_(0.1)));
+                    polygons_reverse(holes);
+                    polygons_append(brim, std::move(holes));
+                } else
+                    polygons_append(brim, ex.holes);
+            }
+        }
+        brim = union_(brim);
+    }
+
     // How much to inflate the support columns to be stable. This also applies to the 1st layer, if no raft layers are to be printed.
     const float inflate_factor_fine      = float(scale_((m_slicing_params.raft_layers() > 1) ? 0.5 : EPSILON));
     const float inflate_factor_1st_layer = float(scale_(3.)) - inflate_factor_fine;
@@ -2587,6 +2612,13 @@ PrintObjectSupportMaterial::MyLayersPtr PrintObjectSupportMaterial::generate_raf
             offset(m_object->layers().front()->lslices, (float)scale_(m_gap_xy), SUPPORT_SURFACES_OFFSET_PARAMETERS));
         if (contacts != nullptr)
             columns_base->polygons = diff(columns_base->polygons, interface_polygons);
+        if (! brim.empty()) {
+            columns_base->polygons = diff(columns_base->polygons, brim);
+            if (contacts)
+                contacts->polygons = diff(contacts->polygons, brim);
+            if (interfaces)
+                interfaces->polygons = diff(interfaces->polygons, brim);
+        }
     }
 
     return raft_layers;

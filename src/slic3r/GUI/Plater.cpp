@@ -790,6 +790,9 @@ Sidebar::Sidebar(Plater *parent)
     p->btn_export_gcode->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { p->plater->export_gcode(false); });
     p->btn_reslice->Bind(wxEVT_BUTTON, [this](wxCommandEvent&)
     {
+        if (p->plater->canvas3D()->get_gizmos_manager().is_in_editing_mode(true))
+            return;
+
         const bool export_gcode_after_slicing = wxGetKeyState(WXK_SHIFT);
         if (export_gcode_after_slicing)
             p->plater->export_gcode(true);
@@ -4386,9 +4389,9 @@ bool Plater::priv::can_fix_through_netfabb() const
 
 bool Plater::priv::can_increase_instances() const
 {
-    if (m_ui_jobs.is_any_running()) {
-        return false;
-    }
+    if (m_ui_jobs.is_any_running()
+     || q->canvas3D()->get_gizmos_manager().is_in_editing_mode())
+            return false;
 
     int obj_idx = get_selected_object_idx();
     return (0 <= obj_idx) && (obj_idx < (int)model.objects.size());
@@ -4396,9 +4399,9 @@ bool Plater::priv::can_increase_instances() const
 
 bool Plater::priv::can_decrease_instances() const
 {
-    if (m_ui_jobs.is_any_running()) {
-        return false;
-    }
+    if (m_ui_jobs.is_any_running()
+     || q->canvas3D()->get_gizmos_manager().is_in_editing_mode())
+            return false;
 
     int obj_idx = get_selected_object_idx();
     return (0 <= obj_idx) && (obj_idx < (int)model.objects.size()) && (model.objects[obj_idx]->instances.size() > 1);
@@ -5330,6 +5333,10 @@ void Plater::export_gcode(bool prefer_removable)
     if (p->model.objects.empty())
         return;
 
+    if (canvas3D()->get_gizmos_manager().is_in_editing_mode(true))
+        return;
+
+
     if (p->process_completed_with_error)
         return;
 
@@ -5634,6 +5641,11 @@ void Plater::reslice()
     if (p->process_completed_with_error)
         return;
 
+    // In case SLA gizmo is in editing mode, refuse to continue
+    // and notify user that he should leave it first.
+    if (canvas3D()->get_gizmos_manager().is_in_editing_mode(true))
+        return;
+
     // Stop arrange and (or) optimize rotation tasks.
     this->stop_jobs();
 
@@ -5884,8 +5896,7 @@ void Plater::on_config_change(const DynamicPrintConfig &config)
     bool update_scheduled = false;
     bool bed_shape_changed = false;
     for (auto opt_key : p->config->diff(config)) {
-        if (opt_key == "filament_colour")
-        {
+        if (opt_key == "filament_colour") {
             update_scheduled = true; // update should be scheduled (for update 3DScene) #2738
 
             if (update_filament_colors_in_full_config()) {
@@ -5920,10 +5931,11 @@ void Plater::on_config_change(const DynamicPrintConfig &config)
         else if(opt_key == "extruder_colour") {
             update_scheduled = true;
             p->sidebar->obj_list()->update_extruder_colors();
-        } else if(opt_key == "max_print_height") {
-            update_scheduled = true;
         }
+        else if(opt_key == "max_print_height")
+            update_scheduled = true;
         else if (opt_key == "printer_model") {
+            p->reset_gcode_toolpaths();
             // update to force bed selection(for texturing)
             bed_shape_changed = true;
             update_scheduled = true;
