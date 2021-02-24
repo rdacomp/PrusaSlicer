@@ -799,6 +799,9 @@ bool GUI_App::on_init_inner()
     app_config->set("version", SLIC3R_VERSION);
     app_config->save();
 
+    // If load_language() fails, the application closes.
+    load_language(wxString(), true);
+
     wxInitAllImageHandlers();
 
     SplashScreen* scrn = nullptr;
@@ -865,9 +868,6 @@ bool GUI_App::on_init_inner()
     // initialize label colors and fonts
     init_label_colours();
     init_fonts();
-
-    // If load_language() fails, the application closes.
-    load_language(wxString(), true);
 
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
@@ -1716,7 +1716,11 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                 PreferencesDialog dlg(mainframe);
                 dlg.ShowModal();
                 app_layout_changed = dlg.settings_layout_changed();
+#if ENABLE_GCODE_LINES_ID_IN_H_SLIDER
+                if (dlg.seq_top_layer_only_changed() || dlg.seq_seq_top_gcode_indices_changed())
+#else
                 if (dlg.seq_top_layer_only_changed())
+#endif // ENABLE_GCODE_LINES_ID_IN_H_SLIDER
                     this->plater_->refresh_print();
 #if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
@@ -1813,7 +1817,8 @@ bool GUI_App::check_unsaved_changes(const wxString &header)
             // synchronize config.ini with the current selections.
             preset_bundle->export_selections(*app_config);
 
-            wxMessageBox(_L("The preset(s) modifications are successfully saved"));
+            wxMessageBox(_L_PLURAL("The preset modifications are successfully saved", 
+                                   "The presets modifications are successfully saved", dlg.get_names_and_types().size()));
         }
     }
 
@@ -1928,15 +1933,11 @@ void GUI_App::MacOpenFiles(const wxArrayString &fileNames)
             start_new_slicer(non_gcode_files, true);
     } else {
         if (! files.empty()) {
-#if ENABLE_DRAG_AND_DROP_FIX
             wxArrayString input_files;
             for (size_t i = 0; i < non_gcode_files.size(); ++i) {
                 input_files.push_back(non_gcode_files[i]);
             }
             this->plater()->load_files(input_files);
-#else
-            this->plater()->load_files(files, true, true);
-#endif     
         }
         for (const wxString &filename : gcode_files)
             start_new_gcodeviewer(&filename);

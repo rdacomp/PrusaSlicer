@@ -65,7 +65,7 @@ public:
 
 	wxBoxSizer*	vsizer() const { return m_vsizer; }
 	wxWindow*	parent() const { return m_parent; }
-	wxString	title()	 const { return m_title; }
+	const wxString&	title()	 const { return m_title; }
 	size_t		iconID() const { return m_iconID; }
 	void		set_config(DynamicPrintConfig* config_in) { m_config = config_in; }
 	void		reload_config();
@@ -78,6 +78,9 @@ public:
 	Field*		get_field(const t_config_option_key& opt_key, int opt_index = -1) const;
 	bool		set_value(const t_config_option_key& opt_key, const boost::any& value);
 	ConfigOptionsGroupShp	new_optgroup(const wxString& title, int noncommon_label_width = -1);
+#if ENABLE_VALIDATE_CUSTOM_GCODE
+	const ConfigOptionsGroupShp	get_optgroup(const wxString& title) const;
+#endif // ENABLE_VALIDATE_CUSTOM_GCODE
 
 	bool		set_item_colour(const wxColour *clr) {
 		if (m_item_color != clr) {
@@ -112,6 +115,7 @@ protected:
 	const wxString		m_title;
 	TabPresetComboBox*	m_presets_choice;
 	ScalableButton*		m_search_btn;
+	ScalableButton*		m_btn_compare_preset;
 	ScalableButton*		m_btn_save_preset;
 	ScalableButton*		m_btn_delete_preset;
 	ScalableButton*		m_btn_edit_ph_printer {nullptr};
@@ -290,6 +294,7 @@ public:
 	void		OnTreeSelChange(wxTreeEvent& event);
 	void		OnKeyDown(wxKeyEvent& event);
 
+	void		compare_preset();
 	void		save_preset(std::string name = std::string(), bool detach = false);
 	void		delete_preset();
 	void		toggle_show_hide_incompatible();
@@ -381,7 +386,6 @@ public:
 private:
 	ogStaticText*	m_recommended_thin_wall_thickness_description_line = nullptr;
 	ogStaticText*	m_top_bottom_shell_thickness_explanation = nullptr;
-	bool			m_support_material_overhangs_queried = false;
 };
 
 class TabFilament : public Tab
@@ -408,6 +412,10 @@ public:
 	void		update() override;
 	void		clear_pages() override;
     bool 		supports_printer_technology(const PrinterTechnology tech) override { return tech == ptFFF; }
+
+#if ENABLE_VALIDATE_CUSTOM_GCODE
+	bool        validate_custom_gcodes() const;
+#endif // ENABLE_VALIDATE_CUSTOM_GCODE
 };
 
 class TabPrinter : public Tab
@@ -456,7 +464,7 @@ public:
     void        update_pages(); // update m_pages according to printer technology
 	void		extruders_count_changed(size_t extruders_count);
 	PageShp		build_kinematics_page();
-	void		build_unregular_pages();
+	void		build_unregular_pages(bool from_initial_build = false);
 	void		on_preset_loaded() override;
 	void		init_options_list() override;
 	void		msw_rescale() override;
@@ -466,6 +474,10 @@ public:
 	wxSizer*	create_bed_shape_widget(wxWindow* parent);
 	void		cache_extruder_cnt();
 	void		apply_extruder_cnt_from_cache();
+
+#if ENABLE_VALIDATE_CUSTOM_GCODE
+	bool        validate_custom_gcodes() const;
+#endif // ENABLE_VALIDATE_CUSTOM_GCODE
 };
 
 class TabSLAMaterial : public Tab

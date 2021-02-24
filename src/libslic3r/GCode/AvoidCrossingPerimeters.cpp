@@ -283,8 +283,10 @@ static size_t avoid_perimeters_inner(const AvoidCrossingPerimeters::Boundary &bo
         AllIntersectionsVisitor visitor(edge_grid, intersections, Line(start, end));
         edge_grid.visit_cells_intersecting_line(start, end, visitor);
         Vec2d dir = (end - start).cast<double>();
-        for (Intersection &intersection : intersections)
-            intersection.distance = boundary.boundaries_params[intersection.border_idx][intersection.line_idx];
+        for (Intersection &intersection : intersections) {
+            float dist_from_line_begin = (intersection.point - boundary.boundaries[intersection.border_idx][intersection.line_idx]).cast<float>().norm();
+            intersection.distance = boundary.boundaries_params[intersection.border_idx][intersection.line_idx] + dist_from_line_begin;
+        }
         std::sort(intersections.begin(), intersections.end(), [dir](const auto &l, const auto &r) { return (r.point - l.point).template cast<double>().dot(dir) > 0.; });
     }
 
@@ -568,7 +570,7 @@ static void precompute_polygon_distances(const Polygon &polygon, std::vector<flo
     polygon_distances_out.assign(polygon.size() + 1, 0.f);
     for (size_t point_idx = 1; point_idx < polygon.size(); ++point_idx)
         polygon_distances_out[point_idx] = polygon_distances_out[point_idx - 1] + (polygon[point_idx].cast<float>() - polygon[point_idx - 1].cast<float>()).norm();
-    polygon_distances_out.back() = polygon_distances_out[polygon.size() - 1] + (polygon.last_point().cast<float>() - polygon.first_point().cast<float>()).norm();
+    polygon_distances_out.back() = polygon_distances_out[polygon.size() - 1] + (polygon.points.back().cast<float>() - polygon.points.front().cast<float>()).norm();
 }
 
 static void precompute_expolygon_distances(const ExPolygon &ex_polygon, std::vector<std::vector<float>> &expolygon_distances_out)
@@ -596,7 +598,7 @@ static std::vector<float> contour_distance(const EdgeGrid::Grid     &grid,
     {
         struct Visitor {
             Visitor(const EdgeGrid::Grid &grid, const size_t contour_idx, const std::vector<float> &polygon_distances, double dist_same_contour_accept, double dist_same_contour_reject) :
-                grid(grid), idx_contour(contour_idx), contour(*grid.contours()[contour_idx]), boundary_parameters(polygon_distances), dist_same_contour_accept(dist_same_contour_accept), dist_same_contour_reject(dist_same_contour_reject) {}
+                grid(grid), idx_contour(contour_idx), contour(grid.contours()[contour_idx]), boundary_parameters(polygon_distances), dist_same_contour_accept(dist_same_contour_accept), dist_same_contour_reject(dist_same_contour_reject) {}
 
             void init(const Points &contour, const Point &apoint)
             {
@@ -630,12 +632,12 @@ static std::vector<float> contour_distance(const EdgeGrid::Grid     &grid,
                             // Complex case: The closest segment originates from the same contour as the starting point.
                             // Reject the closest point if its distance along the contour is reasonable compared to the current contour bisector
                             // (this->pt, foot).
-                            const Slic3r::Points &ipts      = *grid.contours()[it_contour_and_segment->first];
-                            double                param_lo  = boundary_parameters[this->idx_point];
-                            double                param_hi  = t * sqrt(l2);
-                            double                param_end = boundary_parameters.back();
+                            const EdgeGrid::Contour &contour   = grid.contours()[it_contour_and_segment->first];
+                            double                   param_lo  = boundary_parameters[this->idx_point];
+                            double                   param_hi  = t * sqrt(l2);
+                            double                   param_end = boundary_parameters.back();
                             const size_t ipt = it_contour_and_segment->second;
-                            if (ipt + 1 < ipts.size())
+                            if (contour.begin() + ipt + 1 < contour.end())
                                 param_hi += boundary_parameters[ipt > 0 ? ipt - 1 : 0];
                             if (param_lo > param_hi)
                                 std::swap(param_lo, param_hi);
@@ -649,9 +651,9 @@ static std::vector<float> contour_distance(const EdgeGrid::Grid     &grid,
                                 // longer than the bisector. That is, the path shall not bulge away from the bisector too much.
                                 // Bulge is estimated by 0.6 of the circle circumference drawn around the bisector.
                                 // Test whether the contour is convex or concave.
-                                bool inside = (t == 0.) ? this->inside_corner(ipts, ipt, this->point) :
-                                              (t == 1.) ? this->inside_corner(ipts, ipt + 1 == ipts.size() ? 0 : ipt + 1, this->point) :
-                                                          this->left_of_segment(ipts, ipt, this->point);
+                                bool inside = (t == 0.) ? this->inside_corner(contour, ipt, this->point) :
+                                              (t == 1.) ? this->inside_corner(contour, contour.segment_idx_next(ipt), this->point) :
+                                                          this->left_of_segment(contour, ipt, this->point);
                                 accept      = inside && dist_along_contour > 0.6 * M_PI * dist;
                             }
                         }
@@ -668,7 +670,7 @@ static std::vector<float> contour_distance(const EdgeGrid::Grid     &grid,
 
             const EdgeGrid::Grid 			   &grid;
             const size_t 		  				idx_contour;
-            const Points					   &contour;
+            const EdgeGrid::Contour            &contour;
 
             const std::vector<float>           &boundary_parameters;
             const double                        dist_same_contour_accept;
@@ -691,25 +693,27 @@ static std::vector<float> contour_distance(const EdgeGrid::Grid     &grid,
                 return Vec2d(-v1.y() - v2.y(), v1.x() + v2.x());
             }
 
-            static bool inside_corner(const Slic3r::Points &contour, size_t i, const Point &pt_oposite)
+            static bool inside_corner(const EdgeGrid::Contour &contour, size_t i, const Point &pt_oposite)
             {
                 const Vec2d pt         = pt_oposite.cast<double>();
-                size_t      iprev      = prev_idx_modulo(i, contour);
-                size_t      inext      = next_idx_modulo(i, contour);
-                Vec2d       v1         = (contour[i] - contour[iprev]).cast<double>();
-                Vec2d       v2         = (contour[inext] - contour[i]).cast<double>();
-                bool        left_of_v1 = cross2(v1, pt - contour[iprev].cast<double>()) > 0.;
-                bool        left_of_v2 = cross2(v2, pt - contour[i].cast<double>()) > 0.;
+                const Point &pt_prev   = contour.segment_prev(i);
+                const Point &pt_this   = contour.segment_start(i);
+                const Point &pt_next   = contour.segment_end(i);
+                Vec2d       v1         = (pt_this - pt_prev).cast<double>();
+                Vec2d       v2         = (pt_next - pt_this).cast<double>();
+                bool        left_of_v1 = cross2(v1, pt - pt_prev.cast<double>()) > 0.;
+                bool        left_of_v2 = cross2(v2, pt - pt_this.cast<double>()) > 0.;
                 return cross2(v1, v2) > 0 ? left_of_v1 && left_of_v2 : // convex corner
                                             left_of_v1 || left_of_v2;                   // concave corner
             }
 
-            static bool left_of_segment(const Slic3r::Points &contour, size_t i, const Point &pt_oposite)
+            static bool left_of_segment(const EdgeGrid::Contour &contour, size_t i, const Point &pt_oposite)
             {
-                const Vec2d pt    = pt_oposite.cast<double>();
-                size_t      inext = next_idx_modulo(i, contour);
-                Vec2d       v     = (contour[inext] - contour[i]).cast<double>();
-                return cross2(v, pt - contour[i].cast<double>()) > 0.;
+                const Vec2d  pt      = pt_oposite.cast<double>();
+                const Point &pt_this = contour.segment_start(i);
+                const Point &pt_next = contour.segment_end(i);
+                Vec2d        v       = (pt_next - pt_this).cast<double>();
+                return cross2(v, pt - pt_this.cast<double>()) > 0.;
             }
         } visitor(grid, contour_idx, poly_distances, 0.5 * compensation * M_PI, search_radius);
 
@@ -727,10 +731,11 @@ static std::vector<float> contour_distance(const EdgeGrid::Grid     &grid,
 
 // Polygon offset which ensures that if a polygon breaks up into several separate parts, the original polygon will be used in these places.
 // ExPolygons are handled one by one so returned ExPolygons could intersect.
-static ExPolygons inner_offset(const ExPolygons &ex_polygons, double offset, double min_contour_width = scale_(0.001))
+static ExPolygons inner_offset(const ExPolygons &ex_polygons, double offset)
 {
-    double     search_radius  = 2. * (offset + min_contour_width);
-    ExPolygons ex_poly_result = ex_polygons;
+    double     min_contour_width = 2. * offset + SCALED_EPSILON;
+    double     search_radius     = 2. * (offset + min_contour_width);
+    ExPolygons ex_poly_result    = ex_polygons;
     resample_expolygons(ex_poly_result, offset / 2);
 
     for (ExPolygon &ex_poly : ex_poly_result) {

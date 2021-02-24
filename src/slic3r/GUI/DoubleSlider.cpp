@@ -646,8 +646,16 @@ wxString Control::get_label(int tick, LabelType label_type/* = ltHeightWithLayer
     if (value >= m_values.size())
         return "ErrVal";
 
+#if ENABLE_GCODE_LINES_ID_IN_H_SLIDER
+    if (m_draw_mode == dmSequentialGCodeView) {
+        return (Slic3r::GUI::get_app_config()->get("seq_top_gcode_indices") == "1") ?
+            wxString::Format("%lu", static_cast<unsigned long>(m_alternate_values[value])) :
+            wxString::Format("%lu", static_cast<unsigned long>(m_values[value]));
+    }
+#else
     if (m_draw_mode == dmSequentialGCodeView)
         return wxString::Format("%lu", static_cast<unsigned long>(m_values[value]));
+#endif // ENABLE_GCODE_LINES_ID_IN_H_SLIDER
     else {
         if (label_type == ltEstimatedTime) {
             return (value < m_layers_times.size()) ? short_and_splitted_time(get_time_dhms(m_layers_times[value])) : "";
@@ -1550,9 +1558,8 @@ void Control::move_current_thumb(const bool condition)
     if (accelerator > 0)
         delta *= accelerator;
 
-#if ENABLE_ARROW_KEYS_WITH_SLIDERS
-    if (m_selection == ssUndef) m_selection = ssHigher;
-#endif // ENABLE_ARROW_KEYS_WITH_SLIDERS
+    if (m_selection == ssUndef)
+        m_selection = ssHigher;
 
     if (m_selection == ssLower) {
         m_lower_value -= delta;
@@ -1614,26 +1621,17 @@ void Control::OnKeyDown(wxKeyEvent &event)
             if (key == WXK_LEFT || key == WXK_RIGHT)
                 move_current_thumb(key == WXK_LEFT);
             else if (key == WXK_UP || key == WXK_DOWN) {
-#if ENABLE_ARROW_KEYS_WITH_SLIDERS
                 if (key == WXK_DOWN)
                     m_selection = ssHigher;
                 else if (key == WXK_UP && is_lower_thumb_editable())
                     m_selection = ssLower;
-#else
-                if (key == WXK_UP)
-                    m_selection = ssHigher;
-                else if (key == WXK_DOWN && is_lower_thumb_editable())
-                    m_selection = ssLower;
-#endif // ENABLE_ARROW_KEYS_WITH_SLIDERS
                 Refresh();
             }
         }
-#if ENABLE_ARROW_KEYS_WITH_SLIDERS
         else {
             if (key == WXK_LEFT || key == WXK_RIGHT)
                 move_current_thumb(key == WXK_LEFT);
         }
-#endif // ENABLE_ARROW_KEYS_WITH_SLIDERS
     }
     else {
         if (m_is_focused) {
@@ -1647,12 +1645,10 @@ void Control::OnKeyDown(wxKeyEvent &event)
             else if (key == WXK_UP || key == WXK_DOWN)
                 move_current_thumb(key == WXK_UP);
         }
-#if ENABLE_ARROW_KEYS_WITH_SLIDERS
         else {
             if (key == WXK_UP || key == WXK_DOWN)
                 move_current_thumb(key == WXK_UP);
         }
-#endif // ENABLE_ARROW_KEYS_WITH_SLIDERS
     }
 
     event.Skip(); // !Needed to have EVT_CHAR generated as well
@@ -1889,7 +1885,7 @@ void Control::show_cog_icon_context_menu()
             []() { return true; }, [this]() { return m_extra_style & wxSL_VALUE_LABEL; }, GUI::wxGetApp().plater());
 
         append_submenu(&menu, ruler_mode_menu, wxID_ANY, _L("Ruler mode"), _L("Set ruler mode"), "",
-            [this]() { return true; }, this);
+            []() { return true; }, this);
     }
 
     if (m_mode == MultiAsSingle && m_draw_mode == dmRegular)

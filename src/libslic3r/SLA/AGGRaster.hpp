@@ -136,7 +136,7 @@ public:
               const TColor &    background,
               GammaFn &&        gammafn)
         : m_resolution(res)
-        , m_pxdim_scaled(SCALING_FACTOR / pd.w_mm, SCALING_FACTOR / pd.h_mm)
+        , m_pxdim_scaled(SCALING_FACTOR, SCALING_FACTOR)
         , m_buf(res.pixels())
         , m_rbuf(reinterpret_cast<TValue *>(m_buf.data()),
                  unsigned(res.width_px),
@@ -147,6 +147,12 @@ public:
         , m_renderer(m_raw_renderer)
         , m_trafo(trafo)
     {
+        // Visual Studio compiler gives warnings about possible division by zero.
+        assert(pd.w_mm != 0 && pd.h_mm != 0);
+        if (pd.w_mm != 0 && pd.h_mm != 0) {
+            m_pxdim_scaled.w_mm /= pd.w_mm;
+            m_pxdim_scaled.h_mm /= pd.h_mm;
+        }
         m_renderer.color(foreground);
         clear(background);
         

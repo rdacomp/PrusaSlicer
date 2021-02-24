@@ -15,7 +15,7 @@ static constexpr float ENFORCER_BLOCKER_PENALTY = 100;
 
 // In case there are custom enforcers/blockers, the loop polygon shall always have
 // sides smaller than this (so it isn't limited to original resolution).
-static constexpr float MINIMAL_POLYGON_SIDE = scale_(0.2f);
+static constexpr float MINIMAL_POLYGON_SIDE = scaled<float>(0.2f);
 
 // When spAligned is active and there is a support enforcer,
 // add this penalty to its center.
@@ -664,7 +664,7 @@ static std::vector<size_t> find_enforcer_centers(const Polygon& polygon,
     if (polygon.size() < 2 || enforcers_idxs.empty())
         return out;
 
-    auto get_center_idx = [&polygon, &lengths](size_t start_idx, size_t end_idx) -> size_t {
+    auto get_center_idx = [&lengths](size_t start_idx, size_t end_idx) -> size_t {
         assert(end_idx >= start_idx);
         if (start_idx == end_idx)
             return start_idx;
@@ -750,35 +750,36 @@ void SeamPlacer::apply_custom_seam(const Polygon& polygon, size_t po_idx,
         }
     }
 
-////////////////////////
-//    std::ostringstream os;
-//    os << std::setw(3) << std::setfill('0') << layer_id;
-//    int a = scale_(30.);
-//    SVG svg("custom_seam" + os.str() + ".svg", BoundingBox(Point(-a, -a), Point(a, a)));
-//    //if (! m_enforcers[po_idx].empty())
-//    //    svg.draw(m_enforcers[po_idx][layer_id].polys, "blue");
-//    //if (! m_blockers[po_idx].empty())
-//    //    svg.draw(m_blockers[po_idx][layer_id].polys, "red");
+#if 0
+    std::ostringstream os;
+    os << std::setw(3) << std::setfill('0') << layer_id;
+    int a = scale_(30.);
+    SVG svg("custom_seam" + os.str() + ".svg", BoundingBox(Point(-a, -a), Point(a, a)));
+    if (! m_enforcers[po_idx].empty())
+        svg.draw(m_enforcers[po_idx][layer_id].polys, "blue");
+    if (! m_blockers[po_idx].empty())
+        svg.draw(m_blockers[po_idx][layer_id].polys, "red");
+
+    if (! blockers_idxs.empty()) {
+        ;
+    }
 
 
+    size_t min_idx = std::min_element(penalties.begin(), penalties.end()) - penalties.begin();
 
-//    size_t min_idx = std::min_element(penalties.begin(), penalties.end()) - penalties.begin();
-
-//    //svg.draw(polygon.points[idx_min], "red", 6e5);
-//    for (size_t i=0; i<polygon.points.size(); ++i) {
-//        std::string fill;
-//        coord_t size = 0;
-//        if (min_idx == i) {
-//            fill = "yellow";
-//            size = 5e5;
-//        } else
-//            fill = (std::find(enforcers_idxs.begin(), enforcers_idxs.end(), i) != enforcers_idxs.end() ? "green" : "black");
-//        if (i != 0)
-//            svg.draw(polygon.points[i], fill, size);
-//        else
-//            svg.draw(polygon.points[i], "red", 5e5);
-//    }
-//////////////////////
+    for (size_t i=0; i<polygon.points.size(); ++i) {
+        std::string fill;
+        coord_t size = 5e5;
+        if (min_idx == i)
+            fill = "yellow";
+        else
+            fill = (std::find(blockers_idxs.begin(), blockers_idxs.end(), i) != blockers_idxs.end() ? "green" : "black");
+        if (i != 0)
+            svg.draw(polygon.points[i], fill, size);
+        else
+            svg.draw(polygon.points[i], "red", 5e5);
+    }
+#endif
 
 }
 
@@ -786,15 +787,15 @@ void SeamPlacer::apply_custom_seam(const Polygon& polygon, size_t po_idx,
 
 std::optional<Point> SeamHistory::get_last_seam(const PrintObject* po, size_t layer_id, const BoundingBox& island_bb)
 {
-    assert(layer_id >= m_layer_id);
-    if (layer_id > m_layer_id) {
+    assert(layer_id >= m_layer_id || layer_id == 0);
+    if (layer_id != m_layer_id) {
         // Get seam was called for different layer than last time.
+        if (layer_id == 0) // seq printing
+            m_data_this_layer.clear();
         m_data_last_layer = m_data_this_layer;
         m_data_this_layer.clear();
         m_layer_id = layer_id;
     }
-
-
 
     std::optional<Point> out;
 

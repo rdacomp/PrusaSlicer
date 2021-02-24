@@ -28,6 +28,7 @@ class ModelInstance;
 class Print;
 class SLAPrint;
 enum SLAPrintObjectStep : unsigned int;
+enum class ConversionType : int;
 
 using ModelInstancePtrs = std::vector<ModelInstance*>;
 
@@ -150,10 +151,8 @@ public:
     std::vector<size_t> load_files(const std::vector<boost::filesystem::path>& input_files, bool load_model = true, bool load_config = true, bool imperial_units = false);
     // To be called when providing a list of files to the GUI slic3r on command line.
     std::vector<size_t> load_files(const std::vector<std::string>& input_files, bool load_model = true, bool load_config = true, bool imperial_units = false);
-#if ENABLE_DRAG_AND_DROP_FIX
     // to be called on drag and drop
     bool load_files(const wxArrayString& filenames);
-#endif // ENABLE_DRAG_AND_DROP_FIX
 
     const wxString& get_last_loaded_gcode() const { return m_last_loaded_gcode; }
 
@@ -191,7 +190,7 @@ public:
     void fill_bed_with_instances();
     bool is_selection_empty() const;
     void scale_selection_to_fit_print_volume();
-    void convert_unit(bool from_imperial_unit);
+    void convert_unit(ConversionType conv_type);
 
     void cut(size_t obj_idx, size_t instance_idx, coordf_t z, bool keep_upper = true, bool keep_lower = true, bool rotate_lower = false);
 

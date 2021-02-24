@@ -11,10 +11,6 @@ class PrintObject;
 class PrintConfig;
 class PrintObjectConfig;
 
-// how much we extend support around the actual contact area
-//FIXME this should be dependent on the nozzle diameter!
-#define SUPPORT_MATERIAL_MARGIN 1.5	
-
 // This class manages raft and supports for a single PrintObject.
 // Instantiated by Slic3r::Print::Object->_support_material()
 // This class is instantiated before the slicing starts as Object.pm will query
@@ -151,7 +147,7 @@ public:
 	// Is raft enabled?
 	bool 		has_raft() 					const { return m_slicing_params.has_raft(); }
 	// Has any support?
-	bool 		has_support()				const { return m_object_config->support_material.value; }
+	bool 		has_support()				const { return m_object_config->support_material.value || m_object_config->support_material_enforce_layers; }
 	bool 		build_plate_only() 			const { return this->has_support() && m_object_config->support_material_buildplate_only.value; }
 
 	bool 		synchronize_layers()		const { return m_slicing_params.soluble_interface && m_object_config->support_material_synchronize_layers.value; }
@@ -196,17 +192,21 @@ private:
 	// Generate raft layers, also expand the 1st support layer
 	// in case there is no raft layer to improve support adhesion.
     MyLayersPtr generate_raft_base(
+    	const PrintObject   &object,
 	    const MyLayersPtr   &top_contacts,
 	    const MyLayersPtr   &interface_layers,
 	    const MyLayersPtr   &base_layers,
 	    MyLayerStorage      &layer_storage) const;
 
-    // Turn some of the base layers into interface layers.
-	MyLayersPtr generate_interface_layers(
+	// Turn some of the base layers into base interface layers.
+	// For soluble interfaces with non-soluble bases, print maximum two first interface layers with the base
+	// extruder to improve adhesion of the soluble filament to the base.
+	std::pair<MyLayersPtr, MyLayersPtr> generate_interface_layers(
 	    const MyLayersPtr   &bottom_contacts,
 	    const MyLayersPtr   &top_contacts,
 	    MyLayersPtr         &intermediate_layers,
 	    MyLayerStorage      &layer_storage) const;
+	
 
 	// Trim support layers by an object to leave a defined gap between
 	// the support volume and the object.
@@ -224,12 +224,13 @@ private:
 
 	// Produce the actual G-code.
 	void generate_toolpaths(
-        const PrintObject	&object,
+		SupportLayerPtrs    &support_layers,
         const MyLayersPtr 	&raft_layers,
         const MyLayersPtr   &bottom_contacts,
         const MyLayersPtr   &top_contacts,
         const MyLayersPtr   &intermediate_layers,
-        const MyLayersPtr   &interface_layers) const;
+		const MyLayersPtr   &interface_layers,
+        const MyLayersPtr   &base_interface_layers) const;
 
 	// Following objects are not owned by SupportMaterial class.
 	const PrintObject 		*m_object;
@@ -246,7 +247,7 @@ private:
 	bool 				 m_can_merge_support_regions;
 
     coordf_t 			 m_support_layer_height_min;
-	coordf_t		 	 m_support_layer_height_max;
+//	coordf_t		 	 m_support_layer_height_max;
 
 	coordf_t			 m_gap_xy;
 };

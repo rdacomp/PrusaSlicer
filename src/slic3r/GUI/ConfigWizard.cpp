@@ -304,21 +304,28 @@ PrinterPicker::PrinterPicker(wxWindow *parent, const VendorProfile &vendor, wxSt
     }
     title_sizer->AddStretchSpacer();
 
-    if (/*titles.size() > 1*/is_variants) {
+    if (titles.size() > 1 || is_variants) {
         // It only makes sense to add the All / None buttons if there's multiple printers
-
+        // All Standard button is added when there are more variants for at least one printer
         auto *sel_all_std = new wxButton(this, wxID_ANY, titles.size() > 1 ? _L("All standard") : _L("Standard"));
         auto *sel_all = new wxButton(this, wxID_ANY, _L("All"));
         auto *sel_none = new wxButton(this, wxID_ANY, _L("None"));
-        sel_all_std->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &event) { this->select_all(true, false); });
+        if (is_variants) 
+            sel_all_std->Bind(wxEVT_BUTTON, [this](const wxCommandEvent& event) { this->select_all(true, false); });
         sel_all->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &event) { this->select_all(true, true); });
         sel_none->Bind(wxEVT_BUTTON, [this](const wxCommandEvent &event) { this->select_all(false); });
-        title_sizer->Add(sel_all_std, 0, wxRIGHT, BTN_SPACING);
+        if (is_variants) 
+            title_sizer->Add(sel_all_std, 0, wxRIGHT, BTN_SPACING);
         title_sizer->Add(sel_all, 0, wxRIGHT, BTN_SPACING);
         title_sizer->Add(sel_none);
 
         // fill button indexes used later for buttons rescaling
-        m_button_indexes = { sel_all_std->GetId(), sel_all->GetId(), sel_none->GetId() };
+        if (is_variants)
+            m_button_indexes = { sel_all_std->GetId(), sel_all->GetId(), sel_none->GetId() };
+        else {
+            sel_all_std->Destroy();
+            m_button_indexes = { sel_all->GetId(), sel_none->GetId() };
+        }
     }
 
     sizer->Add(title_sizer, 0, wxEXPAND | wxBOTTOM, BTN_SPACING);
@@ -1494,6 +1501,7 @@ ConfigWizardIndex::ConfigWizardIndex(wxWindow *parent)
     sizer->AddStretchSpacer();
     sizer->Add(logo);
     SetSizer(sizer);
+    logo_height = logo->GetBitmap().GetHeight();
 
     Bind(wxEVT_PAINT, &ConfigWizardIndex::on_paint, this);
     Bind(wxEVT_MOTION, &ConfigWizardIndex::on_mouse_move, this);
@@ -1610,15 +1618,15 @@ void ConfigWizardIndex::on_paint(wxPaintEvent & evt)
 {
     const auto size = GetClientSize();
     if (size.GetHeight() == 0 || size.GetWidth() == 0) { return; }
-
+   
     wxPaintDC dc(this);
-
+    
     const auto bullet_w = bullet_black.bmp().GetSize().GetWidth();
     const auto bullet_h = bullet_black.bmp().GetSize().GetHeight();
     const int yoff_icon = bullet_h < em_h ? (em_h - bullet_h) / 2 : 0;
     const int yoff_text = bullet_h > em_h ? (bullet_h - em_h) / 2 : 0;
     const int yinc = item_height();
-
+   
     int index_width = 0;
 
     unsigned y = 0;
@@ -1646,6 +1654,11 @@ void ConfigWizardIndex::on_paint(wxPaintEvent & evt)
             Refresh();
         });
     }
+
+    if ((int)y + logo_height > size.GetHeight())
+        logo->Hide();
+    else
+        logo->Show();
 }
 
 void ConfigWizardIndex::on_mouse_move(wxMouseEvent &evt)
@@ -1872,7 +1885,7 @@ void ConfigWizard::priv::load_vendors()
 		std::map<std::string, std::string> section_new;
 		if (app_config->has_section(section_name)) {
 			const std::map<std::string, std::string> &section_old = app_config->get_section(section_name);
-			for (const std::pair<std::string, std::string> &material_name_and_installed : section_old)
+            for (const auto& material_name_and_installed : section_old)
 				if (material_name_and_installed.second == "1") {
 					// Material is installed. Resolve it in bundles.
                     size_t num_found = 0;
@@ -2248,7 +2261,7 @@ bool ConfigWizard::priv::check_and_install_missing_materials(Technology technolo
 	            	if ((only_for_model_id.empty() || only_for_model_id == printer_model->id) &&
 	            		printer_models_without_material.find(printer_model) == printer_models_without_material.end()) {
                     	bool has_material = false;
-			            for (const std::pair<std::string, std::string> &preset : appconfig_presets) {
+                        for (const auto& preset : appconfig_presets) {
 			            	if (preset.second == "1") {
 			            		const Preset *material = materials.find_preset(preset.first, false);
 			            		if (material != nullptr && is_compatible_with_printer(PresetWithVendorProfile(*material, nullptr), PresetWithVendorProfile(printer, nullptr))) {
