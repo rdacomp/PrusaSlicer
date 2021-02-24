@@ -133,6 +133,13 @@ PresetBundle& PresetBundle::operator=(const PresetBundle &rhs)
 
     return *this;
 }
+PresetBundle::PresetBundle(const std::vector<CommonBundleInfo>& ctr) : PresetBundle()
+{
+    for (const auto & tr : ctr)
+    {
+        common_bundles.emplace_back(tr);
+    }
+}
 
 void PresetBundle::reset(bool delete_files)
 {
@@ -245,6 +252,11 @@ std::string PresetBundle::load_system_presets()
     // Here the vendor specific read only Config Bundles are stored.
     boost::filesystem::path dir = (boost::filesystem::path(data_dir()) / "vendor").make_preferred();
     std::string errors_cummulative;
+    // load common presets first
+    for (auto& dir_entry : boost::filesystem::directory_iterator(dir))
+        if (Slic3r::is_ini_file(dir_entry)) {
+            this->load_common_configbundle(dir_entry.path().string());
+        }
     bool        first = true;
     for (auto &dir_entry : boost::filesystem::directory_iterator(dir))
         if (Slic3r::is_ini_file(dir_entry)) {
@@ -260,7 +272,7 @@ std::string PresetBundle::load_system_presets()
                 } else {
                     // Load the other vendor configs, merge them with this PresetBundle.
                     // Report duplicate profiles.
-                    PresetBundle other;
+                    PresetBundle other(this->common_bundles);
                     other.load_configbundle(dir_entry.path().string(), LOAD_CFGBNDLE_SYSTEM);
                     std::vector<std::string> duplicates = this->merge_presets(std::move(other));
                     if (! duplicates.empty()) {
@@ -1111,6 +1123,14 @@ static void flatten_configbundle_hierarchy(boost::property_tree::ptree &tree, co
     flatten_configbundle_hierarchy(tree, "printer",         preset_bundle ? preset_bundle->printers.system_preset_names()      : std::vector<std::string>());
 }
 
+static void print_ptree(const boost::property_tree::ptree& tree)
+{
+    for (const auto& section : tree) {
+        BOOST_LOG_TRIVIAL(error) <<section.first<<" " << section.second.size();
+        //print_ptree(section.second, depth+1);
+    }
+}
+
 // Load a config bundle file, into presets and store the loaded presets into separate files
 // of the local configuration directory.
 size_t PresetBundle::load_configbundle(const std::string &path, unsigned int flags)
@@ -1132,8 +1152,9 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
     const VendorProfile *vendor_profile = nullptr;
     if (flags & (LOAD_CFGBNDLE_SYSTEM | LOAD_CFGBUNDLE_VENDOR_ONLY)) {
         auto vp = VendorProfile::from_ini(tree, path);
-        if (vp.name == "common" || vp.name == "common_filaments" || vp.name == "common_materials"){
-            return load_common_configbundle(path, flags, tree, vp);
+        if (vp.name == "common" || vp.name == "common_filaments" || vp.name == "common_materials"){ // common profiles should be already loaded
+            //return load_common_configbundle(path, flags, tree, vp);
+            return 0;
         }
         else if (vp.models.size() == 0) {
             BOOST_LOG_TRIVIAL(error) << boost::format("Vendor bundle: `%1%`: No printer model defined.") % path;
@@ -1148,11 +1169,31 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
     if (flags & LOAD_CFGBUNDLE_VENDOR_ONLY) {
         return 0;
     }
-
+    
+    // 1.1) If common profile is being inherited, find ptree of such common profile and branch it into current tree
+    if (flags & LOAD_CFGBNDLE_SYSTEM)
+    {
+        if (vendor_profile->using_common_base_profile || vendor_profile->using_common_filaments_profile || vendor_profile->using_common_materials_profile) {
+            for (const auto& cbn : common_bundles) {
+                if (cbn.name == "common" && cbn.version == vendor_profile->common_base_version) {
+                    boost::nowide::ifstream path(cbn.path);
+                    pt::ptree               ctr;
+                    pt::read_ini(path, ctr);
+                    for (const auto& section : ctr) {
+                        if (section.first != "vendor")
+                            tree.add_child(section.first, section.second);
+                    }
+                    //print_ptree(ctr);
+                    break;
+                }
+            }
+        }
+    }
+    
     // 1.5) Flatten the config bundle by applying the inheritance rules. Internal profiles (with names starting with '*') are removed.
     // If loading a user config bundle, do not flatten with the system profiles, but keep the "inherits" flag intact.
     flatten_configbundle_hierarchy(tree, ((flags & LOAD_CFGBNDLE_SYSTEM) == 0) ? this : nullptr);
-
+    print_ptree(tree);
     // 2) Parse the property_tree, extract the active preset names and the profiles, save them into local config files.
     // Parse the obsolete preset names, to be deleted when upgrading from the old configuration structure.
     std::vector<std::string> loaded_prints;
@@ -1244,7 +1285,7 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
             continue;
         if (presets != nullptr) {
             // Load the print, filament or printer preset.
-            const DynamicPrintConfig *default_config = nullptr;
+             const DynamicPrintConfig *default_config = nullptr;
             DynamicPrintConfig        config;
             std::string 			  alias_name;
             std::vector<std::string>  renamed_from;
@@ -1432,14 +1473,34 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
     return presets_loaded + ph_printers_loaded;
 }
 
-size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned int flags, boost::property_tree::ptree& tree, VendorProfile& vp)
+size_t PresetBundle::load_common_configbundle(const std::string& path)
 {
+    namespace pt = boost::property_tree;
+    pt::ptree tree;
+    boost::nowide::ifstream ifs(path);
+    try {
+        pt::read_ini(ifs, tree);
+    }
+    catch (const boost::property_tree::ini_parser::ini_parser_error& err) {
+        throw Slic3r::RuntimeError(format("Failed loading config bundle \"%1%\"\nError: \"%2%\" at line %3%", path, err.message(), err.line()).c_str());
+    }
+
+    const VendorProfile* vendor_profile = nullptr;
+    auto vp = VendorProfile::from_ini(tree, path);
+    // return if not common profile
+    // TODO: should save tree for later load?
+    if (vp.name != "common" && vp.name != "common_filaments" && vp.name != "common_materials")
+        return 0;
+
+    PresetBundle::CommonBundleInfo tr(vp.name, vp.config_version, path);
+    common_bundles.emplace_back(tr);
+    /*
     const VendorProfile* vendor_profile = &this->vendors.insert({ vp.id, vp }).first->second;
 
     // FIXME 
     // Follows copied code from load_configbundle
 
-    
+    print_ptree(tree);
     // 1.5) Flatten the config bundle by applying the inheritance rules. Internal profiles (with names starting with '*') are removed.
      // If loading a user config bundle, do not flatten with the system profiles, but keep the "inherits" flag intact.
     flatten_configbundle_hierarchy(tree, ((flags & LOAD_CFGBNDLE_SYSTEM) == 0) ? this : nullptr);
@@ -1457,7 +1518,7 @@ size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned 
     std::string              active_sla_material;
     std::string              active_printer;
     size_t                   presets_loaded = 0;
-    /*
+   
     for (const auto& section : tree) {
         PresetCollection* presets = nullptr;
         std::vector<std::string>* loaded = nullptr;
@@ -1673,7 +1734,7 @@ size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned 
             ++presets_loaded;
         }
     }
-     */
+     
     // 3) Activate the presets.
     if ((flags & LOAD_CFGBNDLE_SYSTEM) == 0) {
         if (!active_print.empty())
@@ -1692,8 +1753,8 @@ size_t PresetBundle::load_common_configbundle(const std::string& path, unsigned 
             this->filament_presets[i] = filaments.find_preset(active_filaments[i], true)->name;
         this->update_compatible(PresetSelectCompatibleType::Never);
     }
-
-    return presets_loaded;
+    */
+    return 1;
 }
 
 void PresetBundle::update_multi_material_filament_presets()

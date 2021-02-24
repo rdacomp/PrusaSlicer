@@ -14,10 +14,21 @@ namespace Slic3r {
 // Bundle of Print + Filament + Printer presets.
 class PresetBundle
 {
+    struct CommonBundleInfo
+    {
+        std::string                 name;
+        Semver                      version;
+        //boost::property_tree::ptree tree;
+        std::string                 path;
+        CommonBundleInfo(const std::string& n, const Semver& v, /*boost::property_tree::ptree t,*/ const std::string& p) : name(n), version(v),/* tree(t),*/ path(p) {}
+    };
+
 public:
     PresetBundle();
     PresetBundle(const PresetBundle &rhs);
     PresetBundle& operator=(const PresetBundle &rhs);
+
+    PresetBundle(const std::vector<CommonBundleInfo> &ctr);
 
     // Remove all the presets but the "-- default --".
     // Optionally remove all the files referenced by the presets from the user profile directory.
@@ -103,7 +114,7 @@ public:
     size_t                      load_configbundle(const std::string &path, unsigned int flags = LOAD_CFGBNDLE_SAVE);
     
     // Load common confing bundle, called from load_configbundle
-    size_t                      load_common_configbundle(const std::string& path, unsigned int flags, boost::property_tree::ptree& tree, VendorProfile& vp);
+    size_t                      load_common_configbundle(const std::string& path);
 
     // Export a config bundle file containing all the presets and the names of the active presets.
     void                        export_configbundle(const std::string &path, bool export_system_settings = false, bool export_physical_printers = false);
@@ -163,6 +174,11 @@ private:
 
     DynamicPrintConfig          full_fff_config() const;
     DynamicPrintConfig          full_sla_config() const;
+
+
+    
+    // common profiles bundles
+    std::vector<CommonBundleInfo> common_bundles;
 };
 
 } // namespace Slic3r
