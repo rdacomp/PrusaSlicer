@@ -2432,6 +2432,57 @@ void append_neighbor_branch(VoronoiGraph::ExPath &dst,
 }
 
 /// <summary>
+/// DTO for process node during depth search of longest path in voronoi graph
+/// </summary>
+struct NodeData
+{
+    // actual proccessed node
+    const VoronoiGraph::Node *node;
+    // distance to this node from input node
+    double distance_to_node;
+
+    // path from start point to this node
+    // last one is actual node
+    VoronoiGraph::Path act_path;
+
+    // skip node when circle start - must end at this node
+    // set --> multiple cirle could start at same node
+    // previous node should be skiped to so it is initialized with it
+    std::set<const VoronoiGraph::Node *> skip_nodes; // circle
+
+    // store all circle indexes this node is lay on
+    // used to create connected circles structure
+    std::vector<size_t> circle_indexes;
+    // When circle_indexes is not empty node lays on circle
+    // and in this node is not searching for longest path only store side
+    // branches(not part of circle)
+
+    // indexes of circle ending in this node(could be more than one)
+    std::vector<size_t> end_circle_indexes;
+    // When end_circle_indexes == circle_indexes
+    // than it is end of circle (multi circle structure) and it is processed
+
+    // contain possible continue path
+    // possible empty
+    VoronoiGraph::ExPath::SideBranches side_branches;
+public:
+    // append node to act path
+    NodeData(const VoronoiGraph::Node *node,
+             double                    distance_to_node,
+             const VoronoiGraph::Path &prev_path)
+        : node(node), distance_to_node(distance_to_node)
+    {
+        const VoronoiGraph::Node *prev_node = (prev_path.path.size() >= 1) ?
+                                                  prev_path.path.back() :
+                                                  nullptr;
+        skip_nodes = {prev_node};
+        // append actual node
+        act_path = prev_path;                    // copy
+        act_path.append(node, distance_to_node); // increase path
+    }
+};
+
+/// <summary>
 /// PRIVATE:
 /// Depth search in Voronoi graph for longest path
 /// 
@@ -2445,33 +2496,20 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
     double distance_to_node = 0.,
     const VoronoiGraph::Path &prev_path = VoronoiGraph::Path({},0.))
 {
-    const VoronoiGraph::Node *prev_node =
-        (prev_path.path.size() >= 1) ? prev_path.path.back() : nullptr;
-    // append actual node
-    VoronoiGraph::Path act_path = prev_path; // make copy
-    act_path.append(&node, distance_to_node);
-
-    VoronoiGraph::ExPath::SideBranches side_branches;
-
-    // skip node on circle when circle start at this node
-    // vector --> multiple cirle could start at same node
-    // prev node should be skiped to
-    std::set<const VoronoiGraph::Node *> skip_nodes({prev_node}); // circle
-
+    // keep data out of stack
+    std::unique_ptr<NodeData> data = std::make_unique<NodeData>(
+        &node, distance_to_node, prev_path); 
     VoronoiGraph::ExPath result;
-
-    // when search on cirle store only branches not search for longest Path
-    std::vector<size_t> circle_indexes; // connected circles
-    std::vector<size_t> end_circle_indexes;
     // Depth search for path of all neighbors --> fill paths
     for (const VoronoiGraph::Node::Neighbor &neighbor : node.neighbors) {
-        if (skip_nodes.find(neighbor.node) != skip_nodes.end())  continue;
+        if (data->skip_nodes.find(neighbor.node) != data->skip_nodes.end())
+            continue;
 
         // detection of circle
-        auto circle_opt = create_circle(act_path, neighbor);
+        auto circle_opt = create_circle(data->act_path, neighbor);
         if (circle_opt.has_value()) {
             size_t circle_index = result.circles.size();
-            circle_indexes.push_back(circle_index);
+            data->circle_indexes.push_back(circle_index);
             result.circles.emplace_back(std::move(circle_opt.value()));
             continue;
         }
@@ -2481,12 +2519,13 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
         // is next node leaf ?
         if (next_node.neighbors.size() == 1) {
             VoronoiGraph::Path side_branch({&next_node}, neighbor.edge_length);
-            side_branches.push(std::move(side_branch));
+            data->side_branches.push(std::move(side_branch));
             continue;
         }
 
         VoronoiGraph::ExPath next_path =
-            create_longest_branch_from_node(next_node, neighbor.edge_length, act_path);
+            create_longest_branch_from_node(next_node, neighbor.edge_length,
+                                            data->act_path);
 
         bool is_circle_neighbor = false;
         if (next_path.path.empty()) { // neighbor node is on circle            
@@ -2497,18 +2536,18 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
                  
                 size_t next_circle_index = &circle - &next_path.circles.front();
                 size_t circle_index = result.circles.size() + next_circle_index;
-                circle_indexes.push_back(circle_index);
+                data->circle_indexes.push_back(circle_index);
 
                 // check if this node is end of circle
                 if (circle_item == circle.path.begin()) {
-                    end_circle_indexes.push_back(circle_index);
+                    data->end_circle_indexes.push_back(circle_index);
 
                     // !! this FIX circle lenght because at detection of
                     // circle it will cost time to calculate it
-                    circle.length -= act_path.length;
+                    circle.length -= data->act_path.length;
 
                     // skip twice checking of circle
-                    skip_nodes.insert(circle.path.back());
+                    data->skip_nodes.insert(circle.path.back());
                 }              
                 is_circle_neighbor = true;
             }
@@ -2516,13 +2555,14 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
 
         append_neighbor_branch(result, next_path);   
 
-        if (!is_circle_neighbor) side_branches.push(std::move(next_path));                
+        if (!is_circle_neighbor)
+            data->side_branches.push(std::move(next_path));                
     }
 
     // remember connected circle
-    if (circle_indexes.size() > 1) {
-        for (size_t circle_index : circle_indexes) { 
-            for (size_t circle_index2 : circle_indexes) {
+    if (data->circle_indexes.size() > 1) {
+        for (size_t circle_index : data->circle_indexes) { 
+            for (size_t circle_index2 : data->circle_indexes) {
                 if (circle_index == circle_index2) continue;
                 result.connected_circle[circle_index].insert(circle_index2);
             }
@@ -2530,32 +2570,33 @@ VoronoiGraph::ExPath create_longest_branch_from_node(
     }
 
     // detect end of circles in this node
-    if (!end_circle_indexes.empty() &&
-        end_circle_indexes.size() == circle_indexes.size()) {
-        size_t circle_index = circle_indexes.front(); // possible any of them
-        side_branches.push(
+    if (!data->end_circle_indexes.empty() &&
+        data->end_circle_indexes.size() == data->circle_indexes.size()) {
+        // possible any of circle indexes
+        size_t circle_index = data->circle_indexes.front(); 
+        data->side_branches.push(
             find_longest_path_on_circles(node, circle_index, result));
 
-        circle_indexes.clear(); // resolved circles
+        data->circle_indexes.clear(); // resolved circles
     }
 
     // simple node on circle --> only input and output neighbor
-    if (side_branches.empty()) {
+    if (data->side_branches.empty()) {
         return result; 
     }
 
     // is node on unresolved circle?
-    if (!circle_indexes.empty()) {
+    if (!data->circle_indexes.empty()) {
         // not search for longest path, it will eval on end of circle
-        result.side_branches[&node] = side_branches;
+        result.side_branches[&node] = data->side_branches;
         return result;
     }
     
     // create result longest path from longest side branch
-    VoronoiGraph::Path longest_path(std::move(side_branches.top()));
-    side_branches.pop();
-    if (!side_branches.empty()) {
-        result.side_branches[&node] = side_branches;
+    VoronoiGraph::Path longest_path(std::move(data->side_branches.top()));
+    data->side_branches.pop();
+    if (!data->side_branches.empty()) {
+        result.side_branches[&node] = data->side_branches;
     }
     longest_path.path.insert(longest_path.path.begin(), &node);
     result.path = std::move(longest_path.path);
@@ -2627,51 +2668,25 @@ void reshape_longest_path(VoronoiGraph::ExPath& path) {
 }
 
 /// <summary>
-/// DTO for process node to depth search to get longest path in voronoi graph
+/// DTO for non recursive call to search of longest path
 /// </summary>
-struct CallData
+struct NodeDataWithResult : public NodeData
 {
-    // actual proccessed node
-    const VoronoiGraph::Node *node;
-    // distance to this node from input node
-    double distance_to_node;
-
-    // path from start point to this node
-    // last one is actual node
-    VoronoiGraph::Path act_path;
-
-    // skip node when circle start - must end at this node
-    // set --> multiple cirle could start at same node
-    // previous node should be skiped to so it is initialized with it
-    std::set<const VoronoiGraph::Node *> skip_nodes; // circle
-
-    // store all circle indexes this node is lay on
-    // used to create connected circles structure
-    std::vector<size_t> circle_indexes;
-    // When circle_indexes is not empty node lays on circle
-    // and in this node is not searching for longest path only store side
-    // branches(not part of circle)
-
-    // indexes of circle ending in this node(could be more than one)
-    std::vector<size_t> end_circle_indexes;
-    // When end_circle_indexes == circle_indexes
-    // than it is end of circle (multi circle structure) and it is processed
-
-    // contain possible continue path
-    // possible empty
-    VoronoiGraph::ExPath::SideBranches side_branches;
-
     // result for this node
-    VoronoiGraph::ExPath& result;
+    VoronoiGraph::ExPath &result;
 
 public:
-    CallData(VoronoiGraph::ExPath &    result,
-             const VoronoiGraph::Node *node,
-             double                    distance_to_node)
-        : result(result), node(node), distance_to_node(distance_to_node)
+    NodeDataWithResult(VoronoiGraph::ExPath &    result,
+                       const VoronoiGraph::Node *node,
+                       double                    distance_to_node,
+                       const VoronoiGraph::Path &prev_path)
+        : result(result), NodeData(node, distance_to_node, prev_path)
     {}
 };
 
+/// <summary>
+/// interface for objects inside of CallStack
+/// </summary>
 class IStackFunction
 {
 public:
@@ -2702,23 +2717,16 @@ public:
 /// <summary>
 /// call after all neighbors are processed
 /// </summary>
-class PostProcessNeighbors : public CallData , public IStackFunction
+class PostProcessNeighbors : public NodeDataWithResult , public IStackFunction
 {
 public:
     PostProcessNeighbors(
         VoronoiGraph::ExPath &    result,
         const VoronoiGraph::Node *node,
         double                    distance_to_node = 0.,
-        VoronoiGraph::Path prev_path = VoronoiGraph::Path({}, 0.) // make copy
-    ): CallData(result, node, distance_to_node)
-    {
-        const VoronoiGraph::Node *prev_node = 
-            (prev_path.path.size() >= 1) ? prev_path.path.back() : nullptr;
-        skip_nodes = {prev_node};
-        // append actual node
-        act_path = std::move(prev_path); 
-        act_path.append(node, distance_to_node);
-    }
+        const VoronoiGraph::Path& prev_path = VoronoiGraph::Path({}, 0.) // make copy
+    ): NodeDataWithResult(result, node, distance_to_node, prev_path)
+    {}
 
     virtual void process([[maybe_unused]] CallStack &call_stack)
     {
@@ -2780,10 +2788,10 @@ public:
 /// </summary>
 class PostProcessNeighbor : public IStackFunction
 {
-    CallData &data;
+    NodeDataWithResult &data;
 public:
     VoronoiGraph::ExPath neighbor_path; // data filled in EvaluateNeighbor
-    PostProcessNeighbor(CallData &data): data(data) {}
+    PostProcessNeighbor(NodeDataWithResult &data): data(data) {}
 
     virtual void process([[maybe_unused]] CallStack &call_stack)
     {
@@ -2827,11 +2835,11 @@ public:
 
 class ExpandNeighbor: public IStackFunction
 {
-    CallData &data;
+    NodeDataWithResult &data;
     const VoronoiGraph::Node::Neighbor &neighbor;
 
 public:
-    ExpandNeighbor(CallData &                          data,
+    ExpandNeighbor(NodeDataWithResult &                          data,
                    const VoronoiGraph::Node::Neighbor &neighbor)
         : data(data), neighbor(neighbor)
     {}
@@ -2888,7 +2896,7 @@ EvaluateNeighbor::EvaluateNeighbor(VoronoiGraph::ExPath &    result,
 
 void EvaluateNeighbor::process(IStackFunction::CallStack &call_stack)
 {
-    CallData &data = *post_process_neighbor;
+    NodeDataWithResult &data = *post_process_neighbor;
     call_stack.emplace(std::move(post_process_neighbor));
     for (const VoronoiGraph::Node::Neighbor &neighbor : data.node->neighbors)
         call_stack.emplace(std::make_unique<ExpandNeighbor>(data, neighbor));
@@ -3035,7 +3043,8 @@ std::vector<Point> sample_voronoi_graph(const VoronoiGraph &graph,
     // every island has to have a point on contour
     assert(start_node != nullptr);
 
-    longest_path = create_longest_path(start_node);    
+    //longest_path = create_longest_path(start_node);
+    longest_path = create_longest_path_recursive(start_node);
     if (longest_path.length < config.max_length_for_one_support_point) 
     { // create only one point in center
         // sample in center of voronoi
@@ -3276,7 +3285,7 @@ TEST_CASE("Sample small islands", "[VoronoiSkeleton]")
                                        {4 * size5, size5},
                                        {3 * size5, size5}}};
 
-    size_t count_cirlce_lines = 100; // test stack overfrow
+    size_t count_cirlce_lines = 1000; // test stack overfrow
     double r_CCW              = size / 2;
     double r_CW               = r_CCW - size / 6;
     // CCW: couter clock wise, CW: clock wise
