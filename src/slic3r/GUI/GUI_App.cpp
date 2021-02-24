@@ -121,7 +121,7 @@ public:
     }
 
     void SetText(const wxString& text)
-    {
+    {    
         set_bitmap(m_main_bitmap);
         if (!text.empty()) {
             wxBitmap bitmap(m_main_bitmap);
@@ -826,12 +826,20 @@ bool GUI_App::on_init_inner()
 #endif
         scrn->SetText(_L("Loading configuration")+ dots);
     }
-
     preset_bundle = new PresetBundle();
 
     // just checking for existence of Slic3r::data_dir is not enough : it may be an empty directory
     // supplied as argument to --datadir; in that case we should still run the wizard
-    preset_bundle->setup_directories();
+    try
+    {
+        preset_bundle->setup_directories();
+    }
+    catch (const Slic3r::RuntimeError& e)
+    {
+        scrn->Close();
+        scrn = nullptr;
+        show_error(nullptr, format(e.what()));
+    }
 
     if (is_editor()) {
 #ifdef __WXMSW__ 
@@ -868,6 +876,8 @@ bool GUI_App::on_init_inner()
     try {
         preset_bundle->load_presets(*app_config);
     } catch (const std::exception &ex) {
+        scrn->Close();
+        scrn = nullptr;
         show_error(nullptr, ex.what());
     }
 

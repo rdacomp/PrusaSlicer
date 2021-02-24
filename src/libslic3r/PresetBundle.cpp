@@ -204,31 +204,37 @@ void PresetBundle::load_presets(AppConfig &config, const std::string &preferred_
         this->prints.load_presets(dir_user_presets, "print");
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
+        errors_cummulative += "\n";
     }
     try {
         this->sla_prints.load_presets(dir_user_presets, "sla_print");
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
+        errors_cummulative += "\n";
     }
     try {
         this->filaments.load_presets(dir_user_presets, "filament");
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
+        errors_cummulative += "\n";
     }
     try {
         this->sla_materials.load_presets(dir_user_presets, "sla_material");
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
+        errors_cummulative += "\n";
     }
     try {
         this->printers.load_presets(dir_user_presets, "printer");
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
+        errors_cummulative += "\n";
     }
     try {
         this->physical_printers.load_printers(dir_user_presets, "physical_printer");
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
+        errors_cummulative += "\n";
     }
     this->update_multi_material_filament_presets();
     this->update_compatible(PresetSelectCompatibleType::Never);
@@ -246,7 +252,11 @@ std::string PresetBundle::load_system_presets()
     boost::filesystem::path dir = (boost::filesystem::path(data_dir()) / "vendor").make_preferred();
     std::string errors_cummulative;
     bool        first = true;
-    for (auto &dir_entry : boost::filesystem::directory_iterator(dir))
+    boost::system::error_code ec;
+    boost::filesystem::directory_iterator dir_iter = boost::filesystem::directory_iterator(dir, ec);
+    if (ec)
+        return (boost::format("PrusaSlicer couldn't open directory %1%. System presets couldn't be loaded.\n") % dir).str();
+    for (auto &dir_entry : dir_iter)
         if (Slic3r::is_ini_file(dir_entry)) {
             std::string name = dir_entry.path().filename().string();
             // Remove the .ini suffix.

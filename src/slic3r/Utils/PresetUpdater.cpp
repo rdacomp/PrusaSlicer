@@ -227,7 +227,15 @@ PresetUpdater::priv::priv()
 	// Install indicies from resources. Only installs those that are either missing or older than in resources.
 	check_install_indices();
 	// Load indices from the cache directory.
-	index_db = Index::load_db();
+	try
+	{
+		index_db = Index::load_db();
+	}
+	catch (const Slic3r::RuntimeError& e)
+	{
+		GUI::show_error(nullptr, e.what());
+	}
+	
 }
 
 // Pull relevant preferences from AppConfig
@@ -768,13 +776,21 @@ void PresetUpdater::sync(PresetBundle *preset_bundle)
 		try
 		{
 			this->p->prune_tmps();
+		}
+		catch (const std::exception& e)
+		{
+			BOOST_LOG_TRIVIAL(error)<<e.what();
+			GUI::show_error(nullptr, GUI::format(_L("Configuration folder was not found or missing access rights.\n%1%"), e.what()));
+		}
+		try
+		{
 			this->p->sync_version();
 			this->p->sync_config(std::move(vendors));
 		}
 		catch (const std::exception& e)
 		{
-			BOOST_LOG_TRIVIAL(error)<<e.what();
-			GUI::show_error(nullptr, GUI::format(_L("Configuration folder was not found or missing access rights.")));
+			BOOST_LOG_TRIVIAL(error) << e.what();
+			GUI::show_error(nullptr, GUI::format(e.what()));
 		}
 		
     });

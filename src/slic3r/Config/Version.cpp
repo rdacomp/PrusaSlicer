@@ -310,7 +310,11 @@ std::vector<Index> Index::load_db()
 
     std::vector<Index> index_db;
     std::string errors_cummulative;
-	for (auto &dir_entry : boost::filesystem::directory_iterator(cache_dir))
+	boost::system::error_code ec;
+	boost::filesystem::directory_iterator dir = boost::filesystem::directory_iterator(cache_dir, ec);
+	if (ec)
+		throw Slic3r::RuntimeError((boost::format("PrusaSlicer couldn't open directory %1%. Loading database failed.") % cache_dir).str());
+	for (auto &dir_entry : dir)
         if (Slic3r::is_idx_file(dir_entry)) {
         	Index idx;
             try {
