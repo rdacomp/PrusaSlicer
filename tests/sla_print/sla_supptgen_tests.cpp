@@ -246,6 +246,31 @@ std::vector<Point> test_island_sampling(const ExPolygon &   island,
     return points;
 }
 
+
+TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
+{
+    TriangleMesh            mesh = load_model("frog_legs.obj");
+    TriangleMeshSlicer      slicer{&mesh};
+    std::vector<float>      grid({0.1f});
+    std::vector<ExPolygons> slices;
+    slicer.slice(grid, SlicingMode::Regular, 0.05f, &slices, [] {});
+    ExPolygon frog_leg = slices.front()[1];
+
+    double       size = 3e7;
+    SampleConfig cfg;
+    cfg.max_distance   = size + 0.1;
+    cfg.sample_size    = size / 5;
+    cfg.start_distance = 0.2 * size; // radius of support head
+    cfg.curve_sample   = 0.1 * size;
+    cfg.max_length_for_one_support_point = 3 * size;
+
+    for (int i = 0; i < 100; ++i) {
+        auto points = SupportPointGenerator::uniform_cover_island(
+            frog_leg, cfg);
+    }
+}
+
+
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
 {
     double size = 3e7;
