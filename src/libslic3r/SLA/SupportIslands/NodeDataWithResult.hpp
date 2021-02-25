@@ -52,19 +52,20 @@ public:
         VoronoiGraph::ExPath &    result,
         const VoronoiGraph::Node *node,
         double                    distance_to_node,
-        const VoronoiGraph::Path &prev_path)
+        VoronoiGraph::Path &&act_path,        
+        std::set<const VoronoiGraph::Node *> &&skip_nodes
+    )
         : result(result)
         , node(node)
         , distance_to_node(distance_to_node)
+        , act_path(std::move(act_path)) // copy prev and append actual node
+        , skip_nodes(std::move(skip_nodes))
     {
-        // TODO: process it before constructor or in factory
-        const VoronoiGraph::Node *prev_node = (prev_path.path.size() >= 1) ?
-                                                  prev_path.path.back() :
-                                                  nullptr;
-        skip_nodes = {prev_node};
-        // append actual node
-        act_path = prev_path;                    // copy
-        act_path.append(node, distance_to_node); // increase path
+        //prev_path.extend(node, distance_to_node)
+        //const VoronoiGraph::Node *prev_node = (prev_path.nodes.size() >= 1) ?
+        //                                          prev_path.nodes.back() :
+        //                                          nullptr;
+        //skip_nodes = {prev_node};
     }
 };
 

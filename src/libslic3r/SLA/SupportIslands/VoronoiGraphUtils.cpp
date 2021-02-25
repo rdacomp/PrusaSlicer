@@ -4,6 +4,8 @@
 #include "IStackFunction.hpp"
 #include "EvaluateNeighbor.hpp"
 
+#include <libslic3r/VoronoiVisualUtils.hpp>
+
 using namespace Slic3r::sla;
 
 VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
@@ -32,10 +34,44 @@ VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
     return &iterator->second;
 }
 
+double VoronoiGraphUtils::calculate_length_of_parabola(
+    const VD::edge_type &                             edge,
+    const std::vector<Voronoi::Internal::segment_type> &segments)
+{
+    // TODO: len by param not sampling of parabola
+
+    double discretization_step = 0.0002 * 1e7;
+    Points points; // voronoi created by line segments only
+
+    std::vector<Voronoi::Internal::point_type> samples;
+    samples.push_back(Voronoi::Internal::point_type(edge.vertex0()->x(),
+                                                    edge.vertex0()->y()));
+    samples.push_back(Voronoi::Internal::point_type(edge.vertex1()->x(),
+                                                    edge.vertex1()->y()));
+    Voronoi::Internal::sample_curved_edge(points, segments, edge, samples,
+                                          discretization_step); 
+    
+    double sumLength = 0;
+    for (size_t index = 1; index < samples.size(); ++index) {
+        double diffX = samples[index - 1].x() - samples[index].x();
+        double diffY = samples[index - 1].y() - samples[index].y();
+        double length = sqrt(diffX * diffX + diffY * diffY);
+        sumLength += length;
+    }
+    return sumLength;
+}
+
 VoronoiGraph VoronoiGraphUtils::getSkeleton(const VD &vd, const Lines &lines)
 {
     // vd should be annotated.
     // assert(Voronoi::debug::verify_inside_outside_annotations(vd));
+
+        std::vector<Voronoi::Internal::segment_type> segments;
+    for (Lines::const_iterator it = lines.begin(); it != lines.end(); ++it)
+        segments.push_back(Voronoi::Internal::segment_type(
+            Voronoi::Internal::point_type(double(it->a(0)), double(it->a(1))),
+            Voronoi::Internal::point_type(double(it->b(0)),
+                                          double(it->b(1)))));
 
     VoronoiGraph         skeleton;
     const VD::edge_type *first_edge = &vd.edges().front();
@@ -72,8 +108,8 @@ VoronoiGraph VoronoiGraphUtils::getSkeleton(const VD &vd, const Lines &lines)
             double diffY = v0->y() - v1->y();
             length       = sqrt(diffX * diffX + diffY * diffY);
         } else { // if (edge.is_curved())
-            // TODO: len of parabola
-            length = 1.0;
+            assert(edge.is_curved());
+            length = calculate_length_of_parabola(edge, segments);
         }
 
         VoronoiGraph::Node *node0 = getNode(skeleton, v0, &edge, lines);
@@ -139,7 +175,7 @@ VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circle(
     bool is_short_revers_direction = false;
     // find longest side branch
     const VoronoiGraph::Node *prev_circle_node = nullptr;
-    for (const VoronoiGraph::Node *circle_node : circle.path) {
+    for (const VoronoiGraph::Node *circle_node : circle.nodes) {
         if (prev_circle_node != nullptr)
             distance_on_circle += get_neighbor_distance(circle_node,
                                                         prev_circle_node);
@@ -172,20 +208,20 @@ VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circle(
     // circle.path.front()); assert(distance_on_circle == circle.length);
 
     // circlePath
-    auto circle_iterator = std::find(circle.path.begin(), circle.path.end(),
+    auto circle_iterator = std::find(circle.nodes.begin(), circle.nodes.end(),
                                      longest_circle_node);
     VoronoiGraph::Nodes circle_path;
     if (is_longest_revers_direction) {
-        circle_path = VoronoiGraph::Nodes(circle_iterator, circle.path.end());
+        circle_path = VoronoiGraph::Nodes(circle_iterator, circle.nodes.end());
         std::reverse(circle_path.begin(), circle_path.end());
     } else {
-        if (longest_circle_node != circle.path.front())
-            circle_path = VoronoiGraph::Nodes(circle.path.begin() + 1,
+        if (longest_circle_node != circle.nodes.front())
+            circle_path = VoronoiGraph::Nodes(circle.nodes.begin() + 1,
                                               circle_iterator + 1);
     }
     // append longest side branch
-    circle_path.insert(circle_path.end(), longest_circle_branch->path.begin(),
-                       longest_circle_branch->path.end());
+    circle_path.insert(circle_path.end(), longest_circle_branch->nodes.begin(),
+                       longest_circle_branch->nodes.end());
     return {circle_path, longest_branch_length};
 }
 
@@ -210,10 +246,10 @@ VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circles(
 
     // collect all circle ndoes
     std::set<const VoronoiGraph::Node *> nodes;
-    nodes.insert(circle.path.begin(), circle.path.end());
+    nodes.insert(circle.nodes.begin(), circle.nodes.end());
     for (size_t circle_index : connected_circles) {
         const auto &circle = circles[circle_index];
-        nodes.insert(circle.path.begin(), circle.path.end());
+        nodes.insert(circle.nodes.begin(), circle.nodes.end());
     }
 
     // nodes are path throw circles
@@ -233,7 +269,7 @@ VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circles(
         // shortest path from input_node
         VoronoiGraph::Path path(std::move(search_queue.top()));
         search_queue.pop();
-        const VoronoiGraph::Node &node = *path.path.back();
+        const VoronoiGraph::Node &node = *path.nodes.back();
         if (done.find(&node) != done.end()) { // already checked
             continue;
         }
@@ -254,24 +290,24 @@ VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circles(
             double length = longest_branch.length + neighbor_path.length;
             if (longest_path.length < length) {
                 longest_path.length = length;
-                longest_path.path   = neighbor_path.path; // copy path
+                longest_path.nodes   = neighbor_path.nodes; // copy path
             }
         }
     }
 
     // create result path
-    assert(!longest_path.path.empty());
-    longest_path.path.erase(longest_path.path.begin()); // remove input_node
-    assert(!longest_path.path.empty());
-    auto branches_item = ex_path.side_branches.find(longest_path.path.back());
+    assert(!longest_path.nodes.empty());
+    longest_path.nodes.erase(longest_path.nodes.begin()); // remove input_node
+    assert(!longest_path.nodes.empty());
+    auto branches_item = ex_path.side_branches.find(longest_path.nodes.back());
     if (branches_item == ex_path.side_branches.end()) {
         // longest path ends on circle
         return longest_path;
     }
     const VoronoiGraph::Path &longest_branch = branches_item->second.top();
-    longest_path.path.insert(longest_path.path.end(),
-                             longest_branch.path.begin(),
-                             longest_branch.path.end());
+    longest_path.nodes.insert(longest_path.nodes.end(),
+                             longest_branch.nodes.begin(),
+                             longest_branch.nodes.end());
     return longest_path;
 }
 
@@ -279,7 +315,7 @@ std::optional<VoronoiGraph::Circle> VoronoiGraphUtils::create_circle(
     const VoronoiGraph::Path &          path,
     const VoronoiGraph::Node::Neighbor &neighbor)
 {
-    VoronoiGraph::Nodes passed_nodes = path.path;
+    VoronoiGraph::Nodes passed_nodes = path.nodes;
     // detection of circle
     // not neccesary to check last one in path
     auto        end_find  = passed_nodes.end() - 1;
@@ -350,11 +386,11 @@ void VoronoiGraphUtils::append_neighbor_branch(
 
 void VoronoiGraphUtils::reshape_longest_path(VoronoiGraph::ExPath &path)
 {
-    assert(path.path.size() >= 1);
+    assert(path.nodes.size() >= 1);
 
     double                    actual_length = 0.;
     const VoronoiGraph::Node *prev_node     = nullptr;
-    VoronoiGraph::Nodes       origin_path   = path.path; // make copy
+    VoronoiGraph::Nodes       origin_path   = path.nodes; // make copy
     // index to path
     size_t path_index = 0;
     for (const VoronoiGraph::Node *node : origin_path) {
@@ -373,24 +409,24 @@ void VoronoiGraphUtils::reshape_longest_path(VoronoiGraph::ExPath &path)
         if (actual_length >= branches.top().length)
             continue; // no longer branch
 
-        auto               end_path = path.path.begin() + path_index;
-        VoronoiGraph::Path side_branch({path.path.begin(), end_path},
+        auto               end_path = path.nodes.begin() + path_index;
+        VoronoiGraph::Path side_branch({path.nodes.begin(), end_path},
                                        actual_length);
-        std::reverse(side_branch.path.begin(), side_branch.path.end());
+        std::reverse(side_branch.nodes.begin(), side_branch.nodes.end());
         VoronoiGraph::Path new_main_branch(std::move(branches.top()));
         branches.pop();
-        std::reverse(new_main_branch.path.begin(), new_main_branch.path.end());
+        std::reverse(new_main_branch.nodes.begin(), new_main_branch.nodes.end());
         // add old main path store into side branches - may be it is not neccessary
         branches.push(std::move(side_branch));
 
         // swap side branch with main branch
-        path.path.erase(path.path.begin(), end_path);
-        path.path.insert(path.path.begin(), new_main_branch.path.begin(),
-                         new_main_branch.path.end());
+        path.nodes.erase(path.nodes.begin(), end_path);
+        path.nodes.insert(path.nodes.begin(), new_main_branch.nodes.begin(),
+                         new_main_branch.nodes.end());
 
         path.length += new_main_branch.length;
         path.length -= actual_length;
-        path_index    = new_main_branch.path.size();
+        path_index    = new_main_branch.nodes.size();
         actual_length = new_main_branch.length;
     }
 }
@@ -492,7 +528,7 @@ std::vector<Slic3r::Point> VoronoiGraphUtils::sample_voronoi_graph(
         config.max_length_for_one_support_point) { // create only one
                                                    // point in center
         // sample in center of voronoi
-        return {get_center_of_path(longest_path.path, longest_path.length)};
+        return {get_center_of_path(longest_path.nodes, longest_path.length)};
     }
 
     std::vector<Point> points;
@@ -554,14 +590,14 @@ void VoronoiGraphUtils::draw(SVG &                       svg,
     const char *mainPathColor     = "red";
 
     for (auto &circle : path.circles) {
-        draw(svg, circle.path, width, circlePathColor, true);
+        draw(svg, circle.nodes, width, circlePathColor, true);
         Point center(0, 0);
-        for (auto p : circle.path) {
+        for (auto p : circle.nodes) {
             center.x() += p->vertex->x();
             center.y() += p->vertex->y();
         }
-        center.x() /= circle.path.size();
-        center.y() /= circle.path.size();
+        center.x() /= circle.nodes.size();
+        center.y() /= circle.nodes.size();
 
         svg.draw_text(center,
                       ("C" + std::to_string(&circle - &path.circles.front()))
@@ -573,12 +609,12 @@ void VoronoiGraphUtils::draw(SVG &                       svg,
         auto tmp = branches.second; // copy
         while (!tmp.empty()) {
             const auto &branch = tmp.top();
-            auto        path   = branch.path;
+            auto        path   = branch.nodes;
             path.insert(path.begin(), branches.first);
             draw(svg, path, width, sideBranchesColor);
             tmp.pop();
         }
     }
 
-    draw(svg, path.path, width, mainPathColor);
+    draw(svg, path.nodes, width, mainPathColor);
 }

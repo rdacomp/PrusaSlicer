@@ -71,23 +71,29 @@ public:
 struct VoronoiGraph::Path
 {
     // row of neighbor Nodes
-    VoronoiGraph::Nodes path; // TODO: rename to nodes
+    VoronoiGraph::Nodes nodes; 
 
     // length of path
     // when circle contain length from back to front;
     double length;
 
 public:
-    Path() : path(), length(0.) {}
-    Path(const VoronoiGraph::Node *node) : path({node}), length(0.) {}
+    Path() : nodes(), length(0.) {}
+    Path(const VoronoiGraph::Node *node) : nodes({node}), length(0.) {}
     Path(VoronoiGraph::Nodes nodes, double length)
-        : path(std::move(nodes)), length(length)
+        : nodes(std::move(nodes)), length(length)
     {}
 
     void append(const VoronoiGraph::Node *node, double length)
     {
-        path.push_back(node);
+        nodes.push_back(node);
         this->length += length;
+    }
+
+    Path extend(const VoronoiGraph::Node *node, double length) const {
+        Path result(*this); // make copy
+        result.append(node, length);
+        return result;
     }
     
     struct OrderLengthFromShortest{

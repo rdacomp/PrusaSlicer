@@ -202,7 +202,7 @@ ExPolygons createTestIslands(double size)
                                        {4 * size5, size5},
                                        {3 * size5, size5}}};
 
-    size_t count_cirlce_lines = 1000; // test stack overfrow
+    size_t count_cirlce_lines = 16; // test stack overfrow
     double r_CCW              = size / 2;
     double r_CW               = r_CCW - size / 6;
     // CCW: couter clock wise, CW: clock wise

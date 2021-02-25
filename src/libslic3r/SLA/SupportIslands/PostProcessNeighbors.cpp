@@ -44,7 +44,7 @@ void PostProcessNeighbors::process()
     if (!side_branches.empty()) {
         result.side_branches[node] = side_branches;
     }
-    longest_path.path.insert(longest_path.path.begin(), node);
-    result.path   = std::move(longest_path.path);
+    longest_path.nodes.insert(longest_path.nodes.begin(), node);
+    result.nodes   = std::move(longest_path.nodes);
     result.length = distance_to_node + longest_path.length;
 }

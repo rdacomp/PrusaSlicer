@@ -7,11 +7,11 @@ using namespace Slic3r::sla;
 void PostProcessNeighbor::process()
 {
     bool is_circle_neighbor = false;
-    if (neighbor_path.path.empty()) { // neighbor node is on circle
+    if (neighbor_path.nodes.empty()) { // neighbor node is on circle
         for (VoronoiGraph::Circle &circle : neighbor_path.circles) {
-            const auto &circle_item = std::find(circle.path.begin(),
-                                                circle.path.end(), data.node);
-            if (circle_item == circle.path.end())
+            const auto &circle_item = std::find(circle.nodes.begin(),
+                                                circle.nodes.end(), data.node);
+            if (circle_item == circle.nodes.end())
                 continue; // node is NOT on circle
 
             size_t next_circle_index = &circle -
@@ -21,7 +21,7 @@ void PostProcessNeighbor::process()
             data.circle_indexes.push_back(circle_index);
 
             // check if this node is end of circle
-            if (circle_item == circle.path.begin()) {
+            if (circle_item == circle.nodes.begin()) {
                 data.end_circle_indexes.push_back(circle_index);
 
                 // !! this FIX circle lenght because at detection of
@@ -29,7 +29,7 @@ void PostProcessNeighbor::process()
                 circle.length -= data.act_path.length;
 
                 // skip twice checking of circle
-                data.skip_nodes.insert(circle.path.back());
+                data.skip_nodes.insert(circle.nodes.back());
             }
             is_circle_neighbor = true;
         }

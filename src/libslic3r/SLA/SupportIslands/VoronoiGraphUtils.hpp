@@ -30,7 +30,15 @@ public:
         const VD::edge_type *  edge,
         const Lines &          lines
     );
-        
+      
+    /// <summary>
+    /// Calculate length
+    /// </summary>
+    /// <param name="edge">curved edge</param>
+    /// <returns>edge length</returns>
+    static double calculate_length_of_parabola(const VD::edge_type &edge,
+        const std::vector<VD::segment_type> &segments);
+
     /// <summary>
     /// calculate distances to border of island and length on skeleton
     /// </summary>
