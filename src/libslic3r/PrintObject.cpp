@@ -542,6 +542,7 @@ bool PrintObject::invalidate_state_by_config_options(
                opt_key == "layer_height"
             || opt_key == "first_layer_height"
             || opt_key == "raft_layers"
+            || opt_key == "raft_contact_distance"
             || opt_key == "slice_closing_radius") {
             steps.emplace_back(posSlice);
 		} else if (
@@ -567,6 +568,7 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "support_material_extruder"
             || opt_key == "support_material_extrusion_width"
             || opt_key == "support_material_interface_layers"
+            || opt_key == "support_material_interface_pattern"
             || opt_key == "support_material_interface_contact_loops"
             || opt_key == "support_material_interface_extruder"
             || opt_key == "support_material_interface_spacing"
@@ -576,6 +578,9 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "support_material_synchronize_layers"
             || opt_key == "support_material_threshold"
             || opt_key == "support_material_with_sheath"
+            || opt_key == "raft_expansion"
+            || opt_key == "raft_first_layer_density"
+            || opt_key == "raft_first_layer_expansion"
             || opt_key == "dont_support_bridges"
             || opt_key == "first_layer_extrusion_width") {
             steps.emplace_back(posSupportMaterial);
@@ -764,10 +769,6 @@ void PrintObject::detect_surfaces_type()
             		// In non-spiral vase mode, go over all layers.
             		m_layers.size()),
             [this, idx_region, interface_shells, &surfaces_new](const tbb::blocked_range<size_t>& range) {
-                // If we have raft layers, consider bottom layer as a bridge just like any other bottom surface lying on the void.
-                SurfaceType surface_type_bottom_1st =
-                    (this->has_raft() && m_config.support_material_contact_distance.value > 0) ?
-                    stBottomBridge : stBottom;
                 // If we have soluble support material, don't bridge. The overhang will be squished against a soluble layer separating
                 // the support from the print.
                 SurfaceType surface_type_bottom_other =
@@ -846,7 +847,7 @@ void PrintObject::detect_surfaces_type()
                         // we clone surfaces because we're going to clear the slices collection
                         bottom = layerm->slices.surfaces;
                         for (Surface &surface : bottom)
-                            surface.surface_type = surface_type_bottom_1st;
+                            surface.surface_type = stBottom;
                     }
                     
                     // now, if the object contained a thin membrane, we could have overlapping bottom
@@ -1943,7 +1944,7 @@ end:
     BOOST_LOG_TRIVIAL(debug) << "Slicing objects - make_slices in parallel - begin";
     {
         // Compensation value, scaled.
-        const float xy_compensation_scaled 	 			= float(scale_(m_config.xy_size_compensation.value));
+        const float xy_compensation_scaled              = float(scale_(m_config.xy_size_compensation.value));
         const float elephant_foot_compensation_scaled 	= (m_config.raft_layers == 0) ? 
         	// Only enable Elephant foot compensation if printing directly on the print bed.
             float(scale_(m_config.elefant_foot_compensation.value)) :
