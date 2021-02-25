@@ -213,6 +213,7 @@ public:
     bool            has_current_preset_changes() const;
     bool            check_and_save_current_preset_changes(const wxString& header = wxString());
     void            update_saved_preset_from_current_preset();
+    std::vector<std::pair<unsigned int, std::string>> get_selected_presets() const;
 #else
     bool            check_unsaved_changes(const wxString& header = wxString());
 #endif // ENABLE_PROJECT_STATE

@@ -1439,6 +1439,8 @@ struct Plater::priv
         std::map<const UndoRedo::Stack*, size_t> m_last_save_snapshot_timestamp;
         // keeps track of latest states for gizmos
         std::map<std::string, bool> m_gizmos_state;
+        // keeps track of initial selected presets
+        std::array<std::string, Preset::TYPE_COUNT> m_initial_presets;
 
         struct CurrentGizmo
         {
@@ -1539,8 +1541,21 @@ struct Plater::priv
         }
 
         void update_from_preset() {
-            m_preset_dirty = wxGetApp().has_unsaved_preset_changes();
+            m_preset_dirty = false;
+            std::vector<std::pair<unsigned int, std::string>> selected_presets = wxGetApp().get_selected_presets();
+            for (const auto& [type, name] : selected_presets) {
+                m_preset_dirty |= !m_initial_presets[type].empty() && m_initial_presets[type] != name;
+            }
+            m_preset_dirty |= wxGetApp().has_unsaved_preset_changes();
             wxGetApp().mainframe->update_title();
+        }
+
+        void reset_initial_presets() {
+            m_initial_presets = std::array<std::string, Preset::TYPE_COUNT>();
+            std::vector<std::pair<unsigned int, std::string>> selected_presets = wxGetApp().get_selected_presets();
+            for (const auto& [type, name] : selected_presets) {
+                m_initial_presets[type] = name;
+            }
         }
 
         void reset_after_save() {
@@ -1559,6 +1574,8 @@ struct Plater::priv
                 const UndoRedo::Snapshot* main_active_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(main_stack.active_snapshot_time() - 1)));
                 m_last_save_snapshot_timestamp[&main_stack] = main_active_snapshot->timestamp + 1;
             }
+
+            reset_initial_presets();
 
             // reset all states
             m_plater_dirty = false;
@@ -1687,6 +1704,7 @@ struct Plater::priv
     void save_project_if_dirty() { project_state.save_if_dirty(); }
     void reset_project_after_save() { project_state.reset_after_save(); }
     void update_project_dirty_from_preset() { project_state.update_from_preset(); }
+    void reset_project_initial_presets() { project_state.reset_initial_presets(); }
 #endif // ENABLE_PROJECT_STATE
 
     enum class UpdateParams {
@@ -4764,6 +4782,7 @@ bool Plater::is_project_dirty() const { return p->is_project_dirty(); }
 void Plater::save_project_if_dirty() { p->save_project_if_dirty(); }
 void Plater::reset_project_after_save() { p->reset_project_after_save(); }
 void Plater::update_project_dirty_from_preset() { p->update_project_dirty_from_preset(); }
+void Plater::reset_project_initial_presets() { p->reset_project_initial_presets(); }
 #endif // ENABLE_PROJECT_STATE
 
 Sidebar&        Plater::sidebar()           { return *p->sidebar; }
@@ -4788,6 +4807,8 @@ void Plater::new_project()
     take_snapshot(_L("New Project"));
     Plater::SuppressSnapshots suppress(this);
     reset();
+    reset_project_initial_presets();
+    update_project_dirty_from_preset();
 #else
     wxPostEvent(p->view3D->get_wxglcanvas(), SimpleEvent(EVT_GLTOOLBAR_DELETE_ALL));
 #endif // ENABLE_PROJECT_STATE
@@ -4823,8 +4844,16 @@ void Plater::load_project(const wxString& filename)
     std::vector<size_t> res = load_files(input_paths);
 
     // if res is empty no data has been loaded
+#if ENABLE_PROJECT_STATE
+    if (!res.empty()) {
+        p->set_project_filename(filename);
+        reset_project_initial_presets();
+        update_project_dirty_from_preset();
+    }
+#else
     if (!res.empty())
         p->set_project_filename(filename);
+#endif // ENABLE_PROJECT_STATE
 }
 
 void Plater::add_model(bool imperial_units/* = false*/)

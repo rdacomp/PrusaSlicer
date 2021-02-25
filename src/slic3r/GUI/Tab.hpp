@@ -267,7 +267,7 @@ public:
 	wxString	title()	 const { return m_title; }
 // 	std::string	name()	 const { return m_name; }
 	std::string	name()	 const { return m_presets->name(); }
-    Preset::Type type()  const { return m_type; }
+	Preset::Type type()  const { return m_type; }
     // The tab is already constructed.
     bool 		completed() const { return m_completed; }
 #if ENABLE_PROJECT_STATE

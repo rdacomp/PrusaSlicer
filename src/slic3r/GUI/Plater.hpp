@@ -135,6 +135,7 @@ public:
     void save_project_if_dirty();
     void reset_project_after_save();
     void update_project_dirty_from_preset();
+    void reset_project_initial_presets();
 #endif // ENABLE_PROJECT_STATE
 
     Sidebar& sidebar();

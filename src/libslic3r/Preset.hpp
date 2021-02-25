@@ -460,7 +460,6 @@ public:
     // Compare the content of get_saved_preset() with get_edited_preset() configs, return the list of keys where they differ.
     std::vector<std::string>    saved_dirty_options(const bool deep_compare = false) const
     { return dirty_options(&this->get_edited_preset(), &this->get_saved_preset(), deep_compare); }
-
     // Copy edited preset into saved preset.
     void                        update_saved_preset_from_current_preset() { m_saved_preset = m_edited_preset; }
 #endif // ENABLE_PROJECT_STATE

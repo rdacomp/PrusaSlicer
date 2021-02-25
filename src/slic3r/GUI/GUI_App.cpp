@@ -910,6 +910,14 @@ bool GUI_App::on_init_inner()
     }
     else
         load_current_presets();
+
+#if ENABLE_PROJECT_STATE
+    if (plater_ != nullptr) {
+        plater_->reset_project_initial_presets();
+        plater_->update_project_dirty_from_preset();
+    }
+#endif // ENABLE_PROJECT_STATE
+
     mainframe->Show(true);
 
     obj_list()->set_min_height();
@@ -1869,6 +1877,19 @@ void GUI_App::update_saved_preset_from_current_preset()
         if (tab->supports_printer_technology(printer_technology))
             tab->update_saved_preset_from_current_preset();
     }
+}
+
+std::vector<std::pair<unsigned int, std::string>> GUI_App::get_selected_presets() const
+{
+    std::vector<std::pair<unsigned int, std::string>> ret;
+    PrinterTechnology printer_technology = preset_bundle->printers.get_edited_preset().printer_technology();
+    for (Tab* tab : tabs_list) {
+        if (tab->supports_printer_technology(printer_technology)) {
+            const PresetCollection* presets = tab->get_presets();
+            ret.push_back({ static_cast<unsigned int>(presets->type()), presets->get_selected_preset_name() });
+        }
+    }
+    return ret;
 }
 #endif // ENABLE_PROJECT_STATE
 
