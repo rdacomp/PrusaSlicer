@@ -14,6 +14,61 @@ if (TARGET OpenVDB::openvdb)
     set(OpenVDBUtils_SOURCES OpenVDBUtils.cpp OpenVDBUtils.hpp)
 endif()
 
+
+set(SOURCE_LIST_SLA
+    "SLA/Pad.hpp"
+    "SLA/Pad.cpp"
+    "SLA/SupportTreeBuilder.hpp"
+    "SLA/SupportTreeMesher.hpp"
+    "SLA/SupportTreeMesher.cpp"
+    "SLA/SupportTreeBuildsteps.hpp"
+    "SLA/SupportTreeBuildsteps.cpp"
+    "SLA/SupportTreeBuilder.cpp"
+    "SLA/Concurrency.hpp"
+    "SLA/SupportTree.hpp"
+    "SLA/SupportTree.cpp"
+#    "SLA/SupportTreeIGL.cpp"
+    "SLA/Rotfinder.hpp"
+    "SLA/Rotfinder.cpp"
+    "SLA/BoostAdapter.hpp"
+    "SLA/SpatIndex.hpp"
+    "SLA/SpatIndex.cpp"
+    "SLA/RasterBase.hpp"
+    "SLA/RasterBase.cpp"
+    "SLA/AGGRaster.hpp"
+    "SLA/RasterToPolygons.hpp"
+    "SLA/RasterToPolygons.cpp"
+    "SLA/ConcaveHull.hpp"
+    "SLA/ConcaveHull.cpp"
+    "SLA/Hollowing.hpp"
+    "SLA/Hollowing.cpp"
+    "SLA/JobController.hpp"
+    "SLA/SupportPoint.hpp"
+    "SLA/SupportPointGenerator.hpp"
+    "SLA/SupportPointGenerator.cpp"
+    "SLA/Contour3D.hpp"
+    "SLA/Contour3D.cpp"
+    "SLA/IndexedMesh.hpp"
+    "SLA/IndexedMesh.cpp"
+    "SLA/Clustering.hpp"
+    "SLA/Clustering.cpp"
+    "SLA/ReprojectPointsOnMesh.hpp"
+    "SLA/SupportIslands/EvaluateNeighbor.cpp"
+    "SLA/SupportIslands/EvaluateNeighbor.hpp"
+    "SLA/SupportIslands/ExpandNeighbor.cpp"
+    "SLA/SupportIslands/ExpandNeighbor.hpp"
+    "SLA/SupportIslands/IStackFunction.hpp"
+    "SLA/SupportIslands/NodeDataWithResult.hpp"
+    "SLA/SupportIslands/PostProcessNeighbor.cpp"
+    "SLA/SupportIslands/PostProcessNeighbor.hpp"
+    "SLA/SupportIslands/PostProcessNeighbors.cpp"
+    "SLA/SupportIslands/PostProcessNeighbors.hpp"
+    "SLA/SupportIslands/SampleConfig.hpp"
+    "SLA/SupportIslands/VoronoiGraph.hpp"
+    "SLA/SupportIslands/VoronoiGraphUtils.cpp"
+    "SLA/SupportIslands/VoronoiGraphUtils.hpp"
+)
+
 add_library(libslic3r STATIC
     pchheader.cpp
     pchheader.hpp
@@ -219,44 +274,11 @@ add_library(libslic3r STATIC
     Optimize/NLoptOptimizer.hpp
     Optimize/BruteforceOptimizer.hpp
     ${OpenVDBUtils_SOURCES}
-    SLA/Pad.hpp
-    SLA/Pad.cpp
-    SLA/SupportTreeBuilder.hpp
-    SLA/SupportTreeMesher.hpp
-    SLA/SupportTreeMesher.cpp
-    SLA/SupportTreeBuildsteps.hpp
-    SLA/SupportTreeBuildsteps.cpp
-    SLA/SupportTreeBuilder.cpp
-    SLA/Concurrency.hpp
-    SLA/SupportTree.hpp
-    SLA/SupportTree.cpp
-#    SLA/SupportTreeIGL.cpp
-    SLA/Rotfinder.hpp
-    SLA/Rotfinder.cpp
-    SLA/BoostAdapter.hpp
-    SLA/SpatIndex.hpp
-    SLA/SpatIndex.cpp
-    SLA/RasterBase.hpp
-    SLA/RasterBase.cpp
-    SLA/AGGRaster.hpp
-    SLA/RasterToPolygons.hpp
-    SLA/RasterToPolygons.cpp
-    SLA/ConcaveHull.hpp
-    SLA/ConcaveHull.cpp
-    SLA/Hollowing.hpp
-    SLA/Hollowing.cpp
-    SLA/JobController.hpp
-    SLA/SupportPoint.hpp
-    SLA/SupportPointGenerator.hpp
-    SLA/SupportPointGenerator.cpp
-    SLA/Contour3D.hpp
-    SLA/Contour3D.cpp
-    SLA/IndexedMesh.hpp
-    SLA/IndexedMesh.cpp
-    SLA/Clustering.hpp
-    SLA/Clustering.cpp
-    SLA/ReprojectPointsOnMesh.hpp
+    ${SOURCE_LIST_SLA}
 )
+
+# Create the source groups for source tree with root at CMAKE_CURRENT_SOURCE_DIR.
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCE_LIST_SLA})
 
 if (SLIC3R_STATIC)
     set(CGAL_Boost_USE_STATIC_LIBS ON CACHE BOOL "" FORCE)

@@ -17,6 +17,12 @@
 #include "libnest2d/backends/clipper/geometries.hpp"
 #include "libnest2d/utils/rotcalipers.hpp"
 
+#include "libslic3r/EdgeGrid.hpp"
+#include "libslic3r/VoronoiOffset.hpp"
+
+#include "libslic3r/SLA/SupportIslands/VoronoiGraph.hpp"
+#include "libslic3r/SLA/SupportIslands/VoronoiGraphUtils.hpp"
+
 #include <iostream>
 #include <random>
 
@@ -321,19 +327,67 @@ std::vector<Vec2f> SupportPointGenerator::uniform_cover_island(
     const ExPolygon &island           = *structure.polygon;
     float            area             = structure.area;
     const Point &    bb_size          = structure.bbox.size();
+    
+    // TODO: find valid params !!!!
+    SampleConfig cfg;
+    cfg.max_distance   = 10;
+    cfg.sample_size    = 10000;
+    cfg.start_distance = 2 * m_config.head_diameter; // radius of support head
+    cfg.curve_sample   = 10;
+    cfg.max_length_for_one_support_point = 1000;
 
-    // only one support point?
-    if (area < one_support_area && 
-        bb_size[0] < x && 
-        bb_size[1] < x ) {
-        structure.centroid
-    }
+    std::vector<Point> points = uniform_cover_island(island, cfg);
 
-    // longest distance in area
-        float size = getSize()
-    // calculate island moments
+    std::vector<Vec2f> result;
+    result.reserve(points.size());
+    std::transform(points.begin(), points.end(), std::back_inserter(result),
+                   [](const Point p) -> Vec2f { return Vec2f(p.x(), p.y()); });
+    return result;
+}
 
-    // unit support force 11.1f / density_relative(1.)
+std::vector<Point> SupportPointGenerator::uniform_cover_island(
+    const ExPolygon &island, const SampleConfig &config)
+{
+    using VD = Slic3r::Geometry::VoronoiDiagram;
+    VD    vd;
+    Lines lines = to_lines(island);
+    construct_voronoi(lines.begin(), lines.end(), &vd);
+    Slic3r::Voronoi::annotate_inside_outside(vd, lines);
+    VoronoiGraph         skeleton = VoronoiGraphUtils::getSkeleton(vd, lines);
+    VoronoiGraph::ExPath longest_path;
+    std::vector<Point>   samples =
+        VoronoiGraphUtils::sample_voronoi_graph(
+            skeleton, config, longest_path);
+
+#ifdef SLA_SUPPORTPOINTGEN_DEBUG
+    static int  counter = 0;
+    BoundingBox bb;
+    double      scale = bb.size().x();
+    for (const Point &pt : island.contour.points) bb.merge(pt);
+    SVG svg("voronoi-skeleton-" + std::to_string(++counter) + ".svg", bb);
+    svg.draw(island, "blue", 0.5f);
+    VoronoiGraphUtils::draw(svg, skeleton, scale / 300);
+    for (auto l : lines) svg.draw(l, "black", coord_t(scale / 200));
+    for (auto p : samples)
+        svg.draw(p, "lightgreen", coord_t(config.start_distance));
+    VoronoiGraphUtils::draw(svg, longest_path, scale / 200);
+    
+    // dump_voronoi_to_svg("tt", vd, Points(), lines);
+#endif /* NDEBUG */
+    return samples;
+}
+
+void SupportPointGenerator::supportCenterPoint(
+    SupportPointGenerator::Structure &  structure,
+                     SupportPointGenerator::PointGrid3D &grid3d)
+{ 
+    const ExPolygon &island = *structure.polygon; 
+    Point center             = island.contour.centroid();
+    Vec2f            centerf = unscaled(center).cast<float>();
+    m_output.emplace_back(centerf(0), centerf(1), structure.zlevel,
+                          m_config.head_diameter / 2.f, icfIsNew);
+    structure.supports_force_this_layer += m_config.support_force();
+    grid3d.insert(centerf, &structure);
 }
 
 void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure &s, SupportPointGenerator::PointGrid3D &grid3d)
@@ -347,8 +401,9 @@ void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure 
     if (s.islands_below.empty()) {
         // completely new island - needs support no doubt
         // deficit is full, there is nothing below that would hold this island
-        uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
-        grid3d.insert(uniform_cover_island(s), s);
+        //uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
+        //supportCenterPoint(s, grid3d);
+        grid3d.insert(uniform_cover_island(s), &s);
         return;
     }
 
@@ -684,7 +739,7 @@ void SupportPointGenerator::output_structures(const std::vector<Structure>& stru
 {
     for (unsigned int i=0 ; i<structures.size(); ++i) {
         std::stringstream ss;
-        ss << structures[i].unique_id.count() << "_" << std::setw(10) << std::setfill('0') << 1000 + (int)structures[i].height/1000 << ".png";
+        ss << structures[i].unique_id.count() << "_" << std::setw(10) << std::setfill('0') << 1000 + (int)structures[i].zlevel/1000 << ".png";
         output_expolygons(std::vector<ExPolygon>{*structures[i].polygon}, ss.str());
     }
 }

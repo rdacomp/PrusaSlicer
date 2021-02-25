@@ -2260,6 +2260,14 @@ VoronoiGraph::Path find_longest_path_on_circle(
     return {circle_path, longest_branch_length};
 }
 
+/// <summary>
+/// PRIVATE:
+/// Serach longest path from input_node throw Nodes in connected circles
+/// </summary>
+/// <param name="input_node">Node on circle</param>
+/// <param name="finished_circle_index">index of circle with input node</param>
+/// <param name="ex_path">Hold Circles, connection of circles and Side branches</param>
+/// <returns>Longest path from input node</returns>
 VoronoiGraph::Path find_longest_path_on_circles(
     const VoronoiGraph::Node &input_node,
     size_t finished_circle_index,
@@ -2344,6 +2352,7 @@ VoronoiGraph::Path find_longest_path_on_circles(
 }
 
 /// <summary>
+/// PRIVATE:
 /// function for detection circle in passed path
 /// </summary>
 /// <param name="path">IN/OUT: If exist append circle to path</param>
@@ -2369,6 +2378,15 @@ std::optional<VoronoiGraph::Circle> create_circle(
     return VoronoiGraph::Circle(std::move(circle_path), circle_length);
 };
 
+/// <summary>
+/// PRIVATE: 
+/// merge connected circle structures
+/// </summary>
+/// <param name="dst"></param>
+/// <param name="src"></param>
+/// <param name="dst_circle_count">Count of destination circles before merge
+/// Source circle are append afted destination, 
+/// therfore all src indexes must be increased by destination circle count</param>
 void merge_connected_circle(
     std::map<size_t, std::set<size_t>>& dst,
     std::map<size_t, std::set<size_t>>& src,
@@ -3043,8 +3061,8 @@ std::vector<Point> sample_voronoi_graph(const VoronoiGraph &graph,
     // every island has to have a point on contour
     assert(start_node != nullptr);
 
-    //longest_path = create_longest_path(start_node);
-    longest_path = create_longest_path_recursive(start_node);
+    longest_path = create_longest_path(start_node);
+    //longest_path = create_longest_path_recursive(start_node);
     if (longest_path.length < config.max_length_for_one_support_point) 
     { // create only one point in center
         // sample in center of voronoi
@@ -3301,13 +3319,12 @@ TEST_CASE("Sample small islands", "[VoronoiSkeleton]")
     }
     ExPolygon double_circle(circle_CCW, circle_CW);
 
-    /*
     TriangleMesh       mesh = load_model("frog_legs.obj");
     TriangleMeshSlicer slicer{&mesh};
     std::vector<float> grid({ 0.1f });
     std::vector<ExPolygons> slices;
     slicer.slice(grid, SlicingMode::Regular, 0.05f, &slices, [] {});
-    ExPolygon frog_leg = slices.front()[1]; //*/
+    ExPolygon frog_leg = slices.front()[1]; //
 
     SampleConfig cfg;
     cfg.max_distance = size + 0.1;
@@ -3317,16 +3334,15 @@ TEST_CASE("Sample small islands", "[VoronoiSkeleton]")
     cfg.max_length_for_one_support_point = 3 * size;
 
     ExPolygons islands = {
-        double_circle
-        // triangle
-        //, square
-        //, sharp_triangle
-        //, rect
-        //, rect_with_hole
-        //, triangle_with_hole
-        //, rect_with_4_hole
-        //, mountains
-        //, double_circle
+         triangle
+        , square
+        , sharp_triangle
+        , rect
+        , rect_with_hole
+        , triangle_with_hole
+        , rect_with_4_hole
+        , mountains
+        , double_circle
         //, frog_leg 
     };
     for (auto &island : islands) {
@@ -3341,3 +3357,4 @@ TEST_CASE("Sample small islands", "[VoronoiSkeleton]")
     }
     
 }
+// */

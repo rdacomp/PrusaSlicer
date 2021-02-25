@@ -10,6 +10,8 @@
 #include <libslic3r/ClipperUtils.hpp>
 #include <libslic3r/Point.hpp>
 
+#include <libslic3r/SLA/SupportIslands/SampleConfig.hpp>
+
 #include <boost/container/small_vector.hpp>
 
 // #define SLA_SUPPORTPOINTGEN_DEBUG
@@ -206,11 +208,21 @@ private:
     
     void process(const std::vector<ExPolygons>& slices, const std::vector<float>& heights);
 
+    void supportCenterPoint(Structure &structure, PointGrid3D &grid3d);
+    std::vector<Vec2f> uniform_cover_island(SupportPointGenerator::Structure &structure);
+
+public: // for testing
+    /// <summary>
+    /// uniforlmly cover surface of island by support points
+    /// </summary>
+    /// <param name="island">Island to be covered</param>
+    /// <param name="config">Define limits for uniform cover</param>
+    /// <returns>support points in coor of island</returns>
+    static std::vector<Point> uniform_cover_island(const ExPolygon &   island,
+                                                   const SampleConfig &config);
 public:
     enum IslandCoverageFlags : uint8_t { icfNone = 0x0, icfIsNew = 0x1, icfWithBoundary = 0x2 };
 
-public: // for testing
-    std::vector<Vec2f> uniform_cover_island(SupportPointGenerator::Structure &structure);
 private:
     void uniformly_cover(const ExPolygons& islands, Structure& structure, float deficit, PointGrid3D &grid3d, IslandCoverageFlags flags = icfNone);
 

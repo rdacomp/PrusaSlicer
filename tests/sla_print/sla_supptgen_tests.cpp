@@ -4,6 +4,8 @@
 #include <libslic3r/ExPolygon.hpp>
 #include <libslic3r/BoundingBox.hpp>
 
+#include <libslic3r/SLA/SupportIslands/SampleConfig.hpp>
+
 #include "sla_test_utils.hpp"
 
 namespace Slic3r { namespace sla {
@@ -141,6 +143,130 @@ TEST_CASE("Two parallel plates should be supported", "[SupGen][Hollowed]")
     sla::remove_bottom_points(pts, mesh.bounding_box().min.z() + EPSILON);
 
     REQUIRE(!pts.empty());
+}
+
+ExPolygons createTestIslands(double size)
+{
+    ExPolygon triangle(
+        Polygon{{.0, .0},
+                {size, .0},
+                {size / 2., sqrt(size * size - size * size / 4)}});
+    ExPolygon sharp_triangle(
+        Polygon{{.0, size / 2}, {.0, .0}, {2 * size, .0}});
+    ExPolygon triangle_with_hole({{.0, .0},
+                                  {size, .0},
+                                  {size / 2.,
+                                   sqrt(size * size - size * size / 4)}},
+                                 {{size / 4, size / 4},
+                                  {size / 2, size / 2},
+                                  {size / 2, size / 4}});
+    ExPolygon square(Polygon{{.0, size}, {.0, .0}, {size, .0}, {size, size}});
+    ExPolygon rect(
+        Polygon{{.0, size}, {.0, .0}, {2 * size, .0}, {2 * size, size}});
+    ExPolygon rect_with_hole({{-size, size}, // rect CounterClockWise
+                              {-size, -size},
+                              {size, -size},
+                              {size, size}},
+                             {{0., size / 2}, // inside rect ClockWise
+                              {size / 2, 0.},
+                              {0., -size / 2},
+                              {-size / 2, 0.}});
+    // need post reorganization of longest path
+    ExPolygon mountains({{0., 0.},
+                         {size, 0.},
+                         {5 * size / 6, size},
+                         {4 * size / 6, size / 6},
+                         {3 * size / 7, 2 * size},
+                         {2 * size / 7, size / 6},
+                         {size / 7, size}});
+    ExPolygon rect_with_4_hole(Polygon{{0., size}, // rect CounterClockWise
+                                       {0., 0.},
+                                       {size, 0.},
+                                       {size, size}});
+    // inside rects ClockWise
+    double size5           = size / 5.;
+    rect_with_4_hole.holes = Polygons{{{size5, 4 * size5},
+                                       {2 * size5, 4 * size5},
+                                       {2 * size5, 3 * size5},
+                                       {size5, 3 * size5}},
+                                      {{3 * size5, 4 * size5},
+                                       {4 * size5, 4 * size5},
+                                       {4 * size5, 3 * size5},
+                                       {3 * size5, 3 * size5}},
+                                      {{size5, 2 * size5},
+                                       {2 * size5, 2 * size5},
+                                       {2 * size5, size5},
+                                       {size5, size5}},
+                                      {{3 * size5, 2 * size5},
+                                       {4 * size5, 2 * size5},
+                                       {4 * size5, size5},
+                                       {3 * size5, size5}}};
+
+    size_t count_cirlce_lines = 1000; // test stack overfrow
+    double r_CCW              = size / 2;
+    double r_CW               = r_CCW - size / 6;
+    // CCW: couter clock wise, CW: clock wise
+    Points circle_CCW, circle_CW;
+    circle_CCW.reserve(count_cirlce_lines);
+    circle_CW.reserve(count_cirlce_lines);
+    for (size_t i = 0; i < count_cirlce_lines; ++i) {
+        double alpha = (2 * M_PI * i) / count_cirlce_lines;
+        double sina  = sin(alpha);
+        double cosa  = cos(alpha);
+        circle_CCW.emplace_back(-r_CCW * sina, r_CCW * cosa);
+        circle_CW.emplace_back(r_CW * sina, r_CW * cosa);
+    }
+    ExPolygon double_circle(circle_CCW, circle_CW);
+
+    TriangleMesh            mesh = load_model("frog_legs.obj");
+    TriangleMeshSlicer      slicer{&mesh};
+    std::vector<float>      grid({0.1f});
+    std::vector<ExPolygons> slices;
+    slicer.slice(grid, SlicingMode::Regular, 0.05f, &slices, [] {});
+    ExPolygon frog_leg = slices.front()[1]; //
+
+    return {
+        triangle,         square,
+        sharp_triangle,   rect,
+        rect_with_hole,   triangle_with_hole,
+        rect_with_4_hole, mountains,
+        double_circle
+        //, frog_leg
+    };
+}
+
+std::vector<Point> test_island_sampling(const ExPolygon &   island,
+                                        const SampleConfig &config)
+{
+    auto points = SupportPointGenerator::uniform_cover_island(island, config);
+    CHECK(!points.empty());
+
+    // all points must be inside of island
+    for (const auto &point : points) { CHECK(island.contains(point)); }
+    return points;
+}
+
+TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
+{
+    double size = 3e7;
+    SampleConfig cfg;
+    cfg.max_distance   = size + 0.1;
+    cfg.sample_size    = size / 5;
+    cfg.start_distance = 0.2 * size; // radius of support head
+    cfg.curve_sample   = 0.1 * size;
+    cfg.max_length_for_one_support_point = 3 * size;
+
+    ExPolygons islands = createTestIslands(size);
+    for (auto &island : islands) {
+        auto   points = test_island_sampling(island, cfg);
+        double angle  = 3.14 / 3; // cca 60 degree
+
+        island.rotate(angle);
+        auto pointsR = test_island_sampling(island, cfg);
+        for (Point &p : pointsR) p.rotate(-angle);
+
+        // points should be equal to pointsR
+    }
 }
 
 }} // namespace Slic3r::sla
