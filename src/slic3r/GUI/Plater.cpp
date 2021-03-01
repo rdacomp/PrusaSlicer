@@ -8,6 +8,9 @@
 #include <regex>
 #include <future>
 #include <boost/algorithm/string.hpp>
+#if ENABLE_PROJECT_STATE
+#include <boost/algorithm/string/predicate.hpp>
+#endif // ENABLE_PROJECT_STATE
 #include <boost/optional.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -1424,11 +1427,8 @@ struct Plater::priv
 
     // Data
 #if ENABLE_PROJECT_STATE
-    static bool starts_with(const std::string& s, const std::string& prefix) {
-        return s.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), s.begin());
-    }
     static std::string extract_gizmo_name(const std::string& s, const std::string& prefix) {
-        return starts_with(s, prefix) ? s.substr(prefix.length() + 1) : "";
+        return boost::starts_with(s, prefix) ? s.substr(prefix.length() + 1) : "";
     }
 
     class ProjectState
@@ -1469,10 +1469,6 @@ struct Plater::priv
             const std::vector<UndoRedo::Snapshot>& main_snapshots = main_stack.snapshots();
             const UndoRedo::Snapshot* active_main_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(main_stack.active_snapshot_time() - 1)));
 
-            // early exit if active snapshot is from a selection
-            if (starts_with(active_main_snapshot->name, _utf8("Selection")))
-                return;
-
             if (&main_stack == &active_stack) {
                 if (std::string gizmo_name = extract_gizmo_name(active_main_snapshot->name, _utf8("Entering")); m_current_gizmo.name.empty() && !gizmo_name.empty()) {
                     // entering a gizmo undo/redo stack
@@ -1496,13 +1492,13 @@ struct Plater::priv
 
             if (active_main_snapshot->name == _utf8("New Project") ||
                 active_main_snapshot->name == _utf8("Reset Project") ||
-                starts_with(active_main_snapshot->name, _utf8("Load Project:")))
+                boost::starts_with(active_main_snapshot->name, _utf8("Load Project:")))
                 m_plater_dirty = false;
             else {
                 // backtrack to the latest valid snapshot
-                while ((starts_with(active_main_snapshot->name, _utf8("Entering")) ||
-                    starts_with(active_main_snapshot->name, _utf8("Leaving")) ||
-                    starts_with(active_main_snapshot->name, _utf8("Selection"))) &&
+                while ((boost::starts_with(active_main_snapshot->name, _utf8("Entering")) ||
+                    boost::starts_with(active_main_snapshot->name, _utf8("Leaving")) ||
+                    boost::starts_with(active_main_snapshot->name, _utf8("Selection"))) &&
                     last_main_save_snapshot_timestamp != active_main_snapshot->timestamp) {
                     size_t shift = 1;
                     const UndoRedo::Snapshot* curr = active_main_snapshot;
