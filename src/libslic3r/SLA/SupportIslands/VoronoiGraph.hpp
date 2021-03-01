@@ -52,13 +52,18 @@ struct VoronoiGraph::Node
 struct VoronoiGraph::Node::Neighbor
 {
     const VD::edge_type *edge;
+    // pointer on graph node structure
+    const Node *node;
+
     // length edge between vertices
     double edge_length;
-    // pointer on graph node structure
-    Node *node;
+
+    // maximal widht of sland(distance to outline)
+    double max_width;
+
 public:
-    Neighbor(const VD::edge_type *edge, double edge_length, Node *node)
-        : edge(edge), edge_length(edge_length), node(node)
+    Neighbor(const VD::edge_type *edge, const Node *node, double edge_length)
+        : edge(edge), node(node), edge_length(edge_length)
     {}
 };
 

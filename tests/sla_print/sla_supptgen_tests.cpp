@@ -5,6 +5,7 @@
 #include <libslic3r/BoundingBox.hpp>
 
 #include <libslic3r/SLA/SupportIslands/SampleConfig.hpp>
+#include <libslic3r/SLA/SupportIslands/VoronoiGraphUtils.hpp>
 
 #include "sla_test_utils.hpp"
 
@@ -261,7 +262,6 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     cfg.max_distance   = size + 0.1;
     cfg.sample_size    = size / 5;
     cfg.start_distance = 0.2 * size; // radius of support head
-    cfg.curve_sample   = 0.1 * size;
     cfg.max_length_for_one_support_point = 3 * size;
 
     for (int i = 0; i < 100; ++i) {
@@ -270,7 +270,6 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     }
 }
 
-
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
 {
     double size = 3e7;
@@ -278,7 +277,6 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
     cfg.max_distance   = size + 0.1;
     cfg.sample_size    = size / 5;
     cfg.start_distance = 0.2 * size; // radius of support head
-    cfg.curve_sample   = 0.1 * size;
     cfg.max_length_for_one_support_point = 3 * size;
 
     ExPolygons islands = createTestIslands(size);

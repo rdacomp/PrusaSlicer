@@ -39,7 +39,11 @@ TEST_CASE("Pillar pairhash should be unique", "[SLASupportGeneration]") {
 
 TEST_CASE("Support point generator should be deterministic if seeded", 
           "[SLASupportGeneration], [SLAPointGen]") {
-    TriangleMesh mesh = load_model("A_upsidedown.obj");
+    //TriangleMesh mesh = load_model("A_upsidedown.obj");
+    //TriangleMesh mesh = load_model("smallIslands.obj");
+    TriangleMesh mesh = load_model("triangleStick.obj");
+    //TriangleMesh mesh = load_model("triangleSticks.obj");
+    //TriangleMesh mesh = load_model("StarStick.obj");
     
     sla::IndexedMesh emesh{mesh};
     
@@ -53,12 +57,13 @@ TEST_CASE("Support point generator should be deterministic if seeded",
     auto   bb      = mesh.bounding_box();
     double zmin    = bb.min.z();
     double zmax    = bb.max.z();
-    double gnd     = zmin - supportcfg.object_elevation_mm;
-    auto   layer_h = 0.05f;
+    double gnd     = zmin;
+    auto   layer_h = 0.1f;
     
     auto slicegrid = grid(float(gnd), float(zmax), layer_h);
     std::vector<ExPolygons> slices;
-    slicer.slice(slicegrid, SlicingMode::Regular, CLOSING_RADIUS, &slices, []{});
+    float                   closing_radius = 0.05f; //CLOSING_RADIUS
+    slicer.slice(slicegrid, SlicingMode::Regular, closing_radius, &slices, []{});
     
     point_gen.seed(0);
     point_gen.execute(slices, slicegrid);

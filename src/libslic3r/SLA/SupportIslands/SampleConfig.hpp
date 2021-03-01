@@ -17,11 +17,10 @@ struct SampleConfig
 
     // maximal length of longest path in voronoi diagram to be island
     // supported only by one single support point this point will be in center
-    // of path suggestion: smaller than 2* SampleConfig.start_distance
+    // of path.
+    // suggestion 1: Smaller than 2 * SampleConfig.start_distance
+    // suggestion 2: Bigger than 2 * Head diameter
     double max_length_for_one_support_point = 1.;
-
-    // each curve is sampled by this value to test distance to edge of island
-    double curve_sample = 1.; // must be bigger than zero
 };
 
 } // namespace Slic3r::sla
