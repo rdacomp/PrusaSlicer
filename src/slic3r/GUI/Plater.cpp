@@ -1390,7 +1390,13 @@ bool PlaterDropTarget::OnDropFiles(wxCoord x, wxCoord y, const wxArrayString &fi
     this->MSWUpdateDragImageOnLeave();
 #endif // WIN32
 
+#if ENABLE_PROJECT_STATE
+    bool res = (m_plater != nullptr) ? m_plater->load_files(filenames) : false;
+    wxGetApp().mainframe->update_title();
+    return res;
+#else
     return (m_plater != nullptr) ? m_plater->load_files(filenames) : false;
+#endif // ENABLE_PROJECT_STATE
 }
 
 // State to manage showing after export notifications and device ejecting
