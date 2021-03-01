@@ -835,14 +835,10 @@ bool GUI_App::on_init_inner()
 
     if (is_editor()) {
 #ifdef __WXMSW__ 
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
         if (app_config->get("associate_3mf") == "1")
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
             associate_3mf_files();
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
         if (app_config->get("associate_stl") == "1")
             associate_stl_files();
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #endif // __WXMSW__
 
         preset_updater = new PresetUpdater();
@@ -858,9 +854,7 @@ bool GUI_App::on_init_inner()
     }
     else {
 #ifdef __WXMSW__ 
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
         if (app_config->get("associate_gcode") == "1")
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
             associate_gcode_files();
 #endif // __WXMSW__
     }
@@ -1738,7 +1732,6 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                 if (dlg.seq_top_layer_only_changed())
 #endif // ENABLE_GCODE_LINES_ID_IN_H_SLIDER
                     this->plater_->refresh_print();
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
                 if (is_editor()) {
                     if (app_config->get("associate_3mf") == "1")
@@ -1751,7 +1744,6 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                         associate_gcode_files();
                 }
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
             }
             if (app_layout_changed) {
                 // hide full main_sizer for mainFrame
@@ -2371,7 +2363,6 @@ void GUI_App::associate_3mf_files()
         ::SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 void GUI_App::associate_stl_files()
 {
     wchar_t app_path[MAX_PATH];
@@ -2395,7 +2386,6 @@ void GUI_App::associate_stl_files()
         // notify Windows only when any of the values gets changed
         ::SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 
 void GUI_App::associate_gcode_files()
 {
