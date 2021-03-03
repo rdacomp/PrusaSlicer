@@ -34,20 +34,26 @@ GLGizmoPainterBase::GLGizmoPainterBase(GLCanvas3D& parent, const std::string& ic
 
 void GLGizmoPainterBase::activate_internal_undo_redo_stack(bool activate)
 {
+    bool serializing = m_parent.get_gizmos_manager().is_serializing();
+
     if (activate && ! m_internal_stack_active) {
-        wxString str = get_painter_type() == PainterGizmoType::FDM_SUPPORTS
-                           ? _L("Entering Paint-on supports")
-                           : _L("Entering Seam painting");
-        Plater::TakeSnapshot(wxGetApp().plater(), str);
+        if (! serializing) {
+            wxString str = get_painter_type() == PainterGizmoType::FDM_SUPPORTS
+                               ? _L("Entering Paint-on supports")
+                               : _L("Entering Seam painting");
+            Plater::TakeSnapshot(wxGetApp().plater(), str);
+        }
         wxGetApp().plater()->enter_gizmos_stack();
         m_internal_stack_active = true;
     }
     if (! activate && m_internal_stack_active) {
-        wxString str = get_painter_type() == PainterGizmoType::SEAM
+        wxGetApp().plater()->leave_gizmos_stack();
+        if (! serializing) {
+            wxString str = get_painter_type() == PainterGizmoType::SEAM
                            ? _L("Leaving Seam painting")
                            : _L("Leaving Paint-on supports");
-        wxGetApp().plater()->leave_gizmos_stack();
-        Plater::TakeSnapshot(wxGetApp().plater(), str);
+            Plater::TakeSnapshot(wxGetApp().plater(), str);
+        }
         m_internal_stack_active = false;
     }
 }
@@ -486,11 +492,9 @@ void GLGizmoPainterBase::on_set_state()
 
     if (m_state == On && m_old_state != On) { // the gizmo was just turned on
         on_opening();
-        if (! m_parent.get_gizmos_manager().is_serializing()) {
-            wxGetApp().CallAfter([this]() {
-                activate_internal_undo_redo_stack(true);
-            });
-        }
+        wxGetApp().CallAfter([this]() {
+            activate_internal_undo_redo_stack(true);
+        });
     }
     if (m_state == Off && m_old_state != Off) { // the gizmo was just turned Off
         // we are actually shutting down
