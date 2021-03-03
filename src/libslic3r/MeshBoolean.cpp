@@ -167,24 +167,17 @@ template<class _Mesh> TriangleMesh cgal_to_triangle_mesh(const _Mesh &cgalmesh)
     for (auto &face : cgalmesh.faces()) {
         auto vtc = cgalmesh.vertices_around_face(cgalmesh.halfedge(face));
 
-        switch(vtc.size()) {
-        case 3 : {
-            auto it = vtc.begin();
-            auto v1 = *it, v2 = *(++it), v3 = *(++it);
-            facets.emplace_back(v1, v2, v3);
-            break;
+        int i = 0;
+        Vec3i facet;
+        for (const auto &v : vtc) {
+            if (i > 2) { i = 0; break; }
+            facet(i++) = v;
         }
-        case 4: {
-            auto it = vtc.begin();
-            auto v1 = *it, v2 = *(++it), v3 = *(++it), v4 = *(++it);
-            facets.emplace_back(v1, v2, v3);
-            facets.emplace_back(v2, v4, v1);
-            break;
-        }
-        default:
-            BOOST_LOG_TRIVIAL(error)
-                    << "CGAL face has " << vtc.size() << " vertices."
-                    << " Should be within 3 and 4.";
+
+        if (i == 3) {
+            facets.emplace_back(facet);
+        } else {
+            BOOST_LOG_TRIVIAL(error) << "CGAL face is not a triangle.";
         }
     }
     
