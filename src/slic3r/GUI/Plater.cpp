@@ -1437,6 +1437,14 @@ struct Plater::priv
         return boost::starts_with(s, prefix) ? s.substr(prefix.length() + 1) : "";
     }
 
+    static const UndoRedo::Snapshot* get_active_snapshot(const UndoRedo::Stack& stack) {
+        const std::vector<UndoRedo::Snapshot>& snapshots = stack.snapshots();
+        const UndoRedo::Snapshot* snapshot = &(*std::lower_bound(snapshots.begin(), snapshots.end(), UndoRedo::Snapshot(stack.active_snapshot_time())));
+        if (snapshot->is_topmost())
+            snapshot = &(*std::lower_bound(snapshots.begin(), snapshots.end(), UndoRedo::Snapshot(stack.active_snapshot_time() - 1)));
+        return snapshot;
+    };
+
     class ProjectState
     {
         bool m_plater_dirty{ false };
@@ -1472,8 +1480,7 @@ struct Plater::priv
             const UndoRedo::Stack& active_stack = plater->undo_redo_stack_active();
 
             // update dirty states
-            const std::vector<UndoRedo::Snapshot>& main_snapshots = main_stack.snapshots();
-            const UndoRedo::Snapshot* active_main_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(main_stack.active_snapshot_time() - 1)));
+            const UndoRedo::Snapshot* active_main_snapshot = get_active_snapshot(main_stack);
 
             if (&main_stack == &active_stack) {
                 if (std::string gizmo_name = extract_gizmo_name(active_main_snapshot->name, _utf8("Entering")); m_current_gizmo.name.empty() && !gizmo_name.empty()) {
@@ -1508,8 +1515,9 @@ struct Plater::priv
                     last_main_save_snapshot_timestamp != active_main_snapshot->timestamp) {
                     size_t shift = 1;
                     const UndoRedo::Snapshot* curr = active_main_snapshot;
+                    const std::vector<UndoRedo::Snapshot>& snapshots = main_stack.snapshots();
                     do {
-                        active_main_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(active_main_snapshot->timestamp - shift)));
+                        active_main_snapshot = &(*std::lower_bound(snapshots.begin(), snapshots.end(), UndoRedo::Snapshot(active_main_snapshot->timestamp - shift)));
                         ++shift;
                     } while (curr == active_main_snapshot);
                 }
@@ -1518,13 +1526,11 @@ struct Plater::priv
 
             // check current gizmo undo/redo stack
             if (&main_stack != &active_stack) {
-                const std::vector<UndoRedo::Snapshot>& active_snapshots = active_stack.snapshots();
-                const UndoRedo::Snapshot* last_active_snapshot = &(*std::lower_bound(active_snapshots.begin(), active_snapshots.end(), UndoRedo::Snapshot(active_stack.active_snapshot_time() - 1)));
+                const UndoRedo::Snapshot* last_active_snapshot = get_active_snapshot(active_stack);
                 auto it = m_last_save_snapshot_timestamp.find(&active_stack);
                 size_t last_active_save_snapshot_timestamp = (it != m_last_save_snapshot_timestamp.end()) ? it->second : 0;
                 m_current_gizmo.dirty |= last_active_snapshot->name != _utf8("Gizmos-Initial") &&
                     (last_active_save_snapshot_timestamp == 0 || last_active_save_snapshot_timestamp != last_active_snapshot->timestamp);
-
                 m_plater_dirty |= m_current_gizmo.dirty;
             }
 
@@ -1566,14 +1572,12 @@ struct Plater::priv
             const UndoRedo::Stack& active_stack = plater->undo_redo_stack_active();
 
             // update active stack last saved timestamp
-            const std::vector<UndoRedo::Snapshot>& active_snapshots = active_stack.snapshots();
-            const UndoRedo::Snapshot* active_active_snapshot = &(*std::lower_bound(active_snapshots.begin(), active_snapshots.end(), UndoRedo::Snapshot(active_stack.active_snapshot_time() - 1)));
+            const UndoRedo::Snapshot* active_active_snapshot = get_active_snapshot(active_stack);
             m_last_save_snapshot_timestamp[&active_stack] = active_active_snapshot->timestamp;
 
             // update also the main stack last saved timestamp, if it is not the active stack
             if (&main_stack != &active_stack) {
-                const std::vector<UndoRedo::Snapshot>& main_snapshots = main_stack.snapshots();
-                const UndoRedo::Snapshot* main_active_snapshot = &(*std::lower_bound(main_snapshots.begin(), main_snapshots.end(), UndoRedo::Snapshot(main_stack.active_snapshot_time() - 1)));
+                const UndoRedo::Snapshot* main_active_snapshot = get_active_snapshot(main_stack);
                 m_last_save_snapshot_timestamp[&main_stack] = main_active_snapshot->timestamp + 1;
             }
 
