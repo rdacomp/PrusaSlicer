@@ -139,7 +139,7 @@ private:
 	std::unique_ptr<StackImpl> 	pimpl;
 };
 
-}; // namespace UndoRedo
-}; // namespace Slic3r
+} // namespace UndoRedo
+} // namespace Slic3r
 
 #endif /* slic3r_Utils_UndoRedo_hpp_ */

@@ -1795,6 +1795,8 @@ struct Plater::priv
     void suppress_snapshots()   { this->m_prevent_snapshots++; }
     void allow_snapshots()      { this->m_prevent_snapshots--; }
 
+    void process_validation_warning(const std::string& warning) const;
+
     bool background_processing_enabled() const { return this->get_config("background_processing") == "1"; }
     void update_print_volume_state();
     void schedule_background_process();
@@ -2328,7 +2330,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
 
     const auto loading = _L("Loading") + dots;
     wxProgressDialog dlg(loading, "", 100, q, wxPD_AUTO_HIDE);
-    dlg.Pulse();
+    wxBusyCursor busy;
 
     auto *new_model = (!load_model || one_by_one) ? nullptr : new Slic3r::Model();
     std::vector<size_t> obj_idxs;
@@ -2336,8 +2338,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
     for (size_t i = 0; i < input_files.size(); ++i) {
         const auto &path = input_files[i];
         const auto filename = path.filename();
-        const auto dlg_info = _L("Loading file") + ": " + from_path(filename);
-        dlg.Update(static_cast<int>(100.0f * static_cast<float>(i) / static_cast<float>(input_files.size())), dlg_info);
+        dlg.Update(static_cast<int>(100.0f * static_cast<float>(i) / static_cast<float>(input_files.size())), _L("Loading file") + ": " + from_path(filename));
+        dlg.Fit();
 
         const bool type_3mf = std::regex_match(path.string(), pattern_3mf);
         const bool type_zip_amf = !type_3mf && std::regex_match(path.string(), pattern_zip_amf);
@@ -2357,12 +2359,10 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         PrinterTechnology printer_technology = Preset::printer_technology(config_loaded);
 
                         // We can't to load SLA project if there is at least one multi-part object on the bed
-                        if (printer_technology == ptSLA)
-                        {
+                        if (printer_technology == ptSLA) {
                             const ModelObjectPtrs& objects = q->model().objects;
                             for (auto object : objects)
-                                if (object->volumes.size() > 1)
-                                {
+                                if (object->volumes.size() > 1) {
                                     Slic3r::GUI::show_info(nullptr,
                                         _L("You cannot load SLA project with a multi-part object on the bed") + "\n\n" +
                                         _L("Please check your object list before preset changing."),
@@ -2381,8 +2381,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                     this->model.custom_gcode_per_print_z = model.custom_gcode_per_print_z;
                 }
 
-                if (load_config)
-                {
+                if (load_config) {
                     if (!config.empty()) {
                         Preset::normalize(config);
                         PresetBundle* preset_bundle = wxGetApp().preset_bundle;
@@ -2457,8 +2456,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
             continue;
         }
 
-        if (load_model)
-        {
+        if (load_model) {
             // The model should now be initialized
 
             auto convert_from_imperial_units = [](Model& model, bool only_small_volumes) {
@@ -2508,8 +2506,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
             else if ((wxGetApp().get_mode() == comSimple) && (type_3mf || type_any_amf) && model_has_advanced_features(model)) {
                 wxMessageDialog msg_dlg(q, _L("This file cannot be loaded in a simple mode. Do you want to switch to an advanced mode?")+"\n",
                     _L("Detected advanced data"), wxICON_WARNING | wxYES | wxNO);
-                if (msg_dlg.ShowModal() == wxID_YES)
-                {
+                if (msg_dlg.ShowModal() == wxID_YES) {
                     Slic3r::GUI::wxGetApp().save_mode(comAdvanced);
                     view3D->set_as_dirty();
                 }
@@ -2524,8 +2521,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
             }
 
             // check multi-part object adding for the SLA-printing
-            if (printer_technology == ptSLA)
-            {
+            if (printer_technology == ptSLA) {
                 for (auto obj : model.objects)
                     if ( obj->volumes.size()>1 ) {
                         Slic3r::GUI::show_error(nullptr,
@@ -2561,23 +2557,20 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
         obj_idxs.insert(obj_idxs.end(), loaded_idxs.begin(), loaded_idxs.end());
     }
 
-    if (load_model)
-    {
+    if (load_model) {
         wxGetApp().app_config->update_skein_dir(input_files[input_files.size() - 1].parent_path().string());
         // XXX: Plater.pm had @loaded_files, but didn't seem to fill them with the filenames...
         statusbar()->set_status_text(_L("Loaded"));
     }
 
     // automatic selection of added objects
-    if (!obj_idxs.empty() && (view3D != nullptr))
-    {
+    if (!obj_idxs.empty() && view3D != nullptr) {
         // update printable state for new volumes on canvas3D
         wxGetApp().plater()->canvas3D()->update_instance_printable_state_for_objects(obj_idxs);
 
         Selection& selection = view3D->get_canvas3d()->get_selection();
         selection.clear();
-        for (size_t idx : obj_idxs)
-        {
+        for (size_t idx : obj_idxs) {
             selection.add_object((unsigned int)idx, false);
         }
 
@@ -2983,6 +2976,41 @@ void Plater::priv::update_print_volume_state()
     this->q->model().update_print_volume_state(print_volume);
 }
 
+
+void Plater::priv::process_validation_warning(const std::string& warning) const
+{
+    if (warning.empty())
+        notification_manager->close_notification_of_type(NotificationType::PrintValidateWarning);
+    else {
+        std::string text = warning;
+        std::string hypertext = "";
+        std::function<bool(wxEvtHandler*)> action_fn = [](wxEvtHandler*){ return false; };
+
+        if (text == "_SUPPORTS_OFF") {
+            text = _u8L("An object has custom support enforcers which will not be used "
+                        "because supports are disabled.")+"\n";
+            hypertext = _u8L("Enable supports for enforcers only");
+            action_fn = [](wxEvtHandler*) {
+                Tab* print_tab = wxGetApp().get_tab(Preset::TYPE_PRINT);
+                assert(print_tab);
+                DynamicPrintConfig& config = wxGetApp().preset_bundle->prints.get_edited_preset().config;
+                config.set_key_value("support_material", new ConfigOptionBool(true));
+                config.set_key_value("support_material_auto", new ConfigOptionBool(false));
+                print_tab->on_value_change("support_material", config.opt_bool("support_material"));
+                print_tab->on_value_change("support_material_auto", config.opt_bool("support_material_auto"));
+                return true;
+            };
+        }
+
+        notification_manager->push_notification(
+            NotificationType::PrintValidateWarning,
+            NotificationManager::NotificationLevel::ImportantNotification,
+            text, hypertext, action_fn
+        );
+    }
+}
+
+
 // Update background processing thread from the current config and Model.
 // Returns a bitmask of UpdateBackgroundProcessReturnState.
 unsigned int Plater::priv::update_background_process(bool force_validation, bool postpone_error_messages)
@@ -3025,17 +3053,23 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
 		// The delayed error message is no more valid.
 		this->delayed_error_message.clear();
 		// The state of the Print changed, and it is non-zero. Let's validate it and give the user feedback on errors.
-        std::string err = this->background_process.validate();
+        std::string warning;
+        std::string err = this->background_process.validate(&warning);
         if (err.empty()) {
 			notification_manager->set_all_slicing_errors_gray(true);
             if (invalidated != Print::APPLY_STATUS_UNCHANGED && this->background_processing_enabled())
                 return_state |= UPDATE_BACKGROUND_PROCESS_RESTART;
+
+            // Pass a warning from validation and either show a notification,
+            // or hide the old one.
+            process_validation_warning(warning);
         } else {
 			// The print is not valid.
 			// Show error as notification.
             notification_manager->push_slicing_error_notification(err);
             return_state |= UPDATE_BACKGROUND_PROCESS_INVALID;
         }
+
     } else if (! this->delayed_error_message.empty()) {
     	// Reusing the old state.
         return_state |= UPDATE_BACKGROUND_PROCESS_INVALID;
@@ -5629,9 +5663,13 @@ void Plater::export_3mf(const boost::filesystem::path& output_path)
 #endif // ENABLE_PROJECT_STATE
 {
 #if ENABLE_PROJECT_STATE
-    if (p->model.objects.empty()) { return false; }
+    if (p->model.objects.empty()
+        || canvas3D()->get_gizmos_manager().is_in_editing_mode(true))
+        return false;
 #else
-    if (p->model.objects.empty()) { return; }
+    if (p->model.objects.empty()
+        || canvas3D()->get_gizmos_manager().is_in_editing_mode(true))
+        return;
 #endif // ENABLE_PROJECT_STATE
 
     wxString path;

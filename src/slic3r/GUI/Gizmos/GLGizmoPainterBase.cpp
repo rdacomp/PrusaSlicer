@@ -34,20 +34,34 @@ GLGizmoPainterBase::GLGizmoPainterBase(GLCanvas3D& parent, const std::string& ic
 
 void GLGizmoPainterBase::activate_internal_undo_redo_stack(bool activate)
 {
+    Plater* plater = wxGetApp().plater();
+
+    // Following is needed to prevent taking an extra snapshot when the activation of
+    // the internal stack happens when the gizmo is already active (such as open gizmo,
+    // close gizmo, undo, start painting). The internal stack does not activate on the
+    // undo, because that would obliterate all future of the main stack (user would
+    // have to close the gizmo himself, he has no access to main undo/redo after the
+    // internal stack opens). We don't want the "entering" snapshot taken in this case,
+    // because there already is one.
+    std::string last_snapshot_name;
+    plater->undo_redo_topmost_string_getter(plater->can_undo(), last_snapshot_name);
+
     if (activate && ! m_internal_stack_active) {
-        wxString str = get_painter_type() == PainterGizmoType::FDM_SUPPORTS
-                           ? _L("Entering Paint-on supports")
-                           : _L("Entering Seam painting");
-        Plater::TakeSnapshot(wxGetApp().plater(), str);
-        wxGetApp().plater()->enter_gizmos_stack();
+        std::string str = get_painter_type() == PainterGizmoType::FDM_SUPPORTS
+                           ? _u8L("Entering Paint-on supports")
+                           : _u8L("Entering Seam painting");
+        if (last_snapshot_name != str)
+            Plater::TakeSnapshot(plater, str);
+        plater->enter_gizmos_stack();
         m_internal_stack_active = true;
     }
     if (! activate && m_internal_stack_active) {
-        wxString str = get_painter_type() == PainterGizmoType::SEAM
-                           ? _L("Leaving Seam painting")
-                           : _L("Leaving Paint-on supports");
-        wxGetApp().plater()->leave_gizmos_stack();
-        Plater::TakeSnapshot(wxGetApp().plater(), str);
+        plater->leave_gizmos_stack();
+        std::string str = get_painter_type() == PainterGizmoType::SEAM
+                           ? _u8L("Leaving Seam painting")
+                           : _u8L("Leaving Paint-on supports");
+        if (last_snapshot_name != str)
+            Plater::TakeSnapshot(plater, str);
         m_internal_stack_active = false;
     }
 }
