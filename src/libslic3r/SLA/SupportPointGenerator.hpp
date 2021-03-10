@@ -14,9 +14,11 @@
 
 #include <boost/container/small_vector.hpp>
 
-// #define SLA_SUPPORTPOINTGEN_DEBUG
+#include "libslic3r/SLA/SupportIslands/SupportIslandPoint.hpp"
 
-namespace Slic3r { namespace sla {
+#define SLA_SUPPORTPOINTGEN_DEBUG
+
+namespace Slic3r::sla {
 
 class SupportPointGenerator {
 public:
@@ -218,8 +220,7 @@ public: // for testing
     /// <param name="island">Island to be covered</param>
     /// <param name="config">Define limits for uniform cover</param>
     /// <returns>support points in coor of island</returns>
-    static std::vector<Point> uniform_cover_island(const ExPolygon &   island,
-                                                   const SampleConfig &config);
+    static SupportIslandPoints uniform_cover_island(const ExPolygon &island, const SampleConfig &config);
 public:
     enum IslandCoverageFlags : uint8_t { icfNone = 0x0, icfIsNew = 0x1, icfWithBoundary = 0x2 };
 
@@ -247,6 +248,6 @@ void remove_bottom_points(std::vector<SupportPoint> &pts, float lvl);
 std::vector<Vec2f> sample_expolygon(const ExPolygon &expoly, float samples_per_mm2, std::mt19937 &rng);
 void sample_expolygon_boundary(const ExPolygon &expoly, float samples_per_mm, std::vector<Vec2f> &out, std::mt19937 &rng);
 
-}} // namespace Slic3r::sla
+} // namespace Slic3r::sla
 
 #endif // SUPPORTPOINTGENERATOR_HPP

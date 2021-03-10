@@ -20,8 +20,9 @@
 #include "libslic3r/EdgeGrid.hpp"
 #include "libslic3r/VoronoiOffset.hpp"
 
-#include "libslic3r/SLA/SupportIslands/VoronoiGraph.hpp"
 #include "libslic3r/SLA/SupportIslands/VoronoiGraphUtils.hpp"
+#include "libslic3r/SLA/SupportIslands/SampleIslandUtils.hpp"
+#include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
 
 #include <iostream>
 #include <random>
@@ -329,23 +330,19 @@ std::vector<Vec2f> SupportPointGenerator::uniform_cover_island(
     const Point &    bb_size          = structure.bbox.size();
     
     // TODO: find valid params !!!!
-    SampleConfig cfg;
-    cfg.max_distance   = 10;
-    cfg.sample_size    = 10000;
-    cfg.start_distance = 2 * m_config.head_diameter; // radius of support head
-    cfg.curve_sample   = 10;
-    cfg.max_length_for_one_support_point = 1000;
-
-    std::vector<Point> points = uniform_cover_island(island, cfg);
+    SampleConfig cfg = SampleConfigFactory::create(m_config);
+    SupportIslandPoints points = uniform_cover_island(island, cfg);
 
     std::vector<Vec2f> result;
     result.reserve(points.size());
     std::transform(points.begin(), points.end(), std::back_inserter(result),
-                   [](const Point p) -> Vec2f { return Vec2f(p.x(), p.y()); });
+                   [](const SupportIslandPoint& p) -> Vec2f {
+                       return p.point.cast<float>();
+                   });
     return result;
 }
 
-std::vector<Point> SupportPointGenerator::uniform_cover_island(
+SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     const ExPolygon &island, const SampleConfig &config)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
@@ -355,11 +352,12 @@ std::vector<Point> SupportPointGenerator::uniform_cover_island(
     Slic3r::Voronoi::annotate_inside_outside(vd, lines);
     VoronoiGraph         skeleton = VoronoiGraphUtils::getSkeleton(vd, lines);
     VoronoiGraph::ExPath longest_path;
-    std::vector<Point>   samples =
-        VoronoiGraphUtils::sample_voronoi_graph(
+    SupportIslandPoints  samples = SampleIslandUtils::sample_voronoi_graph(
             skeleton, config, longest_path);
 
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
+    const char* support_point_color = "lightgreen";
+    coord_t     support_point_radius = config.head_radius;
     static int  counter = 0;
     BoundingBox bb;
     double      scale = bb.size().x();
@@ -368,8 +366,7 @@ std::vector<Point> SupportPointGenerator::uniform_cover_island(
     svg.draw(island, "blue", 0.5f);
     VoronoiGraphUtils::draw(svg, skeleton, scale / 300);
     for (auto l : lines) svg.draw(l, "black", coord_t(scale / 200));
-    for (auto p : samples)
-        svg.draw(p, "lightgreen", coord_t(config.start_distance));
+    SampleIslandUtils::draw(svg, samples, support_point_radius, support_point_color);
     VoronoiGraphUtils::draw(svg, longest_path, scale / 200);
     
     // dump_voronoi_to_svg("tt", vd, Points(), lines);

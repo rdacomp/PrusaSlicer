@@ -11,6 +11,7 @@
 #include "VoronoiGraph.hpp"
 #include "Parabola.hpp"
 #include "SampleConfig.hpp"
+#include "SupportIslandPoint.hpp"
 
 namespace Slic3r::sla {
 
@@ -190,48 +191,17 @@ public:
     /// </summary>
     static Point get_edge_point(const VD::edge_type *edge, double ratio);
 
-    /// <summary>
-    /// Find point lay on path with distance from first point on path
-    /// </summary>
-    /// <param name="path">Neighbor connected Nodes</param>
-    /// <param name="distance">Distance to final point</param>
-    /// <returns>Points with distance to first node</returns>
-    static Point get_point_on_path(const VoronoiGraph::Nodes &path, double distance);
+    static const VoronoiGraph::Node *getFirstContourNode(
+        const VoronoiGraph &graph);
 
     /// <summary>
-    /// Find point lay in center of path
-    /// Distance from this point to front of path
-    /// is same as distance to back of path
+    /// Get max width from edge in voronoi graph
     /// </summary>
-    /// <param name="path">Queue of neighbor nodes.(must be neighbor)</param>
-    /// <param name="path_length">length of path</param>
-    /// <returns>Point laying on voronoi diagram</returns>
-    static Point get_center_of_path(const VoronoiGraph::Nodes &path, double path_length)
-    { return get_point_on_path(path, path_length / 2); }
-
-    /// <summary>
-    /// decide how to sample longest path
-    /// </summary>
-    /// <param name="longest_path">Path inside voronoi diagram with all side branches and circles</param>
-    /// <param name="config">Definition how to sample</param>
-    /// <returns>Support points for island</returns>
-    static std::vector<Point> sample_longest_path(
-        const VoronoiGraph::ExPath &longest_path, 
-        const SampleConfig &config
-    );
-
-    /// <summary>
-    /// Sample voronoi skeleton
-    /// </summary>
-    /// <param name="graph">Inside skeleton of island</param>
-    /// <param name="config">Params for sampling</param>
-    /// <param name="longest_path">OUTPUT: longest path in graph</param>
-    /// <returns>Vector of sampled points or Empty when distance from edge is
-    /// bigger than max_distance</returns>
-    static std::vector<Point> sample_voronoi_graph(
-        const VoronoiGraph &  graph,
-        const SampleConfig &  config,
-        VoronoiGraph::ExPath &longest_path);
+    /// <param name="longest_path">Input point to voronoi graph</param>
+    /// <returns>Maximal widht in graph</returns>
+    static double get_max_width(const VoronoiGraph::ExPath &longest_path);
+    static double get_max_width(const VoronoiGraph::Nodes &path);
+    static double get_max_width(const VoronoiGraph::Node *node);
 
 public: // draw function for debug
     static void draw(SVG &svg, const VoronoiGraph &graph, coord_t width);

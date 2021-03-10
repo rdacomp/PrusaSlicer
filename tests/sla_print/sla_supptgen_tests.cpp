@@ -3,13 +3,16 @@
 
 #include <libslic3r/ExPolygon.hpp>
 #include <libslic3r/BoundingBox.hpp>
+#include <libslic3r/ClipperUtils.hpp>
 
 #include <libslic3r/SLA/SupportIslands/SampleConfig.hpp>
 #include <libslic3r/SLA/SupportIslands/VoronoiGraphUtils.hpp>
+#include <libslic3r/SLA/SupportIslands/SampleIslandUtils.hpp>
 
 #include "sla_test_utils.hpp"
 
-namespace Slic3r { namespace sla {
+using namespace Slic3r;
+using namespace Slic3r::sla;
 
 TEST_CASE("Overhanging point should be supported", "[SupGen]") {
 
@@ -146,32 +149,105 @@ TEST_CASE("Two parallel plates should be supported", "[SupGen][Hollowed]")
     REQUIRE(!pts.empty());
 }
 
+// all triangle side are same length
+Slic3r::Polygon equilateral_triangle(double size)
+{
+    return {{.0, .0},
+         {size, .0},
+         {size / 2., sqrt(size * size - size * size / 4)}};
+}
+
+// two side of triangle are same size
+Slic3r::Polygon isosceles_triangle(double side, double height)
+{
+    return {{-side / 2, 0.}, {side / 2, 0.}, {.0, height}};
+}
+
+Slic3r::Polygon square(double size)
+{
+    double size_2 = size / 2;
+    return {{-size_2, size_2},
+            {-size_2, -size_2},
+            {size_2, -size_2},
+            {size_2, size_2}};
+}
+
+Slic3r::Polygon rect(double x, double y){
+    return {{.0, y}, {.0, .0}, {x, .0}, {x, y}};
+}
+
+Slic3r::Polygon circle(double radius, size_t count_line_segments) {
+    // CCW: couter clock wise, CW: clock wise
+    Points circle;
+    circle.reserve(count_line_segments);
+    for (size_t i = 0; i < count_line_segments; ++i) {
+        double alpha = (2 * M_PI * i) / count_line_segments;
+        double sina  = sin(alpha);
+        double cosa  = cos(alpha);
+        circle.emplace_back(-radius * sina, radius * cosa);
+    }
+    return Slic3r::Polygon(circle);
+}
+
+Slic3r::Polygon create_cross_roads(double size, double width)
+{
+    auto r1 = rect( 5.3 * size, width);
+    r1.rotate(3.14/4);
+    auto r2 = rect(6.1*size, 3/4.*width);
+    r2.rotate(-3.14 / 5);
+    auto r3 = rect(7.9*size, 4/5.*width);
+    r3.translate(Point(-2*size, size));
+    auto r4 = rect(5 / 6. * width, 5.7 * size);
+    r4.translate(Point(size,0.));
+    Polygons rr = union_(Polygons({r1, r2, r3, r4}));
+    return rr.front();
+}
+
+ExPolygon create_trinagle_with_hole(double size)
+{
+    return ExPolygon(equilateral_triangle(size), {{size / 4, size / 4},
+                                                  {size / 2, size / 2},
+                                                  {size / 2, size / 4}});
+}
+
+ExPolygon create_square_with_hole(double size, double hole_size)
+{
+    assert(sqrt(hole_size *hole_size / 2) < size);
+    auto hole = square(hole_size);
+    hole.rotate(M_PI / 4.); // 45
+    hole.reverse();
+    return ExPolygon(square(size), hole);
+}
+
+ExPolygon create_square_with_4holes(double size, double hole_size) {
+    auto hole = square(hole_size);
+    hole.reverse();
+    double size_4 = size / 4;
+    auto h1 = hole;
+    h1.translate(size_4, size_4);
+    auto h2 = hole;
+    h2.translate(-size_4, size_4);
+    auto h3   = hole;
+    h3.translate(size_4, -size_4);
+    auto h4   = hole;
+    h4.translate(-size_4, -size_4);
+    ExPolygon result(square(size));
+    result.holes = Polygons({h1, h2, h3, h4});
+    return result;
+}
+
+// boudary of circle
+ExPolygon create_disc(double radius, double width, size_t count_line_segments)
+{
+    double width_2 = width / 2;
+    auto hole = circle(radius-width_2, count_line_segments);
+    hole.reverse();
+    return ExPolygon(circle(radius + width_2, count_line_segments), hole);
+}
+
 ExPolygons createTestIslands(double size)
 {
-    ExPolygon triangle(
-        Polygon{{.0, .0},
-                {size, .0},
-                {size / 2., sqrt(size * size - size * size / 4)}});
-    ExPolygon sharp_triangle(
-        Polygon{{.0, size / 2}, {.0, .0}, {2 * size, .0}});
-    ExPolygon triangle_with_hole({{.0, .0},
-                                  {size, .0},
-                                  {size / 2.,
-                                   sqrt(size * size - size * size / 4)}},
-                                 {{size / 4, size / 4},
-                                  {size / 2, size / 2},
-                                  {size / 2, size / 4}});
-    ExPolygon square(Polygon{{.0, size}, {.0, .0}, {size, .0}, {size, size}});
-    ExPolygon rect(
-        Polygon{{.0, size}, {.0, .0}, {2 * size, .0}, {2 * size, size}});
-    ExPolygon rect_with_hole({{-size, size}, // rect CounterClockWise
-                              {-size, -size},
-                              {size, -size},
-                              {size, size}},
-                             {{0., size / 2}, // inside rect ClockWise
-                              {size / 2, 0.},
-                              {0., -size / 2},
-                              {-size / 2, 0.}});
+    bool      useFrogLeg = false;    
     // need post reorganization of longest path
     ExPolygon mountains({{0., 0.},
                          {size, 0.},
@@ -180,28 +256,6 @@ ExPolygons createTestIslands(double size)
                          {3 * size / 7, 2 * size},
                          {2 * size / 7, size / 6},
                          {size / 7, size}});
-    ExPolygon rect_with_4_hole(Polygon{{0., size}, // rect CounterClockWise
-                                       {0., 0.},
-                                       {size, 0.},
-                                       {size, size}});
-    // inside rects ClockWise
-    double size5           = size / 5.;
-    rect_with_4_hole.holes = Polygons{{{size5, 4 * size5},
-                                       {2 * size5, 4 * size5},
-                                       {2 * size5, 3 * size5},
-                                       {size5, 3 * size5}},
-                                      {{3 * size5, 4 * size5},
-                                       {4 * size5, 4 * size5},
-                                       {4 * size5, 3 * size5},
-                                       {3 * size5, 3 * size5}},
-                                      {{size5, 2 * size5},
-                                       {2 * size5, 2 * size5},
-                                       {2 * size5, size5},
-                                       {size5, size5}},
-                                      {{3 * size5, 2 * size5},
-                                       {4 * size5, 2 * size5},
-                                       {4 * size5, size5},
-                                       {3 * size5, size5}}};
 
     size_t count_cirlce_lines = 16; // test stack overfrow
     double r_CCW              = size / 2;
@@ -218,36 +272,159 @@ ExPolygons createTestIslands(double size)
         circle_CW.emplace_back(r_CW * sina, r_CW * cosa);
     }
     ExPolygon double_circle(circle_CCW, circle_CW);
+    ExPolygons result = {
+        // one support point
+        ExPolygon(equilateral_triangle(size)), 
+        ExPolygon(square(size)),
+        ExPolygon(rect(size / 2, size)),
+        ExPolygon(isosceles_triangle(size / 2, 3 * size / 2)), // small sharp triangle
+        ExPolygon(circle(size/2, 10)),
+        create_square_with_4holes(size, size / 4),
+        create_disc(size/4, size / 4, 10),
 
-    TriangleMesh            mesh = load_model("frog_legs.obj");
-    TriangleMeshSlicer      slicer{&mesh};
-    std::vector<float>      grid({0.1f});
-    std::vector<ExPolygons> slices;
-    slicer.slice(grid, SlicingMode::Regular, 0.05f, &slices, [] {});
-    ExPolygon frog_leg = slices.front()[1]; //
+        // two support points
+        ExPolygon(isosceles_triangle(size / 2, 3 * size)), // small sharp triangle
+        ExPolygon(rect(size / 2, 3 * size)),
 
-    return {
-        triangle,         square,
-        sharp_triangle,   rect,
-        rect_with_hole,   triangle_with_hole,
-        rect_with_4_hole, mountains,
-        double_circle
-        //, frog_leg
+        // tiny line support points
+        ExPolygon(rect(size / 2, 10 * size)), // long line
+        ExPolygon(create_cross_roads(size, size / 3)),
+        create_disc(3*size, size / 4, 30),
+        create_square_with_4holes(5 * size, 5 * size / 2 - size / 3),
+
+        // still problem
+        // three support points
+        ExPolygon(equilateral_triangle(3 * size)), 
+        ExPolygon(circle(size, 20)),
+
+        mountains, 
+        create_trinagle_with_hole(size),
+        create_square_with_hole(size, size / 2),
+        create_square_with_hole(size, size / 3)
     };
+    
+    if (useFrogLeg) {
+        TriangleMesh            mesh = load_model("frog_legs.obj");
+        TriangleMeshSlicer      slicer{&mesh};
+        std::vector<float>      grid({0.1f});
+        std::vector<ExPolygons> slices;
+        slicer.slice(grid, SlicingMode::Regular, 0.05f, &slices, [] {});
+        ExPolygon frog_leg = slices.front()[1];
+        result.push_back(frog_leg);
+    }
+    return result;
 }
 
-std::vector<Point> test_island_sampling(const ExPolygon &   island,
+Points createNet(const BoundingBox& bounding_box, double distance)
+{ 
+    Point  size       = bounding_box.size();
+    double distance_2 = distance / 2;
+    int    cols1 = static_cast<int>(floor(size.x() / distance))+1;
+    int    cols2 = static_cast<int>(floor((size.x() - distance_2) / distance))+1;
+    // equilateral triangle height with side distance
+    double h      = sqrt(distance * distance - distance_2 * distance_2);
+    int    rows   = static_cast<int>(floor(size.y() / h)) +1;
+    int    rows_2 = rows / 2;
+    size_t count_points = rows_2 * (cols1 + static_cast<size_t>(cols2));
+    if (rows % 2 == 1) count_points += cols2;
+    Points result;
+    result.reserve(count_points);
+    bool   isOdd = true;
+    Point offset = bounding_box.min;
+    double x_max = offset.x() + static_cast<double>(size.x());
+    double y_max  = offset.y() + static_cast<double>(size.y());
+    for (double y = offset.y(); y <= y_max; y += h) {
+        double x_offset = offset.x();
+        if (isOdd) x_offset += distance_2;
+        isOdd = !isOdd;
+        for (double x = x_offset; x <= x_max; x += distance) {
+            result.emplace_back(x, y);
+        }
+    }
+    assert(result.size() == count_points);
+    return result; 
+}
+
+// create uniform triangle net and return points laying inside island
+Points rasterize(const ExPolygon &island, double distance) {
+    BoundingBox bb;
+    for (const Point &pt : island.contour.points) bb.merge(pt);
+    Points      fullNet = createNet(bb, distance);
+    Points result;
+    result.reserve(fullNet.size());
+    std::copy_if(fullNet.begin(), fullNet.end(), std::back_inserter(result),
+                 [&island](const Point &p) { return island.contains(p); });
+    return result;
+}
+
+SupportIslandPoints test_island_sampling(const ExPolygon &   island,
                                         const SampleConfig &config)
 {
     auto points = SupportPointGenerator::uniform_cover_island(island, config);
+    Points chck_points = rasterize(island, config.head_radius); // TODO: Use resolution of printer
+
+    bool is_ok = true;
+    double              max_distance = config.max_distance;
+    std::vector<double> point_distances(chck_points.size(),
+                                        {max_distance + 1});
+    for (size_t index = 0; index < chck_points.size(); ++index) { 
+        const Point &chck_point  = chck_points[index];
+        double &min_distance = point_distances[index];
+        bool         exist_close_support_point = false;
+        for (auto &island_point : points) {
+            Point& p = island_point.point;
+            Point abs_diff(fabs(p.x() - chck_point.x()),
+                           fabs(p.y() - chck_point.y()));
+            if (abs_diff.x() < min_distance && abs_diff.y() < min_distance) {
+                double distance = sqrt((double) abs_diff.x() * abs_diff.x() +
+                                       (double) abs_diff.y() * abs_diff.y());
+                if (min_distance > distance) {
+                    min_distance = distance;
+                    exist_close_support_point = true;
+                };
+            }
+        }
+        if (!exist_close_support_point) is_ok = false;
+    }
+
+    if (!is_ok) { // visualize
+        static int  counter              = 0;
+        BoundingBox bb;
+        for (const Point &pt : island.contour.points) bb.merge(pt);
+        SVG svg("Error" + std::to_string(++counter) + ".svg", bb);
+        svg.draw(island, "blue", 0.5f);
+        for (auto p : points)
+            svg.draw(p.point, "lightgreen", config.head_radius);
+        for (size_t index = 0; index < chck_points.size(); ++index) {
+            const Point &chck_point = chck_points[index];
+            double       distance   = point_distances[index];
+            bool         isOk       = distance < max_distance;
+            std::string  color      = (isOk) ? "gray" : "red";
+            svg.draw(chck_point, color, config.head_radius / 4);
+        }
+    }
     CHECK(!points.empty());
+    //CHECK(is_ok);
 
     // all points must be inside of island
-    for (const auto &point : points) { CHECK(island.contains(point)); }
+    for (const auto &point : points) { CHECK(island.contains(point.point)); }
     return points;
 }
 
+SampleConfig create_sample_config(double size) {
+    SampleConfig cfg;
+    cfg.max_distance   = 3 * size + 0.1;
+    cfg.head_radius = size / 4;
+    cfg.minimal_distance_from_outline = cfg.head_radius + size/10;
+    cfg.max_length_for_one_support_point = 2*size;
+    cfg.max_length_for_two_support_points = 4*size;
+    cfg.max_width_for_center_supportr_line = size;
+    cfg.max_width_for_zig_zag_supportr_line = 2*size;
+    return cfg;
+}
 
+#include <libslic3r/Geometry.hpp>
+#include <libslic3r/VoronoiOffset.hpp>
 TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
 {
     TriangleMesh            mesh = load_model("frog_legs.obj");
@@ -256,29 +433,25 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     std::vector<ExPolygons> slices;
     slicer.slice(grid, SlicingMode::Regular, 0.05f, &slices, [] {});
     ExPolygon frog_leg = slices.front()[1];
+    SampleConfig cfg = create_sample_config(3e7);
 
-    double       size = 3e7;
-    SampleConfig cfg;
-    cfg.max_distance   = size + 0.1;
-    cfg.sample_size    = size / 5;
-    cfg.start_distance = 0.2 * size; // radius of support head
-    cfg.max_length_for_one_support_point = 3 * size;
-
+    using VD = Slic3r::Geometry::VoronoiDiagram;
+    VD    vd;
+    Lines lines = to_lines(frog_leg);
+    construct_voronoi(lines.begin(), lines.end(), &vd);
+    Slic3r::Voronoi::annotate_inside_outside(vd, lines);
+    
     for (int i = 0; i < 100; ++i) {
-        auto points = SupportPointGenerator::uniform_cover_island(
-            frog_leg, cfg);
+        VoronoiGraph::ExPath longest_path;
+        VoronoiGraph skeleton = VoronoiGraphUtils::getSkeleton(vd, lines);
+        auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
     }
 }
 
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
 {
-    double size = 3e7;
-    SampleConfig cfg;
-    cfg.max_distance   = size + 0.1;
-    cfg.sample_size    = size / 5;
-    cfg.start_distance = 0.2 * size; // radius of support head
-    cfg.max_length_for_one_support_point = 3 * size;
-
+    double       size = 3e7;
+    SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
     for (auto &island : islands) {
         auto   points = test_island_sampling(island, cfg);
@@ -286,10 +459,7 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
 
         island.rotate(angle);
         auto pointsR = test_island_sampling(island, cfg);
-        for (Point &p : pointsR) p.rotate(-angle);
-
+        //for (Point &p : pointsR) p.rotate(-angle);
         // points should be equal to pointsR
     }
 }
-
-}} // namespace Slic3r::sla

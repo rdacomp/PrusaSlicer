@@ -62,8 +62,11 @@ struct VoronoiGraph::Node::Neighbor
     double max_width;
 
 public:
-    Neighbor(const VD::edge_type *edge, const Node *node, double edge_length)
-        : edge(edge), node(node), edge_length(edge_length)
+    Neighbor(const VD::edge_type *edge, const Node *node, double edge_length, double max_width)
+        : edge(edge)
+        , node(node)
+        , edge_length(edge_length)
+        , max_width(max_width)
     {}
 };
 

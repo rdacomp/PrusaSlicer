@@ -113,8 +113,24 @@ double VoronoiGraphUtils::calculate_max_width(
     Point v1{edge.vertex1()->x(), edge.vertex1()->y()};
 
     if (edge.is_linear()) {
-        // line is initialized by 2 line segments only
-        assert(!edge.cell()->contains_point());
+        // edge line could be initialized by 2 points
+        if (edge.cell()->contains_point()) {
+            const Line &source_line = lines[edge.cell()->source_index()];
+            Point source_point;
+            if (edge.cell()->source_category() ==
+                boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT)
+                source_point = source_line.a;
+            else {
+                assert(edge.cell()->source_category() ==
+                    boost::polygon::SOURCE_CATEGORY_SEGMENT_END_POINT);
+                source_point = source_line.b;
+            }
+            Point vec0 = source_point - v0;
+            Point vec1 = source_point - v1;
+            double distance0 = sqrt(vec0.x() * vec0.x() + vec0.y() * vec0.y());
+            double distance1 = sqrt(vec0.x() * vec0.x() + vec0.y() * vec0.y());
+            return 2 * std::max(distance0, distance1);
+        }
         assert(edge.cell()->contains_segment());
         assert(!edge.twin()->cell()->contains_point());
         assert(edge.twin()->cell()->contains_segment());
@@ -175,10 +191,11 @@ VoronoiGraph VoronoiGraphUtils::getSkeleton(const VD &vd, const Lines &lines)
         VoronoiGraph::Node *node0 = getNode(skeleton, v0, &edge, lines);
         VoronoiGraph::Node *node1 = getNode(skeleton, v1, &edge, lines);
 
+        // TODO: Do not store twice length and max_width.
         // add extended Edge to graph, both side
-        VoronoiGraph::Node::Neighbor neighbor0(&edge, node1, length);
+        VoronoiGraph::Node::Neighbor neighbor0(&edge, node1, length, max_width);
         node0->neighbors.push_back(neighbor0);
-        VoronoiGraph::Node::Neighbor neighbor1(edge.twin(), node0, length);
+        VoronoiGraph::Node::Neighbor neighbor1(edge.twin(), node0, length, max_width);
         node1->neighbors.push_back(neighbor1);
     }
     return skeleton;
@@ -514,7 +531,8 @@ VoronoiGraph::ExPath VoronoiGraphUtils::create_longest_path(
     return longest_path;
 }
 
-Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge, double ratio)
+Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge,
+                                                double               ratio)
 {
     const VD::vertex_type *v0 = edge->vertex0();
     const VD::vertex_type *v1 = edge->vertex1();
@@ -524,9 +542,7 @@ Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge, doubl
         return Point(v1->x(), v1->y());
 
     if (edge->is_linear()) {
-        Point dir(
-            v1->x() - v0->x(), 
-            v1->y() - v0->y());
+        Point dir(v1->x() - v0->x(), v1->y() - v0->y());
         // normalize
         dir *= ratio;
         return Point(v0->x() + dir.x(), v0->y() + dir.y());
@@ -541,71 +557,83 @@ Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge, doubl
     return Point(v0->x() + dir.x(), v0->y() + dir.y());
 }
 
-Slic3r::Point VoronoiGraphUtils::get_point_on_path(const VoronoiGraph::Nodes &path, double distance)
+const VoronoiGraph::Node *VoronoiGraphUtils::getFirstContourNode(
+    const VoronoiGraph &graph)
 {
-    const VoronoiGraph::Node *prev_node        = nullptr;
-    double                    actual_distance         = 0.;
-    for (const VoronoiGraph::Node *node : path) {
-        if (prev_node == nullptr) { // first call
-            prev_node = node;
-            continue;
-        }
-        const VoronoiGraph::Node::Neighbor *neighbor = get_neighbor(prev_node, node);
-        actual_distance += neighbor->edge_length;
-        if (actual_distance >= distance) {
-            // over half point is on
-            double previous_distance = actual_distance - distance;
-            double over_ratio = previous_distance / neighbor->edge_length;
-            double ratio = 1. - over_ratio;
-            return get_edge_point(neighbor->edge, ratio);
-        }
-        prev_node = node;
-    }
-    // distance must be inside path
-    // this means bad input params
-    assert(false);
-    return Point(0, 0);
-}
-
-std::vector<Slic3r::Point> VoronoiGraphUtils::sample_longest_path(
-    const VoronoiGraph::ExPath &longest_path, const SampleConfig &config)
-{
-    // 1) One support point
-    if (longest_path.length <
-        config.max_length_for_one_support_point) { // create only one
-                                                   // point in center
-        // sample in center of voronoi
-        return {get_center_of_path(longest_path.nodes, longest_path.length)};
-    }
-    // 2) Two support points
-    //if (longest_path.length < config.max_distance) {}
-
-    std::vector<Point> points;
-    points.push_back(get_offseted_point(*longest_path.nodes.front(), config.start_distance));
-
-    return points;
-}
-
-std::vector<Slic3r::Point> VoronoiGraphUtils::sample_voronoi_graph(
-    const VoronoiGraph &  graph,
-    const SampleConfig &  config,
-    VoronoiGraph::ExPath &longest_path)
-{
-    // first vertex on contour:
-    const VoronoiGraph::Node *start_node = nullptr;
     for (const auto &[key, value] : graph.data) {
         const VD::vertex_type & vertex   = *key;
         Voronoi::VertexCategory category = Voronoi::vertex_category(vertex);
         if (category == Voronoi::VertexCategory::OnContour) {
-            start_node = &value;
-            break;
+            return &value;
         }
     }
-    // every island has to have a point on contour
-    assert(start_node != nullptr);
-    longest_path = create_longest_path(start_node);
-    // longest_path = create_longest_path_recursive(start_node);
-    return sample_longest_path(longest_path, config);
+    return nullptr;
+}
+
+double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Nodes &path)
+{
+    double max = 0.;
+    const VoronoiGraph::Node *prev_node = nullptr;
+    for (const VoronoiGraph::Node *node : path) { 
+        if (prev_node == nullptr) {
+            prev_node = node;
+            continue;
+        }
+        const VoronoiGraph::Node::Neighbor *neighbor = get_neighbor(prev_node, node);
+        if (max < neighbor->max_width)  max = neighbor->max_width;        
+        prev_node = node;
+    }
+    return max;
+}
+
+double VoronoiGraphUtils::get_max_width(
+    const VoronoiGraph::ExPath &longest_path)
+{
+    double max = get_max_width(longest_path.nodes);
+    for (const auto &side_branches_item : longest_path.side_branches) {
+        const VoronoiGraph::Node *prev_node = side_branches_item.first;
+        VoronoiGraph::ExPath::SideBranches side_branches = side_branches_item.second; // !!! copy
+        while (!side_branches.empty()) {
+            const VoronoiGraph::Path &side_path = side_branches.top();
+            const VoronoiGraph::Node::Neighbor *first_neighbor =
+                get_neighbor(prev_node, side_path.nodes.front());
+            double max_side_branch = std::max(
+                get_max_width(side_path.nodes), first_neighbor->max_width);
+            if (max < max_side_branch) max = max_side_branch;
+            side_branches.pop();
+        }
+    }
+
+    for (const VoronoiGraph::Circle &circle : longest_path.circles) {
+        const VoronoiGraph::Node::Neighbor *first_neighbor =
+            get_neighbor(circle.nodes.front(), circle.nodes.back());
+        double max_circle = std::max(
+            first_neighbor->max_width, get_max_width(circle.nodes));
+        if (max < max_circle) max = max_circle;
+    }
+
+    return max;
+}
+
+// !!! is slower than go along path
+double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
+{
+    double max = 0.;
+    std::set<const VoronoiGraph::Node *> done;
+    std::queue<const VoronoiGraph::Node *> process;
+    process.push(node);
+    while (!process.empty()) {
+        const VoronoiGraph::Node *actual_node = process.front();
+        process.pop();
+        if (done.find(actual_node) != done.end()) continue;
+        for (const VoronoiGraph::Node::Neighbor& neighbor: actual_node->neighbors) {
+            if (done.find(neighbor.node) != done.end()) continue;
+            process.push(neighbor.node);
+            if (max < neighbor.max_width) max = neighbor.max_width;
+        }
+        done.insert(actual_node);
+    }
+    return max;
 }
 
 void VoronoiGraphUtils::draw(SVG &               svg,
