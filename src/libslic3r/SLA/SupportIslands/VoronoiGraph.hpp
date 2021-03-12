@@ -18,6 +18,7 @@ struct VoronoiGraph
     struct Path;
     struct ExPath;
     using Circle = Path;
+    struct Position;
     std::map<const VD::vertex_type *, Node> data;
 };
 
@@ -48,6 +49,8 @@ struct VoronoiGraph::Node
 /// <summary>
 /// Surrond GraphNode data type.
 /// Extend information about voronoi edge.
+/// TODO IMPROVE: extends neighbors for store more edges
+/// (cumulate Nodes with 2 neighbors - No cross)
 /// </summary>
 struct VoronoiGraph::Node::Neighbor
 {
@@ -152,6 +155,30 @@ struct VoronoiGraph::ExPath : public VoronoiGraph::Path
 
 public:
     ExPath() = default;
+};
+
+/// <summary>
+/// DTO 
+/// Extend neighbor with ratio to edge
+/// For point position on VoronoiGraph use VoronoiGraphUtils::get_edge_point
+/// </summary>
+struct VoronoiGraph::Position
+{
+    // neighbor is stored inside of voronoi diagram
+    const VoronoiGraph::Node::Neighbor* neighbor; 
+
+    // define position on neighbor edge 
+    // Value should be in range from 0. to 1. (shrinked when used)
+    // Value 0 means position of edge->vertex0
+    // Value 0.5 is on half edge way between edge->vertex0 and edge->vertex1
+    // Value 1 means position of edge->vertex1
+    double ratio;
+
+    Position(const VoronoiGraph::Node::Neighbor *neighbor, double ratio)
+        : neighbor(neighbor), ratio(ratio)
+    {}
+
+    Position(): neighbor(nullptr), ratio(0.) {}
 };
 
 } // namespace Slic3r::sla

@@ -22,13 +22,27 @@ public:
     SampleIslandUtils() = delete;
 
     /// <summary>
+    /// Create support point on edge defined by neighbor
+    /// </summary>
+    /// <param name="neighbor">Source edge</param>
+    /// <param name="ratio">Source distance ratio for position on edge</param>
+    /// <param name="type">Type of point</param>
+    /// <returns>created support island point</returns>
+    static SupportIslandPoint create_point(
+        const VoronoiGraph::Node::Neighbor *neighbor,
+        double                              ratio,
+        SupportIslandPoint::Type type = SupportIslandPoint::Type::undefined);
+
+    /// <summary>
     /// Find point lay on path with distance from first point on path
     /// </summary>
     /// <param name="path">Neighbor connected Nodes</param>
     /// <param name="distance">Distance to final point</param>
     /// <returns>Points with distance to first node</returns>
-    static Point get_point_on_path(const VoronoiGraph::Nodes &path,
-                                   double                     distance);
+    static SupportIslandPoint create_point_on_path(
+        const VoronoiGraph::Nodes &path,
+        double                     distance,
+        SupportIslandPoint::Type type = SupportIslandPoint::Type::undefined);
 
     /// <summary>
     /// Find point lay in center of path
@@ -38,11 +52,9 @@ public:
     /// <param name="path">Queue of neighbor nodes.(must be neighbor)</param>
     /// <param name="path_length">length of path</param>
     /// <returns>Point laying on voronoi diagram</returns>
-    static Point get_center_of_path(const VoronoiGraph::Nodes &path,
-                                    double                     path_length)
-    {
-        return get_point_on_path(path, path_length / 2);
-    }
+    static SupportIslandPoint create_middle_path_point(
+        const VoronoiGraph::Path &path,
+        SupportIslandPoint::Type  type = SupportIslandPoint::Type::undefined);    
 
     // create 2 points on both ends of path with side distance from border
     static SupportIslandPoints create_side_points(const VoronoiGraph::Nodes &path, double side_distance);
@@ -78,11 +90,20 @@ public:
     // create points along path and its side branches(recursively) + colve circles
     static SupportIslandPoints sample_center_line(const VoronoiGraph::ExPath &path, const CenterLineConfiguration &cfg);
     // create point along multi circles in path
-    static SupportIslandPoints sample_center_circles(const VoronoiGraph::ExPath &path, const CenterLineConfiguration &cfg);
+    static void sample_center_circles(const VoronoiGraph::ExPath &   path,
+                                      const CenterLineConfiguration &cfg,
+                                      SupportIslandPoints &          result);
     static SupportIslandPoints sample_center_circle(
-        const std::set<const VoronoiGraph::Node *> &circle_set,
-        const VoronoiGraph::Nodes &                 path_nodes,
+        const std::set<const VoronoiGraph::Node *> &        circle_set,
+        std::map<const VoronoiGraph::Node *, double> &path_distances,
         const CenterLineConfiguration &             cfg);
+    static void sample_center_circle_end(
+        const VoronoiGraph::Node::Neighbor &neighbor,
+        double &                            neighbor_distance,
+        const VoronoiGraph::Nodes &         done_nodes,
+        double &                            node_distance,
+        const CenterLineConfiguration &     cfg,
+        SupportIslandPoints &               result);
 
     /// <summary>
     /// Decide how to sample path

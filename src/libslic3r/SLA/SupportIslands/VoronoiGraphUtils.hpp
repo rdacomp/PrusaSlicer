@@ -186,6 +186,14 @@ public:
         const VoronoiGraph::Node *start_node);
 
     /// <summary>
+    /// Find source node of neighbor
+    /// </summary>
+    /// <param name="neighbor">neighbor</param>
+    /// <returns>start node</returns>
+    static const VoronoiGraph::Node *VoronoiGraphUtils::get_twin_node(
+        const VoronoiGraph::Node::Neighbor *neighbor);
+
+    /// <summary>
     /// Create point on edge defined by neighbor
     /// in distance defined by edge length ratio
     /// </summary>

@@ -173,7 +173,9 @@ Slic3r::Polygon square(double size)
 }
 
 Slic3r::Polygon rect(double x, double y){
-    return {{.0, y}, {.0, .0}, {x, .0}, {x, y}};
+    double x_2 = x / 2;
+    double y_2 = y / 2;
+    return {{-x_2, y_2}, {-x_2, -y_2}, {x_2, -y_2}, {x_2, y_2}};
 }
 
 Slic3r::Polygon circle(double radius, size_t count_line_segments) {
@@ -193,12 +195,14 @@ Slic3r::Polygon create_cross_roads(double size, double width)
 {
     auto r1 = rect( 5.3 * size, width);
     r1.rotate(3.14/4);
+    r1.translate(2 * size, width / 2);
     auto r2 = rect(6.1*size, 3/4.*width);
     r2.rotate(-3.14 / 5);
+    r2.translate(3 * size, width / 2);
     auto r3 = rect(7.9*size, 4/5.*width);
-    r3.translate(Point(-2*size, size));
+    r3.translate(2*size, width/2);
     auto r4 = rect(5 / 6. * width, 5.7 * size);
-    r4.translate(Point(size,0.));
+    r4.translate(-size,3*size);
     Polygons rr = union_(Polygons({r1, r2, r3, r4}));
     return rr.front();
 }
@@ -245,6 +249,22 @@ ExPolygon create_disc(double radius, double width, size_t count_line_segments)
     return ExPolygon(circle(radius + width_2, count_line_segments), hole);
 }
 
+Slic3r::Polygon create_V_shape(double height, double line_width, double angle = M_PI/4) {
+    double angle_2 = angle / 2;
+    auto   left_side = rect(line_width, height);
+    auto   right_side = left_side;
+    right_side.rotate(-angle_2);
+    double small_move = cos(angle_2) * line_width / 2;
+    double side_move  = sin(angle_2) * height / 2 + small_move;
+    right_side.translate(side_move,0);
+    left_side.rotate(angle_2);
+    left_side.translate(-side_move, 0);
+    auto bottom = rect(4 * small_move, line_width);
+    bottom.translate(0., -cos(angle_2) * height / 2 + line_width/2);
+    Polygons polygons = union_(Polygons({left_side, right_side, bottom}));
+    return polygons.front();
+}
+
 ExPolygons createTestIslands(double size)
 {
     bool      useFrogLeg = false;    
@@ -256,22 +276,6 @@ ExPolygons createTestIslands(double size)
                          {3 * size / 7, 2 * size},
                          {2 * size / 7, size / 6},
                          {size / 7, size}});
-
-    size_t count_cirlce_lines = 16; // test stack overfrow
-    double r_CCW              = size / 2;
-    double r_CW               = r_CCW - size / 6;
-    // CCW: couter clock wise, CW: clock wise
-    Points circle_CCW, circle_CW;
-    circle_CCW.reserve(count_cirlce_lines);
-    circle_CW.reserve(count_cirlce_lines);
-    for (size_t i = 0; i < count_cirlce_lines; ++i) {
-        double alpha = (2 * M_PI * i) / count_cirlce_lines;
-        double sina  = sin(alpha);
-        double cosa  = cos(alpha);
-        circle_CCW.emplace_back(-r_CCW * sina, r_CCW * cosa);
-        circle_CW.emplace_back(r_CW * sina, r_CW * cosa);
-    }
-    ExPolygon double_circle(circle_CCW, circle_CW);
     ExPolygons result = {
         // one support point
         ExPolygon(equilateral_triangle(size)), 
@@ -281,13 +285,16 @@ ExPolygons createTestIslands(double size)
         ExPolygon(circle(size/2, 10)),
         create_square_with_4holes(size, size / 4),
         create_disc(size/4, size / 4, 10),
+        ExPolygon(create_V_shape(2*size/3, size / 4)),
 
         // two support points
         ExPolygon(isosceles_triangle(size / 2, 3 * size)), // small sharp triangle
         ExPolygon(rect(size / 2, 3 * size)),
+        ExPolygon(create_V_shape(1.5*size, size/3)),
 
         // tiny line support points
         ExPolygon(rect(size / 2, 10 * size)), // long line
+        ExPolygon(create_V_shape(size*4, size / 3)),
         ExPolygon(create_cross_roads(size, size / 3)),
         create_disc(3*size, size / 4, 30),
         create_square_with_4holes(5 * size, 5 * size / 2 - size / 3),
@@ -448,6 +455,23 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     }
 }
 
+/*
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Delaunay_triangulation_2.h>
+void cgal_test(const SupportIslandPoints &points, const ExPolygon &island) {
+    using Kernel = CGAL::Exact_predicates_inexact_constructions_kernel;
+    using Delaunay = CGAL::Delaunay_triangulation_2<Kernel>;    
+    std::vector<Kernel::Point_2> k_points;
+    k_points.reserve(points.size());
+    std::transform(points.begin(), points.end(), std::back_inserter(k_points),
+                   [](const SupportIslandPoint &p) {
+                       return Kernel::Point_2(p.point.x(), p.point.y());
+                   });    
+    Delaunay dt;
+    dt.insert(k_points.begin(), k_points.end());
+    std::cout << dt.number_of_vertices() << std::endl;
+}*/
+
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
 {
     double       size = 3e7;
@@ -455,6 +479,7 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
     ExPolygons islands = createTestIslands(size);
     for (auto &island : islands) {
         auto   points = test_island_sampling(island, cfg);
+        //cgal_test(points, island);
         double angle  = 3.14 / 3; // cca 60 degree
 
         island.rotate(angle);

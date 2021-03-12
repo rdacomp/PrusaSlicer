@@ -2,6 +2,7 @@
 #define slic3r_SLA_SuppotstIslands_SupportIslandPoint_hpp_
 
 #include <libslic3r/Point.hpp>
+#include "VoronoiGraph.hpp"
 
 namespace Slic3r::sla {
 
@@ -21,11 +22,22 @@ struct SupportIslandPoint
     };
 
     Slic3r::Point point; // 2 point in layer coordinate
+
+    // Define position on voronoi graph
+    // Lose data when voronoi graph does NOT exist
+    VoronoiGraph::Position position;
+
     Type type;
 
-    SupportIslandPoint(Slic3r::Point point, Type type = Type::undefined)
-        : point(std::move(point)), type(type)
-    {}
+    SupportIslandPoint(Slic3r::Point          point,
+                       Type                   type = Type::undefined,
+                       VoronoiGraph::Position position = {})
+        : point(std::move(point)), type(type), position(position)
+    {
+        if (position.neighbor == nullptr) {
+            int i = 5;
+        }
+    }
 };
 
 using SupportIslandPoints = std::vector<SupportIslandPoint>;

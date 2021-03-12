@@ -201,25 +201,6 @@ VoronoiGraph VoronoiGraphUtils::getSkeleton(const VD &vd, const Lines &lines)
     return skeleton;
 }
 
-Slic3r::Point VoronoiGraphUtils::get_offseted_point(
-    const VoronoiGraph::Node &node, double padding)
-{
-    assert(node.neighbors.size() == 1);
-    const VoronoiGraph::Node::Neighbor &neighbor = node.neighbors.front();
-    const VD::edge_type &               edge     = *neighbor.edge;
-    const VD::vertex_type &             v0       = *edge.vertex0();
-    const VD::vertex_type &             v1       = *edge.vertex1();
-    Point                               dir(v0.x() - v1.x(), v0.y() - v1.y());
-    if (node.vertex == &v0)
-        dir *= -1;
-    else
-        assert(node.vertex == &v1);
-
-    double size = neighbor.edge_length / padding;
-    Point  move(dir[0] / size, dir[1] / size);
-    return Point(node.vertex->x() + move[0], node.vertex->y() + move[1]);
-}
-
 const VoronoiGraph::Node::Neighbor *VoronoiGraphUtils::get_neighbor(
     const VoronoiGraph::Node *from, const VoronoiGraph::Node *to)
 {
@@ -529,6 +510,16 @@ VoronoiGraph::ExPath VoronoiGraphUtils::create_longest_path(
     reshape_longest_path(longest_path);
     // after reshape it shoud be longest path for whole Voronoi Graph
     return longest_path;
+}
+
+const VoronoiGraph::Node *VoronoiGraphUtils::get_twin_node(const VoronoiGraph::Node::Neighbor *neighbor)
+{
+    auto twin_edge = neighbor->edge->twin();
+    for (const VoronoiGraph::Node::Neighbor n : neighbor->node->neighbors) {
+        if (n.edge == twin_edge) return n.node;
+    }
+    assert(false);
+    return nullptr;
 }
 
 Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge,
