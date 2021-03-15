@@ -18,9 +18,11 @@
     #include <sys/resource.h>
 	#ifdef BSD
 		#include <sys/sysctl.h>
-	#elif defined(__APPLE__)
+	#endif
+	#ifdef __APPLE__
         #include <mach/mach.h>
-    #elif defined(__linux__)
+    #endif
+    #ifdef(__linux__)
        	#include <sys/stat.h>
        	#include <fcntl.h>
 		#include <sys/sendfile.h>
