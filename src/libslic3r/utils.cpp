@@ -466,7 +466,7 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 		goto fail;
 	}
 
-  	const mode_t from_mode = from_stat.stx_mode;
+  	const mode_t from_mode = from_stat.st_mode;
   	if (!S_ISREG(from_mode)) {
     	err = ENOSYS;
     	goto fail;
@@ -492,7 +492,7 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 	if (::fstat(outfile.fd, &to_stat) != 0)
 		goto fail_errno;
 
-	to_mode = to_stat.stx_mode;
+	to_mode = to_stat.st_mode;
 	if (!S_ISREG(to_mode)) {
 		err = ENOSYS;
 		goto fail;
@@ -512,8 +512,8 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 		// sendfile will not send more than this amount of data in one call
 		BOOST_CONSTEXPR_OR_CONST std::size_t max_send_size = 0x7ffff000u;
 		uintmax_t offset = 0u;
-		while (offset < from_stat.stx_size) {
-			uintmax_t size_left = from_stat.stx_size - offset;
+		while (offset < from_stat.st_size) {
+			uintmax_t size_left = from_stat.st_size - offset;
 			std::size_t size_to_copy = max_send_size;
 			if (size_left < static_cast<uintmax_t>(max_send_size))
 				size_to_copy = static_cast<std::size_t>(size_left);
