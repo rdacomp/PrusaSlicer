@@ -426,7 +426,8 @@ std::error_code rename_file(const std::string &from, const std::string &to)
 #ifdef __linux__
 // Copied from boost::filesystem, to support copying a file to a weird filesystem, which does not support changing file attributes,
 // for example ChromeOS Linux integration or FlashAIR WebDAV.
-// Copied and simplified from boost::filesystem::detail::copy_file() with option = overwrite_if_exists and with just the Linux path kept.
+// Copied and simplified from boost::filesystem::detail::copy_file() with option = overwrite_if_exists and with just the Linux path kept,
+// and only features supported by Linux 3.10 (on our build server with CentOS 7) are kept, namely sendfile with ranges and statx() are not supported.
 bool copy_file_linux(const boost::filesystem::path &from, const boost::filesystem::path &to, boost::system::error_code &ec)
 {
 	using namespace boost::filesystem;
@@ -458,19 +459,12 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
     	break;
   	}
 
-  	unsigned int statx_data_mask = STATX_TYPE | STATX_MODE | STATX_INO | STATX_SIZE;
-
-  	struct ::statx from_stat;
-  	if (statx(infile.fd, "", AT_EMPTY_PATH | AT_NO_AUTOMOUNT, statx_data_mask, &from_stat) < 0) {
-  	fail_errno:
-    	err = errno;
-    	goto fail;
-  	}
-
-  	if ((from_stat.stx_mask & statx_data_mask) != statx_data_mask) {
-    	err = ENOSYS;
-    	goto fail;
-  	}
+	struct ::stat from_stat;
+	if (::fstat(infile.fd, &from_stat) != 0) {
+		fail_errno:
+		err = errno;
+		goto fail;
+	}
 
   	const mode_t from_mode = from_stat.stx_mode;
   	if (!S_ISREG(from_mode)) {
@@ -494,15 +488,9 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 	  	break;
 	}
 
-	statx_data_mask = STATX_TYPE | STATX_MODE | STATX_INO;
-	struct ::statx to_stat;
-	if (statx(outfile.fd, "", AT_EMPTY_PATH | AT_NO_AUTOMOUNT, statx_data_mask, &to_stat) < 0)
+	struct ::stat to_stat;
+	if (::fstat(outfile.fd, &to_stat) != 0)
 		goto fail_errno;
-
-	if ((to_stat.stx_mask & statx_data_mask) != statx_data_mask) {
-		err = ENOSYS;
-		goto fail;
-	}
 
 	to_mode = to_stat.stx_mode;
 	if (!S_ISREG(to_mode)) {
@@ -510,7 +498,7 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 		goto fail;
 	}
 
-	if (from_stat.stx_dev_major == to_stat.stx_dev_major && from_stat.stx_dev_minor == to_stat.stx_dev_minor && from_stat.stx_ino == to_stat.stx_ino) {
+	if (from_stat.st_dev == to_stat.st_dev && from_stat.st_ino == to_stat.st_ino) {
 		err = EEXIST;
 		goto fail;
 	}
@@ -518,7 +506,8 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 	//! copy_file implementation that uses sendfile loop. Requires sendfile to support file descriptors.
 	//FIXME Vojtech: This is a copy loop valid for Linux 2.6.33 and newer.
 	// copy_file_data_copy_file_range() supports cross-filesystem copying since 5.3, but Vojtech did not want to polute this
-	// function with that, we don't think the performance gain is worth it for the types of files we are copying.
+	// function with that, we don't think the performance gain is worth it for the types of files we are copying,
+	// and our build server based on CentOS 7 with Linux 3.10 does not support that anyways.
 	{
 		// sendfile will not send more than this amount of data in one call
 		BOOST_CONSTEXPR_OR_CONST std::size_t max_send_size = 0x7ffff000u;
