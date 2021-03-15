@@ -510,9 +510,9 @@ bool copy_file_linux(const boost::filesystem::path &from, const boost::filesyste
 	// and our build server based on CentOS 7 with Linux 3.10 does not support that anyways.
 	{
 		// sendfile will not send more than this amount of data in one call
-		BOOST_CONSTEXPR_OR_CONST std::size_t max_send_size = 0x7ffff000u;
+		constexpr std::size_t max_send_size = 0x7ffff000u;
 		uintmax_t offset = 0u;
-		while (offset < from_stat.st_size) {
+		while (off_t(offset) < from_stat.st_size) {
 			uintmax_t size_left = from_stat.st_size - offset;
 			std::size_t size_to_copy = max_send_size;
 			if (size_left < static_cast<uintmax_t>(max_send_size))
