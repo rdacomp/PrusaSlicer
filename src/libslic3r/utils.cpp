@@ -18,10 +18,13 @@
     #include <sys/resource.h>
 	#ifdef BSD
 		#include <sys/sysctl.h>
-	#endif
-    #ifdef __APPLE__
+	#elif defined(__APPLE__)
         #include <mach/mach.h>
-    #endif
+    #elif defined(__linux__)
+       	#include <sys/stat.h>
+       	#include <fcntl.h>
+		#include <sys/sendfile.h>
+	#endif
 #endif
 
 #include <boost/log/core.hpp>
@@ -418,182 +421,144 @@ std::error_code rename_file(const std::string &from, const std::string &to)
 }
 
 #ifdef __linux__
-bool copy_file_linux(const path& from, const path& to, unsigned int options, error_code* ec)
+// Copied from boost::filesystem, to support copying a file to a weird filesystem, which does not support changing file attributes,
+// for example ChromeOS Linux integration or FlashAIR WebDAV.
+bool copy_file_linux(const boost::filesystem::path &from, const boost::filesystem::path &to, boost::system::error_code &ec)
 {
-  BOOST_ASSERT((((options & static_cast< unsigned int >(copy_options::overwrite_existing)) != 0u) +
-    ((options & static_cast< unsigned int >(copy_options::skip_existing)) != 0u) +
-    ((options & static_cast< unsigned int >(copy_options::update_existing)) != 0u)) <= 1);
+	using namespace boost::filesystem;
 
-  if (ec)
-    ec->clear();
+	struct fd_wrapper
+	{
+		int fd { -1 };
+		fd_wrapper() = default;
+		explicit fd_wrapper(int fd) throw() : fd(fd) {}
+		~fd_wrapper() throw() { if (fd >= 0) ::close(fd); }
+	};
 
-  int err = 0;
+	ec.clear();
+  	int err = 0;
 
-  // Note: Declare fd_wrappers here so that errno is not clobbered by close() that may be called in fd_wrapper destructors
-  fd_wrapper infile, outfile;
+  	// Note: Declare fd_wrappers here so that errno is not clobbered by close() that may be called in fd_wrapper destructors
+  	fd_wrapper infile, outfile;
 
-  while (true)
-  {
-    infile.fd = ::open(from.c_str(), O_RDONLY | O_CLOEXEC);
-    if (BOOST_UNLIKELY(infile.fd < 0))
-    {
-      err = errno;
-      if (err == EINTR)
-        continue;
+  	while (true) {
+    	infile.fd = ::open(from.c_str(), O_RDONLY | O_CLOEXEC);
+    	if (infile.fd < 0) {
+      		err = errno;
+      		if (err == EINTR)
+        		continue;
+		fail:
+			ec.assign(err, boost::system::system_category());
+  			return false;
+    	}
+    	break;
+  	}
 
-    fail:
-      emit_error(err, from, to, ec, "boost::filesystem::copy_file");
-      return false;
-    }
+  	unsigned int statx_data_mask = STATX_TYPE | STATX_MODE | STATX_INO | STATX_SIZE;
 
-    break;
-  }
+  	struct ::statx from_stat;
+  	if (statx(infile.fd, "", AT_EMPTY_PATH | AT_NO_AUTOMOUNT, statx_data_mask, &from_stat) < 0) {
+  	fail_errno:
+    	err = errno;
+    	goto fail;
+  	}
 
-  unsigned int statx_data_mask = STATX_TYPE | STATX_MODE | STATX_INO | STATX_SIZE;
-  if ((options & static_cast< unsigned int >(copy_options::update_existing)) != 0u)
-    statx_data_mask |= STATX_MTIME;
+  	if ((from_stat.stx_mask & statx_data_mask) != statx_data_mask) {
+    	err = ENOSYS;
+    	goto fail;
+  	}
 
-  struct ::statx from_stat;
-  if (BOOST_UNLIKELY(statx(infile.fd, "", AT_EMPTY_PATH | AT_NO_AUTOMOUNT, statx_data_mask, &from_stat) < 0))
-  {
-  fail_errno:
-    err = errno;
-    goto fail;
-  }
+  	const mode_t from_mode = from_stat.stx_mode;
+  	if (!S_ISREG(from_mode)) {
+    	err = ENOSYS;
+    	goto fail;
+  	}
 
-  if (BOOST_UNLIKELY((from_stat.stx_mask & statx_data_mask) != statx_data_mask))
-  {
-    err = ENOSYS;
-    goto fail;
-  }
+  	// Enable writing for the newly created files. Having write permission set is important e.g. for NFS,
+  	// which checks the file permission on the server, even if the client's file descriptor supports writing.
+  	mode_t to_mode = from_mode | S_IWUSR;
+  	int oflag = O_WRONLY | O_CLOEXEC | O_CREAT | O_TRUNC;
 
-  const mode_t from_mode = get_mode(from_stat);
-  if (BOOST_UNLIKELY(!S_ISREG(from_mode)))
-  {
-    err = ENOSYS;
-    goto fail;
-  }
+	while (true) {
+	  	outfile.fd = ::open(to.c_str(), oflag, to_mode);
+	  	if (outfile.fd < 0) {
+	    	err = errno;
+	    	if (err == EINTR)
+	      		continue;
+	    	goto fail;
+	  	}
+	  	break;
+	}
 
-  // Enable writing for the newly created files. Having write permission set is important e.g. for NFS,
-  // which checks the file permission on the server, even if the client's file descriptor supports writing.
-  mode_t to_mode = from_mode | S_IWUSR;
-  int oflag = O_WRONLY | O_CLOEXEC;
+	statx_data_mask = STATX_TYPE | STATX_MODE | STATX_INO;
+	struct ::statx to_stat;
+	if (statx(outfile.fd, "", AT_EMPTY_PATH | AT_NO_AUTOMOUNT, statx_data_mask, &to_stat) < 0)
+		goto fail_errno;
 
-  if ((options & static_cast< unsigned int >(copy_options::update_existing)) != 0u)
-  {
-    // Try opening the existing file without truncation to test the modification time later
-    while (true)
-    {
-      outfile.fd = ::open(to.c_str(), oflag, to_mode);
-      if (outfile.fd < 0)
-      {
-        err = errno;
-        if (err == EINTR)
-          continue;
+	if ((to_stat.stx_mask & statx_data_mask) != statx_data_mask) {
+		err = ENOSYS;
+		goto fail;
+	}
 
-        if (err == ENOENT)
-          goto create_outfile;
+	to_mode = to_stat.stx_mode;
+	if (!S_ISREG(to_mode)) {
+		err = ENOSYS;
+		goto fail;
+	}
 
-        goto fail;
-      }
+	if (from_stat.stx_dev_major == to_stat.stx_dev_major && from_stat.stx_dev_minor == to_stat.stx_dev_minor && from_stat.stx_ino == to_stat.stx_ino) {
+		err = EEXIST;
+		goto fail;
+	}
 
-      break;
-    }
-  }
-  else
-  {
-  create_outfile:
-    oflag |= O_CREAT | O_TRUNC;
-    if (((options & static_cast< unsigned int >(copy_options::overwrite_existing)) == 0u ||
-      (options & static_cast< unsigned int >(copy_options::skip_existing)) != 0u) &&
-      (options & static_cast< unsigned int >(copy_options::update_existing)) == 0u)
-    {
-      oflag |= O_EXCL;
-    }
+	//! copy_file implementation that uses sendfile loop. Requires sendfile to support file descriptors.
+	//FIXME Vojtech: This is a copy loop valid for Linux 2.6.33 and newer.
+	// copy_file_data_copy_file_range() supports cross-filesystem copying since 5.3, but Vojtech did not want to polute this
+	// function with that, we don't think the performance gain is worth it for the types of files we are copying.
+	{
+		// sendfile will not send more than this amount of data in one call
+		BOOST_CONSTEXPR_OR_CONST std::size_t max_send_size = 0x7ffff000u;
+		uintmax_t offset = 0u;
+		while (offset < from_stat.stx_size) {
+			uintmax_t size_left = from_stat.stx_size - offset;
+			std::size_t size_to_copy = max_send_size;
+			if (size_left < static_cast<uintmax_t>(max_send_size))
+				size_to_copy = static_cast<std::size_t>(size_left);
+			ssize_t sz = ::sendfile(outfile.fd, infile.fd, nullptr, size_to_copy);
+			if (sz < 0) {
+				err = errno;
+				if (err == EINTR)
+					continue;
+				if (err == 0)
+					break;
+				goto fail; // err already contains the error code
+			}
+			offset += sz;
+		}
+	}
 
-    while (true)
-    {
-      outfile.fd = ::open(to.c_str(), oflag, to_mode);
-      if (outfile.fd < 0)
-      {
-        err = errno;
-        if (err == EINTR)
-          continue;
+	// If we created a new file with an explicitly added S_IWUSR permission,
+	// we may need to update its mode bits to match the source file.
+	if (to_mode != from_mode && ::fchmod(outfile.fd, from_mode) != 0) {
+		if (platform_flavor() == PlatformFlavor::LinuxOnChromium) {
+			// Ignore that. 9p filesystem does not allow fmod().
+		} else {
+			// Generic linux. Write out an error to console. At least we may get some feedback.
+			BOOST_LOG_TRIVIAL(error) << "copy_file_linux() failed to fchmod() the output file \"" << to.string() << "\" to " << from_mode << ": " << ec.message();
+		}
+	}
 
-        if (err == EEXIST && (options & static_cast< unsigned int >(copy_options::skip_existing)) != 0u)
-          return false;
+	// Note: Use fsync/fdatasync followed by close to avoid dealing with the possibility of close failing with EINTR.
+	// Even if close fails, including with EINTR, most operating systems (presumably, except HP-UX) will close the
+	// file descriptor upon its return. This means that if an error happens later, when the OS flushes data to the
+	// underlying media, this error will go unnoticed and we have no way to receive it from close. Calling fsync/fdatasync
+	// ensures that all data have been written, and even if close fails for some unfathomable reason, we don't really
+	// care at that point.
+	err = ::fdatasync(outfile.fd);
+	if (err != 0)
+		goto fail_errno;
 
-        goto fail;
-      }
-
-      break;
-    }
-  }
-
-  statx_data_mask = STATX_TYPE | STATX_MODE | STATX_INO;
-  if ((oflag & O_TRUNC) == 0)
-  {
-    // O_TRUNC is not set if copy_options::update_existing is set and an existing file was opened.
-    statx_data_mask |= STATX_MTIME;
-  }
-
-  struct ::statx to_stat;
-  if (BOOST_UNLIKELY(statx(outfile.fd, "", AT_EMPTY_PATH | AT_NO_AUTOMOUNT, statx_data_mask, &to_stat) < 0))
-    goto fail_errno;
-
-  if (BOOST_UNLIKELY((to_stat.stx_mask & statx_data_mask) != statx_data_mask))
-  {
-    err = ENOSYS;
-    goto fail;
-  }
-
-  to_mode = get_mode(to_stat);
-  if (BOOST_UNLIKELY(!S_ISREG(to_mode)))
-  {
-    err = ENOSYS;
-    goto fail;
-  }
-
-  if (BOOST_UNLIKELY(detail::equivalent_stat(from_stat, to_stat)))
-  {
-    err = EEXIST;
-    goto fail;
-  }
-
-  if ((oflag & O_TRUNC) == 0)
-  {
-    // O_TRUNC is not set if copy_options::update_existing is set and an existing file was opened.
-    // We need to check the last write times.
-    if (from_stat.stx_mtime.tv_sec < to_stat.stx_mtime.tv_sec || (from_stat.stx_mtime.tv_sec == to_stat.stx_mtime.tv_sec && from_stat.stx_mtime.tv_nsec <= to_stat.stx_mtime.tv_nsec))
-      return false;
-
-    if (BOOST_UNLIKELY(::ftruncate(outfile.fd, 0) != 0))
-      goto fail_errno;
-  }
-
-  err = detail::copy_file_data(infile.fd, outfile.fd, get_size(from_stat));
-  if (BOOST_UNLIKELY(err != 0))
-    goto fail; // err already contains the error code
-
-  // If we created a new file with an explicitly added S_IWUSR permission,
-  // we may need to update its mode bits to match the source file.
-  if (to_mode != from_mode)
-  {
-    if (BOOST_UNLIKELY(::fchmod(outfile.fd, from_mode) != 0))
-      goto fail_errno;
-  }
-
-  // Note: Use fsync/fdatasync followed by close to avoid dealing with the possibility of close failing with EINTR.
-  // Even if close fails, including with EINTR, most operating systems (presumably, except HP-UX) will close the
-  // file descriptor upon its return. This means that if an error happens later, when the OS flushes data to the
-  // underlying media, this error will go unnoticed and we have no way to receive it from close. Calling fsync/fdatasync
-  // ensures that all data have been written, and even if close fails for some unfathomable reason, we don't really
-  // care at that point.
-  err = ::fdatasync(outfile.fd);
-  if (BOOST_UNLIKELY(err != 0))
-    goto fail_errno;
-
-  return true;
+	return true;
 }
 #endif // __linux__
 
@@ -617,7 +582,7 @@ CopyFileResult copy_file_inner(const std::string& from, const std::string& to, s
 #ifdef __linux__
 	// We want to allow copying files on Linux to succeed even if changing the file attributes fails.
 	// That may happen when copying on some exotic file system, for example Linux on Chrome.
-	copy_file_linux(source, target, boost::filesystem::copy_option::overwrite_if_exists, ec);
+	copy_file_linux(source, target, ec);
 #else // __linux__
 	boost::filesystem::copy_file(source, target, boost::filesystem::copy_option::overwrite_if_exists, ec);
 #endif // __linux__
