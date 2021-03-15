@@ -6,6 +6,7 @@
 #include <cstdarg>
 #include <stdio.h>
 
+#include "Platform.hpp"
 #include "Time.hpp"
 
 #ifdef WIN32
