@@ -5,10 +5,192 @@
 #include "IStackFunction.hpp"
 #include "EvaluateNeighbor.hpp"
 #include "ParabolaUtils.hpp"
+#include "LineUtils.hpp"
+#include "PointUtils.hpp"
 
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
 using namespace Slic3r::sla;
+
+Slic3r::Line VoronoiGraphUtils::to_line(const VD::edge_type &edge) {
+    assert(edge.is_linear());
+    assert(edge.is_finite());
+    return Line(Point(edge.vertex0()->x(), edge.vertex0()->y()),
+                Point(edge.vertex1()->x(), edge.vertex1()->y()));
+}
+
+// create line segment between (in the middle) points. With size depend on their distance
+Slic3r::Line VoronoiGraphUtils::to_line(Point point1,
+                                        Point point2,
+                                        double        maximal_distance)
+{
+    Point middle = (point1 + point2) / 2;
+    Point diff = point1 - point2;
+    double distance_2 = diff.x() * static_cast<double>(diff.x()) +
+                        diff.y() * static_cast<double>(diff.y());
+    double half_distance = sqrt(distance_2) / 2.;
+    double half_distance_2 = distance_2 / 4;
+    double size = sqrt(maximal_distance * maximal_distance - half_distance_2);
+    // normalized direction to side multiplied by size/2
+    double scale = size / half_distance / 2;
+    Point  side_dir(-diff.y() * scale, diff.x() * scale);
+    return Line(middle - side_dir, middle + side_dir);
+}
+
+bool is_oposit_direction(const Slic3r::Point &p1, const Slic3r::Point &p2) {
+    if (abs(p1.x()) > abs(p1.y())) { 
+        return (p1.x() > 0) != (p2.x() > 0);
+    }
+    return (p1.y() > 0) != (p2.y() > 0);
+}
+
+Slic3r::Line VoronoiGraphUtils::to_line(const VD::edge_type & edge,
+                                        const Points &points,
+                                        double maximal_distance)
+{
+    assert(edge.is_linear());
+    assert(edge.is_primary());
+
+    if (edge.is_finite()) return to_line(edge);
+
+    const VD::cell_type &cell1 = *edge.cell();
+    const VD::cell_type &cell2 = *edge.twin()->cell();
+    assert(cell1.contains_point());
+    assert(cell2.contains_point());
+    Point p1 = retrieve_point(points, cell1);
+    Point p2 = retrieve_point(points, cell2);
+    if (edge.vertex0() == nullptr && edge.vertex1() == nullptr)
+        return to_line(p1, p2, maximal_distance);
+
+    bool is_v0_null = edge.vertex0() == nullptr;
+    if (is_v0_null) std::swap(p1, p2);
+    Point direction(p1.y() - p2.y(), p2.x() - p1.x());
+
+    auto get_koef = [&](const Point &v)->double {
+        /*/ 
+        // faster but less preciss version
+        double abs_max_dir = (std::max)(fabs(direction.x()),
+                                        fabs(direction.y()));
+        return 2 * maximal_distance / abs_max_dir; 
+        
+        //*/
+
+        // slower but more precisse version
+        double dir_size = direction.cast<double>().operatorNorm();
+        Point  middle   = (p1 + p2) / 2;
+        Point  to_middle = middle - v;
+        double to_middle_size = to_middle.cast<double>().operatorNorm();
+        double from_middle_size = sqrt(maximal_distance * maximal_distance -
+                                  to_middle_size * to_middle_size);
+        if (is_oposit_direction(direction, to_middle)) to_middle_size *= -1;
+        return (from_middle_size + to_middle_size)/dir_size;
+    };
+
+    if (is_v0_null) {
+        Point v1(edge.vertex1()->x(), edge.vertex1()->y());
+        Point a = v1 + direction * get_koef(v1);
+        return Line(a, v1);
+    } else {
+        Point v0(edge.vertex0()->x(), edge.vertex0()->y());
+        Point b = v0 + direction * get_koef(v0);
+        return Line(v0, b);
+    }
+}
+
+Slic3r::Polygon VoronoiGraphUtils::to_polygon(const Lines &lines,
+                                              const Point &center,
+                                              double       maximal_distance,
+                                              double       minimal_distance,
+                                              size_t       count_points)
+{
+    assert(lines.size() >= 1);
+    assert(minimal_distance > 0.);
+    assert(maximal_distance > minimal_distance);
+    assert(count_points >= 3);
+    Points points;
+    points.reserve(lines.size());
+    const Line *prev_line = &lines.back();
+    double max_angle = 2 * M_PI / count_points;
+    for (const Line &line : lines) {
+        const Point &p1   = prev_line->b;
+        const Point &p2   = line.a;
+        prev_line         = &line;
+        Point diff = p1-p2;
+        if (abs(diff.x()) < minimal_distance &&
+            abs(diff.y()) < minimal_distance) {
+            Point avg   = (p1 + p2) / 2;
+            points.push_back(avg);
+            continue;
+        } 
+        Point  v1 = p1 - center;
+        Point  v2 = p2 - center;
+        double a1 = std::atan2(v1.y(), v1.x());
+        double a2 = std::atan2(v2.y(), v2.x());
+
+        double diff_angle = a2 - a1;
+        if(diff_angle < 0.) diff_angle += 2 * M_PI;
+        if(diff_angle > 2 * M_PI) diff_angle -= 2 * M_PI;
+
+        size_t count_segment = std::floor(fabs(diff_angle) / max_angle) + 1;
+        double increase_angle = diff_angle / count_segment;
+        points.push_back(p1);
+        for (size_t i = 1; i < count_segment; i++) {
+            double angle = a1 + i*increase_angle;
+            Point  direction(
+                static_cast<coord_t>(cos(angle) * maximal_distance),
+                static_cast<coord_t>(sin(angle) * maximal_distance));
+            points.push_back(center + direction);
+        }
+        points.push_back(p2);
+        
+    }
+    return Polygon(points);
+}
+
+Slic3r::Polygon VoronoiGraphUtils::to_polygon(const VD::cell_type & cell,
+                                              const Slic3r::Points &points,
+                                              double maximal_distance)
+{
+    const VD::edge_type *edge = cell.incident_edge();
+
+    Lines lines;
+    Point center = points[cell.source_index()];
+    // Convenient way to iterate edges around Voronoi cell.
+    do {
+        assert(edge->is_linear());
+        if (edge->is_primary()) {
+            Line line = to_line(*edge, points, maximal_distance);
+            if (!PointUtils::is_ccw(line.a, line.b, center)) std::swap(line.a, line.b);
+            lines.push_back(line);
+        }
+        edge = edge->next();
+    } while (edge != cell.incident_edge());
+    LineUtils::sort_CCW(lines, center);
+    // preccission to decide when not connect neighbor points
+    double          min_distance = maximal_distance / 1000.; 
+    size_t          count_point  = 6; // count added points
+    Slic3r::Polygon polygon = to_polygon(lines, center, maximal_distance, min_distance, count_point);
+#ifdef SLA_SUPPORTPOINTGEN_DEBUG
+    {
+        std::cout << "cell " << cell.source_index() << " has " << lines.size()  << "edges" << std::endl;
+        BoundingBox bbox(center - Point(maximal_distance, maximal_distance),
+                         center + Point(maximal_distance, maximal_distance));
+        static int  counter  = 0;
+        std::string filename = "polygon" + std::to_string(counter++) + ".svg";
+        SVG svg(filename.c_str(), bbox);
+        svg.draw(center, "lightgreen", maximal_distance);
+        svg.draw(polygon, "lightblue");
+        int index = 0;
+        for (auto &line : lines) {
+            svg.draw(line);
+            svg.draw_text(line.a, ("A"+std::to_string(++index)).c_str(), "green");
+            svg.draw_text(line.b, ("B" + std::to_string(index)).c_str(), "blue");
+        }
+        svg.draw(center, "red", maximal_distance / 100);
+    }
+#endif /* SLA_SUPPORTPOINTGEN_DEBUG */
+    return polygon;
+}
 
 VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
                                                const VD::vertex_type *vertex,
@@ -39,14 +221,19 @@ VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
 Slic3r::Point VoronoiGraphUtils::retrieve_point(const Lines &        lines,
                                                 const VD::cell_type &cell)
 {
-    assert(cell.source_category() ==
-               boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT ||
-           cell.source_category() ==
-               boost::polygon::SOURCE_CATEGORY_SEGMENT_END_POINT);
-    return (cell.source_category() ==
-            boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT) ?
+    using namespace boost::polygon;
+    assert(cell.source_category() == SOURCE_CATEGORY_SEGMENT_START_POINT ||
+           cell.source_category() == SOURCE_CATEGORY_SEGMENT_END_POINT);
+    return (cell.source_category() == SOURCE_CATEGORY_SEGMENT_START_POINT) ?
                lines[cell.source_index()].a :
                lines[cell.source_index()].b;
+}
+
+Slic3r::Point VoronoiGraphUtils::retrieve_point(const Points &       points,
+                                                const VD::cell_type &cell)
+{
+    assert(cell.source_category() == boost::polygon::SOURCE_CATEGORY_SINGLE_POINT);
+    return points[cell.source_index()];
 }
 
 Slic3r::Point VoronoiGraphUtils::get_parabola_point(
@@ -88,8 +275,8 @@ double VoronoiGraphUtils::calculate_length_of_parabola(
 {
     Point v0{edge.vertex0()->x(), edge.vertex0()->y()};
     Point v1{edge.vertex1()->x(), edge.vertex1()->y()};
-    Parabola parabola = get_parabola(edge, lines);
-    return ParabolaUtils::calculate_length_of_parabola(parabola, v0, v1);
+    ParabolaSegment parabola(get_parabola(edge, lines), v0, v1);
+    return ParabolaUtils::length(parabola);
 }
 
 double VoronoiGraphUtils::calculate_length(

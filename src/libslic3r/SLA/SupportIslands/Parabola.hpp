@@ -21,5 +21,23 @@ struct Parabola
     {}
 };
 
+
+/// <summary>
+/// DTO store segment of parabola
+/// Parabola with start(from) and end(to) point lay on parabola
+/// </summary>
+struct ParabolaSegment: public Parabola
+{
+    Point from;
+    Point to;
+
+    ParabolaSegment(Parabola parabola, Point from, Point to) : 
+        Parabola(std::move(parabola)), from(from), to(to)
+    {}
+    ParabolaSegment(Line directrix, Point focus, Point from, Point to)
+        : Parabola(directrix, focus), from(from), to(to)
+    {}
+};
+
 } // namespace Slic3r::sla
 #endif // slic3r_SLA_SuppotstIslands_Parabola_hpp_

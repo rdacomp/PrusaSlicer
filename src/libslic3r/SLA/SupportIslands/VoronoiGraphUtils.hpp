@@ -26,6 +26,67 @@ class VoronoiGraphUtils
 public:
     VoronoiGraphUtils() = delete;
 
+    /// <summary>
+    /// Convert line edge segment to slicer line
+    /// only for line edge
+    /// only for finite line
+    /// </summary>
+    /// <param name="edge">line edge</param>
+    /// <returns>line</returns>
+    static Slic3r::Line to_line(const VD::edge_type &edge);
+
+    /// <summary>
+    /// Private function to help convert edge without vertex to line
+    /// </summary>
+    /// <param name="point1">VD Source point</param>
+    /// <param name="point2">VD Source point</param>
+    /// <param name="maximal_distance">Maximal distance from source point</param>
+    /// <returns>Line segment between lines</returns>
+    static Slic3r::Line to_line(Point point1,
+                                Point point2,
+                                double        maximal_distance);
+    /// <summary>
+    /// Convert edge to line
+    /// only for line edge
+    /// crop infinite edge by maximal distance from source point
+    /// inspiration in VoronoiVisualUtils::clip_infinite_edge
+    /// </summary>
+    /// <param name="edge"></param>
+    /// <param name="points">Source point for voronoi diagram</param>
+    /// <param name="maximal_distance">Maximal distance from source point</param>
+    /// <returns>Croped line</returns>
+    static Slic3r::Line to_line(const VD::edge_type & edge,
+                                const Points &points,
+                                double                maximal_distance);
+    /// <summary>
+    /// close polygon defined by lines 
+    /// close points will convert to their center
+    /// Mainly for convert to polygon
+    /// </summary>
+    /// <param name="lines">Border of polygon, sorted lines CCW</param>
+    /// <param name="center">Center point of polygon</param>
+    /// <param name="maximal_distance">Radius around center point</param>
+    /// <param name="minimal_distance">Merge points closer than minimal_distance</param>
+    /// <param name="count_points">Count checking points, create help points for result polygon</param>
+    /// <returns>CCW polygon with center inside of polygon</returns>
+    static Slic3r::Polygon to_polygon(const Lines &lines,
+                                       const Point &center,
+                                       double       maximal_distance,
+                                       double minimal_distance,
+                                       size_t       count_points);
+    /// <summary>
+    /// Convert cell to polygon
+    /// Source for VD must be only point to create VD with only line segments
+    /// infinite cell are croped by maximal distance from source point
+    /// </summary>
+    /// <param name="cell">cell from VD created only by points</param>
+    /// <param name="points">source points for VD</param>
+    /// <param name="maximal_distance">maximal distance from source point - only for infinite edges(cells)</param>
+    /// <returns>polygon created by cell</returns>
+    static Slic3r::Polygon to_polygon(const VD::cell_type & cell,
+                                      const Slic3r::Points &points,
+                                      double maximal_distance);
+
     // return node from graph by vertex, when no exists create one
     static VoronoiGraph::Node *getNode(VoronoiGraph &         graph,
                                        const VD::vertex_type *vertex,
@@ -33,12 +94,26 @@ public:
                                        const Lines &          lines);
 
     /// <summary>
-    /// extract parabola focus point from lines belongs to cell
+    /// Extract point from lines, belongs to cell
+    /// ! Source for VD must be only lines
+    /// Main purpose parabola focus point from lines belongs to cell
+    /// inspiration in VoronoiVisualUtils::retrieve_point
     /// </summary>
-    /// <param name="lines">source of Voronoi diagram</param>
-    /// <param name="cell">cell inside of Voronoi diagram</param>
-    /// <returns>Point from lines which create parabola.</returns>
+    /// <param name="lines">Source of Voronoi diagram</param>
+    /// <param name="cell">Cell inside of Voronoi diagram</param>
+    /// <returns>Point from source lines.</returns>
     static Point retrieve_point(const Lines &lines, const VD::cell_type &cell);
+
+    /// <summary>
+    /// Extract point from lines
+    /// ! Source for VD must be only points
+    /// inspiration in VoronoiVisualUtils::retrieve_point
+    /// </summary>
+    /// <param name="points">Source of Voronoi diagram</param>
+    /// <param name="cell">Cell inside of Voronoi diagram</param>
+    /// <returns>Point from source points.</returns>
+    static Point retrieve_point(const Points &points, const VD::cell_type &cell);
+
     static Slic3r::Point get_parabola_point(const VD::edge_type &parabola, const Slic3r::Lines &lines);
     static Slic3r::Line get_parabola_line(const VD::edge_type &parabola, const Lines &lines);
     static Parabola get_parabola(const VD::edge_type &edge, const Lines &lines);

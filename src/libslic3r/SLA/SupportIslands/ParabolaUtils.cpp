@@ -2,16 +2,15 @@
 
 using namespace Slic3r::sla;
 
-double ParabolaUtils::calculate_length_of_parabola(
-    const Parabola &parabola, const Point &from, const Point &to)
+double ParabolaUtils::length(const ParabolaSegment &parabola)
 {
     const Point &point = parabola.focus;
     const Line & line  = parabola.directrix;
     Line norm_line(point, point + line.normal());
 
     // sign of distance is resolved by dot product in function is_over_zero()
-    double scaled_x1 = norm_line.perp_distance_to(from);
-    double scaled_x2 = norm_line.perp_distance_to(to);
+    double scaled_x1 = norm_line.perp_distance_to(parabola.from);
+    double scaled_x2 = norm_line.perp_distance_to(parabola.to);
 
     double parabola_scale = 1. / (4. * focal_length(parabola));
 
@@ -21,23 +20,21 @@ double ParabolaUtils::calculate_length_of_parabola(
     double length_x1 = parabola_arc_length(x1) / parabola_scale;
     double length_x2 = parabola_arc_length(x2) / parabola_scale;
 
-    return (is_over_zero(parabola, from, to)) ?
+    return (is_over_zero(parabola)) ?
                (length_x1 + length_x2) :    // interval is over zero
                fabs(length_x1 - length_x2); // interval is on same side of parabola
 }
 
-
 #include <Libslic3r/Geometry.hpp>
 #include <Libslic3r/VoronoiOffset.hpp>
 #include <Libslic3r/VoronoiVisualUtils.hpp>
-double ParabolaUtils::calculate_length_of_parabola_by_sampling(
-    const Parabola &parabola,
-    const Point &   from,
-    const Point &   to,
+double ParabolaUtils::length_by_sampling(
+    const ParabolaSegment &parabola,
     double          discretization_step)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
-    std::vector<Voronoi::Internal::point_type> parabola_samples({from, to});
+    std::vector<Voronoi::Internal::point_type> parabola_samples(
+        {parabola.from, parabola.to});
 
     VD::point_type   source_point = parabola.focus;
     VD::segment_type source_segment(parabola.directrix.a, parabola.directrix.b);
@@ -65,12 +62,19 @@ double ParabolaUtils::focal_length(const Parabola &parabola)
     return f;
 }
 
-bool ParabolaUtils::is_over_zero(const Parabola &parabola,
-                                 const Point &   from,
-                                 const Point &   to)
+bool ParabolaUtils::is_over_zero(const ParabolaSegment &parabola)
 {
     Point line_direction = parabola.directrix.b - parabola.directrix.a;
-    bool  is_positive_x1 = line_direction.dot(parabola.focus - from) > 0.;
-    bool  is_positive_x2 = line_direction.dot(parabola.focus - to) > 0.;
+    Point focus_from     = parabola.focus - parabola.from;
+    Point focus_to       = parabola.focus - parabola.to;
+    bool  is_positive_x1 = line_direction.dot(focus_from) > 0.;
+    bool  is_positive_x2 = line_direction.dot(focus_to) > 0.;
     return is_positive_x1 != is_positive_x2;
 }
+
+// PRIVATE
+double ParabolaUtils::parabola_arc_length(double x)
+{
+    double sqrtRes = sqrt(1 + 4 * x * x);
+    return 1 / 4. * log(2 * x + sqrtRes) + 1 / 2. * x * sqrtRes;
+};

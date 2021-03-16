@@ -129,6 +129,15 @@ public:
         const SampleConfig &  config,
         VoronoiGraph::ExPath &longest_path);
 
+    static Slic3r::Points to_points(const SupportIslandPoints &support_points);
+    
+    /// <summary>
+    /// keep same distances between support points
+    /// </summary>
+    /// <param name="result">In/Out vector of support points</param>
+    /// <param name="max_distance">Maximal distance between neighbor points</param>
+    static void align_samples(SupportIslandPoints &samples, double max_distance);
+
     static void draw(SVG &                      svg,
                      const SupportIslandPoints &supportIslandPoints,
                      double      size,

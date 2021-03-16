@@ -49,7 +49,9 @@ SupportIslandPoint SampleIslandUtils::create_point_on_path(
     // distance must be inside path
     // this means bad input params
     assert(false);
-    return Point(0, 0);
+    return SupportIslandPoint(Point(0, 0),
+                              SupportIslandPoint::Type::undefined,
+                              VoronoiGraph::Position(nullptr,0.));
 }
 
 SupportIslandPoint SampleIslandUtils::create_middle_path_point(
@@ -174,6 +176,31 @@ std::vector<std::set<const VoronoiGraph::Node *>> create_circles_sets(
     return result;
 }
 
+Slic3r::Points SampleIslandUtils::to_points(const SupportIslandPoints &support_points)
+{ 
+    Slic3r::Points points;
+    points.reserve(support_points.size());
+    std::transform(support_points.begin(), support_points.end(),
+                   std::back_inserter(points),
+                   [](const SupportIslandPoint &p) {
+                       return p.point; });
+    return points;
+}
+
+void SampleIslandUtils::align_samples(SupportIslandPoints &samples, double max_distance)
+{
+    using VD = Slic3r::Geometry::VoronoiDiagram;
+    VD vd;
+    Slic3r::Points points = SampleIslandUtils::to_points(samples);
+    construct_voronoi(points.begin(), points.end(), &vd);
+    for (const VD::cell_type &cell : vd.cells()) { 
+        SupportIslandPoint& sample = samples[cell.source_index()];
+        Polygon             polygon = VoronoiGraphUtils::to_polygon(cell, points, max_distance);
+
+    }
+    // create voronoi diagram with points
+}
+
 SupportIslandPoints SampleIslandUtils::sample_center_line(
     const VoronoiGraph::ExPath &path, const CenterLineConfiguration &cfg)
 {
@@ -187,6 +214,8 @@ SupportIslandPoints SampleIslandUtils::sample_center_line(
 
     if (path.circles.empty()) return result;
     sample_center_circles(path, cfg, result);
+
+    align_samples(result, cfg.max_sample_distance);
     
     return result;
 }

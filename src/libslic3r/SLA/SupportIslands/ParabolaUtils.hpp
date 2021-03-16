@@ -17,27 +17,18 @@ public:
     /// <summary>
     /// Integrate length over interval defined by points from and to
     /// </summary>
-    /// <param name="parabola">Input parabola</param>
-    /// <param name="from">Input point lay on parabola</param>
-    /// <param name="to">Input point lay on parabola</param>
+    /// <param name="parabola">Input segment of parabola</param>
     /// <returns>Length of parabola arc</returns>
-    static double calculate_length_of_parabola(const Parabola &parabola,
-                                               const Point &   from,
-                                               const Point &   to);
+    static double length(const ParabolaSegment &parabola);
 
     /// <summary>
     /// Sample parabola between points from and to by step.
     /// </summary>
-    /// <param name="parabola">Input parabola</param>
-    /// <param name="from">Input point lay on parabola</param>
-    /// <param name="to">Input point lay on parabola</param>
+    /// <param name="parabola">Input segment of parabola</param>
     /// <param name="discretization_step">Define sampling</param>
     /// <returns>Length of parabola arc</returns>
-    static double calculate_length_of_parabola_by_sampling(
-        const Parabola &parabola,
-        const Point &   from,
-        const Point &   to,
-        double          discretization_step = 0.0002 * 1e6);
+    static double length_by_sampling(const ParabolaSegment &parabola,
+                                     double discretization_step = 200);
 
     /// <summary>
     /// calculate focal length of parabola
@@ -49,13 +40,9 @@ public:
     /// <summary>
     /// Check if parabola interval (from, to) contains top of parabola
     /// </summary>
-    /// <param name="parabola">input parabola</param>
-    /// <param name="from">Start of interval, point lay on parabola</param>
-    /// <param name="to">End of interval, point lay on parabola</param>
+    /// <param name="parabola">Input segment of parabola</param>
     /// <returns>True when interval contain top of parabola otherwise False</returns>
-    static bool is_over_zero(const Parabola &parabola,
-                             const Point &   from,
-                             const Point &   to);
+    static bool is_over_zero(const ParabolaSegment &parabola);
 
 private:
     /// <summary>
@@ -64,10 +51,7 @@ private:
     /// </summary>
     /// <param name="x">x coordinate of parabola, Positive number</param>
     /// <returns>Length of parabola from zero to x</returns> 
-    static double parabola_arc_length(double x) {
-        double sqrtRes = sqrt(1 + 4 * x * x);
-        return 1 / 4. * log(2 * x + sqrtRes) + 1 / 2. * x * sqrtRes;
-    };
+    static double parabola_arc_length(double x);
 };
 
 } // namespace Slic3r::sla

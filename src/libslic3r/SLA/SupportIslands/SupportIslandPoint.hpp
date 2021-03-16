@@ -30,14 +30,10 @@ struct SupportIslandPoint
     Type type;
 
     SupportIslandPoint(Slic3r::Point          point,
-                       Type                   type = Type::undefined,
-                       VoronoiGraph::Position position = {})
+                       Type                   type,
+                       VoronoiGraph::Position position)
         : point(std::move(point)), type(type), position(position)
-    {
-        if (position.neighbor == nullptr) {
-            int i = 5;
-        }
-    }
+    {}
 };
 
 using SupportIslandPoints = std::vector<SupportIslandPoint>;

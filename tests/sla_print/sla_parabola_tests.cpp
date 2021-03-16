@@ -5,19 +5,14 @@
 using namespace Slic3r;
 using namespace Slic3r::sla;
 
-void parabola_check(const Parabola &parabola,
-                    const Point &        from,
-                    const Point &        to)
+void parabola_check_length(const ParabolaSegment &parabola)
 {
-    auto   diffPoint = to - from;
+    auto   diffPoint = parabola.to - parabola.from;
     double min       = sqrt(diffPoint.x() * diffPoint.x() +
                       diffPoint.y() * diffPoint.y());
     double max       = static_cast<double>(diffPoint.x()) + diffPoint.y();
-
-    double len = ParabolaUtils::calculate_length_of_parabola(parabola, from, to);
-    double len2 = ParabolaUtils::calculate_length_of_parabola_by_sampling(
-            parabola, from, to, 1.);
-
+    double len = ParabolaUtils::length(parabola);
+    double len2 = ParabolaUtils::length_by_sampling(parabola, 1.);
     CHECK(fabs(len2 - len) < 1.);
     CHECK(len >= min);
     CHECK(len <= max);
@@ -48,7 +43,8 @@ TEST_CASE("Parabola length", "[SupGen][Voronoi][Parabola]")
     double to_x   = 3 * scale;
     Point  from(from_x, getParabolaY(parabola_x2, from_x));
     Point  to(to_x, getParabolaY(parabola_x2, to_x));
-    parabola_check(parabola_x2, from, to);
+    ParabolaSegment parabola_segment(parabola_x2, from, to);
+    parabola_check_length(parabola_segment);
 } 
 
 
