@@ -214,20 +214,26 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const VD::cell_type & cell,
                                               const Slic3r::Points &points,
                                               double maximal_distance)
 {
-    const VD::edge_type *edge = cell.incident_edge();
     Lines lines;
     Point center = points[cell.source_index()];
     // Convenient way to iterate edges around Voronoi cell.
+    const VD::edge_type *edge = cell.incident_edge();
     do {
         assert(edge->is_linear());
-        if (edge->is_primary()) {
-            std::optional<Line> line = to_line(*edge, points, maximal_distance);
-            if (line.has_value()) {
-                if (!PointUtils::is_ccw(line->a, line->b, center))
-                    std::swap(line->a, line->b);
-                lines.push_back(line.value());
-            }
+        if (!edge->is_primary()) {
+            edge = edge->next();
+            continue;
         }
+        std::optional<Line> line = to_line(*edge, points, maximal_distance);
+        if (!line.has_value()) {
+            edge = edge->next();
+            continue;            
+        }
+        Geometry::Orientation o = Geometry::orient(center, line->a, line->b);
+        assert(o != Geometry::Orientation::ORIENTATION_COLINEAR);
+        if (o == Geometry::Orientation::ORIENTATION_CW)
+            std::swap(line->a, line->b);
+        lines.push_back(line.value());
         edge = edge->next();
     } while (edge != cell.incident_edge());
     LineUtils::sort_CCW(lines, center);

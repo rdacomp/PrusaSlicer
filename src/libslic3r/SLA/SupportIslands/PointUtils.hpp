@@ -14,9 +14,6 @@ class PointUtils
 {
 public:
     PointUtils() = delete;
-
-    // is point p1 to p2 in counter clock wise order against center?
-    static bool is_ccw(const Point &p1, const Point &p2, const Point &center);
 };
 
 } // namespace Slic3r::sla

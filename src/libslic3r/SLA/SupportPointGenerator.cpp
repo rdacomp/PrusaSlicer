@@ -355,6 +355,8 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     SupportIslandPoints  samples = SampleIslandUtils::sample_voronoi_graph(
             skeleton, config, longest_path);
 
+    SampleIslandUtils::align_samples(samples, island, config);
+
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
     const char* support_point_color = "lightgreen";
     coord_t     support_point_radius = config.head_radius;
