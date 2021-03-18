@@ -1,6 +1,7 @@
 #ifndef slic3r_SLA_SuppotstIslands_SupportIslandPoint_hpp_
 #define slic3r_SLA_SuppotstIslands_SupportIslandPoint_hpp_
 
+#include <set>
 #include <libslic3r/Point.hpp>
 #include "VoronoiGraph.hpp"
 
@@ -34,6 +35,29 @@ struct SupportIslandPoint
                        VoronoiGraph::Position position)
         : point(std::move(point)), type(type), position(position)
     {}
+
+    bool can_move() const{ 
+        // use shorter list
+        /*
+        
+        static const std::set<Type> can_move({
+            Type::center_line, 
+            Type::center_circle, 
+            Type::center_circle_end,
+            Type::center_circle_end2
+        });
+        return can_move.find(type) != can_move.end();
+        
+        /*/
+        
+        static const std::set<Type> cant_move({
+            Type::one_center_point, 
+            Type::two_points
+            });
+        return cant_move.find(type) == cant_move.end();
+        
+        //*/
+    }
 };
 
 using SupportIslandPoints = std::vector<SupportIslandPoint>;

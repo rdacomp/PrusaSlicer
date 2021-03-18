@@ -10,6 +10,8 @@
 #include <magic_enum/magic_enum.hpp>
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
+#include <libslic3r/ClipperUtils.hpp> // allign
+
 using namespace Slic3r::sla;
 
 SupportIslandPoint SampleIslandUtils::create_point(
@@ -187,18 +189,48 @@ Slic3r::Points SampleIslandUtils::to_points(const SupportIslandPoints &support_p
     return points;
 }
 
-void SampleIslandUtils::align_samples(SupportIslandPoints &samples, double max_distance)
+void SampleIslandUtils::align_samples(SupportIslandPoints &samples,
+                                      const ExPolygon &    island,
+                                      const SampleConfig & config)
+{
+    size_t count_iteration = config.count_iteration; // copy
+    while (--count_iteration > 1) {
+        coord_t max_move = align_once(samples, island, config);        
+        if (max_move < config.minimal_move) break;
+    }
+}
+
+coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
+                                      const ExPolygon &    island,
+                                      const SampleConfig & config)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
-    VD vd;
+    VD             vd;
     Slic3r::Points points = SampleIslandUtils::to_points(samples);
-    construct_voronoi(points.begin(), points.end(), &vd);
-    for (const VD::cell_type &cell : vd.cells()) { 
-        SupportIslandPoint& sample = samples[cell.source_index()];
-        Polygon             polygon = VoronoiGraphUtils::to_polygon(cell, points, max_distance);
 
-    }
     // create voronoi diagram with points
+    construct_voronoi(points.begin(), points.end(), &vd);
+    coord_t max_move = 0;
+    for (const VD::cell_type &cell : vd.cells()) {
+        SupportIslandPoint &sample = samples[cell.source_index()];
+        if (!sample.can_move()) continue;
+        Polygon polygon = VoronoiGraphUtils::to_polygon(cell, points, config.max_distance);
+        Polygons intersections = Slic3r::intersection(island, ExPolygon(polygon));
+        const Polygon *island_cell   = nullptr;
+        for (const Polygon &intersection : intersections) {
+            if (intersection.contains(sample.point)) {
+                island_cell = &intersection;
+                break;
+            }
+        }
+        assert(island_cell != nullptr);
+        Point center = island_cell->centroid();
+        Point move   = center - sample.point;
+
+        coord_t act_move = move.x() + move.y(); // manhatn distance
+        if (max_move < act_move) max_move = act_move;
+    }
+    return max_move;
 }
 
 SupportIslandPoints SampleIslandUtils::sample_center_line(
@@ -214,8 +246,6 @@ SupportIslandPoints SampleIslandUtils::sample_center_line(
 
     if (path.circles.empty()) return result;
     sample_center_circles(path, cfg, result);
-
-    align_samples(result, cfg.max_sample_distance);
     
     return result;
 }

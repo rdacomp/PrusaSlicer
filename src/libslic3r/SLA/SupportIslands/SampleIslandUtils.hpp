@@ -133,10 +133,28 @@ public:
     
     /// <summary>
     /// keep same distances between support points
+    /// call once align
     /// </summary>
-    /// <param name="result">In/Out vector of support points</param>
-    /// <param name="max_distance">Maximal distance between neighbor points</param>
-    static void align_samples(SupportIslandPoints &samples, double max_distance);
+    /// <param name="samples">In/Out support points to be alligned</param>
+    /// <param name="island">Area for sampling, border for position of samples</param>
+    /// <param name="config"> Sampling configuration
+    /// Maximal distance between neighbor points + 
+    /// Term criteria for align: Minimal sample move and Maximal count of iteration</param>
+    static void align_samples(SupportIslandPoints &samples,
+                              const ExPolygon &    island,
+                              const SampleConfig &config);
+    
+    /// <summary>
+    /// once align
+    /// </summary>
+    /// <param name="samples">In/Out support points to be alligned</param>
+    /// <param name="island">Area for sampling, border for position of samples</param>
+    /// <param name="config"> Sampling configuration
+    /// Maximal distance between neighbor points + 
+    /// Term criteria for align: Minimal sample move and Maximal count of iteration</param>
+    static coord_t align_once(SupportIslandPoints &samples,
+                              const ExPolygon &    island,
+                              const SampleConfig & config);
 
     static void draw(SVG &                      svg,
                      const SupportIslandPoints &supportIslandPoints,

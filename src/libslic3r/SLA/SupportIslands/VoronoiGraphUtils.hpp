@@ -27,24 +27,51 @@ public:
     VoronoiGraphUtils() = delete;
 
     /// <summary>
-    /// Convert line edge segment to slicer line
-    /// only for line edge
-    /// only for finite line
+    /// Convert coordinate type between voronoi and slicer format
     /// </summary>
-    /// <param name="edge">line edge</param>
-    /// <returns>line</returns>
-    static Slic3r::Line to_line(const VD::edge_type &edge);
+    /// <param name="coor">Coordinate</param>
+    /// <returns>When it is possible than cast it otherwise empty optional</returns>
+    static coord_t to_coord(const VD::coordinate_type &coord);
+
+    /// <summary>
+    /// Convert Point type to slicer point
+    /// </summary>
+    /// <param name="vertex">Input point pointer</param>
+    /// <returns>When it is possible to convert than convert otherwise empty optional</returns>
+    static Slic3r::Point to_point(const VD::vertex_type *vertex);
+
+    /// <summary>
+    /// check if coord is in limits for coord_t
+    /// </summary>
+    /// <param name="coord">input value</param>
+    /// <param name="source">VD source point coordinate</param>
+    /// <param name="max_distance">Maximal distance from source</param>
+    /// <returns>True when coord is in +- max_distance from source otherwise FALSE.</returns>
+    static bool is_coord_in_limits(const VD::coordinate_type &coord,
+                                   const coord_t &            source,
+                                   double                     max_distance);
+
+    /// <summary>
+    /// Check x and y values of vertex
+    /// </summary>
+    /// <param name="vertex">input vertex</param>
+    /// <param name="source">VD source point</param>
+    /// <param name="max_distance">Maximal distance from source</param>
+    /// <returns>True when both coord are in limits given by source and max distance otherwise FALSE</returns>
+    static bool is_point_in_limits(const VD::vertex_type *vertex,
+                                   const Point &          source,
+                                   double                 max_distance);
 
     /// <summary>
     /// Private function to help convert edge without vertex to line
     /// </summary>
-    /// <param name="point1">VD Source point</param>
-    /// <param name="point2">VD Source point</param>
+    /// <param name="point1">VD source point</param>
+    /// <param name="point2">VD source point</param>
     /// <param name="maximal_distance">Maximal distance from source point</param>
     /// <returns>Line segment between lines</returns>
-    static Slic3r::Line to_line(Point point1,
-                                Point point2,
-                                double        maximal_distance);
+    static Slic3r::Line create_line_between_source_points(
+        const Point &point1, const Point &point2, double maximal_distance);
+
     /// <summary>
     /// Convert edge to line
     /// only for line edge
@@ -54,10 +81,10 @@ public:
     /// <param name="edge"></param>
     /// <param name="points">Source point for voronoi diagram</param>
     /// <param name="maximal_distance">Maximal distance from source point</param>
-    /// <returns>Croped line</returns>
-    static Slic3r::Line to_line(const VD::edge_type & edge,
-                                const Points &points,
-                                double                maximal_distance);
+    /// <returns>Croped line, when all line segment is out of max distance return empty optional</returns>
+    static std::optional<Slic3r::Line> to_line(const VD::edge_type &edge,
+                                               const Points &       points,
+                                               double maximal_distance);
     /// <summary>
     /// close polygon defined by lines 
     /// close points will convert to their center
@@ -112,7 +139,7 @@ public:
     /// <param name="points">Source of Voronoi diagram</param>
     /// <param name="cell">Cell inside of Voronoi diagram</param>
     /// <returns>Point from source points.</returns>
-    static Point retrieve_point(const Points &points, const VD::cell_type &cell);
+    static const Point& retrieve_point(const Points &points, const VD::cell_type &cell);
 
     static Slic3r::Point get_parabola_point(const VD::edge_type &parabola, const Slic3r::Lines &lines);
     static Slic3r::Line get_parabola_line(const VD::edge_type &parabola, const Lines &lines);

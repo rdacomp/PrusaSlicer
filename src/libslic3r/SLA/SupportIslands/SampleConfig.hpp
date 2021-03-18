@@ -33,6 +33,11 @@ struct SampleConfig
     // Maximal width of line island supported by zig zag
     double max_width_for_zig_zag_supportr_line = 1.;
 
+    // Term criteria for end of alignment
+    // Minimal change in manhatn move of support position before termination
+    coord_t minimal_move     = 1;
+    // Maximal count of align iteration
+    size_t  count_iteration = 100;
 };
 } // namespace Slic3r::sla
 #endif // slic3r_SLA_SuppotstIslands_SampleConfig_hpp_

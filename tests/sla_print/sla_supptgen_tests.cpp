@@ -8,6 +8,7 @@
 #include <libslic3r/SLA/SupportIslands/SampleConfig.hpp>
 #include <libslic3r/SLA/SupportIslands/VoronoiGraphUtils.hpp>
 #include <libslic3r/SLA/SupportIslands/SampleIslandUtils.hpp>
+#include <libslic3r/SLA/SupportIslands/PolygonUtils.hpp>
 
 #include "sla_test_utils.hpp"
 
@@ -149,59 +150,18 @@ TEST_CASE("Two parallel plates should be supported", "[SupGen][Hollowed]")
     REQUIRE(!pts.empty());
 }
 
-// all triangle side are same length
-Slic3r::Polygon equilateral_triangle(double size)
-{
-    return {{.0, .0},
-         {size, .0},
-         {size / 2., sqrt(size * size - size * size / 4)}};
-}
-
-// two side of triangle are same size
-Slic3r::Polygon isosceles_triangle(double side, double height)
-{
-    return {{-side / 2, 0.}, {side / 2, 0.}, {.0, height}};
-}
-
-Slic3r::Polygon square(double size)
-{
-    double size_2 = size / 2;
-    return {{-size_2, size_2},
-            {-size_2, -size_2},
-            {size_2, -size_2},
-            {size_2, size_2}};
-}
-
-Slic3r::Polygon rect(double x, double y){
-    double x_2 = x / 2;
-    double y_2 = y / 2;
-    return {{-x_2, y_2}, {-x_2, -y_2}, {x_2, -y_2}, {x_2, y_2}};
-}
-
-Slic3r::Polygon circle(double radius, size_t count_line_segments) {
-    // CCW: couter clock wise, CW: clock wise
-    Points circle;
-    circle.reserve(count_line_segments);
-    for (size_t i = 0; i < count_line_segments; ++i) {
-        double alpha = (2 * M_PI * i) / count_line_segments;
-        double sina  = sin(alpha);
-        double cosa  = cos(alpha);
-        circle.emplace_back(-radius * sina, radius * cosa);
-    }
-    return Slic3r::Polygon(circle);
-}
 
 Slic3r::Polygon create_cross_roads(double size, double width)
 {
-    auto r1 = rect( 5.3 * size, width);
+    auto r1 = PolygonUtils::create_rect(5.3 * size, width);
     r1.rotate(3.14/4);
     r1.translate(2 * size, width / 2);
-    auto r2 = rect(6.1*size, 3/4.*width);
+    auto r2 = PolygonUtils::create_rect(6.1 * size, 3 / 4. * width);
     r2.rotate(-3.14 / 5);
     r2.translate(3 * size, width / 2);
-    auto r3 = rect(7.9*size, 4/5.*width);
+    auto r3 = PolygonUtils::create_rect(7.9 * size, 4 / 5. * width);
     r3.translate(2*size, width/2);
-    auto r4 = rect(5 / 6. * width, 5.7 * size);
+    auto r4 = PolygonUtils::create_rect(5 / 6. * width, 5.7 * size);
     r4.translate(-size,3*size);
     Polygons rr = union_(Polygons({r1, r2, r3, r4}));
     return rr.front();
@@ -209,7 +169,8 @@ Slic3r::Polygon create_cross_roads(double size, double width)
 
 ExPolygon create_trinagle_with_hole(double size)
 {
-    return ExPolygon(equilateral_triangle(size), {{size / 4, size / 4},
+    return ExPolygon(PolygonUtils::create_equilateral_triangle(size),
+                     {{size / 4, size / 4},
                                                   {size / 2, size / 2},
                                                   {size / 2, size / 4}});
 }
@@ -217,14 +178,14 @@ ExPolygon create_trinagle_with_hole(double size)
 ExPolygon create_square_with_hole(double size, double hole_size)
 {
     assert(sqrt(hole_size *hole_size / 2) < size);
-    auto hole = square(hole_size);
+    auto hole = PolygonUtils::create_square(hole_size);
     hole.rotate(M_PI / 4.); // 45
     hole.reverse();
-    return ExPolygon(square(size), hole);
+    return ExPolygon(PolygonUtils::create_square(size), hole);
 }
 
 ExPolygon create_square_with_4holes(double size, double hole_size) {
-    auto hole = square(hole_size);
+    auto hole = PolygonUtils::create_square(hole_size);
     hole.reverse();
     double size_4 = size / 4;
     auto h1 = hole;
@@ -235,7 +196,7 @@ ExPolygon create_square_with_4holes(double size, double hole_size) {
     h3.translate(size_4, -size_4);
     auto h4   = hole;
     h4.translate(-size_4, -size_4);
-    ExPolygon result(square(size));
+    ExPolygon result(PolygonUtils::create_square(size));
     result.holes = Polygons({h1, h2, h3, h4});
     return result;
 }
@@ -244,14 +205,17 @@ ExPolygon create_square_with_4holes(double size, double hole_size) {
 ExPolygon create_disc(double radius, double width, size_t count_line_segments)
 {
     double width_2 = width / 2;
-    auto hole = circle(radius-width_2, count_line_segments);
+    auto   hole    = PolygonUtils::create_circle(radius - width_2,
+                                            count_line_segments);
     hole.reverse();
-    return ExPolygon(circle(radius + width_2, count_line_segments), hole);
+    return ExPolygon(PolygonUtils::create_circle(radius + width_2,
+                                                 count_line_segments),
+                     hole);
 }
 
 Slic3r::Polygon create_V_shape(double height, double line_width, double angle = M_PI/4) {
     double angle_2 = angle / 2;
-    auto   left_side = rect(line_width, height);
+    auto   left_side  = PolygonUtils::create_rect(line_width, height);
     auto   right_side = left_side;
     right_side.rotate(-angle_2);
     double small_move = cos(angle_2) * line_width / 2;
@@ -259,7 +223,7 @@ Slic3r::Polygon create_V_shape(double height, double line_width, double angle = 
     right_side.translate(side_move,0);
     left_side.rotate(angle_2);
     left_side.translate(-side_move, 0);
-    auto bottom = rect(4 * small_move, line_width);
+    auto bottom = PolygonUtils::create_rect(4 * small_move, line_width);
     bottom.translate(0., -cos(angle_2) * height / 2 + line_width/2);
     Polygons polygons = union_(Polygons({left_side, right_side, bottom}));
     return polygons.front();
@@ -278,22 +242,22 @@ ExPolygons createTestIslands(double size)
                          {size / 7, size}});
     ExPolygons result = {
         // one support point
-        ExPolygon(equilateral_triangle(size)), 
-        ExPolygon(square(size)),
-        ExPolygon(rect(size / 2, size)),
-        ExPolygon(isosceles_triangle(size / 2, 3 * size / 2)), // small sharp triangle
-        ExPolygon(circle(size/2, 10)),
+        ExPolygon(PolygonUtils::create_equilateral_triangle(size)), 
+        ExPolygon(PolygonUtils::create_square(size)),
+        ExPolygon(PolygonUtils::create_rect(size / 2, size)),
+        ExPolygon(PolygonUtils::create_isosceles_triangle(size / 2, 3 * size / 2)), // small sharp triangle
+        ExPolygon(PolygonUtils::create_circle(size / 2, 10)),
         create_square_with_4holes(size, size / 4),
         create_disc(size/4, size / 4, 10),
         ExPolygon(create_V_shape(2*size/3, size / 4)),
 
         // two support points
-        ExPolygon(isosceles_triangle(size / 2, 3 * size)), // small sharp triangle
-        ExPolygon(rect(size / 2, 3 * size)),
+        ExPolygon(PolygonUtils::create_isosceles_triangle(size / 2, 3 * size)), // small sharp triangle
+        ExPolygon(PolygonUtils::create_rect(size / 2, 3 * size)),
         ExPolygon(create_V_shape(1.5*size, size/3)),
 
         // tiny line support points
-        ExPolygon(rect(size / 2, 10 * size)), // long line
+        ExPolygon(PolygonUtils::create_rect(size / 2, 10 * size)), // long line
         ExPolygon(create_V_shape(size*4, size / 3)),
         ExPolygon(create_cross_roads(size, size / 3)),
         create_disc(3*size, size / 4, 30),
@@ -301,8 +265,8 @@ ExPolygons createTestIslands(double size)
 
         // still problem
         // three support points
-        ExPolygon(equilateral_triangle(3 * size)), 
-        ExPolygon(circle(size, 20)),
+        ExPolygon(PolygonUtils::create_equilateral_triangle(3 * size)), 
+        ExPolygon(PolygonUtils::create_circle(size, 20)),
 
         mountains, 
         create_trinagle_with_hole(size),
@@ -454,23 +418,6 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
         auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
     }
 }
-
-/*
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Delaunay_triangulation_2.h>
-void cgal_test(const SupportIslandPoints &points, const ExPolygon &island) {
-    using Kernel = CGAL::Exact_predicates_inexact_constructions_kernel;
-    using Delaunay = CGAL::Delaunay_triangulation_2<Kernel>;    
-    std::vector<Kernel::Point_2> k_points;
-    k_points.reserve(points.size());
-    std::transform(points.begin(), points.end(), std::back_inserter(k_points),
-                   [](const SupportIslandPoint &p) {
-                       return Kernel::Point_2(p.point.x(), p.point.y());
-                   });    
-    Delaunay dt;
-    dt.insert(k_points.begin(), k_points.end());
-    std::cout << dt.number_of_vertices() << std::endl;
-}*/
 
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
 {

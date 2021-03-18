@@ -66,6 +66,8 @@ set(SOURCE_LIST_SLA
     "SLA/SupportIslands/ParabolaUtils.hpp"
     "SLA/SupportIslands/PointUtils.cpp"
     "SLA/SupportIslands/PointUtils.hpp"
+    "SLA/SupportIslands/PolygonUtils.cpp"
+    "SLA/SupportIslands/PolygonUtils.hpp"
     "SLA/SupportIslands/PostProcessNeighbor.cpp"
     "SLA/SupportIslands/PostProcessNeighbor.hpp"
     "SLA/SupportIslands/PostProcessNeighbors.cpp"
