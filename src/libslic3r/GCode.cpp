@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <chrono>
 #include <math.h>
 #include <string_view>
 
@@ -756,8 +757,16 @@ void GCode::do_export(Print* print, const char* path, GCodeProcessor::Result* re
     BOOST_LOG_TRIVIAL(debug) << "Start processing gcode, " << log_memory_info();
     m_processor.process_file(path_tmp, true, [print]() { print->throw_if_canceled(); });
     DoExport::update_print_estimated_times_stats(m_processor, print->m_print_statistics);
+#if ENABLE_GCODE_WINDOW
+    if (result != nullptr) {
+        *result = std::move(m_processor.extract_result());
+        // set the filename to the correct value
+        result->filename = path;
+    }
+#else
     if (result != nullptr)
         *result = std::move(m_processor.extract_result());
+#endif // ENABLE_GCODE_WINDOW
     BOOST_LOG_TRIVIAL(debug) << "Finished processing gcode, " << log_memory_info();
 
     if (rename_file(path_tmp, path))
@@ -1105,15 +1114,15 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
     const double       layer_height         = first_object->config().layer_height.value;
     const double       first_layer_height   = first_object->config().first_layer_height.get_abs_value(layer_height);
     for (const PrintRegion* region : print.regions()) {
-        _write_format(file, "; external perimeters extrusion width = %.2fmm\n", region->flow(frExternalPerimeter, layer_height, false, false, -1., *first_object).width);
-        _write_format(file, "; perimeters extrusion width = %.2fmm\n",          region->flow(frPerimeter,         layer_height, false, false, -1., *first_object).width);
-        _write_format(file, "; infill extrusion width = %.2fmm\n",              region->flow(frInfill,            layer_height, false, false, -1., *first_object).width);
-        _write_format(file, "; solid infill extrusion width = %.2fmm\n",        region->flow(frSolidInfill,       layer_height, false, false, -1., *first_object).width);
-        _write_format(file, "; top infill extrusion width = %.2fmm\n",          region->flow(frTopSolidInfill,    layer_height, false, false, -1., *first_object).width);
+        _write_format(file, "; external perimeters extrusion width = %.2fmm\n", region->flow(*first_object, frExternalPerimeter, layer_height).width());
+        _write_format(file, "; perimeters extrusion width = %.2fmm\n",          region->flow(*first_object, frPerimeter,         layer_height).width());
+        _write_format(file, "; infill extrusion width = %.2fmm\n",              region->flow(*first_object, frInfill,            layer_height).width());
+        _write_format(file, "; solid infill extrusion width = %.2fmm\n",        region->flow(*first_object, frSolidInfill,       layer_height).width());
+        _write_format(file, "; top infill extrusion width = %.2fmm\n",          region->flow(*first_object, frTopSolidInfill,    layer_height).width());
         if (print.has_support_material())
-            _write_format(file, "; support material extrusion width = %.2fmm\n", support_material_flow(first_object).width);
+            _write_format(file, "; support material extrusion width = %.2fmm\n", support_material_flow(first_object).width());
         if (print.config().first_layer_extrusion_width.value > 0)
-            _write_format(file, "; first layer extrusion width = %.2fmm\n",   region->flow(frPerimeter, first_layer_height, false, true, -1., *first_object).width);
+            _write_format(file, "; first layer extrusion width = %.2fmm\n",   region->flow(*first_object, frPerimeter, first_layer_height, true).width());
         _write_format(file, "\n");
     }
     print.throw_if_canceled();
@@ -1129,6 +1138,7 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
     // Prepare the helper object for replacing placeholders in custom G-code and output filename.
     m_placeholder_parser = print.placeholder_parser();
     m_placeholder_parser.update_timestamp();
+    m_placeholder_parser_context.rng = std::mt19937(std::chrono::high_resolution_clock::now().time_since_epoch().count());
     print.update_object_placeholders(m_placeholder_parser.config_writable(), ".gcode");
 
     // Get optimal tool ordering to minimize tool switches of a multi-exruder print.
@@ -1815,7 +1825,8 @@ namespace Skirt {
         // Extrude skirt at the print_z of the raft layers and normal object layers
         // not at the print_z of the interlaced support material layers.
         std::map<unsigned int, std::pair<size_t, size_t>> skirt_loops_per_extruder_out;
-        assert(skirt_done.empty());
+        //For sequential print, the following test may fail when extruding the 2nd and other objects.
+        // assert(skirt_done.empty());
         if (skirt_done.empty() && print.has_skirt() && ! print.skirt().entities.empty() && layer_tools.has_skirt) {
             skirt_loops_per_extruder_all_printing(print, layer_tools, skirt_loops_per_extruder_out);
             skirt_done.emplace_back(layer_tools.print_z);
@@ -2170,14 +2181,13 @@ void GCode::process_layer(
             const std::pair<size_t, size_t> loops = loops_it->second;
             this->set_origin(0., 0.);
             m_avoid_crossing_perimeters.use_external_mp();
-            Flow layer_skirt_flow(print.skirt_flow());
-            layer_skirt_flow.height = float(m_skirt_done.back() - (m_skirt_done.size() == 1 ? 0. : m_skirt_done[m_skirt_done.size() - 2]));
+            Flow layer_skirt_flow = print.skirt_flow().with_height(float(m_skirt_done.back() - (m_skirt_done.size() == 1 ? 0. : m_skirt_done[m_skirt_done.size() - 2])));
             double mm3_per_mm = layer_skirt_flow.mm3_per_mm();
             for (size_t i = loops.first; i < loops.second; ++i) {
                 // Adjust flow according to this layer's layer height.
                 ExtrusionLoop loop = *dynamic_cast<const ExtrusionLoop*>(print.skirt().entities[i]);
                 for (ExtrusionPath &path : loop.paths) {
-                    path.height = layer_skirt_flow.height;
+                    path.height = layer_skirt_flow.height();
                     path.mm3_per_mm = mm3_per_mm;
                 }
                 //FIXME using the support_material_speed of the 1st object printed.

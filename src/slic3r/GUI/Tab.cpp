@@ -1437,6 +1437,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("avoid_crossing_perimeters", category_path + "avoid-crossing-perimeters");
         optgroup->append_single_option_line("avoid_crossing_perimeters_max_detour", category_path + "avoid_crossing_perimeters_max_detour");
         optgroup->append_single_option_line("thin_walls", category_path + "detect-thin-walls");
+        optgroup->append_single_option_line("thick_bridges", category_path + "thick_bridges");
         optgroup->append_single_option_line("overhangs", category_path + "detect-bridging-perimeters");
 
         optgroup = page->new_optgroup(L("Advanced"));
@@ -1446,7 +1447,7 @@ void TabPrint::build()
 
         optgroup = page->new_optgroup(L("Fuzzy skin (experimental)"));
         Option option = optgroup->get_option("fuzzy_skin");
-        option.opt.width = 30;
+//        option.opt.width = 30;
         optgroup->append_single_option_line(option);
         optgroup->append_single_option_line(optgroup->get_option("fuzzy_skin_thickness"));
         optgroup->append_single_option_line(optgroup->get_option("fuzzy_skin_point_dist"));
@@ -1509,12 +1510,15 @@ void TabPrint::build()
         optgroup->append_single_option_line("raft_expansion");
 
         optgroup = page->new_optgroup(L("Options for support material and raft"));
+        optgroup->append_single_option_line("support_material_style", category_path + "style");
         optgroup->append_single_option_line("support_material_contact_distance", category_path + "contact-z-distance");
+        optgroup->append_single_option_line("support_material_bottom_contact_distance", category_path + "contact-z-distance");
         optgroup->append_single_option_line("support_material_pattern", category_path + "pattern");
         optgroup->append_single_option_line("support_material_with_sheath", category_path + "with-sheath-around-the-support");
         optgroup->append_single_option_line("support_material_spacing", category_path + "pattern-spacing-0-inf");
         optgroup->append_single_option_line("support_material_angle", category_path + "pattern-angle");
         optgroup->append_single_option_line("support_material_interface_layers", category_path + "interface-layers");
+        optgroup->append_single_option_line("support_material_bottom_interface_layers", category_path + "interface-layers");
         optgroup->append_single_option_line("support_material_interface_pattern", category_path + "interface-pattern");
         optgroup->append_single_option_line("support_material_interface_spacing", category_path + "interface-pattern-spacing");
         optgroup->append_single_option_line("support_material_interface_contact_loops", category_path + "interface-loops");
@@ -2546,7 +2550,7 @@ PageShp TabPrinter::build_kinematics_page()
         ConfigOptionDef def;
         def.type = coString;
         def.width = Field::def_width();
-        def.gui_type = "legend";
+        def.gui_type = ConfigOptionDef::GUIType::legend;
         def.mode = comAdvanced;
         def.tooltip = L("Values in this column are for Normal mode");
         def.set_default_value(new ConfigOptionString{ _(L("Normal")).ToUTF8().data() });
@@ -3856,7 +3860,7 @@ bool Tab::validate_custom_gcodes()
         assert(opt_group->opt_map().size() == 1);
         std::string key = opt_group->opt_map().begin()->first;
         std::string value = boost::any_cast<std::string>(opt_group->get_value(key));
-        std::string config_value = m_config->opt_string(key);
+        std::string config_value = m_type == Preset::TYPE_FILAMENT ? m_config->opt_string(key, 0u) : m_config->opt_string(key);
         valid &= validate_custom_gcode(opt_group->title, value);
         Field* field = opt_group->get_field(key);
         TextCtrl* text_ctrl = dynamic_cast<TextCtrl*>(field);

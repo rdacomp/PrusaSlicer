@@ -65,6 +65,10 @@ enum SupportMaterialPattern {
     smpRectilinear, smpRectilinearGrid, smpHoneycomb,
 };
 
+enum SupportMaterialStyle {
+    smsGrid, smsSnug,
+};
+
 enum SupportMaterialInterfacePattern {
     smipAuto, smipRectilinear, smipConcentric,
 };
@@ -207,6 +211,15 @@ template<> inline const t_config_enum_values& ConfigOptionEnum<SupportMaterialPa
         keys_map["rectilinear"]         = smpRectilinear;
         keys_map["rectilinear-grid"]    = smpRectilinearGrid;
         keys_map["honeycomb"]           = smpHoneycomb;
+    }
+    return keys_map;
+}
+
+template<> inline const t_config_enum_values& ConfigOptionEnum<SupportMaterialStyle>::get_enum_values() {
+    static t_config_enum_values keys_map;
+    if (keys_map.empty()) {
+        keys_map["grid"]    = smsGrid;
+        keys_map["snug"]    = smsSnug;
     }
     return keys_map;
 }
@@ -503,12 +516,14 @@ public:
     ConfigOptionFloat               support_material_angle;
     ConfigOptionBool                support_material_buildplate_only;
     ConfigOptionFloat               support_material_contact_distance;
+    ConfigOptionFloat               support_material_bottom_contact_distance;
     ConfigOptionInt                 support_material_enforce_layers;
     ConfigOptionInt                 support_material_extruder;
     ConfigOptionFloatOrPercent      support_material_extrusion_width;
     ConfigOptionBool                support_material_interface_contact_loops;
     ConfigOptionInt                 support_material_interface_extruder;
     ConfigOptionInt                 support_material_interface_layers;
+    ConfigOptionInt                 support_material_bottom_interface_layers;
     // Spacing between interface lines (the hatching distance). Set zero to get a solid interface.
     ConfigOptionFloat               support_material_interface_spacing;
     ConfigOptionFloatOrPercent      support_material_interface_speed;
@@ -517,11 +532,13 @@ public:
     // Spacing between support material lines (the hatching distance).
     ConfigOptionFloat               support_material_spacing;
     ConfigOptionFloat               support_material_speed;
+    ConfigOptionEnum<SupportMaterialStyle> support_material_style;
     ConfigOptionBool                support_material_synchronize_layers;
     // Overhang angle threshold.
     ConfigOptionInt                 support_material_threshold;
     ConfigOptionBool                support_material_with_sheath;
     ConfigOptionFloatOrPercent      support_material_xy_spacing;
+    ConfigOptionBool                thick_bridges;
     ConfigOptionFloat               xy_size_compensation;
     ConfigOptionBool                wipe_into_objects;
 
@@ -553,22 +570,26 @@ protected:
         OPT_PTR(support_material_angle);
         OPT_PTR(support_material_buildplate_only);
         OPT_PTR(support_material_contact_distance);
+        OPT_PTR(support_material_bottom_contact_distance);
         OPT_PTR(support_material_enforce_layers);
         OPT_PTR(support_material_interface_contact_loops);
         OPT_PTR(support_material_extruder);
         OPT_PTR(support_material_extrusion_width);
         OPT_PTR(support_material_interface_extruder);
         OPT_PTR(support_material_interface_layers);
+        OPT_PTR(support_material_bottom_interface_layers);
         OPT_PTR(support_material_interface_spacing);
         OPT_PTR(support_material_interface_speed);
         OPT_PTR(support_material_pattern);
         OPT_PTR(support_material_interface_pattern);
         OPT_PTR(support_material_spacing);
         OPT_PTR(support_material_speed);
+        OPT_PTR(support_material_style);
         OPT_PTR(support_material_synchronize_layers);
         OPT_PTR(support_material_xy_spacing);
         OPT_PTR(support_material_threshold);
         OPT_PTR(support_material_with_sheath);
+        OPT_PTR(thick_bridges);
         OPT_PTR(xy_size_compensation);
         OPT_PTR(wipe_into_objects);
     }
