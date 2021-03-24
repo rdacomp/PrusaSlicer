@@ -135,7 +135,7 @@ public:
     /// keep same distances between support points
     /// call once align
     /// </summary>
-    /// <param name="samples">In/Out support points to be alligned</param>
+    /// <param name="samples">In/Out support points to be alligned(min 3 points)</param>
     /// <param name="island">Area for sampling, border for position of samples</param>
     /// <param name="config"> Sampling configuration
     /// Maximal distance between neighbor points + 
@@ -147,7 +147,7 @@ public:
     /// <summary>
     /// once align
     /// </summary>
-    /// <param name="samples">In/Out support points to be alligned</param>
+    /// <param name="samples">In/Out support points to be alligned(min 3 points)</param>
     /// <param name="island">Area for sampling, border for position of samples</param>
     /// <param name="config"> Sampling configuration
     /// Maximal distance between neighbor points + 
@@ -155,6 +155,15 @@ public:
     static coord_t align_once(SupportIslandPoints &samples,
                               const ExPolygon &    island,
                               const SampleConfig & config);
+
+    /// <summary>
+    /// Align support point the closest to Wanted point
+    /// </summary>
+    /// <param name="support">In/Out support point, contain restriction for move</param>
+    /// <param name="center">Wanted position point</param>
+    /// <param name="max_distance">Maximal search distance on VD for closest point</param>
+    /// <returns>Distance move of original point</returns>
+    static coord_t align_support(SupportIslandPoint &support, const Point &wanted, double max_distance);
 
     static void draw(SVG &                      svg,
                      const SupportIslandPoints &supportIslandPoints,

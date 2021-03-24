@@ -34,11 +34,18 @@ public:
     static coord_t to_coord(const VD::coordinate_type &coord);
 
     /// <summary>
-    /// Convert Point type to slicer point
+    /// Convert Vodonoi diagram vertex type to Slicer Point
     /// </summary>
-    /// <param name="vertex">Input point pointer</param>
-    /// <returns>When it is possible to convert than convert otherwise empty optional</returns>
+    /// <param name="vertex">Input point pointer(double precission)</param>
+    /// <returns>Convertedf point(int preccission)</returns>
     static Slic3r::Point to_point(const VD::vertex_type *vertex);
+
+    /// <summary>
+    /// Convert point type between voronoi and slicer format
+    /// </summary>
+    /// <param name="vertex">Input vertex</param>
+    /// <returns>created vector</returns>
+    static Slic3r::Vec2d to_point_d(const VD::vertex_type* vertex);
 
     /// <summary>
     /// check if coord is in limits for coord_t
@@ -95,7 +102,7 @@ public:
     /// <param name="maximal_distance">Radius around center point</param>
     /// <param name="minimal_distance">Merge points closer than minimal_distance</param>
     /// <param name="count_points">Count checking points, create help points for result polygon</param>
-    /// <returns>CCW polygon with center inside of polygon</returns>
+    /// <returns>Valid CCW polygon with center inside of polygon</returns>
     static Slic3r::Polygon to_polygon(const Lines &lines,
                                        const Point &center,
                                        double       maximal_distance,
@@ -179,16 +186,7 @@ public:
     /// (use function Slic3r::Voronoi::annotate_inside_outside)</param>
     /// <param name="lines">Source lines for voronoi diagram</param>
     /// <returns>Extended voronoi graph by distances and length</returns>
-    static VoronoiGraph getSkeleton(const VD &vd, const Lines &lines);
-
-    /// <summary>
-    /// For generating support point in distance from node
-    /// </summary>
-    /// <param name="node">Node lay on outline with only one neighbor</param>
-    /// <param name="padding">Distance from outline</param>
-    /// <returns></returns>
-    static Slic3r::Point get_offseted_point(const VoronoiGraph::Node &node,
-                                            double padding);
+    static VoronoiGraph create_skeleton(const VD &vd, const Lines &lines);
 
     /// <summary>
     /// find neighbor and return distance between nodes
@@ -299,7 +297,35 @@ public:
     /// Create point on edge defined by neighbor
     /// in distance defined by edge length ratio
     /// </summary>
-    static Point get_edge_point(const VD::edge_type *edge, double ratio);
+    /// <param name="position">Containe neighbor and position ratio on neighbor</param>
+    /// <returns>Point laying on neighbor edge</returns>
+    static Point create_edge_point(const VoronoiGraph::Position& position);
+    static Point create_edge_point(const VD::edge_type *edge, double ratio);
+
+    /// <summary>
+    /// align "position" close to point "to"
+    /// </summary>
+    /// <param name="position">input position on VD</param>
+    /// <param name="to">point to align</param>
+    /// <param name="max_distance">maximal distance on VD for search point</param>
+    /// <returns>Position on VD</returns>
+    static VoronoiGraph::Position align(const VoronoiGraph::Position &position,
+                                        const Point &                 to,
+                                        double max_distance);
+
+    /// <summary>
+    /// Calc position by ratio to closest point laying on edge
+    /// </summary>
+    /// <param name="edge">edge to align</param>
+    /// <param name="point">point to align</param>
+    /// <param name="edge_ratio">output: ratio between vertex0 and vertex1 closest to point, 
+    /// when less than zero vertex0 is closest point on edge
+    /// when grater than one vertex1 is closest point on edge</param>
+    /// <returns>distance edge to "to" point
+    /// only when result ratio is in range from 0 to 1 </returns>
+    static double get_distance(const VD::edge_type &edge,
+                               const Point &        point,
+                               double &             edge_ratio);
 
     static const VoronoiGraph::Node *getFirstContourNode(
         const VoronoiGraph &graph);

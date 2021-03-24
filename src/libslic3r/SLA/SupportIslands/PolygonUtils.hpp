@@ -63,6 +63,14 @@ public:
     /// <param name="height">height</param>
     /// <returns>Rectangle</returns>
     static Polygon create_rect(double width, double height);
+
+    /// <summary>
+    /// check if all pairs on polygon create with center ccw triangle
+    /// </summary>
+    /// <param name="polygon">input polygon to check</param>
+    /// <param name="center">center point inside polygon</param>
+    /// <returns>True when all points in polygon are CCW with center</returns>
+    static bool is_ccw(const Polygon &polygon, const Point &center);
 };
 } // namespace Slic3r::sla
 #endif // slic3r_SLA_SuppotstIslands_PolygonUtils_hpp_

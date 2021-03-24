@@ -77,6 +77,7 @@ set(SOURCE_LIST_SLA
     "SLA/SupportIslands/SampleIslandUtils.cpp"
     "SLA/SupportIslands/SampleIslandUtils.hpp"
     "SLA/SupportIslands/SupportIslandPoint.hpp"
+    "SLA/SupportIslands/VectorUtils.hpp"
     "SLA/SupportIslands/VoronoiGraph.hpp"
     "SLA/SupportIslands/VoronoiGraphUtils.cpp"
     "SLA/SupportIslands/VoronoiGraphUtils.hpp"

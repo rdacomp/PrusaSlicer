@@ -65,6 +65,12 @@ public:
             result.max_width_for_zig_zag_supportr_line = max_width_for_zig_zag_supportr_line;
         assert(result.max_width_for_zig_zag_supportr_line < result.max_width_for_center_supportr_line);
 
+        // Align support points
+        // TODO: propagate print resolution
+        result.minimal_move = 1000; // [in nanometers], devide from print resolution to quater pixel
+        result.count_iteration = 100; // speed VS precission
+        result.max_align_distance = result.max_distance / 2;
+
         return result;
     }
 };

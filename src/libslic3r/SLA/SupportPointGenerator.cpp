@@ -350,12 +350,13 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     Lines lines = to_lines(island);
     construct_voronoi(lines.begin(), lines.end(), &vd);
     Slic3r::Voronoi::annotate_inside_outside(vd, lines);
-    VoronoiGraph         skeleton = VoronoiGraphUtils::getSkeleton(vd, lines);
+    VoronoiGraph         skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
     VoronoiGraph::ExPath longest_path;
     SupportIslandPoints  samples = SampleIslandUtils::sample_voronoi_graph(
             skeleton, config, longest_path);
 
-    SampleIslandUtils::align_samples(samples, island, config);
+    if (samples.size() > 2)
+        SampleIslandUtils::align_samples(samples, island, config);
 
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
     const char* support_point_color = "lightgreen";

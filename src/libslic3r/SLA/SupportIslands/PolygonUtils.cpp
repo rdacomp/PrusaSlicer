@@ -1,4 +1,5 @@
 #include "PolygonUtils.hpp"
+#include "libslic3r/Geometry.hpp"
 
 using namespace Slic3r::sla;
 
@@ -52,4 +53,14 @@ Slic3r::Polygon PolygonUtils::create_rect(double width, double height)
     double x_2 = width / 2;
     double y_2 = height / 2;
     return {{-x_2, y_2}, {-x_2, -y_2}, {x_2, -y_2}, {x_2, y_2}};
+}
+
+bool PolygonUtils::is_ccw(const Polygon &polygon, const Point &center) {
+    const Point *prev = &polygon.points.back();
+    for (const Point &point : polygon.points) { 
+        Geometry::Orientation o = Geometry::orient(center, *prev, point);
+        if (o != Geometry::Orientation::ORIENTATION_CCW) return false;
+        prev = &point;
+    }
+    return true;
 }

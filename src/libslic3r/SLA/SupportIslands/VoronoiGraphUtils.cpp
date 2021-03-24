@@ -1,6 +1,7 @@
 #include "VoronoiGraphUtils.hpp"
 
 #include <cmath>
+#include <set>
 #include <libslic3r/VoronoiOffset.hpp>
 #include "IStackFunction.hpp"
 #include "EvaluateNeighbor.hpp"
@@ -11,7 +12,7 @@
 
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
-#define SLA_CELL_2_POLYGON_DEBUG
+//#define SLA_CELL_2_POLYGON_DEBUG
 
 using namespace Slic3r::sla;
 
@@ -29,6 +30,11 @@ coord_t VoronoiGraphUtils::to_coord(const VD::coordinate_type &coord)
 Slic3r::Point VoronoiGraphUtils::to_point(const VD::vertex_type *vertex)
 {
     return Point(to_coord(vertex->x()), to_coord(vertex->y()));
+}
+
+Slic3r::Vec2d VoronoiGraphUtils::to_point_d(const VD::vertex_type *vertex)
+{
+    return Vec2d(to_coord(vertex->x()), to_coord(vertex->y()));
 }
 
 bool VoronoiGraphUtils::is_coord_in_limits(const VD::coordinate_type &coord,
@@ -120,27 +126,10 @@ std::optional<Slic3r::Line> VoronoiGraphUtils::to_line(
         Point(p1.y() - p2.y(), p2.x() - p1.x());
     const VD::vertex_type* edge_vertex = (use_v1) ? v1 : v0;
     // koeficient for crop line
-    double koef = 1.;
     if (!use_double_precision) {
-        // only half edges
-        Point vertex = to_point(edge_vertex);
-        /*// faster but less preciss version
-        double abs_max_dir = (std::max)(fabs(direction.x()),
-        fabs(direction.y())); return 2 * maximal_distance / abs_max_dir;
-        //*/
-
-        // slower but more precisse version
-        double dir_size         = direction.cast<double>().operatorNorm();
-        Point  middle           = (p1 + p2) / 2;
-        Point  to_middle        = middle - vertex;
-        double to_middle_size   = to_middle.cast<double>().operatorNorm();
-        double from_middle_size = sqrt(maximal_distance * maximal_distance -
-                                       to_middle_size * to_middle_size);
-        bool   is_opposit       = is_oposit_direction(direction, to_middle);
-        if (is_opposit) to_middle_size *= -1;
-        koef = (from_middle_size + to_middle_size) / dir_size;
-        Point line_point = vertex + direction * koef;
-        return Line(vertex, line_point);
+        Point ray_point = to_point(edge_vertex);
+        Line ray(ray_point, ray_point + direction);
+        return LineUtils::crop_half_ray(ray, p1, maximal_distance);
     }
     std::optional<Linef> segment;
     if (use_both) { 
@@ -148,7 +137,7 @@ std::optional<Slic3r::Line> VoronoiGraphUtils::to_line(
         segment = LineUtils::crop_line(edge_segment, p1, maximal_distance);
     } else {
         Vec2d ray_point(edge_vertex->x(), edge_vertex->y());
-        Linef ray = Linef(ray_point, ray_point + direction.cast<double>());
+        Linef ray(ray_point, ray_point + direction.cast<double>());
         segment = LineUtils::crop_half_ray(ray, p1, maximal_distance);
     }
     if (!segment.has_value()) return {};
@@ -196,7 +185,6 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const Lines &lines,
         points.push_back(p1);
         for (size_t i = 1; i < count_segment; i++) {
             double angle = a1 + i*increase_angle;
-
             double x = cos(angle) * maximal_distance + center.x();
             assert(x < std::numeric_limits<coord_t>::max());
             assert(x > std::numeric_limits<coord_t>::min());
@@ -207,7 +195,23 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const Lines &lines,
         }
         points.push_back(p2);
     }
-    return Polygon(points);
+    Polygon polygon(points);
+    assert(polygon.is_valid());
+    if (!polygon.contains(center)) {
+        SVG svg("bad_polygon.svg", {polygon.points});
+        svg.draw(polygon, "orange");
+        svg.draw(lines, "red");
+        int counter = 0;
+        for (auto &line : lines) {
+            ++counter;
+            svg.draw_text(line.a, ("A"+std::to_string(counter)).c_str(), "lightgreen");
+            svg.draw_text(line.b, ("B" + std::to_string(counter)).c_str(), "lightblue");
+        }
+        svg.draw(center);
+    }
+    assert(polygon.contains(center));
+    assert(PolygonUtils::is_ccw(polygon, center));
+    return polygon;
 }
 
 Slic3r::Polygon VoronoiGraphUtils::to_polygon(const VD::cell_type & cell,
@@ -229,9 +233,13 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const VD::cell_type & cell,
             edge = edge->next();
             continue;            
         }
-        Geometry::Orientation o = Geometry::orient(center, line->a, line->b);
-        assert(o != Geometry::Orientation::ORIENTATION_COLINEAR);
-        if (o == Geometry::Orientation::ORIENTATION_CW)
+        Geometry::Orientation orientation = Geometry::orient(center, line->a, line->b);
+        if (orientation == Geometry::Orientation::ORIENTATION_COLINEAR) 
+        { // on circle over source point edge
+            edge = edge->next();
+            continue;
+        }
+        if (orientation == Geometry::Orientation::ORIENTATION_CW)
             std::swap(line->a, line->b);
         lines.push_back(line.value());
         edge = edge->next();
@@ -411,7 +419,7 @@ double VoronoiGraphUtils::calculate_max_width(
     return 2 * std::max(distance0, distance1);
 }
 
-VoronoiGraph VoronoiGraphUtils::getSkeleton(const VD &vd, const Lines &lines)
+VoronoiGraph VoronoiGraphUtils::create_skeleton(const VD &vd, const Lines &lines)
 {
     // vd should be annotated.
     // assert(Voronoi::debug::verify_inside_outside_annotations(vd));
@@ -781,8 +789,14 @@ const VoronoiGraph::Node *VoronoiGraphUtils::get_twin_node(const VoronoiGraph::N
     return nullptr;
 }
 
-Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge,
-                                                double               ratio)
+Slic3r::Point VoronoiGraphUtils::create_edge_point(
+    const VoronoiGraph::Position &position)
+{
+    return create_edge_point(position.neighbor->edge, position.ratio);
+}
+    
+Slic3r::Point VoronoiGraphUtils::create_edge_point(const VD::edge_type *edge,
+                                                   double               ratio)
 {
     const VD::vertex_type *v0 = edge->vertex0();
     const VD::vertex_type *v1 = edge->vertex1();
@@ -806,6 +820,87 @@ Slic3r::Point VoronoiGraphUtils::get_edge_point(const VD::edge_type *edge,
     dir *= ratio;
     return Point(v0->x() + dir.x(), v0->y() + dir.y());
 }
+
+VoronoiGraph::Position VoronoiGraphUtils::align(
+    const VoronoiGraph::Position &position, const Point &to, double max_distance)
+{
+    // for each neighbor in max distance try align edge
+    struct NodeDistance
+    {
+        const VoronoiGraph::Node *node;
+        double                    distance; // distance to search for closest point
+        NodeDistance(const VoronoiGraph::Node *node, double distance)
+            : node(node), distance(distance)
+        {}
+    };
+    std::queue<NodeDistance> process;
+    const VoronoiGraph::Node::Neighbor* neighbor = position.neighbor;
+    double from_distance = neighbor->edge_length * position.ratio;
+    if (from_distance < max_distance) {
+        const VoronoiGraph::Node *from_node = VoronoiGraphUtils::get_twin_node(neighbor);
+        process.emplace(from_node, from_distance);
+    }
+    double to_distance = neighbor->edge_length * (1 - position.ratio);
+    if (to_distance < max_distance) {
+        const VoronoiGraph::Node *to_node = neighbor->node;
+        process.emplace(to_node, to_distance);        
+    }
+    if (process.empty()) { 
+        const VoronoiGraph::Node *node = (position.ratio < 0.5) ?
+            VoronoiGraphUtils::get_twin_node(neighbor) : neighbor->node;
+        process.emplace(node, max_distance);
+    }
+
+    double closest_distance = std::numeric_limits<double>::max();
+    VoronoiGraph::Position closest;
+
+    std::set<const VoronoiGraph::Node *> done;
+    while (!process.empty()) { 
+        NodeDistance nd = process.front(); // copy
+        process.pop();
+        if (done.find(nd.node) != done.end()) continue;
+        done.insert(nd.node);
+        for (const auto &neighbor : nd.node->neighbors) {
+            if (done.find(neighbor.node) != done.end()) continue;
+            double ratio;
+            double distance = get_distance(*neighbor.edge, to, ratio);
+            if (closest_distance > distance) { 
+                closest_distance = distance;
+                closest = VoronoiGraph::Position(&neighbor, ratio);
+            }
+            double from_start = nd.distance + neighbor.edge_length;
+            if (from_start < max_distance)
+                process.emplace(neighbor.node, from_start);
+        }
+    }
+    return closest;
+}
+
+double VoronoiGraphUtils::get_distance(const VD::edge_type &edge,
+                                       const Point &        point,
+                                       double &             edge_ratio)
+{
+    // TODO: find closest point on curve edge
+    //if (edge.is_linear()) {
+    
+        // get line foot point, inspired Geometry::foot_pt
+        Vec2d v0 = to_point_d(edge.vertex0());
+        Vec2d v  = point.cast<double>() - v0;
+        Vec2d v1 = to_point_d(edge.vertex1());
+        Vec2d edge_dir = v1 - v0;
+        double l2 = edge_dir.squaredNorm();
+        edge_ratio = v.dot(edge_dir) / l2;
+        // IMPROVE: not neccesary to calculate point if (edge_ratio > 1 || edge_ratio < 0)
+        Point edge_point;
+        if (edge_ratio > 1.) edge_point = v1.cast<coord_t>();
+        else if (edge_ratio < 0.) edge_point = v0.cast<coord_t>();
+        else { // foot point
+            edge_point = (v0 + edge_dir * edge_ratio).cast<coord_t>();
+        }
+        double distance = (point - edge_point).cast<double>().norm();
+        return distance;
+}
+
 
 const VoronoiGraph::Node *VoronoiGraphUtils::getFirstContourNode(
     const VoronoiGraph &graph)

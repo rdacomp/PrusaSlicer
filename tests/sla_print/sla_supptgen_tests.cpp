@@ -332,8 +332,8 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
                                         const SampleConfig &config)
 {
     auto points = SupportPointGenerator::uniform_cover_island(island, config);
-    Points chck_points = rasterize(island, config.head_radius); // TODO: Use resolution of printer
 
+    Points chck_points = rasterize(island, config.head_radius); // TODO: Use resolution of printer
     bool is_ok = true;
     double              max_distance = config.max_distance;
     std::vector<double> point_distances(chck_points.size(),
@@ -364,7 +364,7 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
         for (const Point &pt : island.contour.points) bb.merge(pt);
         SVG svg("Error" + std::to_string(++counter) + ".svg", bb);
         svg.draw(island, "blue", 0.5f);
-        for (auto p : points)
+        for (auto& p : points)
             svg.draw(p.point, "lightgreen", config.head_radius);
         for (size_t index = 0; index < chck_points.size(); ++index) {
             const Point &chck_point = chck_points[index];
@@ -391,6 +391,10 @@ SampleConfig create_sample_config(double size) {
     cfg.max_length_for_two_support_points = 4*size;
     cfg.max_width_for_center_supportr_line = size;
     cfg.max_width_for_zig_zag_supportr_line = 2*size;
+
+    cfg.minimal_move = std::max(1000., size/1000);
+    cfg.count_iteration = 100; 
+    cfg.max_align_distance = 0;
     return cfg;
 }
 
@@ -414,8 +418,31 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     
     for (int i = 0; i < 100; ++i) {
         VoronoiGraph::ExPath longest_path;
-        VoronoiGraph skeleton = VoronoiGraphUtils::getSkeleton(vd, lines);
+        VoronoiGraph skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
         auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
+    }
+}
+
+TEST_CASE("Speed align", "[VoronoiSkeleton]")
+{
+    SampleConfig cfg      = create_sample_config(3e7);
+    cfg.max_align_distance = 1000;
+    cfg.count_iteration    = 1000;
+    cfg.max_align_distance = 3e7;
+
+    double       size = 3e7;
+    auto island = create_square_with_4holes(5 * size, 5 * size / 2 - size / 3);
+    using VD = Slic3r::Geometry::VoronoiDiagram;
+    VD    vd;
+    Lines lines = to_lines(island);
+    construct_voronoi(lines.begin(), lines.end(), &vd);
+    Slic3r::Voronoi::annotate_inside_outside(vd, lines);
+    VoronoiGraph::ExPath longest_path;
+    VoronoiGraph skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
+    auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
+
+    for (int i = 0; i < 100; ++i) { auto sample_copy = samples; // copy
+        SampleIslandUtils::align_samples(sample_copy, island, cfg);
     }
 }
 
@@ -424,7 +451,8 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
     double       size = 3e7;
     SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
-    for (auto &island : islands) {
+    for (ExPolygon &island : islands) {
+        size_t debug_index = &island - &islands.front();
         auto   points = test_island_sampling(island, cfg);
         //cgal_test(points, island);
         double angle  = 3.14 / 3; // cca 60 degree

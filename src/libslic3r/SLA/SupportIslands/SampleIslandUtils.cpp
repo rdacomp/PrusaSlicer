@@ -6,13 +6,19 @@
 #include "EvaluateNeighbor.hpp"
 #include "ParabolaUtils.hpp"
 #include "VoronoiGraphUtils.hpp"
+#include "VectorUtils.hpp"
 
 #include <magic_enum/magic_enum.hpp>
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
 #include <libslic3r/ClipperUtils.hpp> // allign
 
+// comment to enable assert()
+// #define NDEBUG
+#include <cassert>
+
 using namespace Slic3r::sla;
+
 
 SupportIslandPoint SampleIslandUtils::create_point(
     const VoronoiGraph::Node::Neighbor *neighbor,
@@ -20,7 +26,7 @@ SupportIslandPoint SampleIslandUtils::create_point(
     SupportIslandPoint::Type            type)
 {
     VoronoiGraph::Position position(neighbor, ratio);
-    Slic3r::Point p = VoronoiGraphUtils::get_edge_point(neighbor->edge, ratio);
+    Slic3r::Point p = VoronoiGraphUtils::create_edge_point(position);
     return SupportIslandPoint(p, type, position);
 }
 
@@ -86,7 +92,7 @@ SupportIslandPoints SampleIslandUtils::sample_side_branch(
         VoronoiGraph::Nodes reverse_path = side_path.nodes;
         std::reverse(reverse_path.begin(), reverse_path.end());
         reverse_path.push_back(first_node);
-        return {create_point_on_path(reverse_path, cfg.side_distance)};
+        return {create_point_on_path(reverse_path, cfg.side_distance, SupportIslandPoint::Type::center_line_end)};
     }
     // count of segment between points on main path
     size_t segment_count = static_cast<size_t>(
@@ -122,6 +128,7 @@ SupportIslandPoints SampleIslandUtils::sample_side_branch(
         prev_node = node;
     }
     assert(fabs(distance - (sample_distance - cfg.side_distance)) < 1e-5);
+    result.back().type = SupportIslandPoint::Type::center_line_end;
     return result;
 }
 
@@ -180,33 +187,53 @@ std::vector<std::set<const VoronoiGraph::Node *>> create_circles_sets(
 
 Slic3r::Points SampleIslandUtils::to_points(const SupportIslandPoints &support_points)
 { 
-    Slic3r::Points points;
-    points.reserve(support_points.size());
-    std::transform(support_points.begin(), support_points.end(),
-                   std::back_inserter(points),
-                   [](const SupportIslandPoint &p) {
-                       return p.point; });
-    return points;
+    std::function<Point(const SupportIslandPoint &)> transform_func = &SupportIslandPoint::point;
+    return VectorUtils::transform(support_points, transform_func);
 }
 
 void SampleIslandUtils::align_samples(SupportIslandPoints &samples,
                                       const ExPolygon &    island,
                                       const SampleConfig & config)
 {
+    assert(samples.size() > 2);
     size_t count_iteration = config.count_iteration; // copy
+    coord_t max_move        = 0;
     while (--count_iteration > 1) {
-        coord_t max_move = align_once(samples, island, config);        
+        max_move = align_once(samples, island, config);        
         if (max_move < config.minimal_move) break;
     }
+    //std::cout << "Align use " << config.count_iteration - count_iteration
+    //          << " iteration and finish with precision " << max_move << "nano meters" << std::endl;
 }
+
+bool is_points_in_distance(const Slic3r::Point & p,
+                           const Slic3r::Points &points,
+                           double                max_distance)
+{
+    for (const auto &p2 : points) {
+        double d = (p - p2).cast<double>().norm();
+        if (d > max_distance) return false;
+    }
+    return true;
+}
+
+//#define VISUALIZE_SAMPLE_ISLAND_UTILS_ALIGN_ONCE
 
 coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
                                       const ExPolygon &    island,
                                       const SampleConfig & config)
 {
+    assert(samples.size() > 2);
     using VD = Slic3r::Geometry::VoronoiDiagram;
     VD             vd;
     Slic3r::Points points = SampleIslandUtils::to_points(samples);
+
+#ifdef VISUALIZE_SAMPLE_ISLAND_UTILS_ALIGN_ONCE
+    static int  counter = 0;
+    BoundingBox bbox(island);
+    SVG svg(("align_"+std::to_string(counter++)+".svg").c_str(), bbox);
+    svg.draw(island, "lightblue");
+#endif // VISUALIZE_SAMPLE_ISLAND_UTILS_ALIGN_ONCE
 
     // create voronoi diagram with points
     construct_voronoi(points.begin(), points.end(), &vd);
@@ -223,14 +250,33 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
                 break;
             }
         }
-        assert(island_cell != nullptr);
         Point center = island_cell->centroid();
-        Point move   = center - sample.point;
-
-        coord_t act_move = move.x() + move.y(); // manhatn distance
+        assert(island_cell != nullptr);
+        assert(is_points_in_distance(center, island_cell->points, config.max_distance));
+#ifdef VISUALIZE_SAMPLE_ISLAND_UTILS_ALIGN_ONCE
+        svg.draw(polygon, "lightgray");
+        svg.draw(*island_cell, "gray");
+        svg.draw(sample.point, "black", config.head_radius);
+        svg.draw(Line(sample.point, center), "blue", config.head_radius / 5);
+#endif // VISUALIZE_SAMPLE_ISLAND_UTILS_ALIGN_ONCE        
+        coord_t act_move = align_support(sample, center, config.max_align_distance);
         if (max_move < act_move) max_move = act_move;
     }
     return max_move;
+}
+
+coord_t SampleIslandUtils::align_support(SupportIslandPoint &support,
+                                         const Point &       wanted,
+                                         double              max_distance)
+{
+    //move only along VD
+    VoronoiGraph::Position position =
+        VoronoiGraphUtils::align(support.position, wanted, max_distance);
+    Point new_point = VoronoiGraphUtils::create_edge_point(position);
+    Point move      = new_point - support.point;
+    support.position= position;
+    support.point   = new_point;
+    return abs(move.x()) + abs(move.y());
 }
 
 SupportIslandPoints SampleIslandUtils::sample_center_line(
@@ -570,8 +616,9 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
                                     2 * config.minimal_distance_from_outline,
                                     config.max_distance,
                                     config.minimal_distance_from_outline);
-
-        return sample_center_line(path, centerLineConfiguration);
+        SupportIslandPoints samples = sample_center_line(path, centerLineConfiguration);
+        samples.front().type = SupportIslandPoint::Type::center_line_end2;
+        return samples;
     }
 
     // line of zig zag points

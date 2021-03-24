@@ -35,9 +35,13 @@ struct SampleConfig
 
     // Term criteria for end of alignment
     // Minimal change in manhatn move of support position before termination
-    coord_t minimal_move     = 1;
+    coord_t minimal_move = 1000; // in nanometers, devide from print resolution to quater pixel
+
     // Maximal count of align iteration
     size_t  count_iteration = 100;
+
+    // Maximal distance over Voronoi diagram edges to find closest point during aligning Support point
+    double max_align_distance = 0;
 };
 } // namespace Slic3r::sla
 #endif // slic3r_SLA_SuppotstIslands_SampleConfig_hpp_

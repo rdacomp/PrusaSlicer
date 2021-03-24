@@ -16,9 +16,11 @@ struct SupportIslandPoint
         one_center_point,
         two_points,
         center_line,
+        center_line_end, // end of branch
+        center_line_end2, // start of main path(only one per VD)
         center_circle,
-        center_circle_end,
-        center_circle_end2,
+        center_circle_end, // circle finish by one point (one end per circle - need allign)
+        center_circle_end2, // circle finish by multi points (one end per circle - need allign)
         undefined
     };
 
@@ -52,7 +54,9 @@ struct SupportIslandPoint
         
         static const std::set<Type> cant_move({
             Type::one_center_point, 
-            Type::two_points
+            Type::two_points, 
+            Type::center_line_end,
+            Type::center_line_end2
             });
         return cant_move.find(type) == cant_move.end();
         

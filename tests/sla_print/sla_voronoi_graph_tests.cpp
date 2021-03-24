@@ -47,6 +47,7 @@ void check(Slic3r::Points points, double max_distance) {
 
 TEST_CASE("Polygon from cell", "[Voronoi]")
 {
+    // for debug #define SLA_CELL_2_POLYGON_DEBUG in VoronoiGraphUtils
     double  max_distance = 1e7;
     coord_t size         = (int) (4e6);
     coord_t half_size         = size/2;

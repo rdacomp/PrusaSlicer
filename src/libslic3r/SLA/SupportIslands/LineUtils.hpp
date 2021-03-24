@@ -18,10 +18,10 @@ public:
     LineUtils() = delete;
 
     /// <summary>
-    /// Sort lines to be in counter clock wise order
+    /// Sort lines to be in counter clock wise order only by point Line::a and function std::atan2
     /// </summary>
-    /// <param name="lines">Lines to sort</param>
-    /// <param name="center">Center for order</param>
+    /// <param name="lines">Lines to be sort</param>
+    /// <param name="center">Center for CCW order</param>
     static void sort_CCW(Lines &lines, const Point &center);
 
     /// <summary>
