@@ -12,6 +12,10 @@
 
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
+// comment definition of NDEBUG to enable assert()
+// #define NDEBUG
+#include <cassert>
+
 //#define SLA_CELL_2_POLYGON_DEBUG
 
 using namespace Slic3r::sla;
@@ -144,6 +148,7 @@ std::optional<Slic3r::Line> VoronoiGraphUtils::to_line(
     return Line(segment->a.cast<coord_t>(), segment->b.cast<coord_t>());
 }
 
+
 Slic3r::Polygon VoronoiGraphUtils::to_polygon(const Lines &lines,
                                               const Point &center,
                                               double       maximal_distance,
@@ -196,21 +201,10 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const Lines &lines,
         points.push_back(p2);
     }
     Polygon polygon(points);
+    //if (!polygon.contains(center)) draw(polygon, lines, center);
     assert(polygon.is_valid());
-    if (!polygon.contains(center)) {
-        SVG svg("bad_polygon.svg", {polygon.points});
-        svg.draw(polygon, "orange");
-        svg.draw(lines, "red");
-        int counter = 0;
-        for (auto &line : lines) {
-            ++counter;
-            svg.draw_text(line.a, ("A"+std::to_string(counter)).c_str(), "lightgreen");
-            svg.draw_text(line.b, ("B" + std::to_string(counter)).c_str(), "lightblue");
-        }
-        svg.draw(center);
-    }
     assert(polygon.contains(center));
-    assert(PolygonUtils::is_ccw(polygon, center));
+    assert(PolygonUtils::is_not_self_intersect(polygon, center));
     return polygon;
 }
 
@@ -1063,3 +1057,13 @@ void VoronoiGraphUtils::draw(SVG &                       svg,
     draw(svg, path.nodes, width, mainPathColor);
 }
 
+
+void VoronoiGraphUtils::draw(const Polygon &polygon,
+                             const Lines &  lines,
+                             const Point &  center)
+{
+    SVG  svg("Bad_polygon.svg", {polygon.points});
+    svg.draw(polygon, "orange");
+    LineUtils::draw(svg, lines, "red", 0., true, true);
+    svg.draw(center);
+}

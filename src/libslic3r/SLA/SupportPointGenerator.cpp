@@ -13,7 +13,6 @@
 #include "Tesselate.hpp"
 #include "ExPolygonCollection.hpp"
 #include "libslic3r.h"
-
 #include "libnest2d/backends/clipper/geometries.hpp"
 #include "libnest2d/utils/rotcalipers.hpp"
 
@@ -322,24 +321,10 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
 std::vector<Vec2f> SupportPointGenerator::uniform_cover_island(
         SupportPointGenerator::Structure &structure)
 {
-    // X is maximal distance between 2 support points on island
-    float            x                = 10;
-    float            one_support_area = M_PI * x;
-    const ExPolygon &island           = *structure.polygon;
-    float            area             = structure.area;
-    const Point &    bb_size          = structure.bbox.size();
-    
-    // TODO: find valid params !!!!
-    SampleConfig cfg = SampleConfigFactory::create(m_config);
+    SampleConfig        cfg    = SampleConfigFactory::create(m_config);
+    const ExPolygon &   island = *structure.polygon;
     SupportIslandPoints points = uniform_cover_island(island, cfg);
-
-    std::vector<Vec2f> result;
-    result.reserve(points.size());
-    std::transform(points.begin(), points.end(), std::back_inserter(result),
-                   [](const SupportIslandPoint& p) -> Vec2f {
-                       return p.point.cast<float>();
-                   });
-    return result;
+    return SampleIslandUtils::to_points_f(points);
 }
 
 SupportIslandPoints SupportPointGenerator::uniform_cover_island(

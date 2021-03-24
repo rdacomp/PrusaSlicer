@@ -71,6 +71,14 @@ public:
     /// <param name="center">center point inside polygon</param>
     /// <returns>True when all points in polygon are CCW with center</returns>
     static bool is_ccw(const Polygon &polygon, const Point &center);
+
+    /// <summary>
+    /// ! Only for polygon around point, like Voronoi diagram cell
+    /// </summary>
+    /// <param name="polygon">Polygon to check</param>
+    /// <param name="center">Center inside polygon, points create circle around center</param>
+    /// <returns>True when valid without self intersection otherwise FALSE</returns>
+    static bool is_not_self_intersect(const Polygon &polygon, const Point &center);
 };
 } // namespace Slic3r::sla
 #endif // slic3r_SLA_SuppotstIslands_PolygonUtils_hpp_

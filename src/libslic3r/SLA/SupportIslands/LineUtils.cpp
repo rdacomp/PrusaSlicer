@@ -223,3 +223,42 @@ std::tuple<double, double, double> LineUtils::get_param(const Linef &line)
     double c = -a * line.a.x() - b * line.a.y();
     return {a, b, c};
 }
+
+void LineUtils::draw(SVG &       svg,
+                     const Line &line,
+                     const char *color,
+                     coordf_t stroke_width,
+                     const char *name,
+                     bool        side_points,
+                     const char *color_a,
+                     const char *color_b)
+{
+    svg.draw(line, color, stroke_width);
+    bool use_name = name != nullptr;
+    if (use_name) {
+        Point middle = line.a/2 + line.b/2;
+        svg.draw_text(middle, name, color);
+    }
+    if (side_points) {
+        std::string name_a = (use_name) ? "A" : (std::string("A_") + name);            
+        std::string name_b = (use_name) ? "B" : (std::string("B_") + name);
+        svg.draw_text(line.a, name_a.c_str(), color_a);
+        svg.draw_text(line.b, name_b.c_str(), color_b);
+    }
+}
+
+void LineUtils::draw(SVG &        svg,
+                     const Lines &lines,
+                     const char * color,
+                     coordf_t     stroke_width,
+                     bool         ord,
+                     bool         side_points,
+                     const char * color_a,
+                     const char * color_b)
+{
+    for (const auto &line : lines) {
+        draw(svg, line, color, stroke_width,
+            (ord) ? std::to_string(&line - &lines.front()).c_str() : nullptr,
+            side_points, color_a, color_b);
+    }
+}

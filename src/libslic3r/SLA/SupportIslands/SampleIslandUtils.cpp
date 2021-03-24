@@ -13,7 +13,7 @@
 
 #include <libslic3r/ClipperUtils.hpp> // allign
 
-// comment to enable assert()
+// comment definition of NDEBUG to enable assert()
 // #define NDEBUG
 #include <cassert>
 
@@ -191,6 +191,13 @@ Slic3r::Points SampleIslandUtils::to_points(const SupportIslandPoints &support_p
     return VectorUtils::transform(support_points, transform_func);
 }
 
+std::vector<Slic3r::Vec2f> SampleIslandUtils::to_points_f(const SupportIslandPoints &support_points)
+{
+    std::function<Vec2f(const SupportIslandPoint &p)> transform_func =
+        [](const SupportIslandPoint &p) { return p.point.cast<float>(); };
+    return VectorUtils::transform(support_points, transform_func);
+}
+
 void SampleIslandUtils::align_samples(SupportIslandPoints &samples,
                                       const ExPolygon &    island,
                                       const SampleConfig & config)
@@ -250,8 +257,8 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
                 break;
             }
         }
-        Point center = island_cell->centroid();
         assert(island_cell != nullptr);
+        Point center = island_cell->centroid();
         assert(is_points_in_distance(center, island_cell->points, config.max_distance));
 #ifdef VISUALIZE_SAMPLE_ISLAND_UTILS_ALIGN_ONCE
         svg.draw(polygon, "lightgray");

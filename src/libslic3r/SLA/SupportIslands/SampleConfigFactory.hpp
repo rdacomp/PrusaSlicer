@@ -16,6 +16,7 @@ public:
     // factory method to iniciate config
     static SampleConfig create(const SupportPointGenerator::Config &config)
     {
+        // TODO: find valid params !!!!
         SampleConfig result;
         result.max_distance                  = 100. * config.head_diameter;
         result.head_radius                   = config.head_diameter / 2;

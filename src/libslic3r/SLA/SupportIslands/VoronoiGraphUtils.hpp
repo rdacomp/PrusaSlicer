@@ -349,6 +349,11 @@ public: // draw function for debug
     static void draw(SVG &                       svg,
                      const VoronoiGraph::ExPath &path,
                      coord_t                     width);
+
+    // draw polygon when convert from cell
+    static void draw(const Slic3r::Polygon &polygon,
+                     const Slic3r::Lines &  lines,
+                     const Slic3r::Point &  center);
 };
 
 } // namespace Slic3r::sla

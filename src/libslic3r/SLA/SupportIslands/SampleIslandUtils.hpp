@@ -129,7 +129,11 @@ public:
         const SampleConfig &  config,
         VoronoiGraph::ExPath &longest_path);
 
+    /// <summary>
+    /// Transform support point to slicer points
+    /// </summary>
     static Slic3r::Points to_points(const SupportIslandPoints &support_points);
+    static std::vector<Vec2f> to_points_f(const SupportIslandPoints &support_points);
     
     /// <summary>
     /// keep same distances between support points

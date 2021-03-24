@@ -64,3 +64,23 @@ bool PolygonUtils::is_ccw(const Polygon &polygon, const Point &center) {
     }
     return true;
 }
+
+bool PolygonUtils::is_not_self_intersect(const Polygon &polygon,
+                                         const Point &  center)
+{
+    auto get_angle = [&center](const Point &point) {
+        Point diff_point = point - center;
+        return atan2(diff_point.y(), diff_point.x());
+    };
+    bool         found_circle_end = false; // only one can be on polygon
+    double prev_angle = get_angle(polygon.points.back());
+    for (const Point &point : polygon.points) {
+        double angle = get_angle(point);
+        if (angle < prev_angle) { 
+            if (found_circle_end) return false;
+            found_circle_end = true;
+        }
+        prev_angle = angle;
+    }
+    return true;
+}

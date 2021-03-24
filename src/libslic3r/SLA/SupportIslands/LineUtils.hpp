@@ -3,7 +3,9 @@
 
 #include <optional>
 #include <tuple>
+#include <string>
 #include <libslic3r/Line.hpp>
+#include <libslic3r/SVG.hpp>
 
 namespace Slic3r::sla {
 
@@ -81,6 +83,23 @@ public:
     /// <returns>a, b, c</returns>
     static std::tuple<double, double, double> get_param(const Line &line);
     static std::tuple<double, double, double> get_param(const Linef &line);
+
+    static void draw(SVG &       svg,
+                     const Line &line,
+                     const char *color        = "gray",
+                     coordf_t    stroke_width = 0,
+                     const char *name         = nullptr,
+                     bool        side_points  = false,
+                     const char *color_a      = "lightgreen",
+                     const char *color_b      = "lightblue");
+    static void draw(SVG &       svg,
+                     const Lines &lines,
+                     const char *color        = "gray",
+                     coordf_t    stroke_width = 0,
+                     bool ord         = false, // write order as text
+                     bool        side_points  = false,
+                     const char *color_a      = "lightgreen",
+                     const char *color_b      = "lightblue");
 };
 
 } // namespace Slic3r::sla
