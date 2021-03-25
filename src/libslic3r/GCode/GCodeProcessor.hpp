@@ -253,7 +253,18 @@ namespace Slic3r {
             float max_acceleration; // mm/s^2
             float extrude_factor_override_percentage;
             float time; // s
+#if ENABLE_EXTENDED_M73_LINES
+            struct StopTime
+            {
+                unsigned int g1_line_id;
+                float elapsed_time;
+            };
+            std::vector<StopTime> stop_times;
+            std::string line_m73_main_mask;
+            std::string line_m73_stop_mask;
+#else
             std::string line_m73_mask;
+#endif // ENABLE_EXTENDED_M73_LINES
             State curr;
             State prev;
             CustomGCodeTime gcode_time;
@@ -513,7 +524,6 @@ namespace Slic3r {
         GCodeProcessor();
 
         void apply_config(const PrintConfig& config);
-        void apply_config(const DynamicPrintConfig& config);
         void enable_stealth_time_estimator(bool enabled);
         bool is_stealth_time_estimator_enabled() const {
             return m_time_processor.machines[static_cast<size_t>(PrintEstimatedTimeStatistics::ETimeMode::Stealth)].enabled;
@@ -538,6 +548,8 @@ namespace Slic3r {
         std::vector<float> get_layers_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
 
     private:
+        void apply_config(const DynamicPrintConfig& config);
+        void apply_config_simplify3d(const std::string& filename);
         void process_gcode_line(const GCodeReader::GCodeLine& line);
 
         // Process tags embedded into comments
