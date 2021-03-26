@@ -342,8 +342,8 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
         const Point &chck_point  = chck_points[index];
         double &min_distance = point_distances[index];
         bool         exist_close_support_point = false;
-        for (auto &island_point : points) {
-            Point& p = island_point.point;
+        for (const auto &island_point : points) {
+            const Point& p = island_point->point;
             Point abs_diff(fabs(p.x() - chck_point.x()),
                            fabs(p.y() - chck_point.y()));
             if (abs_diff.x() < min_distance && abs_diff.y() < min_distance) {
@@ -365,7 +365,7 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
         SVG svg("Error" + std::to_string(++counter) + ".svg", bb);
         svg.draw(island, "blue", 0.5f);
         for (auto& p : points)
-            svg.draw(p.point, "lightgreen", config.head_radius);
+            svg.draw(p->point, "lightgreen", config.head_radius);
         for (size_t index = 0; index < chck_points.size(); ++index) {
             const Point &chck_point = chck_points[index];
             double       distance   = point_distances[index];
@@ -378,7 +378,7 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
     //CHECK(is_ok);
 
     // all points must be inside of island
-    for (const auto &point : points) { CHECK(island.contains(point.point)); }
+    for (const auto &point : points) { CHECK(island.contains(point->point)); }
     return points;
 }
 
@@ -439,10 +439,10 @@ TEST_CASE("Speed align", "[VoronoiSkeleton]")
     Slic3r::Voronoi::annotate_inside_outside(vd, lines);
     VoronoiGraph::ExPath longest_path;
     VoronoiGraph skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
-    auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
 
-    for (int i = 0; i < 100; ++i) { auto sample_copy = samples; // copy
-        SampleIslandUtils::align_samples(sample_copy, island, cfg);
+    for (int i = 0; i < 100; ++i) {
+        auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
+        SampleIslandUtils::align_samples(samples, island, cfg);
     }
 }
 

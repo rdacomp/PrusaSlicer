@@ -26,6 +26,7 @@ public:
     template<typename T1, typename T2>
     static void sort_by(std::vector<T1> &data, std::function<T2(const T1 &)> &calc)
     {
+        assert(!data.empty());
         // initialize original index locations
         std::vector<size_t> idx(data.size());
         iota(idx.begin(), idx.end(), 0);

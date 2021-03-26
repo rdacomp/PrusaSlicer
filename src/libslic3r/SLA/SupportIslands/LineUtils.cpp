@@ -59,7 +59,7 @@ std::optional<Slic3r::Linef> LineUtils::crop_ray(const Linef &ray,
     Vec2d center_d = center.cast<double>();
     if (is_parallel_y(ray)) {
         double x        = ray.a.x();
-        double diff     = x - center.x();
+        double diff     = x - center_d.x();
         double abs_diff = fabs(diff);
         if (abs_diff > radius) return {};
         // create cross points
@@ -245,6 +245,13 @@ void LineUtils::draw(SVG &       svg,
         svg.draw_text(line.a, name_a.c_str(), color_a);
         svg.draw_text(line.b, name_b.c_str(), color_b);
     }
+}
+
+double LineUtils::perp_distance(const Linef &line, Vec2d p)
+{
+    Vec2d v  = line.b - line.a; // direction
+    Vec2d va = p - line.a;
+    return std::abs(cross2(v, va)) / v.norm();
 }
 
 void LineUtils::draw(SVG &        svg,

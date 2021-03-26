@@ -28,7 +28,7 @@ public:
     /// <param name="ratio">Source distance ratio for position on edge</param>
     /// <param name="type">Type of point</param>
     /// <returns>created support island point</returns>
-    static SupportIslandPoint create_point(
+    static SupportIslandPointPtr create_point(
         const VoronoiGraph::Node::Neighbor *neighbor,
         double                              ratio,
         SupportIslandPoint::Type type = SupportIslandPoint::Type::undefined);
@@ -39,7 +39,7 @@ public:
     /// <param name="path">Neighbor connected Nodes</param>
     /// <param name="distance">Distance to final point</param>
     /// <returns>Points with distance to first node</returns>
-    static SupportIslandPoint create_point_on_path(
+    static SupportIslandPointPtr create_point_on_path(
         const VoronoiGraph::Nodes &path,
         double                     distance,
         SupportIslandPoint::Type type = SupportIslandPoint::Type::undefined);
@@ -52,7 +52,7 @@ public:
     /// <param name="path">Queue of neighbor nodes.(must be neighbor)</param>
     /// <param name="path_length">length of path</param>
     /// <returns>Point laying on voronoi diagram</returns>
-    static SupportIslandPoint create_middle_path_point(
+    static SupportIslandPointPtr create_middle_path_point(
         const VoronoiGraph::Path &path,
         SupportIslandPoint::Type  type = SupportIslandPoint::Type::undefined);    
 

@@ -302,11 +302,11 @@ bool liang_barsky_line_clipping(
 template<typename T>
 int ray_circle_intersections_r2_lv2_c(T r2, T a, T b, T lv2, T c, std::pair<Eigen::Matrix<T, 2, 1, Eigen::DontAlign>, Eigen::Matrix<T, 2, 1, Eigen::DontAlign>> &out)
 {
-    T x0 = - a * c / lv2;
-    T y0 = - b * c / lv2;
     T d = r2 - c * c / lv2;
     if (d < T(0))
         return 0;
+    T x0 = - a * c / lv2;
+    T y0 = - b * c / lv2;
     T mult = sqrt(d / lv2);
     out.first.x() = x0 + b * mult;
     out.first.y() = y0 - a * mult;

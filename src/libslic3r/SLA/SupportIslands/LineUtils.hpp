@@ -84,6 +84,14 @@ public:
     static std::tuple<double, double, double> get_param(const Line &line);
     static std::tuple<double, double, double> get_param(const Linef &line);
 
+    /// <summary>
+    /// Calculate distance between point and ray
+    /// </summary>
+    /// <param name="line">a and b are only for direction, not limit</param>
+    /// <param name="p">Point in space</param>
+    /// <returns>Euclid perpedicular distance</returns>
+    static double perp_distance(const Linef &line, Vec2d p);
+
     static void draw(SVG &       svg,
                      const Line &line,
                      const char *color        = "gray",
