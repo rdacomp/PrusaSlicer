@@ -1436,13 +1436,7 @@ struct Plater::priv
     {
         bool m_plater_dirty{ false };
         bool m_preset_dirty{ false };
-        // keeps track of last save timestamps for undo/redo stacks
-        std::map<const UndoRedo::Stack*, size_t> m_last_save_snapshot_timestamp;
-        // keeps track of latest states for gizmos
-        std::map<std::string, bool> m_gizmos_state;
-        // keeps track of initial selected presets
-        std::array<std::string, Preset::TYPE_COUNT> m_initial_presets;
-
+        bool m_any_gizmo_dirty{ false };
         struct CurrentGizmo
         {
             bool dirty{ false };
@@ -1451,8 +1445,15 @@ struct Plater::priv
 
         CurrentGizmo m_current_gizmo;
 
+        // keeps track of last save timestamps for undo/redo stacks
+        std::map<const UndoRedo::Stack*, size_t> m_last_save_snapshot_timestamp;
+        // keeps track of latest states for gizmos
+        std::map<std::string, bool> m_gizmos_state;
+        // keeps track of initial selected presets
+        std::array<std::string, Preset::TYPE_COUNT> m_initial_presets;
+
     public:
-        bool is_dirty() const { return m_plater_dirty || m_preset_dirty; }
+        bool is_dirty() const { return m_plater_dirty || m_preset_dirty || m_current_gizmo.dirty || m_any_gizmo_dirty; }
 
         void update() {
             if (!wxGetApp().initialized())
@@ -1479,10 +1480,13 @@ struct Plater::priv
                 }
                 else if (std::string gizmo_name = extract_gizmo_name(active_main_snapshot->name, _utf8("Leaving")); !m_current_gizmo.name.empty() && !gizmo_name.empty()) {
                     // leaving a gizmo undo/redo stack
-                    // store state of current gizmo
+                    // store state of current gizmo, if dirty
                     assert(gizmo_name == m_current_gizmo.name);
-                    m_gizmos_state[m_current_gizmo.name] = m_current_gizmo.dirty;
-                    m_current_gizmo.name.clear();
+                    if (m_current_gizmo.dirty) {
+                        m_gizmos_state[m_current_gizmo.name] = m_current_gizmo.dirty;
+                        m_current_gizmo.name.clear();
+                        m_current_gizmo.dirty = false;
+                    }
                 }
             }
 
@@ -1518,20 +1522,19 @@ struct Plater::priv
                 size_t last_active_save_snapshot_timestamp = (it != m_last_save_snapshot_timestamp.end()) ? it->second : 0;
                 m_current_gizmo.dirty |= last_active_snapshot->name != _utf8("Gizmos-Initial") &&
                     (last_active_save_snapshot_timestamp == 0 || last_active_save_snapshot_timestamp != last_active_snapshot->timestamp);
-                m_plater_dirty |= m_current_gizmo.dirty;
             }
 
             // check for stored values
-            bool any_gizmo_dirty = false;
+            m_any_gizmo_dirty = false;
             for (auto gizmo : m_gizmos_state) {
                 if (gizmo.first != m_current_gizmo.name) {
-                    any_gizmo_dirty |= gizmo.second;
-                    if (any_gizmo_dirty) {
+                    m_any_gizmo_dirty |= gizmo.second;
+                    if (m_any_gizmo_dirty) {
                         break;
                     }
                 }
             }
-            m_plater_dirty |= any_gizmo_dirty;
+
             wxGetApp().mainframe->update_title();
         }
 
@@ -1574,9 +1577,8 @@ struct Plater::priv
             m_plater_dirty = false;
             m_preset_dirty = false;
             m_current_gizmo.dirty = false;
-            for (auto& gizmo : m_gizmos_state) {
-                gizmo.second = false;
-            }
+            m_any_gizmo_dirty = false;
+            m_gizmos_state.clear();
 
             wxGetApp().mainframe->update_title();
         }
@@ -1593,6 +1595,55 @@ struct Plater::priv
             }
             return true;
         }
+
+#if ENABLE_PROJECT_STATE_DEBUG_WINDOW
+        void render_debug_window() const {
+            auto color = [](bool value) {
+                return value ? ImVec4(1.0f, 0.49f, 0.216f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+            };
+            auto text = [](bool value) {
+                return value ? "true" : "false";
+            };
+
+            ImGuiWrapper& imgui = *wxGetApp().imgui();
+            imgui.begin(std::string("Project state statistics"), ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+
+            bool dirty = is_dirty();
+            imgui.text_colored(color(dirty), "State:");
+            ImGui::SameLine();
+            imgui.text_colored(color(dirty), text(dirty));
+
+            ImGui::Separator();
+            imgui.text_colored(color(m_plater_dirty), "Plater:");
+            ImGui::SameLine();
+            imgui.text_colored(color(m_plater_dirty), text(m_plater_dirty));
+
+            imgui.text_colored(color(m_preset_dirty), "Preset:");
+            ImGui::SameLine();
+            imgui.text_colored(color(m_preset_dirty), text(m_preset_dirty));
+
+            if (!m_current_gizmo.name.empty()) {
+                ImGui::Separator();
+                imgui.text("Current gizmo");
+                imgui.text_colored(color(m_current_gizmo.dirty), m_current_gizmo.name);
+                ImGui::SameLine();
+                imgui.text_colored(color(m_current_gizmo.dirty), text(m_current_gizmo.dirty));
+            }
+
+            if (!m_gizmos_state.empty()) {
+                ImGui::Separator();
+                imgui.text("Any gizmo dirty");
+
+                for (auto& gizmo : m_gizmos_state) {
+                    imgui.text_colored(color(gizmo.second), gizmo.first);
+                    ImGui::SameLine();
+                    imgui.text_colored(color(gizmo.second), text(gizmo.second));
+                }
+            }
+
+            imgui.end();
+        }
+#endif // ENABLE_PROJECT_STATE_DEBUG_WINDOW
     };
 
     ProjectState project_state;
@@ -1698,6 +1749,9 @@ struct Plater::priv
     void reset_project_after_save() { project_state.reset_after_save(); }
     void update_project_dirty_from_preset() { project_state.update_from_preset(); }
     void reset_project_initial_presets() { project_state.reset_initial_presets(); }
+#if ENABLE_PROJECT_STATE_DEBUG_WINDOW
+    void render_project_state_debug_window() const { project_state.render_debug_window(); }
+#endif // ENABLE_PROJECT_STATE_DEBUG_WINDOW
 #endif // ENABLE_PROJECT_STATE
 
     enum class UpdateParams {
@@ -4634,6 +4688,9 @@ void Plater::save_project_if_dirty() { p->save_project_if_dirty(); }
 void Plater::reset_project_after_save() { p->reset_project_after_save(); }
 void Plater::update_project_dirty_from_preset() { p->update_project_dirty_from_preset(); }
 void Plater::reset_project_initial_presets() { p->reset_project_initial_presets(); }
+#if ENABLE_PROJECT_STATE_DEBUG_WINDOW
+void Plater::render_project_state_debug_window() const { p->render_project_state_debug_window(); }
+#endif // ENABLE_PROJECT_STATE_DEBUG_WINDOW
 #endif // ENABLE_PROJECT_STATE
 
 Sidebar&        Plater::sidebar()           { return *p->sidebar; }

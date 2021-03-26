@@ -136,6 +136,9 @@ public:
     void reset_project_after_save();
     void update_project_dirty_from_preset();
     void reset_project_initial_presets();
+#if ENABLE_PROJECT_STATE_DEBUG_WINDOW
+    void render_project_state_debug_window() const;
+#endif // ENABLE_PROJECT_STATE_DEBUG_WINDOW
 #endif // ENABLE_PROJECT_STATE
 
     Sidebar& sidebar();
