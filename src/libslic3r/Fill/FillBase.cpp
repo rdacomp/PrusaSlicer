@@ -1219,7 +1219,7 @@ BoundaryInfillGraph create_boundary_infill_graph(const Polylines &infill_ordered
                             contour_dst.emplace_back(pt);
                         idx_tjoint_pt = contour_dst.size() - 1;
                     }
-                    out.map_infill_end_point_to_boundary[it->second] = ContourIntersectionPoint{ it->second, idx_contour, idx_tjoint_pt };
+                    out.map_infill_end_point_to_boundary[it->second] = ContourIntersectionPoint{ /* it->second, */ idx_contour, idx_tjoint_pt };
                     ContourIntersectionPoint *pthis = &out.map_infill_end_point_to_boundary[it->second];
                     if (pprev) {
                         pprev->next_on_contour = pthis;
