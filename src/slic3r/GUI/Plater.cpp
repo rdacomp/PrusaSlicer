@@ -1605,8 +1605,11 @@ struct Plater::priv
                 return value ? "true" : "false";
             };
 
+            std::string title = "Project state statistics";
             ImGuiWrapper& imgui = *wxGetApp().imgui();
-            imgui.begin(std::string("Project state statistics"), ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+            float x = ImGui::CalcTextSize(title.c_str()).x + 2.0f * ImGui::GetStyle().WindowPadding.x;
+            ImGui::SetNextWindowSizeConstraints({ x, -1.0f }, { 2.0f * x, -1.0f });
+            imgui.begin(title, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
             bool dirty = is_dirty();
             imgui.text_colored(color(dirty), "State:");
@@ -1640,6 +1643,19 @@ struct Plater::priv
                     imgui.text_colored(color(gizmo.second), text(gizmo.second));
                 }
             }
+
+            ImGui::Separator();
+            imgui.text("Active undo/redo stack");
+            const Plater* plater = wxGetApp().plater();
+            const UndoRedo::Stack& main_stack = plater->undo_redo_stack_main();
+            const UndoRedo::Stack& active_stack = plater->undo_redo_stack_active();
+            ImGui::SameLine();
+            imgui.text(&main_stack == &active_stack ? "main" : "gizmo");
+
+            imgui.text("Active snapshot");
+            const UndoRedo::Snapshot* active_snapshot = get_active_snapshot(active_stack);
+            ImGui::SameLine();
+            imgui.text(active_snapshot->name);
 
             imgui.end();
         }
