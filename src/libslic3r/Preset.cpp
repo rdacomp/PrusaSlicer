@@ -518,6 +518,7 @@ const std::vector<std::string>& Preset::sla_print_options()
             "faded_layers",
             "supports_enable",
             "support_head_front_diameter",
+            "support_head_front_neck_diameter",
             "support_head_penetration",
             "support_head_width",
             "support_pillar_diameter",

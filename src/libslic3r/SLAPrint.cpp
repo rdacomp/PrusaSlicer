@@ -41,7 +41,8 @@ sla::SupportTreeConfig make_support_cfg(const SLAPrintObjectConfig& c)
     sla::SupportTreeConfig scfg;
     
     scfg.enabled = c.supports_enable.getBool();
-    scfg.head_front_radius_mm = 0.5*c.support_head_front_diameter.getFloat();
+    scfg.head_front_radius_mm = .5 * c.support_head_front_diameter.getFloat();
+    scfg.head_front_neck_radius_mm = .5 * c.support_head_front_neck_diameter.getFloat();
     double pillar_r = 0.5 * c.support_pillar_diameter.getFloat();
     scfg.head_back_radius_mm = pillar_r;
     scfg.head_fallback_radius_mm =
@@ -939,6 +940,7 @@ bool SLAPrintObject::invalidate_state_by_config_options(const std::vector<t_conf
             steps.emplace_back(slaposSupportPoints);
         } else if (
                opt_key == "support_head_front_diameter"
+            || opt_key == "support_head_front_neck_diameter"
             || opt_key == "support_head_penetration"
             || opt_key == "support_head_width"
             || opt_key == "support_pillar_diameter"

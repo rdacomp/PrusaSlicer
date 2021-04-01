@@ -29,7 +29,7 @@ Contour3D cylinder(double       r,
                    size_t       steps = 45,
                    const Vec3d &sp    = Vec3d::Zero());
 
-Contour3D pinhead(double r_pin, double r_back, double length, size_t steps = 45);
+Contour3D pinhead(double r_pin, double r_back, double r_front, double length, size_t steps = 45);
 
 Contour3D halfcone(double       baseheight,
                    double       r_bottom,
@@ -39,7 +39,7 @@ Contour3D halfcone(double       baseheight,
 
 inline Contour3D get_mesh(const Head &h, size_t steps)
 {
-    Contour3D mesh = pinhead(h.r_pin_mm, h.r_back_mm, h.width_mm, steps);
+    Contour3D mesh = pinhead(h.r_pin_mm, h.r_back_mm, h.r_front_mm, h.width_mm, steps);
 
     for(auto& p : mesh.points) p.z() -= (h.fullwidth() - h.r_back_mm);
 

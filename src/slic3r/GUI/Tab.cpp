@@ -4224,6 +4224,7 @@ void TabSLAPrint::build()
 
     optgroup = page->new_optgroup(L("Support head"));
     optgroup->append_single_option_line("support_head_front_diameter");
+    optgroup->append_single_option_line("support_head_front_neck_diameter");
     optgroup->append_single_option_line("support_head_penetration");
     optgroup->append_single_option_line("support_head_width");
 

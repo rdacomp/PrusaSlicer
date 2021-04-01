@@ -1121,6 +1121,8 @@ public:
     // Diameter in mm of the pointing side of the head.
     ConfigOptionFloat support_head_front_diameter /*= 0.2*/;
 
+    ConfigOptionFloat support_head_front_neck_diameter;
+
     // How much the pinhead has to penetrate the model surface
     ConfigOptionFloat support_head_penetration /*= 0.2*/;
 
@@ -1254,6 +1256,7 @@ protected:
         OPT_PTR(slice_closing_radius);
         OPT_PTR(supports_enable);
         OPT_PTR(support_head_front_diameter);
+        OPT_PTR(support_head_front_neck_diameter);
         OPT_PTR(support_head_penetration);
         OPT_PTR(support_head_width);
         OPT_PTR(support_pillar_diameter);

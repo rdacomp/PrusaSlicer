@@ -335,15 +335,28 @@ void ConfigManipulation::update_print_sla_config(DynamicPrintConfig* config, con
     }
 
     double pinhead_d = config->opt_float("support_head_front_diameter");
+    double pinhead_neck_d = config->opt_float("support_head_front_neck_diameter");
     double pillar_d = config->opt_float("support_pillar_diameter");
-    if (pinhead_d > pillar_d) {
-        wxString msg_text = _(L("Pinhead diameter should be smaller than the pillar diameter."));
+    if (pinhead_neck_d > pillar_d) {
+        wxString msg_text = _(L("Pinhead neck diameter should be smaller than the pillar diameter."));
 
         wxMessageDialog dialog(nullptr, msg_text, _(L("Invalid pinhead diameter")), wxICON_WARNING | wxOK);
 
         DynamicPrintConfig new_conf = *config;
         if (dialog.ShowModal() == wxID_OK) {
             new_conf.set_key_value("support_head_front_diameter", new ConfigOptionFloat(pillar_d / 2.0));
+            apply(config, &new_conf);
+        }
+    }
+
+    if (pinhead_neck_d > pinhead_d) {
+        wxString msg_text = _(L("Pinhead neck diameter should be smaller than the pinhead front diameter."));
+
+        wxMessageDialog dialog(nullptr, msg_text, _(L("Invalid pinhead diameter")), wxICON_WARNING | wxOK);
+
+        DynamicPrintConfig new_conf = *config;
+        if (dialog.ShowModal() == wxID_OK) {
+            new_conf.set_key_value("support_head_front_neck_diameter", new ConfigOptionFloat(pillar_d));
             apply(config, &new_conf);
         }
     }

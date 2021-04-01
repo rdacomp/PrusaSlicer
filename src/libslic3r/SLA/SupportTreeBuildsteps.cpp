@@ -656,6 +656,7 @@ void SupportTreeBuildsteps::filter()
         heads.emplace_back(
             std::nan(""),
             sp.head_front_radius,
+            m_cfg.head_front_neck_radius_mm,
             0.,
             m_cfg.head_penetration_mm,
             Vec3d::Zero(),         // dir
@@ -986,7 +987,7 @@ bool SupportTreeBuildsteps::connect_to_model_body(Head &head)
         w = 0.;
     }
 
-    m_builder.add_anchor(head.r_back_mm, head.r_pin_mm, w,
+    m_builder.add_anchor(head.r_back_mm, head.r_pin_mm, head.r_front_mm, w,
                          m_cfg.head_penetration_mm, taildir, hitp);
 
     m_pillar_index.guarded_insert(pill.endpoint(), pill.id);

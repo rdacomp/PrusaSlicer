@@ -8,17 +8,19 @@
 namespace Slic3r {
 namespace sla {
 
-Head::Head(double       r_big_mm,
-           double       r_small_mm,
-           double       length_mm,
+Head::Head(double       r_back,
+           double       r_pin,
+           double       r_front,
+           double       length,
            double       penetration,
            const Vec3d &direction,
            const Vec3d &offset)
     : dir(direction)
     , pos(offset)
-    , r_back_mm(r_big_mm)
-    , r_pin_mm(r_small_mm)
-    , width_mm(length_mm)
+    , r_back_mm(r_back)
+    , r_pin_mm(r_pin)
+    , r_front_mm(r_front)
+    , width_mm(length)
     , penetration_mm(penetration)
 {
 }

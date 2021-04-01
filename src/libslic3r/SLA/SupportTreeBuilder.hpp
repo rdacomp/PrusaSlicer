@@ -72,7 +72,8 @@ struct Head: public SupportTreeNode {
     Vec3d dir = DOWN;
     Vec3d pos = {0, 0, 0};
     
-    double r_back_mm = 1;
+    double r_back_mm = 1.;
+    double r_front_mm = 0.5;
     double r_pin_mm = 0.5;
     double width_mm = 2;
     double penetration_mm = 0.5;
@@ -86,8 +87,9 @@ struct Head: public SupportTreeNode {
     inline void invalidate() { id = ID_UNSET; }
     inline bool is_valid() const { return id >= 0; }
     
-    Head(double r_big_mm,
-         double r_small_mm,
+    Head(double r_back_mm,
+         double r_pin_mm,
+         double r_front_mm,
          double length_mm,
          double penetration,
          const Vec3d &direction = DOWN,  // direction (normal to the dull end)

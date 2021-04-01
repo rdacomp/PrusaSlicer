@@ -38,6 +38,8 @@ struct SupportTreeConfig
     // Radius in mm of the pointing side of the head.
     double head_front_radius_mm = 0.2;
 
+    double head_front_neck_radius_mm = 0.2;
+
     // How much the pinhead has to penetrate the model surface
     double head_penetration_mm = 0.5;
 

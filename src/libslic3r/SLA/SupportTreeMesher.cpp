@@ -154,7 +154,7 @@ Contour3D cylinder(double r, double h, size_t ssteps, const Vec3d &sp)
     return ret;
 }
 
-Contour3D pinhead(double r_pin, double r_back, double length, size_t steps)
+Contour3D pinhead(double r_pin, double r_back, double r_front, double length, size_t steps)
 {
     assert(steps > 0);
     assert(length >= 0.);
@@ -177,37 +177,17 @@ Contour3D pinhead(double r_pin, double r_back, double length, size_t steps)
 
     // The height of the whole mesh
     const double h   = r_back + r_pin + length;
-    double       phi = PI / 2. - std::acos((r_back - r_pin) / h);
 
-    // To generate a whole circle we would pass a portion of (0, Pi)
-    // To generate only a half horizontal circle we can pass (0, Pi/2)
-    // The calculated phi is an offset to the half circles needed to smooth
-    // the transition from the circle to the robe geometry
-
-    auto &&s1 = sphere(r_back, make_portion(0, PI / 2 + phi), detail);
-    auto &&s2 = sphere(r_pin, make_portion(PI / 2 + phi, PI), detail);
+    auto s1 = sphere(r_back, make_portion(0, PI), detail);
+    auto s2 = sphere(r_pin, make_portion(0., PI), detail);
 
     for (auto &p : s2.points) p.z() += h;
 
+    auto mantle = halfcone(h, r_back, r_front, Vec3d::Zero(), steps);
+
     mesh.merge(s1);
     mesh.merge(s2);
-
-    for (size_t idx1 = s1.points.size() - steps, idx2 = s1.points.size();
-         idx1 < s1.points.size() - 1; idx1++, idx2++) {
-        coord_t i1s1 = coord_t(idx1), i1s2 = coord_t(idx2);
-        coord_t i2s1 = i1s1 + 1, i2s2 = i1s2 + 1;
-
-        mesh.faces3.emplace_back(i1s1, i2s1, i2s2);
-        mesh.faces3.emplace_back(i1s1, i2s2, i1s2);
-    }
-
-    auto i1s1 = coord_t(s1.points.size()) - coord_t(steps);
-    auto i2s1 = coord_t(s1.points.size()) - 1;
-    auto i1s2 = coord_t(s1.points.size());
-    auto i2s2 = coord_t(s1.points.size()) + coord_t(steps) - 1;
-
-    mesh.faces3.emplace_back(i2s2, i2s1, i1s1);
-    mesh.faces3.emplace_back(i1s2, i2s2, i1s1);
+    mesh.merge(mantle);
 
     return mesh;
 }
