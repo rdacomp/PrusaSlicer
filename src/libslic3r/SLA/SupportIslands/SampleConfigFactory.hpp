@@ -18,20 +18,23 @@ public:
     {
         // TODO: find valid params !!!!
         SampleConfig result;
-        result.max_distance                  = 100. * config.head_diameter;
+        result.max_distance                  = 100 * config.head_diameter;
+        result.half_distance                 = result.max_distance / 2;
         result.head_radius                   = config.head_diameter / 2;
-        result.minimal_distance_from_outline    = config.head_diameter / 2.;
+        result.minimal_distance_from_outline = config.head_diameter / 2.;
+        result.minimal_support_distance = result.minimal_distance_from_outline +
+                                          result.half_distance;
 
         result.max_length_for_one_support_point =
             2 * result.minimal_distance_from_outline + 
             config.head_diameter;
-        double max_length_for_one_support_point = 
+        coord_t max_length_for_one_support_point = 
             2 * result.max_distance +
             config.head_diameter +
             2 * result.minimal_distance_from_outline;
         if (result.max_length_for_one_support_point > max_length_for_one_support_point)
             result.max_length_for_one_support_point = max_length_for_one_support_point;
-        double min_length_for_one_support_point =
+        coord_t min_length_for_one_support_point =
             2 * config.head_diameter +
             2 * result.minimal_distance_from_outline;
         if (result.max_length_for_one_support_point < min_length_for_one_support_point)
@@ -40,7 +43,7 @@ public:
         result.max_length_for_two_support_points =
             2 * result.max_distance + 2 * config.head_diameter +
             2 * result.minimal_distance_from_outline;
-        double max_length_for_two_support_points =
+        coord_t max_length_for_two_support_points =
             2 * result.max_distance + 
             2 * config.head_diameter +
             2 * result.minimal_distance_from_outline;
@@ -48,23 +51,17 @@ public:
             result.max_length_for_two_support_points = max_length_for_two_support_points;
         assert(result.max_length_for_two_support_points < result.max_length_for_one_support_point);
 
-        result.max_width_for_center_supportr_line = 2 * config.head_diameter;
-        double min_width_for_center_supportr_line =
+        result.max_width_for_center_support_line = 2 * config.head_diameter;
+        coord_t min_width_for_center_support_line =
             config.head_diameter + 2 * result.minimal_distance_from_outline;
-        if (result.max_width_for_center_supportr_line < min_width_for_center_supportr_line)
-            result.max_width_for_center_supportr_line = min_width_for_center_supportr_line;
-        double max_width_for_center_supportr_line = 2 * result.max_distance + config.head_diameter;
-        if (result.max_width_for_center_supportr_line > max_width_for_center_supportr_line)
-            result.max_width_for_center_supportr_line = max_width_for_center_supportr_line;
+        if (result.max_width_for_center_support_line < min_width_for_center_support_line)
+            result.max_width_for_center_support_line = min_width_for_center_support_line;
+        coord_t max_width_for_center_support_line = 2 * result.max_distance + config.head_diameter;
+        if (result.max_width_for_center_support_line > max_width_for_center_support_line)
+            result.max_width_for_center_support_line = max_width_for_center_support_line;
 
-        result.max_width_for_zig_zag_supportr_line = sqrt(2*result.max_distance * result.max_distance);
-        double max_width_for_zig_zag_supportr_line = 
-            2 * result.max_distance + 
-            2 * config.head_diameter +
-            2 * result.minimal_distance_from_outline;
-        if (result.max_width_for_zig_zag_supportr_line > max_width_for_zig_zag_supportr_line)
-            result.max_width_for_zig_zag_supportr_line = max_width_for_zig_zag_supportr_line;
-        assert(result.max_width_for_zig_zag_supportr_line < result.max_width_for_center_supportr_line);
+        result.min_width_for_outline_support = result.max_width_for_center_support_line - 2 * config.head_diameter;
+        assert(result.min_width_for_outline_support >= result.max_width_for_center_support_line);
 
         // Align support points
         // TODO: propagate print resolution

@@ -1,6 +1,8 @@
 #ifndef slic3r_SLA_SuppotstIslands_SampleIslandUtils_hpp_
 #define slic3r_SLA_SuppotstIslands_SampleIslandUtils_hpp_
 
+#include <vector>
+
 #include <libslic3r/Geometry.hpp>
 #include <libslic3r/Point.hpp>
 #include <libslic3r/SVG.hpp>
@@ -109,23 +111,25 @@ public:
     /// Decide how to sample path
     /// </summary>
     /// <param name="path">Path inside voronoi diagram with side branches and circles</param>
+    /// <param name="lines">Source lines for VG --> outline of island.</param>
     /// <param name="config">Definition how to sample</param>
     /// <returns>Support points for island</returns>
-    static SupportIslandPoints sample_expath(
-        const VoronoiGraph::ExPath &path, 
-        const SampleConfig &config
-    );
+    static SupportIslandPoints sample_expath(const VoronoiGraph::ExPath &path,
+                                             const Lines &       lines,
+                                             const SampleConfig &config);
 
     /// <summary>
     /// Sample voronoi skeleton
     /// </summary>
     /// <param name="graph">Inside skeleton of island</param>
+    /// <param name="lines">Source lines for VG --> outline of island.</param>
     /// <param name="config">Params for sampling</param>
     /// <param name="longest_path">OUTPUT: longest path in graph</param>
     /// <returns>Vector of sampled points or Empty when distance from edge is
     /// bigger than max_distance</returns>
     static SupportIslandPoints sample_voronoi_graph(
         const VoronoiGraph &  graph,
+        const Lines & lines,
         const SampleConfig &  config,
         VoronoiGraph::ExPath &longest_path);
 
@@ -174,6 +178,94 @@ public:
                      double      size,
                      const char *color = "lightgreen",
                      bool write_type    = true);
+
+    /// <summary>
+    /// DTO hold information for start sampling VD in center
+    /// </summary>
+    struct CenterStart
+    {
+        // Start of ceneter sampled line segment
+        const VoronoiGraph::Node::Neighbor *neighbor;
+
+        // distance to nearest support point
+        coord_t support_in; // [nano meters]
+
+        VoronoiGraph::Nodes path; // to sample in distance from border
+
+        CenterStart(const VoronoiGraph::Node::Neighbor *neighbor,
+                    coord_t                             support_in,
+                    VoronoiGraph::Nodes                 path = {})
+            : neighbor(neighbor), support_in(support_in), path(path)
+        {}
+    };
+    using CenterStarts = std::queue<CenterStart>;
+
+    /// <summary>
+    /// DTO extend VG neighbor with information about last sample
+    /// </summary>
+    struct FieldStart
+    {
+        // define edge where start field
+        const VoronoiGraph::Node::Neighbor *neighbor = nullptr;
+
+        // distance to last support
+        // when last support lay on neighbor edge it is negative value
+        coord_t last_support = 0; // [nano meters]
+
+        FieldStart() = default;
+        FieldStart(const VoronoiGraph::Node::Neighbor *neighbor,
+                   coord_t                             last_support)
+            : neighbor(neighbor), last_support(last_support)
+        {}
+    };
+
+    /// <summary>
+    /// Sample VG in center.
+    /// Detection of wide neighbor which start field
+    /// Creating of new starts (from VG cross -> multi neighbors)
+    /// </summary>
+    /// <param name="start">Start to sample</param>
+    /// <param name="config">Parameters for sampling</param>
+    /// <param name="done">Already done nodes</param>
+    /// <param name="results">Result of sampling</param>
+    /// <param name="field_start">Output: Wide neighbor, start of field</param>
+    /// <returns>New start of sampling</returns>
+    static std::vector<CenterStart> sample(
+        const CenterStart &                   start,
+        const SampleConfig &                  config,
+        std::set<const VoronoiGraph::Node *> &done,
+        SupportIslandPoints &                 results,
+        FieldStart&        field_start);
+
+    /// <summary>
+    /// DTO represents area to sample
+    /// extend polygon with information about source lines
+    /// </summary>
+    struct Field
+    {
+        // border of field created by source lines and closing of tiny island 
+        ExPolygon border;
+
+        // same size as polygon.points.size()
+        // indexes to source island lines 
+        // in case (index == -1) it means fill the gap from tiny part of island
+        std::vector<size_t> source_indexes; 
+    };
+
+
+    /// <summary>
+    /// Create field from input neighbor
+    /// </summary>
+    /// <param name="field_start">Start neighbor, first occur of wide neighbor.</param>
+    /// <param name="tiny_starts">Append new founded tiny parts of island.</param>
+    /// <param name="lines">Source lines for VG --> outline of island.</param>
+    /// <param name="config">Parameters for sampling.</param>
+    /// <returns>New created field</returns>
+    static Field create_field(const FieldStart & field_start,
+                              CenterStarts &tiny_starts,
+                              const Lines & lines,
+                              const SampleConfig &config);
+
 };
 
 } // namespace Slic3r::sla

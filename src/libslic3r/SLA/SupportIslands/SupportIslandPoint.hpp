@@ -19,6 +19,8 @@ struct SupportIslandPoint
         center_line,
         center_line_end,  // end of branch
         center_line_end2, // start of main path(only one per VD)
+        center_line_end3, // end in continous sampling
+        center_line_start, // first sample
         center_circle,
         center_circle_end, // circle finish by one point (one end per circle -
                            // need allign)
@@ -51,7 +53,9 @@ struct SupportIslandPoint
             Type::one_center_point,
             Type::two_points,
             Type::center_line_end,
-            Type::center_line_end2});
+            Type::center_line_end2,
+            Type::center_line_end3,
+            Type::center_line_start});
         return cant_move.find(type) == cant_move.end();
         //*/
     }

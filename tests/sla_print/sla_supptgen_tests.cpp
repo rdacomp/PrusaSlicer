@@ -384,13 +384,15 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
 
 SampleConfig create_sample_config(double size) {
     SampleConfig cfg;
-    cfg.max_distance   = 3 * size + 0.1;
+    cfg.max_distance = 3 * size + 0.1;
+    cfg.half_distance = cfg.max_distance/2;
     cfg.head_radius = size / 4;
     cfg.minimal_distance_from_outline = cfg.head_radius + size/10;
+    cfg.minimal_support_distance = cfg.minimal_distance_from_outline + cfg.half_distance;
     cfg.max_length_for_one_support_point = 2*size;
     cfg.max_length_for_two_support_points = 4*size;
-    cfg.max_width_for_center_supportr_line = size;
-    cfg.max_width_for_zig_zag_supportr_line = 2*size;
+    cfg.max_width_for_center_support_line = size;
+    cfg.min_width_for_outline_support = cfg.max_width_for_center_support_line;
 
     cfg.minimal_move = std::max(1000., size/1000);
     cfg.count_iteration = 100; 
@@ -419,7 +421,7 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     for (int i = 0; i < 100; ++i) {
         VoronoiGraph::ExPath longest_path;
         VoronoiGraph skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
-        auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
+        auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, lines, cfg, longest_path);
     }
 }
 
@@ -441,7 +443,7 @@ TEST_CASE("Speed align", "[VoronoiSkeleton]")
     VoronoiGraph skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
 
     for (int i = 0; i < 100; ++i) {
-        auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, cfg, longest_path);
+        auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, lines, cfg, longest_path);
         SampleIslandUtils::align_samples(samples, island, cfg);
     }
 }

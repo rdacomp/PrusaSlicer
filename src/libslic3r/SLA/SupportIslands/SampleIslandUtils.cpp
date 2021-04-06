@@ -1,12 +1,15 @@
 #include "SampleIslandUtils.hpp"
 
 #include <cmath>
+#include <optional>
 #include <libslic3r/VoronoiOffset.hpp>
 #include "IStackFunction.hpp"
 #include "EvaluateNeighbor.hpp"
 #include "ParabolaUtils.hpp"
 #include "VoronoiGraphUtils.hpp"
 #include "VectorUtils.hpp"
+#include "LineUtils.hpp"
+#include "PointUtils.hpp"
 
 #include <magic_enum/magic_enum.hpp>
 #include <libslic3r/VoronoiVisualUtils.hpp>
@@ -596,7 +599,9 @@ SupportIslandPoints SampleIslandUtils::sample_center_circle(
 }
 
 SupportIslandPoints SampleIslandUtils::sample_expath(
-    const VoronoiGraph::ExPath &path, const SampleConfig &config)
+    const VoronoiGraph::ExPath &path,
+    const Lines &               lines,
+    const SampleConfig &        config)
 {
     // 1) One support point
     if (path.length < config.max_length_for_one_support_point) {
@@ -608,7 +613,7 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
     }
 
     double max_width = VoronoiGraphUtils::get_max_width(path);
-    if (max_width < config.max_width_for_center_supportr_line) {
+    if (max_width < config.max_width_for_center_support_line) {
         // 2) Two support points
         if (path.length < config.max_length_for_two_support_points)
             return create_side_points(path.nodes,
@@ -625,24 +630,114 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
         return std::move(samples);
     }
 
-    // line of zig zag points
-    if (max_width < config.max_width_for_zig_zag_supportr_line) {
-        // return create_zig_zag_points();
-    }
-
     // TODO: 3) Triangle of points
     // eval outline and find three point create almost equilateral triangle
 
-    // TODO: divide path to sampled parts
+    // IMPROVE: Erase continous sampling: Extract path and than sample uniformly whole path    
+    CenterStarts center_starts;
+    const VoronoiGraph::Node *start_node = path.nodes.front();
+    // CHECK> Front of path is outline node
+    assert(start_node->neighbors.size() == 1);
+    const VoronoiGraph::Node::Neighbor *neighbor = &start_node->neighbors.front();
+    center_starts.emplace(neighbor, config.minimal_distance_from_outline);
 
-    SupportIslandPoints points;
-    points.emplace_back(create_point_on_path(path.nodes, config.minimal_distance_from_outline));
+    std::set<const VoronoiGraph::Node *> done; // already done nodes
+    done.insert(start_node);
 
+    SupportIslandPoints points; // result
+
+    while (!center_starts.empty()) {
+        FieldStart field_start;
+        std::vector<CenterStart> new_starts = sample(center_starts.front(),
+                                                     config, done, points,
+                                                     field_start);
+        center_starts.pop();
+        for (const CenterStart &start : new_starts) center_starts.push(start);
+        if (field_start.neighbor != nullptr) {
+            // TODO: create field
+            auto field = create_field(field_start, center_starts, lines, config);
+        }
+    }
+    // Fix first point type
+    if (!points.empty()) { 
+        auto &front = points.front();  
+        if (front->type == SupportIslandPoint::Type::center_line)
+            front->type = SupportIslandPoint::Type::center_line_start;
+    }
+
+    // TODO: remove next line, only for debug
+    points.push_back(create_point_on_path(path.nodes, config.minimal_distance_from_outline));
     return std::move(points);
+}
+
+std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample(
+    const CenterStart &                   start,
+    const SampleConfig &                  config,
+    std::set<const VoronoiGraph::Node *> &done,
+    SupportIslandPoints &                 results,
+    FieldStart &                          field_start)
+{
+    const VoronoiGraph::Node::Neighbor *neighbor = start.neighbor;
+    const VoronoiGraph::Node *node = neighbor->node;
+    if (done.find(node) != done.end()) return {};
+    done.insert(node);
+
+    VoronoiGraph::Nodes path = start.path;
+    std::vector<CenterStart> new_starts;
+    double support_in = start.support_in;
+    while (neighbor->max_width <= config.max_width_for_center_support_line) {
+        double edge_length = neighbor->edge_length;
+        while (edge_length > support_in) {
+            double ratio = support_in / edge_length;
+            results.push_back(
+                create_point(neighbor, ratio, 
+                    SupportIslandPoint::Type::center_line));
+            support_in += config.max_distance;
+        }
+        if (support_in > edge_length)
+            support_in -= edge_length;
+
+        const VoronoiGraph::Node *node = neighbor->node;
+        path.push_back(node);
+        const VoronoiGraph::Node::Neighbor *next_neighbor = nullptr;
+        for (const auto &node_neighbor : node->neighbors) {
+            if (done.find(node_neighbor.node) != done.end()) continue;
+            if (next_neighbor == nullptr) {
+                next_neighbor = &node_neighbor;
+                continue;
+            }
+            double next_support_in = (support_in < config.half_distance) ?
+                        support_in : config.max_distance - support_in;
+            new_starts.emplace_back(&node_neighbor, next_support_in, path); // search in side branch
+        }
+        if (next_neighbor == nullptr) {
+            // no neighbor to continue
+            if ((config.max_distance - support_in) >= config.minimal_support_distance) {
+                VoronoiGraph::Nodes path_reverse = path; // copy
+                std::reverse(path_reverse.begin(), path_reverse.end());
+                results.push_back(create_point_on_path(
+                    path_reverse, config.minimal_distance_from_outline, 
+                        SupportCenterIslandPoint::Type::center_line_end3));
+            }
+
+            if (new_starts.empty()) return {};
+            const CenterStart &new_start = new_starts.back();
+            neighbor                     = new_start.neighbor;
+            support_in                   = new_start.support_in;
+            path                         = new_start.path;
+            new_starts.pop_back();
+        } else {
+            neighbor = next_neighbor;
+        }
+    }
+    field_start.neighbor = neighbor;
+    field_start.last_support = config.max_distance - support_in;
+    return new_starts;
 }
 
 SupportIslandPoints SampleIslandUtils::sample_voronoi_graph(
     const VoronoiGraph &  graph,
+    const Lines &         lines,
     const SampleConfig &  config,
     VoronoiGraph::ExPath &longest_path)
 {
@@ -652,7 +747,147 @@ SupportIslandPoints SampleIslandUtils::sample_voronoi_graph(
     assert(start_node != nullptr);
     longest_path = VoronoiGraphUtils::create_longest_path(start_node);
     // longest_path = create_longest_path_recursive(start_node);
-    return sample_expath(longest_path, config);
+    return sample_expath(longest_path, lines, config);
+}
+
+SampleIslandUtils::Field SampleIslandUtils::create_field(
+    const FieldStart &field_start,
+    CenterStarts &    tiny_starts,
+    const Lines &     lines,
+    const SampleConfig &config)
+{
+    using VD = Slic3r::Geometry::VoronoiDiagram;
+
+    // DTO represents one island change from tiny part to wide part
+    struct WideTinyChange{
+        // new coordinate for line.b point
+        Point new_b;
+        // new coordinate for next line.a point
+        Point next_new_a;
+        // index to lines
+        size_t next_line_index;
+
+        WideTinyChange(Point new_b, Point next_new_a, size_t next_line_index)
+            : new_b(new_b)
+            , next_new_a(next_new_a)
+            , next_line_index(next_line_index)
+        {}
+    };
+
+    // store shortening of outline segments
+    //   line index, <next line index + 2x shortening points>
+    std::map<size_t, WideTinyChange> wide_tiny_changes;
+    const coord_t min_width = config.min_width_for_outline_support;
+    // cut lines at place where neighbor has width = min_width_for_outline_support
+    // neighbor must be in direction from wide part to tiny part of island
+    auto add_wide_tiny_change = [&](const VoronoiGraph::Node::Neighbor *neighbor){        
+        VoronoiGraph::Position position = 
+            VoronoiGraphUtils::get_position_with_distance(neighbor, min_width, lines);
+        const VD::edge_type *edge = neighbor->edge;
+        size_t i1 = edge->cell()->source_index();
+        size_t i2 = edge->twin()->cell()->source_index();
+        const Line &l1 = lines[i1];
+        const Line &l2 = lines[i2];
+        Point p1, p2;
+        std::tie(p1, p2) = VoronoiGraphUtils::point_on_lines(position, l1, l2);
+        if (VoronoiGraphUtils::is_opposit_direction(edge, l1)) {
+            // line1 is shorten on side line1.a --> line2 is shorten on side line2.b
+            wide_tiny_changes.insert({i2, WideTinyChange(p2, p1, i1)});
+        } else {
+            // line1 is shorten on side line1.b
+            wide_tiny_changes.insert({i1, WideTinyChange(p1, p2, i2)});
+        }
+    };
+    const VoronoiGraph::Node::Neighbor *neighbor = field_start.neighbor;
+    const VoronoiGraph::Node::Neighbor *twin_neighbor = VoronoiGraphUtils::get_twin(neighbor);
+    
+    add_wide_tiny_change(twin_neighbor);
+    std::set<const VoronoiGraph::Node*> done;
+    done.insert(twin_neighbor->node);
+    std::queue<const VoronoiGraph::Node *> process;
+    process.push(neighbor->node);
+
+    // all lines belongs to polygon
+    std::set<size_t> field_line_indexes;
+    while (!process.empty()) { 
+        const VoronoiGraph::Node *node = process.front();
+        process.pop();
+        if (done.find(node) != done.end()) continue;
+        do {
+            done.insert(node);
+            const auto &neighbors = node->neighbors;
+            node                  = nullptr;
+            for (const VoronoiGraph::Node::Neighbor &neighbor : neighbors) {
+                if (done.find(neighbor.node) != done.end()) continue;
+                const VD::edge_type *edge   = neighbor.edge;
+                size_t index1 = edge->cell()->source_index();
+                size_t index2 = edge->twin()->cell()->source_index();
+                field_line_indexes.insert(index1);
+                field_line_indexes.insert(index2);
+                if (neighbor.max_width <
+                    config.min_width_for_outline_support) {
+                    add_wide_tiny_change(&neighbor);
+                    continue;
+                }
+                if (node == nullptr) { 
+                    node = neighbor.node;
+                } else {
+                    process.push(neighbor.node);
+                }
+            }
+        } while (node != nullptr);
+    }
+    
+    std::map<size_t, size_t> b_connection =
+        LineUtils::create_line_connection_over_b(lines);
+    // Continue along line indexes create polygon field
+    
+    Points points;
+    points.reserve(field_line_indexes.size());
+    std::vector<size_t> outline_indexes;
+    outline_indexes.reserve(field_line_indexes.size());
+
+    auto inser_point_b = [&](size_t& index, Points& points, std::set<size_t>& done)
+    {
+        const Line &line = lines[index];
+        points.push_back(line.b);
+        const auto &connection_item = b_connection.find(index);
+        assert(connection_item != b_connection.end());
+        done.insert(index);
+        index = connection_item->second;
+    };
+
+    size_t input_index = neighbor->edge->cell()->source_index();
+    size_t outline_index = input_index;
+    std::set<size_t> done_indexes;
+    do {
+        const auto &change_item = wide_tiny_changes.find(outline_index);
+        if (change_item != wide_tiny_changes.end()) { 
+            const WideTinyChange &change = change_item->second;
+            points.push_back(change.new_b);
+            points.push_back(change.next_new_a);
+            done_indexes.insert(outline_index);
+            outline_index = change.next_line_index;
+        }
+        inser_point_b(outline_index, points, done_indexes);
+    } while (outline_index != input_index);
+
+    Field field;
+    field.border.contour = Polygon(points);
+    // finding holes
+    if (done_indexes.size() < field_line_indexes.size()) {
+        for (const size_t &index : field_line_indexes) {
+            if(done_indexes.find(index) != done_indexes.end()) continue;
+            // new  hole
+            Points hole_points;
+            size_t hole_index = index;
+            do {
+                inser_point_b(hole_index, hole_points, done_indexes);
+            } while (hole_index != index);
+            field.border.holes.emplace_back(hole_points);
+        }
+    }
+    return field;
 }
 
 void SampleIslandUtils::draw(SVG &                      svg,

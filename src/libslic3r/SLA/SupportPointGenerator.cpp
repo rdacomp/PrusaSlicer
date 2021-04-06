@@ -338,7 +338,7 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     VoronoiGraph         skeleton = VoronoiGraphUtils::create_skeleton(vd, lines);
     VoronoiGraph::ExPath longest_path;
     SupportIslandPoints  samples = SampleIslandUtils::sample_voronoi_graph(
-            skeleton, config, longest_path);
+            skeleton, lines, config, longest_path);
 
     if (samples.size() > 2)
         SampleIslandUtils::align_samples(samples, island, config);

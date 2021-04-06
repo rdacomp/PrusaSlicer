@@ -38,14 +38,28 @@ public:
     /// </summary>
     /// <param name="vertex">Input point pointer(double precission)</param>
     /// <returns>Convertedf point(int preccission)</returns>
-    static Slic3r::Point to_point(const VD::vertex_type *vertex);
+    static Point to_point(const VD::vertex_type *vertex);
 
     /// <summary>
     /// Convert point type between voronoi and slicer format
     /// </summary>
     /// <param name="vertex">Input vertex</param>
     /// <returns>created vector</returns>
-    static Slic3r::Vec2d to_point_d(const VD::vertex_type* vertex);
+    static Vec2d to_point_d(const VD::vertex_type* vertex);
+
+    /// <summary>
+    /// create direction from Voronoi edge
+    /// </summary>
+    /// <param name="edge">input</param>
+    /// <returns>direction --> (vertex1 - vertex0)</returns>
+    static Point to_direction(const VD::edge_type *edge);
+
+    /// <summary>
+    /// create direction from Voronoi edge
+    /// </summary>
+    /// <param name="edge">input</param>
+    /// <returns>direction --> (vertex1 - vertex0)</returns>
+    static Vec2d to_direction_d(const VD::edge_type *edge);
 
     /// <summary>
     /// check if coord is in limits for coord_t
@@ -70,13 +84,13 @@ public:
                                    double                 max_distance);
 
     /// <summary>
-    /// Private function to help convert edge without vertex to line
+    /// PRIVATE: function to help convert edge without vertex to line
     /// </summary>
     /// <param name="point1">VD source point</param>
     /// <param name="point2">VD source point</param>
     /// <param name="maximal_distance">Maximal distance from source point</param>
     /// <returns>Line segment between lines</returns>
-    static Slic3r::Line create_line_between_source_points(
+    static Line create_line_between_source_points(
         const Point &point1, const Point &point2, double maximal_distance);
 
     /// <summary>
@@ -89,9 +103,9 @@ public:
     /// <param name="points">Source point for voronoi diagram</param>
     /// <param name="maximal_distance">Maximal distance from source point</param>
     /// <returns>Croped line, when all line segment is out of max distance return empty optional</returns>
-    static std::optional<Slic3r::Line> to_line(const VD::edge_type &edge,
-                                               const Points &       points,
-                                               double maximal_distance);
+    static std::optional<Line> to_line(const VD::edge_type &edge,
+                                       const Points &       points,
+                                       double               maximal_distance);
     /// <summary>
     /// close polygon defined by lines 
     /// close points will convert to their center
@@ -103,11 +117,11 @@ public:
     /// <param name="minimal_distance">Merge points closer than minimal_distance</param>
     /// <param name="count_points">Count checking points, create help points for result polygon</param>
     /// <returns>Valid CCW polygon with center inside of polygon</returns>
-    static Slic3r::Polygon to_polygon(const Lines &lines,
-                                       const Point &center,
-                                       double       maximal_distance,
-                                       double minimal_distance,
-                                       size_t       count_points);
+    static Polygon to_polygon(const Lines &lines,
+                              const Point &center,
+                              double       maximal_distance,
+                              double       minimal_distance,
+                              size_t       count_points);
     /// <summary>
     /// Convert cell to polygon
     /// Source for VD must be only point to create VD with only line segments
@@ -117,9 +131,9 @@ public:
     /// <param name="points">source points for VD</param>
     /// <param name="maximal_distance">maximal distance from source point - only for infinite edges(cells)</param>
     /// <returns>polygon created by cell</returns>
-    static Slic3r::Polygon to_polygon(const VD::cell_type & cell,
-                                      const Slic3r::Points &points,
-                                      double maximal_distance);
+    static Polygon to_polygon(const VD::cell_type &cell,
+                              const Points &       points,
+                              double               maximal_distance);
 
     // return node from graph by vertex, when no exists create one
     static VoronoiGraph::Node *getNode(VoronoiGraph &         graph,
@@ -148,18 +162,37 @@ public:
     /// <returns>Point from source points.</returns>
     static const Point& retrieve_point(const Points &points, const VD::cell_type &cell);
 
-    static Slic3r::Point get_parabola_point(const VD::edge_type &parabola, const Slic3r::Lines &lines);
-    static Slic3r::Line get_parabola_line(const VD::edge_type &parabola, const Lines &lines);
+    /// <summary>
+    /// PRIVATE: function to get parabola focus point
+    /// </summary>
+    /// <param name="parabola">curved edge</param>
+    /// <param name="lines">source lines</param>
+    /// <returns>Parabola focus point</returns>
+    static Point get_parabola_point(const VD::edge_type &parabola, const Lines &lines);
+
+    /// <summary>
+    /// PRIVATE:
+    /// </summary>
+    /// <param name="parabola"></param>
+    /// <param name="lines"></param>
+    /// <returns></returns>
+    static Line get_parabola_line(const VD::edge_type &parabola, const Lines &lines);
+
+    /// <summary>
+    /// Construct parabola from curved edge
+    /// </summary>
+    /// <param name="edge">curved edge</param>
+    /// <param name="lines">Voronoi diagram source lines</param>
+    /// <returns>Parabola represented shape of edge</returns>
     static Parabola get_parabola(const VD::edge_type &edge, const Lines &lines);
 
     /// <summary>
-    /// Calculate length
+    /// Calculate length of curved edge
     /// </summary>
     /// <param name="edge">curved edge</param>
+    /// <param name="lines">Voronoi diagram source lines</param>
     /// <returns>edge length</returns>
-    static double calculate_length_of_parabola(
-        const VD::edge_type &                edge,
-        const Lines &                        lines);
+    static double calculate_length_of_parabola(const VD::edge_type &edge, const Lines &lines);
 
     /// <summary>
     /// Calculate length of edge line segment or curve - parabola.
@@ -167,8 +200,7 @@ public:
     /// <param name="edge">Input edge to calcuate length</param>
     /// <param name="lines">Source for Voronoi diagram. It contains parabola parameters</param>
     /// <returns>The length of edge</returns>
-    static double calculate_length(const VD::edge_type &edge,
-                                   const Lines &        lines);
+    static double calculate_length(const VD::edge_type &edge, const Lines &lines);
 
     /// <summary>
     /// Calculate maximal distance to outline and multiply by two(must be similar on both side)
@@ -176,8 +208,7 @@ public:
     /// <param name="edge">Input edge.</param>
     /// <param name="lines">Source for Voronoi diagram. It contains parabola parameters</param>
     /// <returns>Maximal island width along edge</returns>
-    static double calculate_max_width(const VD::edge_type &edge,
-                                      const Lines &        lines);
+    static double calculate_max_width(const VD::edge_type &edge, const Lines &lines);
 
     /// <summary>
     /// calculate distances to border of island and length on skeleton
@@ -286,12 +317,26 @@ public:
         const VoronoiGraph::Node *start_node);
 
     /// <summary>
+    /// Find twin neighbor
+    /// </summary>
+    /// <param name="neighbor">neighbor</param>
+    /// <returns>Twin neighbor</returns>
+    static const VoronoiGraph::Node::Neighbor *get_twin(const VoronoiGraph::Node::Neighbor *neighbor);
+
+    /// <summary>
     /// Find source node of neighbor
     /// </summary>
     /// <param name="neighbor">neighbor</param>
     /// <returns>start node</returns>
-    static const VoronoiGraph::Node *VoronoiGraphUtils::get_twin_node(
-        const VoronoiGraph::Node::Neighbor *neighbor);
+    static const VoronoiGraph::Node *get_twin_node(const VoronoiGraph::Node::Neighbor *neighbor);
+
+    /// <summary>
+    /// Check if neighbor is in opposit direction to line direction
+    /// </summary>
+    /// <param name="edge">edge has direction from vertex0 to vertex1</param>
+    /// <param name="line">line has direction from point a to point b</param>
+    /// <returns>True when oposit direction otherwise FALSE</returns>
+    static bool is_opposit_direction(const VD::edge_type *edge, const Line &line);
 
     /// <summary>
     /// Create point on edge defined by neighbor
@@ -301,6 +346,39 @@ public:
     /// <returns>Point laying on neighbor edge</returns>
     static Point create_edge_point(const VoronoiGraph::Position& position);
     static Point create_edge_point(const VD::edge_type *edge, double ratio);
+
+    /// <summary>
+    /// Find position on VD edge with width
+    /// </summary>
+    /// <param name="neighbor">Edge for searching position</param>
+    /// <param name="width">Specify place on edge</param>
+    /// <param name="lines">Source lines for voronoi diagram</param>
+    /// <returns>Position on given edge</returns>
+    static VoronoiGraph::Position get_position_with_distance(
+        const VoronoiGraph::Node::Neighbor *neighbor,
+        coord_t              width,
+        const Lines &        lines);
+
+    /// <summary>
+    /// Calculate point on line correspond to edge position
+    /// </summary>
+    /// <param name="position">Position on edge</param>
+    /// <param name="line">Line must be source of edge</param>
+    /// <returns>Point lay on line defined by position on edge</returns>
+    static Point point_on_line(const VoronoiGraph::Position& position, const Line& line);
+
+    /// <summary>
+    /// calculate both point on source lines correspond to edge postion
+    /// Faster way to get both point_on_line
+    /// </summary>
+    /// <param name="position">Position on edge</param>
+    /// <param name="line">Line must be source of edge</param>
+    /// <param name="line">Line must be source of edge</param>
+    /// <returns>pair of point lay on lines cirrespond to position</returns>
+    static std::pair<Point, Point> point_on_lines(
+        const VoronoiGraph::Position &position,
+        const Line &                  first,
+        const Line &                  second);
 
     /// <summary>
     /// align "position" close to point "to"

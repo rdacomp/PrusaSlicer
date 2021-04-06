@@ -2,6 +2,7 @@
 #include <libslic3r/Geometry.hpp>
 #include <functional>
 #include "VectorUtils.hpp"
+#include "PointUtils.hpp"
 
 using namespace Slic3r::sla;
 
@@ -94,7 +95,7 @@ std::optional<Slic3r::Line> LineUtils::crop_half_ray(const Line & half_ray,
     fnc use_point_y = [&half_ray, &dir](const Point &p) -> bool {
         return (p.y() > half_ray.a.y()) == (dir.y() > 0);
     };
-    bool use_x = abs(dir.x()) > abs(dir.y());
+    bool use_x = PointUtils::is_majorit_x(dir);
     fnc use_point = (use_x) ? use_point_x : use_point_y;
     bool use_a = use_point(segment->a);
     bool use_b = use_point(segment->b);
@@ -117,7 +118,7 @@ std::optional<Slic3r::Linef> LineUtils::crop_half_ray(const Linef & half_ray,
     fnc use_point_y = [&half_ray, &dir](const Vec2d &p) -> bool {
         return (p.y() > half_ray.a.y()) == (dir.y() > 0);
     };
-    bool use_x     = fabs(dir.x()) > fabs(dir.y());
+    bool use_x = PointUtils::is_majorit_x(dir);
     fnc  use_point = (use_x) ? use_point_x : use_point_y;
     bool use_a     = use_point(segment->a);
     bool use_b     = use_point(segment->b);
@@ -143,7 +144,7 @@ std::optional<Slic3r::Line> LineUtils::crop_line(const Line & line,
         return (dir.y() > 0) ? (p.y() > line.a.y()) && (p.y() < line.b.y()) :
                                (p.y() < line.a.y()) && (p.y() > line.b.y());
     };
-    bool use_x     = abs(dir.x()) > abs(dir.y());
+    bool use_x = PointUtils::is_majorit_x(dir);
     fnc  use_point = (use_x) ? use_point_x : use_point_y;
     bool use_a     = use_point(segment->a);
     bool use_b     = use_point(segment->b);
@@ -182,7 +183,7 @@ std::optional<Slic3r::Linef> LineUtils::crop_line(const Linef & line,
         return (dir.y() > 0) ? (p.y() > line.a.y()) && (p.y() < line.b.y()) :
                                (p.y() < line.a.y()) && (p.y() > line.b.y());
     };
-    bool use_x     = abs(dir.x()) > abs(dir.y());
+    bool use_x = PointUtils::is_majorit_x(dir);
     fnc  use_point = (use_x) ? use_point_x : use_point_y;
     bool use_a     = use_point(segment->a);
     bool use_b     = use_point(segment->b);
@@ -252,6 +253,124 @@ double LineUtils::perp_distance(const Linef &line, Vec2d p)
     Vec2d v  = line.b - line.a; // direction
     Vec2d va = p - line.a;
     return std::abs(cross2(v, va)) / v.norm();
+}
+
+bool LineUtils::is_parallel(const Line &first, const Line &second) 
+{
+    Point dir1 = first.b - first.a;
+    Point dir2 = second.b - second.a;
+    coord_t cross(
+        static_cast<int64_t>(dir1.x()) * dir2.y() - 
+        static_cast<int64_t>(dir2.x()) * dir1.y()
+    );
+    return (cross == 0);
+}
+
+std::optional<Slic3r::Vec2d> LineUtils::intersection(const Line &ray1, const Line &ray2)
+{
+    const Vec2d v1    = direction(ray1).cast<double>();
+    const Vec2d v2    = direction(ray2).cast<double>();
+    double      denom = cross2(v1, v2);
+    if (fabs(denom) < std::numeric_limits<float>::epsilon()) return {};
+
+    const Vec2d v12 = (ray1.a - ray2.a).cast<double>();
+    double nume = cross2(v2, v12);
+    double t = nume / denom;
+    return (ray1.a.cast<double>() + t * v1);
+}
+
+LineUtils::LineConnection LineUtils::create_line_connection(const Slic3r::Lines &lines)
+{
+    LineConnection line_connection;
+    static const size_t bad_index = -1;
+    auto insert = [&](size_t line_index, size_t connected, bool connect_by_a){
+        auto item = line_connection.find(line_index);
+        if (item == line_connection.end()) {
+            // create new
+            line_connection[line_index] = (connect_by_a) ?
+                    std::pair<size_t, size_t>(connected, bad_index) :
+                    std::pair<size_t, size_t>(bad_index, connected);
+        } else {
+            std::pair<size_t, size_t> &pair = item->second;
+            size_t &ref_index = (connect_by_a) ? pair.first : pair.second;
+            assert(ref_index == bad_index);
+            ref_index = connected;
+        }
+    };
+
+    auto inserts = [&](size_t i1, size_t i2)->bool{
+        bool is_l1_a_connect = true; // false => l1_b_connect
+        const Slic3r::Line &l1 = lines[i1];
+        const Slic3r::Line &l2 = lines[i2];
+        if (!PointUtils::is_equal(l1.a, l2.b)) return false;
+        if (!PointUtils::is_equal(l1.b, l2.a)) return false;
+        else is_l1_a_connect = false;
+        insert(i1, i2, is_l1_a_connect);
+        insert(i2, i1, !is_l1_a_connect);
+        return true;
+    };
+
+    std::vector<size_t> not_finished;
+    size_t              prev_index = lines.size() - 1;
+    for (size_t index = 0; index < lines.size(); ++index) {
+        if (!inserts(prev_index, index)) {
+            bool found_index      = false;
+            bool found_prev_index = false;
+            std::remove_if(not_finished.begin(), not_finished.end(),
+                           [&](const size_t &not_finished_index) {
+                               if (!found_index && inserts(index, not_finished_index)) {
+                                   found_index = true;
+                                   return true;
+                               }
+                               if (!found_prev_index && inserts(prev_index, not_finished_index)) {
+                                   found_prev_index = true;
+                                   return true;
+                               }
+                               return false;
+                           });
+            if (!found_index) not_finished.push_back(index);
+            if (!found_prev_index) not_finished.push_back(prev_index);
+        }
+        prev_index = index;
+    }
+    assert(not_finished.empty());
+    return line_connection;
+}
+
+std::map<size_t, size_t> LineUtils::create_line_connection_over_b(const Lines &lines)
+{
+    static const size_t bad_index = -1;
+    std::map<size_t, size_t> line_connection;
+    auto inserts = [&](size_t i1, size_t i2) -> bool {
+        const Line &l1 = lines[i1];
+        const Line &l2 = lines[i2];
+        bool is_connected = PointUtils::is_equal(l1.b, l2.a);
+        if (!PointUtils::is_equal(l1.b, l2.a))
+            return false;
+        assert(line_connection.find(i1) == line_connection.end());
+        line_connection[i1] = i2;
+        return true;
+    };
+
+    std::vector<size_t> not_finished;
+    size_t prev_index = lines.size() - 1;
+    for (size_t index = 0; index < lines.size(); ++index) {
+        if (!inserts(prev_index, index)) {
+            bool found = false;
+            std::remove_if(not_finished.begin(), not_finished.end(),
+                           [&](const size_t &not_finished_index) {
+                               if (!found && inserts(prev_index, not_finished_index)) {
+                                   found = true;
+                                   return true;
+                               }
+                               return false;
+                           });
+            if(!found) not_finished.push_back(prev_index);
+        }
+        prev_index = index;
+    }
+    assert(not_finished.empty());
+    return line_connection;
 }
 
 void LineUtils::draw(SVG &        svg,

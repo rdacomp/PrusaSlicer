@@ -41,6 +41,18 @@ Slic3r::Vec2d VoronoiGraphUtils::to_point_d(const VD::vertex_type *vertex)
     return Vec2d(vertex->x(), vertex->y());
 }
 
+Slic3r::Point VoronoiGraphUtils::to_direction(const VD::edge_type *edge)
+{
+    return to_direction_d(edge).cast<coord_t>();
+}
+
+Slic3r::Vec2d VoronoiGraphUtils::to_direction_d(const VD::edge_type *edge) 
+{
+    const VD::vertex_type *v0 = edge->vertex0();
+    const VD::vertex_type *v1 = edge->vertex1();
+    return Vec2d(v1->x() - v0->x(), v1->y() - v0->y());
+}
+
 bool VoronoiGraphUtils::is_coord_in_limits(const VD::coordinate_type &coord,
                                            const coord_t &            source,
                                            double max_distance)
@@ -768,14 +780,26 @@ VoronoiGraph::ExPath VoronoiGraphUtils::create_longest_path(
     return longest_path;
 }
 
-const VoronoiGraph::Node *VoronoiGraphUtils::get_twin_node(const VoronoiGraph::Node::Neighbor *neighbor)
+const VoronoiGraph::Node::Neighbor *VoronoiGraphUtils::get_twin(const VoronoiGraph::Node::Neighbor *neighbor)
 {
     auto twin_edge = neighbor->edge->twin();
-    for (const VoronoiGraph::Node::Neighbor n : neighbor->node->neighbors) {
-        if (n.edge == twin_edge) return n.node;
+    for (const VoronoiGraph::Node::Neighbor &twin_neighbor : neighbor->node->neighbors) {
+        if (twin_neighbor.edge == twin_edge) return &twin_neighbor;
     }
     assert(false);
     return nullptr;
+}
+
+const VoronoiGraph::Node *VoronoiGraphUtils::get_twin_node(const VoronoiGraph::Node::Neighbor *neighbor)
+{
+    return get_twin(neighbor)->node;
+}
+
+bool VoronoiGraphUtils::is_opposit_direction(const VD::edge_type *edge, const Line &line)
+{
+    Point dir_line = LineUtils::direction(line);
+    Point dir_edge = VoronoiGraphUtils::to_direction(edge);
+    return !PointUtils::is_same_direction(dir_line, dir_edge);
 }
 
 Slic3r::Point VoronoiGraphUtils::create_edge_point(
@@ -808,6 +832,84 @@ Slic3r::Point VoronoiGraphUtils::create_edge_point(const VD::edge_type *edge,
     Point dir(v1->x() - v0->x(), v1->y() - v0->y());
     dir *= ratio;
     return Point(v0->x() + dir.x(), v0->y() + dir.y());
+}
+
+VoronoiGraph::Position VoronoiGraphUtils::get_position_with_distance(
+    const VoronoiGraph::Node::Neighbor *neighbor, coord_t width, const Slic3r::Lines &lines)
+{
+    VoronoiGraph::Position result(neighbor, 0.);
+    const VD::edge_type *edge = neighbor->edge;
+    if (edge->is_curved()) { 
+        // Every point on curve has same distance from outline
+        return result; 
+    }
+    assert(edge->is_finite());
+    Slic3r::Line edge_line(to_point(edge->vertex0()), to_point(edge->vertex1()));
+    const Slic3r::Line &source_line = lines[edge->cell()->source_index()];
+    if (LineUtils::is_parallel(edge_line, source_line)) {
+        // Every point on parallel lines has same distance
+        return result; 
+    }
+
+    double half_width = width / 2.;
+
+    double a_dist = source_line.perp_distance_to(edge_line.a);
+    double b_dist = source_line.perp_distance_to(edge_line.b);
+
+    // check if half_width is in range from a_dist to b_dist
+    if (a_dist > b_dist) { 
+        if (b_dist >= half_width) {
+            // vertex1 is closer to width
+            result.ratio = 1.;
+            return result;
+        } else if (a_dist <= half_width) {
+            // vertex0 is closer to width
+            return result;
+        }
+    } else {
+        // a_dist < b_dist
+        if (a_dist >= half_width) { 
+            // vertex0 is closer to width
+            return result; 
+        } else if (b_dist <= half_width) {
+            // vertex1 is closer to width
+            result.ratio = 1.;
+            return result;
+        }
+    }
+    result.ratio = fabs((a_dist - half_width) / (a_dist - b_dist));
+    return result;
+}
+
+Slic3r::Point VoronoiGraphUtils::point_on_line(
+    const VoronoiGraph::Position &position, const Line &line)
+{
+    const VD::edge_type* edge = position.neighbor->edge;
+    assert(edge->is_linear());
+    Point edge_point = create_edge_point(position);
+    Point dir        = to_point(edge->vertex0()) - to_point(edge->vertex1());
+    Line  edge_line(edge_point, edge_point + PointUtils::perp(dir));
+    std::optional<Vec2d> intersection = LineUtils::intersection(line, edge_line);
+    assert(intersection.has_value());
+    return intersection->cast<coord_t>();
+}
+
+std::pair<Slic3r::Point, Slic3r::Point> VoronoiGraphUtils::point_on_lines(
+    const VoronoiGraph::Position &position,
+    const Line &                  first,
+    const Line &                  second)
+{
+    const VD::edge_type *edge = position.neighbor->edge;
+    assert(edge->is_linear());
+    Point edge_point = create_edge_point(position);
+    Point dir        = to_point(edge->vertex0()) - to_point(edge->vertex1());
+    Line  edge_line(edge_point, edge_point + PointUtils::perp(dir));
+    std::optional<Vec2d> first_intersection = LineUtils::intersection(first, edge_line);
+    assert(first_intersection.has_value());
+    std::optional<Vec2d> second_intersection = LineUtils::intersection(second, edge_line);
+    assert(second_intersection.has_value());
+    return {first_intersection->cast<coord_t>(),
+            second_intersection->cast<coord_t>()};
 }
 
 VoronoiGraph::Position VoronoiGraphUtils::align(
