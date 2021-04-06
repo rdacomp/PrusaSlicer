@@ -1607,7 +1607,7 @@ static inline std::pair<PrintObjectSupportMaterial::MyLayer*, PrintObjectSupport
         height   = layer.lower_layer->height;
         bottom_z = (layer_id == 1) ? slicing_params.object_print_z_min : layer.lower_layer->lower_layer->print_z;
     } else {
-        print_z  = layer.bottom_z() - slicing_params.gap_object_support;
+        print_z  = layer.bottom_z() - slicing_params.gap_support_object;
         bottom_z = print_z;
         height   = 0.;
         // Ignore this contact area if it's too low.
