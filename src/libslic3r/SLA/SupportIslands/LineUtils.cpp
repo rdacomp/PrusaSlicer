@@ -316,7 +316,8 @@ LineUtils::LineConnection LineUtils::create_line_connection(const Slic3r::Lines 
         if (!inserts(prev_index, index)) {
             bool found_index      = false;
             bool found_prev_index = false;
-            std::remove_if(not_finished.begin(), not_finished.end(),
+            not_finished.erase(std::remove_if(not_finished.begin(),
+                                       not_finished.end(),
                            [&](const size_t &not_finished_index) {
                                if (!found_index && inserts(index, not_finished_index)) {
                                    found_index = true;
@@ -327,7 +328,8 @@ LineUtils::LineConnection LineUtils::create_line_connection(const Slic3r::Lines 
                                    return true;
                                }
                                return false;
-                           });
+                                      }),
+                       not_finished.end());
             if (!found_index) not_finished.push_back(index);
             if (!found_prev_index) not_finished.push_back(prev_index);
         }
@@ -335,6 +337,16 @@ LineUtils::LineConnection LineUtils::create_line_connection(const Slic3r::Lines 
     }
     assert(not_finished.empty());
     return line_connection;
+}
+
+Slic3r::BoundingBox LineUtils::create_bounding_box(const Lines &lines) {
+    Points pts;
+    pts.reserve(lines.size()*2);
+    for (const Line &line : lines) {
+        pts.push_back(line.a);
+        pts.push_back(line.b);
+    }
+    return BoundingBox(pts);
 }
 
 std::map<size_t, size_t> LineUtils::create_line_connection_over_b(const Lines &lines)
@@ -352,24 +364,37 @@ std::map<size_t, size_t> LineUtils::create_line_connection_over_b(const Lines &l
         return true;
     };
 
-    std::vector<size_t> not_finished;
+    std::vector<size_t> not_finished_a;
+    std::vector<size_t> not_finished_b;
     size_t prev_index = lines.size() - 1;
     for (size_t index = 0; index < lines.size(); ++index) {
         if (!inserts(prev_index, index)) {
-            bool found = false;
-            std::remove_if(not_finished.begin(), not_finished.end(),
+            bool found_b = false;
+            not_finished_b.erase(std::remove_if(not_finished_b.begin(), not_finished_b.end(),
                            [&](const size_t &not_finished_index) {
-                               if (!found && inserts(prev_index, not_finished_index)) {
-                                   found = true;
+                               if (!found_b && inserts(prev_index, not_finished_index)) {
+                                   found_b = true;
                                    return true;
                                }
                                return false;
-                           });
-            if(!found) not_finished.push_back(prev_index);
+                           }),not_finished_b.end());
+            if (!found_b) not_finished_a.push_back(prev_index);
+
+            bool found_a = false;
+            not_finished_a.erase(std::remove_if(not_finished_a.begin(), not_finished_a.end(),
+                           [&](const size_t &not_finished_index) {
+                               if (!found_a && inserts(not_finished_index, index)) {
+                                   found_a = true;
+                                   return true;
+                               }
+                               return false;
+                           }),not_finished_a.end());
+            if (!found_a) not_finished_b.push_back(index);
         }
         prev_index = index;
     }
-    assert(not_finished.empty());
+    assert(not_finished_a.empty());
+    assert(not_finished_b.empty());
     return line_connection;
 }
 

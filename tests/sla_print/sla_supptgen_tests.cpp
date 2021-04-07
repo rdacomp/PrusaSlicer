@@ -229,6 +229,29 @@ Slic3r::Polygon create_V_shape(double height, double line_width, double angle = 
     return polygons.front();
 }
 
+ExPolygon create_tiny_wide_test(double wide, double tiny)
+{
+    double hole_size = wide;
+    double width     = (2 + 1) * wide + 2 * hole_size;
+    double height    = wide + 2*tiny + 2*hole_size;
+    auto outline = PolygonUtils::create_rect( width, height);
+    auto   hole      = PolygonUtils::create_rect(hole_size, hole_size);
+    hole.reverse();
+    auto  hole2 = hole;// copy
+    auto  hole3       = hole; // copy
+    auto  hole4       = hole; // copy
+
+    int   hole_move_x = wide / 2 + hole_size / 2;
+    int   hole_move_y = wide / 2 + hole_size / 2;
+    hole.translate({hole_move_x, hole_move_y});
+    hole2.translate({-hole_move_x, hole_move_y});
+    hole3.translate({hole_move_x, -hole_move_y});
+    hole4.translate({-hole_move_x, -hole_move_y});
+    ExPolygon result(outline);
+    result.holes = {hole, hole2, hole3, hole4};
+    return result;
+}
+
 ExPolygons createTestIslands(double size)
 {
     bool      useFrogLeg = false;    

@@ -129,6 +129,13 @@ public:
     static LineConnection create_line_connection(const Lines &lines);
 
     /// <summary>
+    /// create bounding box around lines
+    /// </summary>
+    /// <param name="lines">input lines</param>
+    /// <returns>Bounding box</returns>
+    static BoundingBox create_bounding_box(const Lines &lines);
+
+    /// <summary>
     /// Create data structure from exPolygon lines to store connected line indexes
     /// </summary>
     /// <param name="lines">Lines created from ExPolygon</param>

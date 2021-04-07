@@ -377,8 +377,17 @@ double VoronoiGraphUtils::calculate_length(
 double VoronoiGraphUtils::calculate_max_width(
     const VD::edge_type &edge, const Lines &lines)
 {
-    Point v0 = to_point(edge.vertex0());
-    Point v1 = to_point(edge.vertex1());
+    auto get_squared_distance = [&](const VD::vertex_type *vertex,
+                                    const Point &point) -> double {
+        Point point_v = to_point(vertex);
+        Vec2d vector  = (point - point_v).cast<double>();
+        return vector.x() * vector.x() + vector.y() * vector.y();
+    };
+    auto max_width = [&](const Point& point)->double{
+        return 2. *
+               sqrt(std::max(get_squared_distance(edge.vertex0(), point),
+                             get_squared_distance(edge.vertex1(), point)));
+    };
 
     if (edge.is_linear()) {
         // edge line could be initialized by 2 points
@@ -393,11 +402,7 @@ double VoronoiGraphUtils::calculate_max_width(
                     boost::polygon::SOURCE_CATEGORY_SEGMENT_END_POINT);
                 source_point = source_line.b;
             }
-            Point vec0 = source_point - v0;
-            Point vec1 = source_point - v1;
-            double distance0 = sqrt(vec0.x() * vec0.x() + vec0.y() * vec0.y());
-            double distance1 = sqrt(vec0.x() * vec0.x() + vec0.y() * vec0.y());
-            return 2 * std::max(distance0, distance1);
+            return max_width(source_point);
         }
         assert(edge.cell()->contains_segment());
         assert(!edge.twin()->cell()->contains_point());
@@ -405,6 +410,8 @@ double VoronoiGraphUtils::calculate_max_width(
 
         const Line &line = lines[edge.cell()->source_index()];
 
+        Point  v0        = to_point(edge.vertex0());
+        Point  v1        = to_point(edge.vertex1());
         double distance0 = line.perp_distance_to(v0);
         double distance1 = line.perp_distance_to(v1);
         return 2 * std::max(distance0, distance1);
@@ -413,11 +420,7 @@ double VoronoiGraphUtils::calculate_max_width(
     Parabola parabola = get_parabola(edge, lines);
     // distance to point and line is same
     // vector from edge vertex to parabola focus point
-    Point  vec0 = parabola.focus - v0;
-    Point  vec1 = parabola.focus - v1;
-    double distance0 = sqrt(vec0.x() * vec0.x() + vec0.y() * vec0.y());
-    double distance1 = sqrt(vec0.x() * vec0.x() + vec0.y() * vec0.y());
-    return 2 * std::max(distance0, distance1);
+    return max_width(parabola.focus);
 }
 
 VoronoiGraph VoronoiGraphUtils::create_skeleton(const VD &vd, const Lines &lines)
@@ -881,35 +884,39 @@ VoronoiGraph::Position VoronoiGraphUtils::get_position_with_distance(
     return result;
 }
 
-Slic3r::Point VoronoiGraphUtils::point_on_line(
-    const VoronoiGraph::Position &position, const Line &line)
-{
-    const VD::edge_type* edge = position.neighbor->edge;
-    assert(edge->is_linear());
-    Point edge_point = create_edge_point(position);
-    Point dir        = to_point(edge->vertex0()) - to_point(edge->vertex1());
-    Line  edge_line(edge_point, edge_point + PointUtils::perp(dir));
-    std::optional<Vec2d> intersection = LineUtils::intersection(line, edge_line);
-    assert(intersection.has_value());
-    return intersection->cast<coord_t>();
-}
-
 std::pair<Slic3r::Point, Slic3r::Point> VoronoiGraphUtils::point_on_lines(
-    const VoronoiGraph::Position &position,
-    const Line &                  first,
-    const Line &                  second)
+    const VoronoiGraph::Position &position, const Lines &lines)
 {
     const VD::edge_type *edge = position.neighbor->edge;
-    assert(edge->is_linear());
+
+    // TODO: solve point on parabola
+    //assert(edge->is_linear());
+    bool is_linear = edge->is_linear();
+
     Point edge_point = create_edge_point(position);
     Point dir        = to_point(edge->vertex0()) - to_point(edge->vertex1());
-    Line  edge_line(edge_point, edge_point + PointUtils::perp(dir));
-    std::optional<Vec2d> first_intersection = LineUtils::intersection(first, edge_line);
-    assert(first_intersection.has_value());
-    std::optional<Vec2d> second_intersection = LineUtils::intersection(second, edge_line);
-    assert(second_intersection.has_value());
-    return {first_intersection->cast<coord_t>(),
-            second_intersection->cast<coord_t>()};
+    Line  intersecting_line(edge_point, edge_point + PointUtils::perp(dir));
+
+    auto point_on_line           = [&](const VD::edge_type *edge) -> Point {
+        assert(edge->is_finite());        
+        const VD::cell_type *cell = edge->cell();
+        size_t line_index = cell->source_index();
+        const Line &line = lines[line_index];
+        using namespace boost::polygon;
+        bool is_single_point = cell->source_category() ==
+                               SOURCE_CATEGORY_SINGLE_POINT;
+        if (cell->source_category() == SOURCE_CATEGORY_SEGMENT_START_POINT) {
+            return line.a;
+        }
+        if (cell->source_category() == SOURCE_CATEGORY_SEGMENT_END_POINT) {
+            return line.b;
+        }
+        std::optional<Vec2d> intersection = LineUtils::intersection(line, intersecting_line);
+        assert(intersection.has_value());
+        return intersection->cast<coord_t>();
+    };
+    
+    return {point_on_line(edge), point_on_line(edge->twin())};
 }
 
 VoronoiGraph::Position VoronoiGraphUtils::align(
@@ -1074,18 +1081,34 @@ double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
 
 void VoronoiGraphUtils::draw(SVG &               svg,
                              const VoronoiGraph &graph,
-                             coord_t             width)
+                             coord_t             width,
+                             bool pointer_caption)
 {
+    auto print_address = [&](const Point& p, const char* prefix, void * addr, const char* color){
+        if (pointer_caption) {
+            std::stringstream ss;
+            ss << prefix << std::hex << (int) addr;
+            std::string s = ss.str();
+            svg.draw_text(p, s.c_str(), color);
+        }
+    };
+
     for (const auto &[key, value] : graph.data) {
-        svg.draw(Point(key->x(), key->y()), "lightgray", width);
+        Point p(key->x(), key->y());
+        svg.draw(p, "lightgray", width);
+        print_address(p, "v_",(void*)key, "lightgray");
         for (const auto &n : value.neighbors) {
-            if (n.edge->vertex0() > n.edge->vertex1()) continue;
             Point from = to_point(n.edge->vertex0());
             Point to   = to_point(n.edge->vertex1());
+            bool  is_second = n.edge->vertex0() > n.edge->vertex1();
+            Point center    = (from + to) / 2;
+            Point p        = center + ((is_second) ? Point(0., -2e6) :
+                                                            Point(0., 2e6));
+            print_address(p, "n_", (void *) &n, "gray");
+            if (is_second) continue;
+            svg.draw_text(center + Point(-6e6, 0.), ("w="+std::to_string(n.max_width)).c_str(), "gray");
             svg.draw(Line(from, to), "gray", width);
 
-            Point center = from + to;
-            center *= .5;
             // svg.draw_text(center,
             // (std::to_string(std::round(n.edge_length/3e5)/100.)).c_str(), "gray");
         }

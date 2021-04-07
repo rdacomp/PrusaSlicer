@@ -18,7 +18,7 @@ bool PointUtils::is_majorit_x(const Vec2d &point)
 
 Slic3r::Point PointUtils::perp(const Point &vector)
 {
-    return Point(-vector.x(), vector.y());
+    return Point(-vector.y(), vector.x());
 }
 
 bool PointUtils::is_same_direction(const Point &dir1, const Point &dir2)

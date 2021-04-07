@@ -783,18 +783,19 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     auto add_wide_tiny_change = [&](const VoronoiGraph::Node::Neighbor *neighbor){        
         VoronoiGraph::Position position = 
             VoronoiGraphUtils::get_position_with_distance(neighbor, min_width, lines);
+        Point p1, p2;
+        std::tie(p1, p2) = VoronoiGraphUtils::point_on_lines(position, lines);
         const VD::edge_type *edge = neighbor->edge;
         size_t i1 = edge->cell()->source_index();
         size_t i2 = edge->twin()->cell()->source_index();
         const Line &l1 = lines[i1];
-        const Line &l2 = lines[i2];
-        Point p1, p2;
-        std::tie(p1, p2) = VoronoiGraphUtils::point_on_lines(position, l1, l2);
         if (VoronoiGraphUtils::is_opposit_direction(edge, l1)) {
             // line1 is shorten on side line1.a --> line2 is shorten on side line2.b
+            assert(wide_tiny_changes.find(i2) == wide_tiny_changes.end());
             wide_tiny_changes.insert({i2, WideTinyChange(p2, p1, i1)});
         } else {
             // line1 is shorten on side line1.b
+            assert(wide_tiny_changes.find(i1) == wide_tiny_changes.end());
             wide_tiny_changes.insert({i1, WideTinyChange(p1, p2, i2)});
         }
     };
@@ -811,30 +812,32 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     std::set<size_t> field_line_indexes;
     while (!process.empty()) { 
         const VoronoiGraph::Node *node = process.front();
+        const VoronoiGraph::Node *prev_node = nullptr;
         process.pop();
         if (done.find(node) != done.end()) continue;
         do {
             done.insert(node);
-            const auto &neighbors = node->neighbors;
-            node                  = nullptr;
-            for (const VoronoiGraph::Node::Neighbor &neighbor : neighbors) {
-                if (done.find(neighbor.node) != done.end()) continue;
-                const VD::edge_type *edge   = neighbor.edge;
+            const VoronoiGraph::Node *next_node = nullptr;
+            for (const VoronoiGraph::Node::Neighbor &neighbor: node->neighbors) {
+                if (neighbor.node == prev_node) continue; 
+                const VD::edge_type *edge = neighbor.edge;
                 size_t index1 = edge->cell()->source_index();
                 size_t index2 = edge->twin()->cell()->source_index();
                 field_line_indexes.insert(index1);
                 field_line_indexes.insert(index2);
-                if (neighbor.max_width <
-                    config.min_width_for_outline_support) {
+                if (neighbor.max_width < config.min_width_for_outline_support) {
                     add_wide_tiny_change(&neighbor);
                     continue;
                 }
-                if (node == nullptr) { 
-                    node = neighbor.node;
+                if (done.find(neighbor.node) != done.end()) continue; // loop back
+                if (next_node == nullptr) { 
+                    next_node = neighbor.node;
                 } else {
                     process.push(neighbor.node);
                 }
             }
+            prev_node = node;
+            node      = next_node;
         } while (node != nullptr);
     }
     

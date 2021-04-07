@@ -360,25 +360,17 @@ public:
         const Lines &        lines);
 
     /// <summary>
-    /// Calculate point on line correspond to edge position
-    /// </summary>
-    /// <param name="position">Position on edge</param>
-    /// <param name="line">Line must be source of edge</param>
-    /// <returns>Point lay on line defined by position on edge</returns>
-    static Point point_on_line(const VoronoiGraph::Position& position, const Line& line);
-
-    /// <summary>
     /// calculate both point on source lines correspond to edge postion
     /// Faster way to get both point_on_line
     /// </summary>
     /// <param name="position">Position on edge</param>
-    /// <param name="line">Line must be source of edge</param>
-    /// <param name="line">Line must be source of edge</param>
-    /// <returns>pair of point lay on lines cirrespond to position</returns>
+    /// <param name="lines">Source lines of VD</param>
+    /// <returns>pair of point lay on outline lines correspond to position on edge
+    /// first -> source line of edge cell
+    /// second -> source line of edge twin cell </returns>
     static std::pair<Point, Point> point_on_lines(
         const VoronoiGraph::Position &position,
-        const Line &                  first,
-        const Line &                  second);
+        const Lines &                  lines);
 
     /// <summary>
     /// align "position" close to point "to"
@@ -418,7 +410,7 @@ public:
     static double get_max_width(const VoronoiGraph::Node *node);
 
 public: // draw function for debug
-    static void draw(SVG &svg, const VoronoiGraph &graph, coord_t width);
+    static void draw(SVG &svg, const VoronoiGraph &graph, coord_t width, bool pointer_caption = false);
     static void draw(SVG &                      svg,
                      const VoronoiGraph::Nodes &path,
                      coord_t                    width,
