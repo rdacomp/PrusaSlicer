@@ -1669,9 +1669,9 @@ static inline void base_support_extend_infill_lines(Polylines &infill, BoundaryI
         double                       arc_len_next;
 
         if (! graph.next_vertical(cp)){
-            int i = int(cp.point_idx);
-            int j = next_idx_modulo(i, contour);
-            while (j != int(cp.next_on_contour->point_idx)) {
+            size_t i = cp.point_idx;
+            size_t j = next_idx_modulo(i, contour);
+            while (j != cp.next_on_contour->point_idx) {
                 //const Point &p1 = contour[i];
                 const Point &p2 = contour[j];
                 if (std::abs(p2.x() - pt.x()) > dist_max_x)
@@ -1695,9 +1695,9 @@ static inline void base_support_extend_infill_lines(Polylines &infill, BoundaryI
         }
 
         if (! graph.prev_vertical(cp)) {
-            int i = int(cp.point_idx);
-            int j = prev_idx_modulo(i, contour);
-            while (j != int(cp.prev_on_contour->point_idx)) {
+            size_t i = cp.point_idx;
+            size_t j = prev_idx_modulo(i, contour);
+            while (j != cp.prev_on_contour->point_idx) {
                 //const Point &p1 = contour[i];
                 const Point &p2 = contour[j];
                 if (std::abs(p2.x() - pt.x()) > dist_max_x)
@@ -1779,10 +1779,12 @@ static inline void emit_loops_in_band(
     assert(left < right);
     assert(contour.size() + 1 == contour_params.size());
     assert(contour.size() >= 3);
+#ifndef NDEBUG
     double contour_length = contour_params.back();
     assert(tbegin >= 0 && tbegin < contour_length);
     assert(tend   >= 0 && tend   < contour_length);
     assert(min_length > 0);
+#endif // NDEBUG
 
     // Find iterators of the range of segments, where the first and last segment contains tbegin and tend.
     size_t ibegin, iend;
@@ -2188,7 +2190,6 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const std::vector<co
         assert(cp.contour_idx != boundary_idx_unconnected);
         if (cp.consumed)
             continue;
-        const bool                      first    = graph.first(cp);
         const ContourIntersectionPoint &cp_other = graph.other(cp);
         assert((cp.next_on_contour == &cp_other) == (cp_other.prev_on_contour == &cp));
         assert((cp.prev_on_contour == &cp_other) == (cp_other.next_on_contour == &cp));
@@ -2358,10 +2359,12 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const std::vector<co
         const ContourIntersectionPoint *other_end = first ? &cp + 1 : &cp - 1;
         const bool                      loop_next = cp.next_on_contour == other_end;
         const bool                      loop_prev = other_end->next_on_contour == &cp;
+#ifndef NDEBUG
         const SupportArcCost           &cost_prev = arches[(&cp - graph.map_infill_end_point_to_boundary.data()) * 2];
         const SupportArcCost           &cost_next = *(&cost_prev + 1);
         assert(cost_prev.self_loop == loop_prev);
         assert(cost_next.self_loop == loop_next);
+#endif // NDEBUG
         if (loop_prev && cp.could_take_prev())
             take_next(*cp.prev_on_contour, false);
         if (loop_next && cp.could_take_next())

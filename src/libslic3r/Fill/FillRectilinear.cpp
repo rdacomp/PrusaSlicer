@@ -3026,7 +3026,6 @@ Polylines FillSupportBase::fill_surface(const Surface *surface, const FillParams
     ExPolygonWithOffset poly_with_offset(surface->expolygon, - rotate_vector.first, float(scale_(this->overlap - 0.5 * this->spacing)));
     if (poly_with_offset.n_contours > 0) {
         Polylines fill_lines;
-        coord_t line_width = coord_t(scale_(this->spacing));
         coord_t line_spacing = coord_t(scale_(this->spacing) / params.density);
         // Create infill lines, keep them vertical.
         make_fill_lines(poly_with_offset, rotate_vector.second.rotated(- rotate_vector.first), 0, 0, line_spacing, 0, fill_lines);
