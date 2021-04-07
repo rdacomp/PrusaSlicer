@@ -435,11 +435,10 @@ namespace Slic3r {
     {
         std::string gcode;
         assert(m_layer_idx >= 0);
-        if (!m_brim_done || gcodegen.writer().need_toolchange(extruder_id) || finish_layer) {
+        if (gcodegen.writer().need_toolchange(extruder_id) || finish_layer) {
             if (m_layer_idx < (int)m_tool_changes.size()) {
                 if (!(size_t(m_tool_change_idx) < m_tool_changes[m_layer_idx].size()))
                     throw Slic3r::RuntimeError("Wipe tower generation failed, possibly due to empty first layer.");
-
 
                 // Calculate where the wipe tower layer will be printed. -1 means that print z will not change,
                 // resulting in a wipe tower with sparse layers.
@@ -447,7 +446,7 @@ namespace Slic3r {
                 bool ignore_sparse = false;
                 if (gcodegen.config().wipe_tower_no_sparse_layers.value) {
                     wipe_tower_z = m_last_wipe_tower_print_z;
-                    ignore_sparse = (m_brim_done && m_tool_changes[m_layer_idx].size() == 1 && m_tool_changes[m_layer_idx].front().initial_tool == m_tool_changes[m_layer_idx].front().new_tool);
+                    ignore_sparse = (m_tool_changes[m_layer_idx].size() == 1 && m_tool_changes[m_layer_idx].front().initial_tool == m_tool_changes[m_layer_idx].front().new_tool);
                     if (m_tool_change_idx == 0 && !ignore_sparse)
                         wipe_tower_z = m_last_wipe_tower_print_z + m_tool_changes[m_layer_idx].front().layer_height;
                 }
@@ -457,7 +456,6 @@ namespace Slic3r {
                     m_last_wipe_tower_print_z = wipe_tower_z;
                 }
             }
-            m_brim_done = true;
         }
         return gcode;
     }
@@ -786,7 +784,8 @@ void GCode::do_export(Print* print, const char* path, GCodeProcessor::Result* re
 namespace DoExport {
     static void init_gcode_processor(const PrintConfig& config, GCodeProcessor& processor, bool& silent_time_estimator_enabled)
     {
-        silent_time_estimator_enabled = (config.gcode_flavor == gcfMarlin) && config.silent_mode;
+        silent_time_estimator_enabled = (config.gcode_flavor == gcfMarlinLegacy || config.gcode_flavor == gcfMarlinFirmware)
+                                        && config.silent_mode;
         processor.reset();
         processor.apply_config(config);
         processor.enable_stealth_time_estimator(silent_time_estimator_enabled);
@@ -1357,7 +1356,7 @@ void GCode::_do_export(Print& print, FILE* file, ThumbnailsGeneratorCallback thu
                 bbox_prime.offset(0.5f);
                 bool overlap = bbox_prime.overlap(bbox_print);
 
-                if (print.config().gcode_flavor == gcfMarlin) {
+                if (print.config().gcode_flavor == gcfMarlinLegacy || print.config().gcode_flavor == gcfMarlinFirmware) {
                     _write(file, this->retract());
                     _write(file, "M300 S800 P500\n"); // Beep for 500ms, tone 800Hz.
                     if (overlap) {
@@ -1560,7 +1559,8 @@ static bool custom_gcode_sets_temperature(const std::string &gcode, const int mc
 // Do not process this piece of G-code by the time estimator, it already knows the values through another sources.
 void GCode::print_machine_envelope(FILE *file, Print &print)
 {
-    if (print.config().gcode_flavor.value == gcfMarlin && print.config().machine_limits_usage.value == MachineLimitsUsage::EmitToGCode) {
+    if ((print.config().gcode_flavor.value == gcfMarlinLegacy || print.config().gcode_flavor.value == gcfMarlinFirmware)
+     && print.config().machine_limits_usage.value == MachineLimitsUsage::EmitToGCode) {
         fprintf(file, "M201 X%d Y%d Z%d E%d ; sets maximum accelerations, mm/sec^2\n",
             int(print.config().machine_max_acceleration_x.values.front() + 0.5),
             int(print.config().machine_max_acceleration_y.values.front() + 0.5),
@@ -1571,10 +1571,20 @@ void GCode::print_machine_envelope(FILE *file, Print &print)
             int(print.config().machine_max_feedrate_y.values.front() + 0.5),
             int(print.config().machine_max_feedrate_z.values.front() + 0.5),
             int(print.config().machine_max_feedrate_e.values.front() + 0.5));
+
+        // Now M204 - acceleration. This one is quite hairy thanks to how Marlin guys care about
+        // backwards compatibility: https://github.com/prusa3d/PrusaSlicer/issues/1089
+        // Legacy Marlin should export travel acceleration the same as printing acceleration.
+        // MarlinFirmware has the two separated.
+        int travel_acc = print.config().gcode_flavor == gcfMarlinLegacy
+                       ? int(print.config().machine_max_acceleration_extruding.values.front() + 0.5)
+                       : int(print.config().machine_max_acceleration_travel.values.front() + 0.5);
         fprintf(file, "M204 P%d R%d T%d ; sets acceleration (P, T) and retract acceleration (R), mm/sec^2\n",
             int(print.config().machine_max_acceleration_extruding.values.front() + 0.5),
             int(print.config().machine_max_acceleration_retracting.values.front() + 0.5),
-            int(print.config().machine_max_acceleration_extruding.values.front() + 0.5));
+            travel_acc);
+
+
         fprintf(file, "M205 X%.2lf Y%.2lf Z%.2lf E%.2lf ; sets the jerk limits, mm/sec\n",
             print.config().machine_max_jerk_x.values.front(),
             print.config().machine_max_jerk_y.values.front(),

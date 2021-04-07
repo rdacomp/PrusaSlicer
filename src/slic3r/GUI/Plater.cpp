@@ -964,6 +964,10 @@ void Sidebar::msw_rescale()
 
 void Sidebar::sys_color_changed()
 {
+#ifdef __WXMSW__
+    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+#endif
+
     for (PlaterPresetComboBox* combo : std::vector<PlaterPresetComboBox*>{  p->combo_print,
                                                                 p->combo_sla_print,
                                                                 p->combo_sla_material,
@@ -972,6 +976,8 @@ void Sidebar::sys_color_changed()
     for (PlaterPresetComboBox* combo : p->combos_filament)
         combo->msw_rescale();
 
+    p->frequently_changed_parameters->msw_rescale();
+    p->object_list->msw_rescale();
     p->object_list->sys_color_changed();
     p->object_manipulation->sys_color_changed();
     p->object_layers->sys_color_changed();
@@ -2663,32 +2669,36 @@ void Plater::priv::mirror(Axis axis)
     view3D->mirror_selection(axis);
 }
 
-void Plater::find_new_position(const ModelInstancePtrs &instances,
-                                     coord_t min_d)
+void Plater::find_new_position(const ModelInstancePtrs &instances)
 {
     arrangement::ArrangePolygons movable, fixed;
+    arrangement::ArrangeParams arr_params = get_arrange_params(this);
     
     for (const ModelObject *mo : p->model.objects)
-        for (const ModelInstance *inst : mo->instances) {
+        for (ModelInstance *inst : mo->instances) {
             auto it = std::find(instances.begin(), instances.end(), inst);
-            auto arrpoly = inst->get_arrange_polygon();
+            auto arrpoly = get_arrange_poly(inst, this);
 
             if (it == instances.end())
                 fixed.emplace_back(std::move(arrpoly));
-            else
+            else {
+                arrpoly.setter = [it](const arrangement::ArrangePolygon &p) {
+                    if (p.is_arranged() && p.bed_idx == 0) {
+                        Vec2d t = p.translation.cast<double>();
+                        (*it)->apply_arrange_result(t, p.rotation);
+                    }
+                };
                 movable.emplace_back(std::move(arrpoly));
+            }
         }
     
     if (auto wt = get_wipe_tower_arrangepoly(*this))
         fixed.emplace_back(*wt);
     
-    arrangement::arrange(movable, fixed, get_bed_shape(*config()),
-                         arrangement::ArrangeParams{min_d});
+    arrangement::arrange(movable, fixed, get_bed_shape(*config()), arr_params);
 
-    for (size_t i = 0; i < instances.size(); ++i)
-        if (movable[i].bed_idx == 0)
-            instances[i]->apply_arrange_result(movable[i].translation.cast<double>(),
-                                               movable[i].rotation);
+    for (auto & m : movable)
+        m.apply();
 }
 
 void Plater::priv::split_object()
