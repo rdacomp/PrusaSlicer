@@ -3174,8 +3174,13 @@ static inline void fill_expolygons_with_sheath_generate_paths(
 // Support layers, partially processed.
 struct MyLayerExtruded
 {
-    MyLayerExtruded() : layer(nullptr), m_polygons_to_extrude(nullptr) {}
-    ~MyLayerExtruded() { delete m_polygons_to_extrude; m_polygons_to_extrude = nullptr; }
+    MyLayerExtruded& operator=(MyLayerExtruded &&rhs) {
+        this->layer = rhs.layer;
+        this->extrusions = std::move(rhs.extrusions);
+        this->m_polygons_to_extrude = std::move(m_polygons_to_extrude);
+        rhs.layer = nullptr;
+        return *this;
+    }
 
     bool empty() const {
         return layer == nullptr || layer->polygons.empty();
@@ -3183,7 +3188,7 @@ struct MyLayerExtruded
 
     void set_polygons_to_extrude(Polygons &&polygons) { 
         if (m_polygons_to_extrude == nullptr) 
-            m_polygons_to_extrude = new Polygons(std::move(polygons)); 
+            m_polygons_to_extrude = std::make_unique<Polygons>(std::move(polygons));
         else
             *m_polygons_to_extrude = std::move(polygons);
     }
@@ -3204,12 +3209,11 @@ struct MyLayerExtruded
             if (m_polygons_to_extrude == nullptr) {
                 // This layer has no extrusions generated yet, if it has no m_polygons_to_extrude (its area to extrude was not reduced yet).
                 assert(this->extrusions.empty());
-                m_polygons_to_extrude = new Polygons(this->layer->polygons);
+                m_polygons_to_extrude = std::make_unique<Polygons>(this->layer->polygons);
             }
             Slic3r::polygons_append(*m_polygons_to_extrude, std::move(*other.m_polygons_to_extrude));
             *m_polygons_to_extrude = union_(*m_polygons_to_extrude, true);
-            delete other.m_polygons_to_extrude;
-            other.m_polygons_to_extrude = nullptr;
+            other.m_polygons_to_extrude.reset();
         } else if (m_polygons_to_extrude != nullptr) {
             assert(other.m_polygons_to_extrude == nullptr);
             // The other layer has no extrusions generated yet, if it has no m_polygons_to_extrude (its area to extrude was not reduced yet).
@@ -3232,12 +3236,14 @@ struct MyLayerExtruded
     }
 
     // The source layer. It carries the height and extrusion type (bridging / non bridging, extrusion height).
-    PrintObjectSupportMaterial::MyLayer  *layer;
+    PrintObjectSupportMaterial::MyLayer  *layer { nullptr };
     // Collect extrusions. They will be exported sorted by the bottom height.
     ExtrusionEntitiesPtr                  extrusions;
+
+private:
     // In case the extrusions are non-empty, m_polygons_to_extrude may contain the rest areas yet to be filled by additional support.
     // This is useful mainly for the loop interfaces, which are generated before the zig-zag infills.
-    Polygons                             *m_polygons_to_extrude;
+    std::unique_ptr<Polygons>             m_polygons_to_extrude;
 };
 
 typedef std::vector<MyLayerExtruded*> MyLayerExtrudedPtrs;
@@ -3900,7 +3906,7 @@ void PrintObjectSupportMaterial::generate_toolpaths(
             std::stable_sort(this->nonempty.begin(), this->nonempty.end(), [](const LayerCacheItem &lc1, const LayerCacheItem &lc2) { return lc1.layer_extruded->layer->height > lc2.layer_extruded->layer->height; });
         }
     };
-    std::vector<LayerCache>             layer_caches(support_layers.size(), LayerCache());
+    std::vector<LayerCache>             layer_caches(support_layers.size());
 
 
     const auto fill_type_interface  = 
