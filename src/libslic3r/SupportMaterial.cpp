@@ -3166,7 +3166,7 @@ static inline void fill_expolygons_with_sheath_generate_paths(
         extrusion_entities_append_paths(out, polylines, erSupportMaterial, flow.mm3_per_mm(), flow.width(), flow.height());
         // Fill in the rest.
         fill_expolygons_generate_paths(out, offset_ex(expoly, float(-0.4 * spacing)), filler, fill_params, density, role, flow);
-        if (no_sort)
+        if (no_sort && ! eec->empty())
             dst.emplace_back(eec.release());
     }
 }
@@ -4152,6 +4152,27 @@ void PrintObjectSupportMaterial::generate_toolpaths(
             }
         }
     });
+
+#ifndef NDEBUG
+    struct Test {
+        static bool verify_nonempty(const ExtrusionEntityCollection *collection) {
+            for (const ExtrusionEntity *ee : collection->entities) {
+                if (const ExtrusionPath *path = dynamic_cast<const ExtrusionPath*>(ee))
+                    assert(! path->empty());
+                else if (const ExtrusionMultiPath *multipath = dynamic_cast<const ExtrusionMultiPath*>(ee))
+                    assert(! multipath->empty());
+                else if (const ExtrusionEntityCollection *eecol = dynamic_cast<const ExtrusionEntityCollection*>(ee)) {
+                    assert(! eecol->empty());
+                    return verify_nonempty(eecol);
+                } else
+                    assert(false);
+            }
+            return true;
+        }
+    };
+    for (const SupportLayer *support_layer : support_layers)
+    assert(Test::verify_nonempty(&support_layer->support_fills));
+#endif // NDEBUG
 }
 
 /*

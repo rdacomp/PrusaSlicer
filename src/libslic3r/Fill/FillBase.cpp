@@ -2048,13 +2048,13 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const std::vector<co
                 // Bottom point of a vertical infill line, cp.next_on_contour points right.
                 left  += line_half_width;
                 if (vertical)
-                    right = bbox.max.x() + line_half_width;
+                    right = bbox.max.x() + line_half_width * 2;
                 else
                     right += line_spacing - line_half_width;
             } else {
                 // Top point of a vertical infill line, cp.next_on_contour points left.
                 if (vertical)
-                    left = bbox.min.x() - line_half_width;
+                    left = bbox.min.x() - line_half_width * 2;
                 else
                     left -= line_spacing - line_half_width;
                 right -= line_half_width;
@@ -2404,33 +2404,39 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const std::vector<co
     for (ContourIntersectionPoint &cp : graph.map_infill_end_point_to_boundary) {
         const SupportArcCost &cost_prev = arches[(&cp - graph.map_infill_end_point_to_boundary.data()) * 2];
         const SupportArcCost &cost_next = *(&cost_prev + 1);
-        if (cp.contour_not_taken_length_prev > SCALED_EPSILON && cost_prev.self_loop ?
+        if (cp.contour_not_taken_length_prev > SCALED_EPSILON && 
+            (cost_prev.self_loop ?
                 cost_prev.cost > cap_cost :
-                cost_prev.cost > cost_veryhigh) {
+                cost_prev.cost > cost_veryhigh)) {
             assert(cp.consumed && (cp.prev_on_contour->consumed || cp.prev_trimmed));
             Polyline pl { graph.point(cp) };
             if (! cp.prev_trimmed) {
                 cp.trim_prev(cp.contour_not_taken_length_prev - line_half_width);
                 cp.prev_on_contour->trim_next(0);
             }
-            take_cw_limited(pl, graph.boundary[cp.contour_idx], graph.boundary_params[cp.contour_idx], cp.point_idx, cp.prev_on_contour->point_idx, cp.contour_not_taken_length_prev);
-            cp.trim_prev(0);
-            pl.clip_start(line_half_width);
-            polylines_out.emplace_back(std::move(pl));
+            if (cp.contour_not_taken_length_prev > SCALED_EPSILON) {
+                take_cw_limited(pl, graph.boundary[cp.contour_idx], graph.boundary_params[cp.contour_idx], cp.point_idx, cp.prev_on_contour->point_idx, cp.contour_not_taken_length_prev);
+                cp.trim_prev(0);
+                pl.clip_start(line_half_width);
+                polylines_out.emplace_back(std::move(pl));
+            }
         }
-        if (cp.contour_not_taken_length_next > SCALED_EPSILON && cost_next.self_loop ?
-            cost_next.cost > cap_cost :
-            cost_next.cost > cost_veryhigh) {
+        if (cp.contour_not_taken_length_next > SCALED_EPSILON && 
+            (cost_next.self_loop ?
+                cost_next.cost > cap_cost :
+                cost_next.cost > cost_veryhigh)) {
             assert(cp.consumed && (cp.next_on_contour->consumed || cp.next_trimmed));
             Polyline pl { graph.point(cp) };
             if (! cp.next_trimmed) {
                 cp.trim_next(cp.contour_not_taken_length_next - line_half_width);
                 cp.next_on_contour->trim_prev(0);
             }
-            take_ccw_limited(pl, graph.boundary[cp.contour_idx], graph.boundary_params[cp.contour_idx], cp.point_idx, cp.next_on_contour->point_idx, cp.contour_not_taken_length_next); // line_half_width);
-            cp.trim_next(0);
-            pl.clip_start(line_half_width);
-            polylines_out.emplace_back(std::move(pl));
+            if (cp.contour_not_taken_length_next > SCALED_EPSILON) {
+                take_ccw_limited(pl, graph.boundary[cp.contour_idx], graph.boundary_params[cp.contour_idx], cp.point_idx, cp.next_on_contour->point_idx, cp.contour_not_taken_length_next); // line_half_width);
+                cp.trim_next(0);
+                pl.clip_start(line_half_width);
+                polylines_out.emplace_back(std::move(pl));
+            }
         }
     }
 

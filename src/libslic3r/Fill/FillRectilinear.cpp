@@ -798,33 +798,44 @@ static std::vector<SegmentedIntersectionLine> slice_region_by_vertical_lines(con
                 assert(l <= this_x);
                 assert(r >= this_x);
                 // Calculate the intersection position in y axis. x is known.
-                if (p1(0) == this_x) {
-                    if (p2(0) == this_x) {
+                if (p1.x() == this_x) {
+                    if (p2.x() == this_x) {
                         // Ignore strictly vertical segments.
                         continue;
                     }
-                    is.pos_p = p1(1);
+                    const Point &p0 = prev_value_modulo(iPrev, contour);
+                    if (int64_t(p0.x() - p1.x()) * int64_t(p2.x() - p1.x()) > 0) {
+                        // Ignore points of a contour touching the infill line from one side.
+                        continue;
+                    }
+                    is.pos_p = p1.y();
                     is.pos_q = 1;
-                } else if (p2(0) == this_x) {
-                    is.pos_p = p2(1);
+                } else if (p2.x() == this_x) {
+                    const Point &p3 = next_value_modulo(iSegment, contour);
+                    if (int64_t(p3.x() - p2.x()) * int64_t(p1.x() - p2.x()) > 0) {
+                        // Ignore points of a contour touching the infill line from one side.
+                        continue;
+                    }
+                    is.pos_p = p2.y();
                     is.pos_q = 1;
                 } else {
                     // First calculate the intersection parameter 't' as a rational number with non negative denominator.
-                    if (p2(0) > p1(0)) {
-                        is.pos_p = this_x - p1(0);
-                        is.pos_q = p2(0) - p1(0);
+                    if (p2.x() > p1.x()) {
+                        is.pos_p = this_x - p1.x();
+                        is.pos_q = p2.x() - p1.x();
                     } else {
-                        is.pos_p = p1(0) - this_x;
-                        is.pos_q = p1(0) - p2(0);
+                        is.pos_p = p1.x() - this_x;
+                        is.pos_q = p1.x() - p2.x();
                     }
-                    assert(is.pos_p >= 0 && is.pos_p <= is.pos_q);
+                    assert(is.pos_q > 1);
+                    assert(is.pos_p > 0 && is.pos_p < is.pos_q);
                     // Make an intersection point from the 't'.
-                    is.pos_p *= int64_t(p2(1) - p1(1));
-                    is.pos_p += p1(1) * int64_t(is.pos_q);
+                    is.pos_p *= int64_t(p2.y() - p1.y());
+                    is.pos_p += p1.y() * int64_t(is.pos_q);
                 }
                 // +-1 to take rounding into account.
-                assert(is.pos() + 1 >= std::min(p1(1), p2(1)));
-                assert(is.pos() <= std::max(p1(1), p2(1)) + 1);
+                assert(is.pos() + 1 >= std::min(p1.y(), p2.y()));
+                assert(is.pos() <= std::max(p1.y(), p2.y()) + 1);
                 segs[i].intersections.push_back(is);
             }
         }
@@ -844,55 +855,46 @@ static std::vector<SegmentedIntersectionLine> slice_region_by_vertical_lines(con
         size_t j = 0;
         for (size_t i = 0; i < sil.intersections.size(); ++ i) {
             // What is the orientation of the segment at the intersection point?
-            size_t iContour = sil.intersections[i].iContour;
-            const Points &contour = poly_with_offset.contour(iContour).points;
-            size_t iSegment = sil.intersections[i].iSegment;
-            size_t iPrev    = ((iSegment == 0) ? contour.size() : iSegment) - 1;
-            coord_t dir = contour[iSegment](0) - contour[iPrev](0);
-            bool low = dir > 0;
-            sil.intersections[i].type = poly_with_offset.is_contour_outer(iContour) ? 
+            SegmentIntersection       &is       = sil.intersections[i];
+            const size_t               iContour = is.iContour;
+            const Points              &contour  = poly_with_offset.contour(iContour).points;
+            const size_t               iSegment = is.iSegment;
+            const size_t               iPrev    = prev_idx_modulo(iSegment, contour);
+            const coord_t              dir      = contour[iSegment].x() - contour[iPrev].x();
+            const bool                 low      = dir > 0;
+            is.type = poly_with_offset.is_contour_outer(iContour) ?
                 (low ? SegmentIntersection::OUTER_LOW : SegmentIntersection::OUTER_HIGH) :
                 (low ? SegmentIntersection::INNER_LOW : SegmentIntersection::INNER_HIGH);
-            if (j > 0 && sil.intersections[i].iContour == sil.intersections[j-1].iContour) {
-                // Two successive intersection points on a vertical line with the same contour. This may be a special case.
-                if (sil.intersections[i].pos() == sil.intersections[j-1].pos()) {
-                    // Two successive segments meet exactly at the vertical line.
-        #ifdef SLIC3R_DEBUG
-                    // Verify that the segments of sil.intersections[i] and sil.intersections[j-1] are adjoint.
-                    size_t iSegment2 = sil.intersections[j-1].iSegment;
-                    size_t iPrev2    = ((iSegment2 == 0) ? contour.size() : iSegment2) - 1;
-                    assert(iSegment == iPrev2 || iSegment2 == iPrev);
-        #endif /* SLIC3R_DEBUG */
-                    if (sil.intersections[i].type == sil.intersections[j-1].type) {
+            bool take_next = true;
+            if (j > 0) {
+                SegmentIntersection &is2 = sil.intersections[j - 1];
+                if (iContour == is2.iContour && is.pos_q == 1 && is2.pos_q == 1) {
+                    // Two successive intersection points on a vertical line with the same contour, both points are end points of their respective contour segments.
+                    if (is.pos_p == is2.pos_p) {
+                        // Two successive segments meet exactly at the vertical line.
+                        // Verify that the segments of sil.intersections[i] and sil.intersections[j-1] are adjoint.
+                        assert(iSegment == prev_idx_modulo(is2.iSegment, contour) || is2.iSegment == iPrev);
+                        assert(is.type == is2.type);
                         // Two successive segments of the same direction (both to the right or both to the left)
                         // meet exactly at the vertical line.
                         // Remove the second intersection point.
-                    } else {
-                        // This is a loop returning to the same point.
-                        // It may as well be a vertex of a loop touching this vertical line.
-                        // Remove both the lines.
-                        -- j;
+                        take_next = false;
+                    } else if (is.type == is2.type) {
+                        // Two non successive segments of the same direction (both to the right or both to the left)
+                        // meet exactly at the vertical line. That means there is a Z shaped path, where the center segment
+                        // of the Z shaped path is aligned with this vertical line.
+                        // Remove one of the intersection points while maximizing the vertical segment length.
+                        if (low) {
+                            // Remove the second intersection point, keep the first intersection point.
+                        } else {
+                            // Remove the first intersection point, keep the second intersection point.
+                            sil.intersections[j-1] = sil.intersections[i];
+                        }
+                        take_next = false;
                     }
-                } else if (sil.intersections[i].type == sil.intersections[j-1].type) {
-                    // Two non successive segments of the same direction (both to the right or both to the left)
-                    // meet exactly at the vertical line. That means there is a Z shaped path, where the center segment
-                    // of the Z shaped path is aligned with this vertical line.
-                    // Remove one of the intersection points while maximizing the vertical segment length.
-                    if (low) {
-                        // Remove the second intersection point, keep the first intersection point.
-                    } else {
-                        // Remove the first intersection point, keep the second intersection point.
-                        sil.intersections[j-1] = sil.intersections[i];
-                    }
-                } else {
-                    // Vertical line intersects a contour segment at a general position (not at one of its end points).
-                    // or the contour just touches this vertical line with a vertical segment or a sequence of vertical segments.
-                    // Keep both intersection points.
-                    if (j < i)
-                        sil.intersections[j] = sil.intersections[i];
-                    ++ j;
                 }
-            } else {
+            }
+            if (take_next) {
                 // Vertical line intersects a contour segment at a general position (not at one of its end points).
                 if (j < i)
                     sil.intersections[j] = sil.intersections[i];
@@ -905,7 +907,13 @@ static std::vector<SegmentedIntersectionLine> slice_region_by_vertical_lines(con
     }
 
     // Verify the segments. If something is wrong, give up.
-#define ASSERT_THROW(CONDITION) do { assert(CONDITION); if (! (CONDITION)) throw InfillFailedException(); } while (0)
+#ifdef INFILL_DEBUG_OUTPUT
+    #define INFILL_DEBUG_ASSERT(CONDITION)
+    try {
+#else // INFILL_DEBUG_OUTPUT
+    #define INFILL_DEBUG_ASSERT(CONDITION) assert(CONDITION)
+#endif // INFILL_DEBUG_OUTPUT
+#define ASSERT_THROW(CONDITION) do { INFILL_DEBUG_ASSERT(CONDITION); if (! (CONDITION)) throw InfillFailedException(); } while (0)
     for (size_t i_seg = 0; i_seg < segs.size(); ++ i_seg) {
         SegmentedIntersectionLine &sil = segs[i_seg];
         // The intersection points have to be even.
@@ -925,6 +933,56 @@ static std::vector<SegmentedIntersectionLine> slice_region_by_vertical_lines(con
         }
     }
 #undef ASSERT_THROW
+#undef INFILL_DEBUG_ASSERT
+#ifdef INFILL_DEBUG_OUTPUT
+    } catch (const InfillFailedException & /* ex */) {
+        // Export the buggy result into an SVG file.
+        static int iRun = 0;
+        BoundingBox bbox = get_extents(poly_with_offset.polygons_src);
+        bbox.offset(scale_(3.));
+        ::Slic3r::SVG svg(debug_out_path("slice_region_by_vertical_lines-failed-%d.svg", iRun ++), bbox);
+        svg.draw(poly_with_offset.polygons_src);
+        svg.draw_outline(poly_with_offset.polygons_src, "green");
+        svg.draw_outline(poly_with_offset.polygons_outer, "green");
+        svg.draw_outline(poly_with_offset.polygons_inner, "green");
+        for (size_t i_seg = 0; i_seg < segs.size(); ++i_seg) {
+            SegmentedIntersectionLine &sil = segs[i_seg];
+            for (size_t i = 0; i < sil.intersections.size();) {
+                // An intersection segment crossing the bigger contour may cross the inner offsetted contour even number of times.
+                if (sil.intersections[i].type != SegmentIntersection::OUTER_LOW) {
+                    svg.draw(Point(sil.pos, sil.intersections[i].pos()), "red");
+                    break;
+                }
+                size_t j = i + 1;
+                if (j == sil.intersections.size()) {
+                    svg.draw(Point(sil.pos, sil.intersections[i].pos()), "magenta");
+                    break;
+                }
+                if (! (sil.intersections[j].type == SegmentIntersection::INNER_LOW || sil.intersections[j].type == SegmentIntersection::OUTER_HIGH)) {
+                    svg.draw(Point(sil.pos, sil.intersections[j].pos()), "blue");
+                    break;
+                }
+                for (; j < sil.intersections.size() && sil.intersections[j].is_inner(); ++j);
+                if (j == sil.intersections.size()) {
+                    svg.draw(Point(sil.pos, sil.intersections[j - 1].pos()), "magenta");
+                    break;
+                }
+                if ((j & 1) != 1 || sil.intersections[j].type != SegmentIntersection::OUTER_HIGH) {
+                    svg.draw(Point(sil.pos, sil.intersections[j].pos()), "red");
+                    break;
+                }
+                if (! (i + 1 == j || sil.intersections[j - 1].type == SegmentIntersection::INNER_HIGH)) {
+                    svg.draw(Point(sil.pos, sil.intersections[j].pos()), "red");
+                    break;
+                }
+                svg.draw(Line(Point(sil.pos, sil.intersections[i].pos()), Point(sil.pos, sil.intersections[j].pos())), "black");
+                i = j + 1;
+            }
+        }
+        assert(false);
+        throw;
+    }
+#endif //INFILL_DEBUG_OUTPUT
 
     return segs;
 }
