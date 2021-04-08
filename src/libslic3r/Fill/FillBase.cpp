@@ -1823,63 +1823,129 @@ static inline void emit_loops_in_band(
         Left,
         Right,
         Mid,
+        Unknown
     };
-    auto side = [left, right](const Point *p) {
+
+    enum InOutBand {
+        Entering, 
+        Leaving,
+    };
+
+    class State {
+    public:
+        State(coord_t left, coord_t right, double min_length, Polylines &polylines_out) : 
+            m_left(left), m_right(right), m_min_length(min_length), m_polylines_out(polylines_out) {}
+
+        void add_inner_point(const Point* p)
+        {
+            m_polyline.points.emplace_back(*p);
+        }
+
+        void add_outer_point(const Point* p)
+        {
+            if (m_polyline_end > 0)
+                m_polyline.points.emplace_back(*p);
+        }
+
+        void add_interpolated_point(const Point* p1, const Point* p2, Side side, InOutBand inout)
+        {
+            assert(side == Left || side == Right);
+
+            coord_t x = side == Left ? m_left : m_right;
+            coord_t y = p1->y() + coord_t(double(x - p1->x()) * double(p2->y() - p1->y()) / double(p2->x() - p1->x()));
+
+            if (inout == Leaving) {
+                assert(m_polyline_end == 0);
+                m_polyline_end = m_polyline.size();
+                m_polyline.points.emplace_back(x, y);
+            } else {
+                assert(inout == Entering);
+                if (m_polyline_end > 0) {
+                    if ((this->side1 == Left) == (y - m_polyline.points[m_polyline_end].y() < 0)) {
+                        // Emit the vertical segment. Remove the point, where the source contour was split the last time at m_left / m_right.
+                        m_polyline.points.erase(m_polyline.points.begin() + m_polyline_end);
+                    } else {
+                        // Don't emit the vertical segment, split the contour.
+                        this->finalize();
+                        m_polyline.points.emplace_back(x, y);
+                    }
+                    m_polyline_end = 0;
+                } else
+                    m_polyline.points.emplace_back(x, y);
+            }
+        };
+
+        void finalize()
+        {
+            m_polyline.points.erase(m_polyline.points.begin() + m_polyline_end, m_polyline.points.end());
+            if (! m_polyline.empty()) {
+                if (! m_polylines_out.empty() && (m_polylines_out.back().points.back() - m_polyline.points.front()).cast<int64_t>().squaredNorm() < SCALED_EPSILON)
+                    m_polylines_out.back().points.insert(m_polylines_out.back().points.end(), m_polyline.points.begin() + 1, m_polyline.points.end());
+                else if (m_polyline.length() > m_min_length)
+                    m_polylines_out.emplace_back(std::move(m_polyline));
+                m_polyline.clear();
+            }
+        };
+
+    private:
+        coord_t      m_left;
+        coord_t      m_right;
+        double       m_min_length;
+        Polylines   &m_polylines_out;
+
+        Polyline     m_polyline;
+        size_t       m_polyline_end { 0 };
+        Polyline     m_overlapping;
+
+    public:
+        Side         side1 { Unknown };
+        Side         side2 { Unknown };
+    };
+
+    State state { left, right, min_length, polylines_out };
+
+    const Point *p1 = &pbegin;
+    auto side = [left, right](const Point* p) {
         coord_t x = p->x();
         return x < left ? Left : x > right ? Right : Mid;
     };
-    const Point *p1    = &pbegin;
-    Side         side1 = side(p1);
-    Polyline     polyline;
-    auto add_interpolated_point = [&polyline, left, right](const Point *p1, const Point *p2, Side side) {
-        assert(side == Left || side == Right);
-        coord_t x = side == Left ? left : right;
-        coord_t y = p1->y() + coord_t(double(x - p1->x()) * double(p2->y() - p1->y()) / double(p2->x() - p1->x()));
-        polyline.points.emplace_back(x, y);
-    };
-    auto finalize_polyline = [&polylines_out, &polyline, min_length]() {
-        if (! polyline.empty()) {
-            if (! polylines_out.empty() && (polylines_out.back().points.back() - polyline.points.front()).cast<int64_t>().squaredNorm() < SCALED_EPSILON)
-                polylines_out.back().points.insert(polylines_out.back().points.end(), polyline.points.begin() + 1, polyline.points.end());
-            else if (polyline.length() > min_length)
-                polylines_out.emplace_back(std::move(polyline));
-            polyline.clear();
-        }
-    };
+    state.side1 = side(p1);
+    if (state.side1 == Mid)
+        state.add_inner_point(p1);
+
     for (size_t i = ibegin; i != iend; ) {
         size_t inext = i + 1;
         if (inext == contour.size())
             inext = 0;
-        const Point *p2    = inext == iend ? &pend : &contour[inext];
-        Side         side2 = side(p2);
-        assert(side1 == Mid || polyline.empty());
-        if (side1 == Mid) {
-            if (polyline.empty())
-                polyline.points.emplace_back(*p1);
-            else
-                assert(polyline.points.back() == *p1);
-            if (side2 == Mid)
-                polyline.points.emplace_back(*p2);
-            else {
-                add_interpolated_point(p1, p2, side2);
-                finalize_polyline();
+        const Point *p2 = inext == iend ? &pend : &contour[inext];
+        state.side2 = side(p2);
+        if (state.side1 == Mid) {
+            if (state.side2 == Mid) {
+                // Inside the band.
+                state.add_inner_point(p2);
+            } else {
+                // From intisde the band to the outside of the band.
+                state.add_interpolated_point(p1, p2, state.side2, Leaving);
+                state.add_outer_point(p2);
             }
-        } else if (side2 == Mid) {
-            add_interpolated_point(p1, p2, side1);
-            polyline.points.emplace_back(*p2);
-        } else if (side1 != side2) {
-            add_interpolated_point(p1, p2, side1);
-            add_interpolated_point(p1, p2, side2);
-            finalize_polyline();
+        } else if (state.side2 == Mid) {
+            // From outside the band into the band.
+            state.add_interpolated_point(p1, p2, state.side1, Entering);
+            state.add_inner_point(p2);
+        } else if (state.side1 != state.side2) {
+            // Both points outside the band.
+            state.add_interpolated_point(p1, p2, state.side1, Entering);
+            state.add_interpolated_point(p1, p2, state.side2, Leaving);
         } else {
-            // Complete segment is outside, do nothing.
-            assert((side1 == Left && side2 == Left) || (side1 == Right && side2 == Right));
+            // Complete segment is outside.
+            assert((state.side1 == Left && state.side2 == Left) || (state.side1 == Right && state.side2 == Right));
+            state.add_outer_point(p2);
         }
-        p1    = p2;
-        side1 = side2;
-        i     = inext;
+        state.side1 = state.side2;
+        p1 = p2;
+        i  = inext;
     }
-    finalize_polyline();
+    state.finalize();
 }
 
 #ifdef INFILL_DEBUG_OUTPUT
@@ -1964,7 +2030,7 @@ static inline std::vector<SupportArcCost> evaluate_support_arches(Polylines &inf
         out_next.self_loop = cp.next_on_contour == other_end;
         out_next.open      = cp.next_trimmed;
 
-        if (cp.could_take_next()) {
+        if (cp.contour_not_taken_length_next > SCALED_EPSILON) {
             pl.clear();
             pl.points.emplace_back(graph.point(cp));
             if (cp.next_trimmed)
@@ -1974,7 +2040,7 @@ static inline std::vector<SupportArcCost> evaluate_support_arches(Polylines &inf
             out_next.cost = evaluate_support_arch_cost(pl);
         }
 
-        if (cp.could_take_prev()) {
+        if (cp.contour_not_taken_length_prev > SCALED_EPSILON) {
             pl.clear();
             pl.points.emplace_back(graph.point(cp));
             if (cp.prev_trimmed)
@@ -2045,20 +2111,11 @@ void Fill::connect_base_support(Polylines &&infill_ordered, const std::vector<co
             bool    first    = graph.first(cp);
             coord_t left     = graph.point(cp).x();
             coord_t right    = left;
-            bool    vertical = graph.point(cp).x() == graph.point(*cp.next_on_contour).x();
             if (first) {
-                // Bottom point of a vertical infill line, cp.next_on_contour points right.
                 left  += line_half_width;
-                if (vertical)
-                    right = bbox.max.x() + line_half_width * 2;
-                else
-                    right += line_spacing - line_half_width;
+                right += line_spacing - line_half_width;
             } else {
-                // Top point of a vertical infill line, cp.next_on_contour points left.
-                if (vertical)
-                    left = bbox.min.x() - line_half_width * 2;
-                else
-                    left -= line_spacing - line_half_width;
+                left  -= line_spacing - line_half_width;
                 right -= line_half_width;
             }
             double param_start    = cp.param + cp.contour_not_taken_length_next;
