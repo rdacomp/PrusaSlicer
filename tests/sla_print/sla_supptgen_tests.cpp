@@ -232,7 +232,7 @@ Slic3r::Polygon create_V_shape(double height, double line_width, double angle = 
 ExPolygon create_tiny_wide_test(double wide, double tiny)
 {
     double hole_size = wide;
-    double width     = (2 + 1) * wide + 2 * hole_size;
+    double width     = (3 + 1) * wide + 3 * hole_size;
     double height    = wide + 2*tiny + 2*hole_size;
     auto outline = PolygonUtils::create_rect( width, height);
     auto   hole      = PolygonUtils::create_rect(hole_size, hole_size);
@@ -241,14 +241,21 @@ ExPolygon create_tiny_wide_test(double wide, double tiny)
     auto  hole3       = hole; // copy
     auto  hole4       = hole; // copy
 
-    int   hole_move_x = wide / 2 + hole_size / 2;
+    int   hole_move_x = wide + hole_size;
     int   hole_move_y = wide / 2 + hole_size / 2;
-    hole.translate({hole_move_x, hole_move_y});
-    hole2.translate({-hole_move_x, hole_move_y});
-    hole3.translate({hole_move_x, -hole_move_y});
-    hole4.translate({-hole_move_x, -hole_move_y});
+    hole.translate(hole_move_x, hole_move_y);
+    hole2.translate(-hole_move_x, hole_move_y);
+    hole3.translate(hole_move_x, -hole_move_y);
+    hole4.translate(-hole_move_x, -hole_move_y);
+
+    auto hole5 = PolygonUtils::create_circle(hole_size / 2, 16);
+    hole5.reverse();
+    auto hole6 = hole5; // copy
+    hole5.translate(0, hole_move_y);
+    hole6.translate(0, -hole_move_y);
+
     ExPolygon result(outline);
-    result.holes = {hole, hole2, hole3, hole4};
+    result.holes = {hole, hole2, hole3, hole4, hole5, hole6};
     return result;
 }
 
@@ -285,6 +292,9 @@ ExPolygons createTestIslands(double size)
         ExPolygon(create_cross_roads(size, size / 3)),
         create_disc(3*size, size / 4, 30),
         create_square_with_4holes(5 * size, 5 * size / 2 - size / 3),
+
+        // Tiny and wide part together with holes
+        create_tiny_wide_test(3 * size, 2 / 3. * size),
 
         // still problem
         // three support points

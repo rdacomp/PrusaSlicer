@@ -248,8 +248,8 @@ public:
 
         // same size as polygon.points.size()
         // indexes to source island lines 
-        // in case (index == -1) it means fill the gap from tiny part of island
-        std::vector<size_t> source_indexes; 
+        // in case (index > lines.size()) it means fill the gap from tiny part of island
+        std::vector<size_t> source_indexes;
     };
 
 

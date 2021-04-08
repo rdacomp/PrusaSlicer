@@ -18,6 +18,10 @@
 
 // comment definition of NDEBUG to enable assert()
 // #define NDEBUG
+
+#define SLA_SAMPLING_STORE_FIELD_TO_SVG
+#define SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
+
 #include <cassert>
 
 using namespace Slic3r::sla;
@@ -747,6 +751,15 @@ SupportIslandPoints SampleIslandUtils::sample_voronoi_graph(
     assert(start_node != nullptr);
     longest_path = VoronoiGraphUtils::create_longest_path(start_node);
     // longest_path = create_longest_path_recursive(start_node);
+
+#ifdef SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
+    {
+        static int counter=0;
+        SVG svg("voronoiGraph"+std::to_string(counter++)+".svg", LineUtils::create_bounding_box(lines));
+        LineUtils::draw(svg, lines, "black",0., true);
+        VoronoiGraphUtils::draw(svg, graph, 1e6, true);
+    }
+#endif // SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
     return sample_expath(longest_path, lines, config);
 }
 
@@ -758,7 +771,8 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
 
-    // DTO represents one island change from tiny part to wide part
+    // DTO represents one island change from wide to tiny part
+    // it is stored inside map under source line index
     struct WideTinyChange{
         // new coordinate for line.b point
         Point new_b;
@@ -772,11 +786,24 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
             , next_new_a(next_new_a)
             , next_line_index(next_line_index)
         {}
+
+        // is used only when multi wide tiny change are on same Line
+        struct SortFromAToB
+        {
+            LineUtils::SortFromAToB compare;
+            SortFromAToB(const Line &line) : compare(line) {}            
+            bool operator()(const WideTinyChange &left,
+                            const WideTinyChange &right)
+            {
+                return compare.compare(left.new_b, right.new_b);
+            }
+        };
     };
+    using WideTinyChanges = std::vector<WideTinyChange>;
 
     // store shortening of outline segments
-    //   line index, <next line index + 2x shortening points>
-    std::map<size_t, WideTinyChange> wide_tiny_changes;
+    //   line index, vector<next line index + 2x shortening points>
+    std::map<size_t, WideTinyChanges> wide_tiny_changes;
     const coord_t min_width = config.min_width_for_outline_support;
     // cut lines at place where neighbor has width = min_width_for_outline_support
     // neighbor must be in direction from wide part to tiny part of island
@@ -788,21 +815,33 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
         const VD::edge_type *edge = neighbor->edge;
         size_t i1 = edge->cell()->source_index();
         size_t i2 = edge->twin()->cell()->source_index();
+
+        auto add = [&](const Point &p1, const Point &p2, size_t i1, size_t i2) {
+            WideTinyChange change(p1, p2, i2);
+            auto item = wide_tiny_changes.find(i1);
+            if (item == wide_tiny_changes.end()) {
+                wide_tiny_changes[i1] = {change};
+            } else {
+                WideTinyChange::SortFromAToB pred(lines[i1]);
+                VectorUtils::insert_sorted(item->second, change, pred);
+            }
+        };
         const Line &l1 = lines[i1];
         if (VoronoiGraphUtils::is_opposit_direction(edge, l1)) {
             // line1 is shorten on side line1.a --> line2 is shorten on side line2.b
-            assert(wide_tiny_changes.find(i2) == wide_tiny_changes.end());
-            wide_tiny_changes.insert({i2, WideTinyChange(p2, p1, i1)});
+            add(p2, p1, i2, i1);
         } else {
             // line1 is shorten on side line1.b
-            assert(wide_tiny_changes.find(i1) == wide_tiny_changes.end());
-            wide_tiny_changes.insert({i1, WideTinyChange(p1, p2, i2)});
+            add(p1, p2, i1, i2);
         }
     };
     const VoronoiGraph::Node::Neighbor *neighbor = field_start.neighbor;
     const VoronoiGraph::Node::Neighbor *twin_neighbor = VoronoiGraphUtils::get_twin(neighbor);
-    
-    add_wide_tiny_change(twin_neighbor);
+    // is input wide tiny change
+    // first input could be from border of Voronoi Graph
+    if (twin_neighbor->node->neighbors.size() != 1) {
+        add_wide_tiny_change(twin_neighbor);
+    }
     std::set<const VoronoiGraph::Node*> done;
     done.insert(twin_neighbor->node);
     std::queue<const VoronoiGraph::Node *> process;
@@ -841,14 +880,9 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
         } while (node != nullptr);
     }
     
+    // connection of line on island
     std::map<size_t, size_t> b_connection =
         LineUtils::create_line_connection_over_b(lines);
-    // Continue along line indexes create polygon field
-    
-    Points points;
-    points.reserve(field_line_indexes.size());
-    std::vector<size_t> outline_indexes;
-    outline_indexes.reserve(field_line_indexes.size());
 
     auto inser_point_b = [&](size_t& index, Points& points, std::set<size_t>& done)
     {
@@ -859,23 +893,60 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
         done.insert(index);
         index = connection_item->second;
     };
+    
+    Points points;
+    points.reserve(field_line_indexes.size());
+    std::vector<size_t> outline_indexes;
+    outline_indexes.reserve(field_line_indexes.size());
 
     size_t input_index = neighbor->edge->cell()->source_index();
     size_t outline_index = input_index;
     std::set<size_t> done_indexes;
+    std::vector<size_t> source_indexes;
+    size_t source_indexe_for_change = lines.size();
+    // Continue along line indexes and create polygon field
     do {
-        const auto &change_item = wide_tiny_changes.find(outline_index);
-        if (change_item != wide_tiny_changes.end()) { 
-            const WideTinyChange &change = change_item->second;
-            points.push_back(change.new_b);
-            points.push_back(change.next_new_a);
+        auto change_item = wide_tiny_changes.find(outline_index);
+        while(change_item != wide_tiny_changes.end()) { 
+            const WideTinyChanges &changes = change_item->second;
+            assert(!changes.empty());
+            size_t change_index = 0;
+            if (!points.empty()) {
+                const Point &last_point = points.back();
+                LineUtils::SortFromAToB pred(lines[outline_index]);
+                bool no_change = false;
+                while (pred.compare(changes[change_index].new_b, last_point)) {
+                    ++change_index;
+                    if (change_index >= changes.size()) {
+                        no_change = true;
+                        break;
+                    }
+                }
+                if (no_change) break;
+            }
+            const WideTinyChange& change = changes[change_index];            
+            // prevent double points
+            if (points.empty() || !PointUtils::is_equal(points.back(),change.new_b)){
+                points.push_back(change.new_b);
+                source_indexes.push_back(source_indexe_for_change);
+            } else {
+                source_indexes.back() = source_indexe_for_change;
+            }
+            // prevent double points
+            if (!PointUtils::is_equal(lines[change.next_line_index].b, change.next_new_a)){
+                points.push_back(change.next_new_a);
+                source_indexes.push_back(change.next_line_index);
+            } 
             done_indexes.insert(outline_index);
             outline_index = change.next_line_index;
+            change_item   = wide_tiny_changes.find(outline_index);
         }
         inser_point_b(outline_index, points, done_indexes);
+        source_indexes.push_back(outline_index);
     } while (outline_index != input_index);
 
     Field field;
+    field.source_indexes = std::move(source_indexes);
     field.border.contour = Polygon(points);
     // finding holes
     if (done_indexes.size() < field_line_indexes.size()) {
@@ -890,6 +961,36 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
             field.border.holes.emplace_back(hole_points);
         }
     }
+
+#ifdef SLA_SAMPLING_STORE_FIELD_TO_SVG
+    {
+        bool draw_border_line_indexes = false;
+        bool draw_source_line_indexes = true;
+        bool draw_field_source_indexes = true;
+        const char *field_color = "red";
+        const char *source_line_color = "black";
+        const char *border_line_color = "blue";
+
+        static int counter = 0;
+        std::string file_name = "field_" + std::to_string(counter++) + ".svg";
+
+        SVG svg(file_name, LineUtils::create_bounding_box(lines));
+        svg.draw(field.border, field_color);
+        LineUtils::draw(svg,lines, source_line_color,0., draw_source_line_indexes);
+        Lines border_lines = to_lines(field.border);
+        LineUtils::draw(svg, border_lines, border_line_color, 0., draw_border_line_indexes);
+        if (draw_field_source_indexes)
+            for (auto &line : border_lines) {
+                size_t index = &line - &border_lines.front();
+                // start of holes
+                if (index >= field.source_indexes.size()) break;
+                Point  middle_point = (line.a + line.b) / 2;
+                std::string text = std::to_string(field.source_indexes[index]);
+                svg.draw_text(middle_point, text.c_str(), field_color);
+            }
+    }
+#endif //SLA_SAMPLING_STORE_FIELD_TO_SVG
+
     return field;
 }
 

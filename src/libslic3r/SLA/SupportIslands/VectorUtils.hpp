@@ -123,6 +123,21 @@ public:
         }
     }
 
+    /// <summary>
+    /// Insert item into sorted vector of items
+    /// </summary>
+    /// <param name="data">Sorted vector with items</param>
+    /// <param name="item">Item to insert</param>
+    /// <param name="pred">Predicate for sorting</param>
+    /// <returns>now inserted item</returns>
+    template<typename T, typename Pred>
+    static typename std::vector<T>::iterator insert_sorted(
+        std::vector<T> &data, const T &item, Pred pred)
+    {
+        auto iterator = std::upper_bound(data.begin(), data.end(), item, pred);
+        return data.insert(iterator, item);
+    }
+
 };
 
 } // namespace Slic3r::sla

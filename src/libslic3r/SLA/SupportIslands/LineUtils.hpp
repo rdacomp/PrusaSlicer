@@ -7,6 +7,7 @@
 #include <map>
 #include <libslic3r/Line.hpp>
 #include <libslic3r/SVG.hpp>
+#include "PointUtils.hpp"
 
 namespace Slic3r::sla {
 
@@ -141,6 +142,41 @@ public:
     /// <param name="lines">Lines created from ExPolygon</param>
     /// <returns>map of connected lines over point line::b</returns>
     static std::map<size_t, size_t> create_line_connection_over_b(const Lines &lines);
+
+    /// <summary>
+    /// Comparator to sort points laying on line from point a to point b
+    /// </summary>
+    struct SortFromAToB
+    {
+        std::function<bool(const Point &, const Point &)> compare;
+        SortFromAToB(const Line &line)
+        {
+            Point dir = LineUtils::direction(line);
+            compare   = (PointUtils::is_majorit_x(dir)) ?
+                            ((dir.x() < 0) ? is_x_grater : is_x_smaller) :
+                            ((dir.y() < 0) ? is_y_grater : is_y_smaller);
+        }
+        static bool is_x_grater(const Point &left, const Point &right)
+        {
+            return left.x() > right.x();
+        }
+        static bool is_x_smaller(const Point &left, const Point &right)
+        {
+            return left.x() < right.x();
+        }
+        static bool is_y_grater(const Point &left, const Point &right)
+        {
+            return left.y() > right.y();
+        }
+        static bool is_y_smaller(const Point &left, const Point &right)
+        {
+            return left.y() < right.y();
+        }
+        bool operator()(const Point &left, const Point &right)
+        {
+            return compare(left, right);
+        }
+    };
 
     static void draw(SVG &       svg,
                      const Line &line,
