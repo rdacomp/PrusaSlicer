@@ -63,6 +63,8 @@ public:
         result.min_width_for_outline_support = result.max_width_for_center_support_line - 2 * config.head_diameter;
         assert(result.min_width_for_outline_support >= result.max_width_for_center_support_line);
 
+        result.outline_sample_distance = result.max_distance;
+
         // Align support points
         // TODO: propagate print resolution
         result.minimal_move = 1000; // [in nanometers], devide from print resolution to quater pixel

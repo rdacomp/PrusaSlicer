@@ -49,6 +49,10 @@ struct SampleConfig
 
     // Maximal count of align iteration
     size_t count_iteration = 100;
+    
+    // Sample outline of Field by this value
+    // Less than max_distance
+    coord_t outline_sample_distance = 2; 
 
     // Maximal distance over Voronoi diagram edges to find closest point during aligning Support point
     coord_t max_align_distance = 0.;

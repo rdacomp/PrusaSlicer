@@ -1177,6 +1177,10 @@ void VoronoiGraphUtils::draw(SVG &                       svg,
     draw(svg, path.nodes, width, mainPathColor);
 }
 
+bool VoronoiGraphUtils::is_last_neighbor(const VoronoiGraph::Node::Neighbor *neighbor)
+{
+    return (neighbor->node->neighbors.size() == 1);
+}
 
 void VoronoiGraphUtils::draw(const Polygon &polygon,
                              const Lines &  lines,

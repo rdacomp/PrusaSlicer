@@ -2,6 +2,7 @@
 #define slic3r_SLA_SuppotstIslands_SampleIslandUtils_hpp_
 
 #include <vector>
+#include <optional>
 
 #include <libslic3r/Geometry.hpp>
 #include <libslic3r/Point.hpp>
@@ -173,12 +174,6 @@ public:
     /// <returns>Distance move of original point</returns>
     static coord_t align_support(SupportIslandPoint &support, const Point &wanted, double max_distance);
 
-    static void draw(SVG &                      svg,
-                     const SupportIslandPoints &supportIslandPoints,
-                     double      size,
-                     const char *color = "lightgreen",
-                     bool write_type    = true);
-
     /// <summary>
     /// DTO hold information for start sampling VD in center
     /// </summary>
@@ -201,26 +196,7 @@ public:
     using CenterStarts = std::queue<CenterStart>;
 
     /// <summary>
-    /// DTO extend VG neighbor with information about last sample
-    /// </summary>
-    struct FieldStart
-    {
-        // define edge where start field
-        const VoronoiGraph::Node::Neighbor *neighbor = nullptr;
-
-        // distance to last support
-        // when last support lay on neighbor edge it is negative value
-        coord_t last_support = 0; // [nano meters]
-
-        FieldStart() = default;
-        FieldStart(const VoronoiGraph::Node::Neighbor *neighbor,
-                   coord_t                             last_support)
-            : neighbor(neighbor), last_support(last_support)
-        {}
-    };
-
-    /// <summary>
-    /// Sample VG in center.
+    /// Sample VG in center --> sample tiny part of island
     /// Detection of wide neighbor which start field
     /// Creating of new starts (from VG cross -> multi neighbors)
     /// </summary>
@@ -228,17 +204,19 @@ public:
     /// <param name="config">Parameters for sampling</param>
     /// <param name="done">Already done nodes</param>
     /// <param name="results">Result of sampling</param>
+    /// <param name="liness">Source line for VD. To decide position of change from tiny to wide part</param>
     /// <param name="field_start">Output: Wide neighbor, start of field</param>
     /// <returns>New start of sampling</returns>
-    static std::vector<CenterStart> sample(
+    static std::vector<CenterStart> sample_center(
         const CenterStart &                   start,
         const SampleConfig &                  config,
         std::set<const VoronoiGraph::Node *> &done,
         SupportIslandPoints &                 results,
-        FieldStart&        field_start);
+        const Lines &lines,
+        std::optional<VoronoiGraph::Position> &field_start);
 
     /// <summary>
-    /// DTO represents area to sample
+    /// DTO represents Wide parts of island to sample
     /// extend polygon with information about source lines
     /// </summary>
     struct Field
@@ -250,22 +228,60 @@ public:
         // indexes to source island lines 
         // in case (index > lines.size()) it means fill the gap from tiny part of island
         std::vector<size_t> source_indexes;
+        // value for source index of change from wide to tiny part of island
+        size_t              source_indexe_for_change;
     };
 
+    /// <summary>
+    /// Create & sample field -- wide part of island
+    /// </summary>
+    /// <param name="field_start">Start neighbor, first occur of wide neighbor.</param>
+    /// <param name="tiny_starts">Append new founded tiny parts of island.</param>
+    /// <param name="tiny_done">Already sampled node sets. Filled only node inside field imediate after change</param>
+    /// <param name="lines">Source lines for VG --> outline of island.</param>
+    /// <param name="config">Containe Minimal width in field and sample distance for center line</param>
+    static void sample_field(VoronoiGraph::Position &field_start,
+                             SupportIslandPoints &   points,
+                             CenterStarts &          center_starts,
+                             std::set<const VoronoiGraph::Node *> &done,
+                             const Lines &                         lines,
+                             const SampleConfig &                  config);
 
     /// <summary>
     /// Create field from input neighbor
     /// </summary>
     /// <param name="field_start">Start neighbor, first occur of wide neighbor.</param>
     /// <param name="tiny_starts">Append new founded tiny parts of island.</param>
+    /// <param name="tiny_done">Already sampled node sets. Filled only node inside field imediate after change</param>
     /// <param name="lines">Source lines for VG --> outline of island.</param>
-    /// <param name="config">Parameters for sampling.</param>
+    /// <param name="config">Containe Minimal width in field and sample distance for center line</param>
     /// <returns>New created field</returns>
-    static Field create_field(const FieldStart & field_start,
-                              CenterStarts &tiny_starts,
-                              const Lines & lines,
+    static Field create_field(const VoronoiGraph::Position &field_start,
+                              CenterStarts &    tiny_starts,
+                              std::set<const VoronoiGraph::Node *> &tiny_done,
+                              const Lines &     lines,
                               const SampleConfig &config);
 
+    /// <summary>
+    /// create support points on border of field
+    /// </summary>
+    /// <param name="field">Input field</param>
+    /// <param name="config">Parameters for sampling.</param>
+    /// <returns>support for outline</returns>
+    static SupportIslandPoints sample_outline(const Field &       field,
+                                              const SampleConfig &config);
+
+    // debug draw functions
+    static void draw(SVG &        svg,
+                     const Field &field,
+                     bool         draw_border_line_indexes  = false,
+                     bool         draw_field_source_indexes = true);
+
+    static void draw(SVG &                      svg,
+                     const SupportIslandPoints &supportIslandPoints,
+                     double      size,
+                     const char *color = "lightgreen",
+                     bool write_type    = true);
 };
 
 } // namespace Slic3r::sla

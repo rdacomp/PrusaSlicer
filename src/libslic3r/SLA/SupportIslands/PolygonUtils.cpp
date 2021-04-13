@@ -29,9 +29,9 @@ Slic3r::Polygon PolygonUtils::create_regular(size_t       count_points,
 
 Slic3r::Polygon PolygonUtils::create_equilateral_triangle(double edge_size)
 {
-    return {{.0, .0},
-            {edge_size, .0},
-            {edge_size / 2., sqrt(edge_size * edge_size - edge_size * edge_size / 4)}};
+    coord_t x = edge_size / 2;
+    coord_t y = sqrt(edge_size * edge_size - edge_size * edge_size / 4) / 2;
+    return {{-x, -y}, {x, -y}, {0, y}};
 }
 
 Slic3r::Polygon PolygonUtils::create_isosceles_triangle(double side, double height)

@@ -233,7 +233,7 @@ ExPolygon create_tiny_wide_test(double wide, double tiny)
 {
     double hole_size = wide;
     double width     = (3 + 1) * wide + 3 * hole_size;
-    double height    = wide + 2*tiny + 2*hole_size;
+    double height    = 2*wide + 2*tiny + 3*hole_size;
     auto outline = PolygonUtils::create_rect( width, height);
     auto   hole      = PolygonUtils::create_rect(hole_size, hole_size);
     hole.reverse();
@@ -242,7 +242,7 @@ ExPolygon create_tiny_wide_test(double wide, double tiny)
     auto  hole4       = hole; // copy
 
     int   hole_move_x = wide + hole_size;
-    int   hole_move_y = wide / 2 + hole_size / 2;
+    int   hole_move_y = wide + hole_size;
     hole.translate(hole_move_x, hole_move_y);
     hole2.translate(-hole_move_x, hole_move_y);
     hole3.translate(hole_move_x, -hole_move_y);
@@ -254,8 +254,15 @@ ExPolygon create_tiny_wide_test(double wide, double tiny)
     hole5.translate(0, hole_move_y);
     hole6.translate(0, -hole_move_y);
 
+    auto hole7 = PolygonUtils::create_equilateral_triangle(hole_size);
+    hole7.reverse();
+    auto hole8 = PolygonUtils::create_circle(hole_size/2, 7, Point(hole_move_x,0));
+    hole8.reverse();
+    auto hole9 = PolygonUtils::create_circle(hole_size/2, 5, Point(-hole_move_x,0));
+    hole9.reverse();
+
     ExPolygon result(outline);
-    result.holes = {hole, hole2, hole3, hole4, hole5, hole6};
+    result.holes = {hole, hole2, hole3, hole4, hole5, hole6, hole7, hole8, hole9};
     return result;
 }
 
@@ -426,6 +433,7 @@ SampleConfig create_sample_config(double size) {
     cfg.max_length_for_two_support_points = 4*size;
     cfg.max_width_for_center_support_line = size;
     cfg.min_width_for_outline_support = cfg.max_width_for_center_support_line;
+    cfg.outline_sample_distance       = cfg.max_distance;
 
     cfg.minimal_move = std::max(1000., size/1000);
     cfg.count_iteration = 100; 

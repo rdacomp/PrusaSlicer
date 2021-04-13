@@ -31,10 +31,10 @@ public:
     static bool is_majorit_x(const Vec2d &point);
 
     /// <summary>
-    /// Create perpendicular vector 
+    /// Create perpendicular vector[-y,x] 
     /// </summary>
     /// <param name="vector">input vector from zero to point coordinate</param>
-    /// <returns>Perpendicular vector</returns>
+    /// <returns>Perpendicular[-vector.y, vector.x]</returns>
     static Point perp(const Point &vector);
 
     /// <summary>

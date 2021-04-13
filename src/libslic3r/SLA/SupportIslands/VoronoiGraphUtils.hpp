@@ -409,6 +409,13 @@ public:
     static double get_max_width(const VoronoiGraph::Nodes &path);
     static double get_max_width(const VoronoiGraph::Node *node);
 
+    /// <summary>
+    /// Check if neighbor is end of VG
+    /// </summary>
+    /// <param name="neighbor">Neighbor to test</param>
+    /// <returns>True when neighbor node has only one neighbor</returns>
+    static bool is_last_neighbor(const VoronoiGraph::Node::Neighbor *neighbor);
+
 public: // draw function for debug
     static void draw(SVG &svg, const VoronoiGraph &graph, coord_t width, bool pointer_caption = false);
     static void draw(SVG &                      svg,
