@@ -302,7 +302,7 @@ public:
     // helper methods to change the model
 
     unsigned int    GetColumnCount() const override { return 3;}
-    wxString        GetColumnType(unsigned int col) const override{ return wxT("string"); }
+    wxString        GetColumnType(unsigned int col) const override{ return wxT("void*"); }
 
     void GetValue(  wxVariant &variant,
                     const wxDataViewItem &item,
