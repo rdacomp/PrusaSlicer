@@ -229,7 +229,23 @@ Slic3r::Polygon create_V_shape(double height, double line_width, double angle = 
     return polygons.front();
 }
 
-ExPolygon create_tiny_wide_test(double wide, double tiny)
+ExPolygon create_tiny_wide_test_1(double wide, double tiny)
+{
+    double hole_size = wide;
+    double width     = 2 * wide + hole_size;
+    double height    = wide + hole_size + tiny;
+    auto   outline   = PolygonUtils::create_rect(width, height);
+    auto   hole      = PolygonUtils::create_rect(hole_size, hole_size);
+    hole.reverse();
+    int hole_move_y = height/2 - (hole_size/2 + tiny);
+    hole.translate(0, hole_move_y);
+    
+    ExPolygon result(outline);
+    result.holes = {hole};
+    return result;
+}
+
+ExPolygon create_tiny_wide_test_2(double wide, double tiny)
 {
     double hole_size = wide;
     double width     = (3 + 1) * wide + 3 * hole_size;
@@ -301,7 +317,9 @@ ExPolygons createTestIslands(double size)
         create_square_with_4holes(5 * size, 5 * size / 2 - size / 3),
 
         // Tiny and wide part together with holes
-        create_tiny_wide_test(3 * size, 2 / 3. * size),
+        ExPolygon(PolygonUtils::create_isosceles_triangle(5. * size, 40. * size)),
+        create_tiny_wide_test_1(3 * size, 2 / 3. * size),
+        create_tiny_wide_test_2(3 * size, 2 / 3. * size),
 
         // still problem
         // three support points

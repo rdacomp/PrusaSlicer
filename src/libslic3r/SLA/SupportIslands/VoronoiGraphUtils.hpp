@@ -162,6 +162,7 @@ public:
     /// <returns>Point from source points.</returns>
     static const Point& retrieve_point(const Points &points, const VD::cell_type &cell);
 
+private:
     /// <summary>
     /// PRIVATE: function to get parabola focus point
     /// </summary>
@@ -171,13 +172,14 @@ public:
     static Point get_parabola_point(const VD::edge_type &parabola, const Lines &lines);
 
     /// <summary>
-    /// PRIVATE:
+    /// PRIVATE: function to get parabola diretrix
     /// </summary>
-    /// <param name="parabola"></param>
-    /// <param name="lines"></param>
-    /// <returns></returns>
+    /// <param name="parabola">curved edge</param>
+    /// <param name="lines">source lines</param>
+    /// <returns>Parabola diretrix</returns>
     static Line get_parabola_line(const VD::edge_type &parabola, const Lines &lines);
 
+public:
     /// <summary>
     /// Construct parabola from curved edge
     /// </summary>
@@ -204,12 +206,31 @@ public:
 
     /// <summary>
     /// Calculate maximal distance to outline and multiply by two(must be similar on both side)
+    /// ! not used
     /// </summary>
     /// <param name="edge">Input edge.</param>
     /// <param name="lines">Source for Voronoi diagram. It contains parabola parameters</param>
     /// <returns>Maximal island width along edge</returns>
     static double calculate_max_width(const VD::edge_type &edge, const Lines &lines);
 
+    /// <summary>
+    /// Calculate width limit(min, max) and round value to coord_t
+    /// </summary>
+    /// <param name="edge">Input edge</param>
+    /// <param name="lines">Source for Voronoi diagram. It contains parabola parameters</param>
+    /// <returns>Width range for edge.
+    /// First is minimal width on edge.
+    /// Second is maximal width on edge.</returns>
+    static std::pair<coord_t, coord_t> calculate_width(const VD::edge_type &edge, const Lines &lines);
+
+private:
+    static std::pair<coord_t, coord_t> calculate_width_for_line(
+        const VD::edge_type &line_edge, const Lines &lines);
+    static std::pair<coord_t, coord_t> calculate_width_for_parabola(
+        const VD::edge_type &parabola_edge, const Lines &lines);
+    static std::pair<coord_t, coord_t> min_max_width(const VD::edge_type &edge, const Point &point);
+
+public:
     /// <summary>
     /// calculate distances to border of island and length on skeleton
     /// </summary>
@@ -405,9 +426,9 @@ public:
     /// </summary>
     /// <param name="longest_path">Input point to voronoi graph</param>
     /// <returns>Maximal widht in graph</returns>
-    static double get_max_width(const VoronoiGraph::ExPath &longest_path);
-    static double get_max_width(const VoronoiGraph::Nodes &path);
-    static double get_max_width(const VoronoiGraph::Node *node);
+    static coord_t get_max_width(const VoronoiGraph::ExPath &longest_path);
+    static coord_t get_max_width(const VoronoiGraph::Nodes &path);
+    static coord_t get_max_width(const VoronoiGraph::Node *node);
 
     /// <summary>
     /// Check if neighbor is end of VG
@@ -417,7 +438,16 @@ public:
     static bool is_last_neighbor(const VoronoiGraph::Node::Neighbor *neighbor);
 
 public: // draw function for debug
-    static void draw(SVG &svg, const VoronoiGraph &graph, coord_t width, bool pointer_caption = false);
+    static void draw(SVG &               svg,
+                     const VoronoiGraph &graph,
+                     const Lines &       lines,
+                     coord_t             width,
+                     bool                pointer_caption = false);
+    static void draw(SVG &                svg,
+                     const VD::edge_type &edge,
+                     const Lines &        lines,
+                     const char *         color,
+                     coord_t              width);
     static void draw(SVG &                      svg,
                      const VoronoiGraph::Nodes &path,
                      coord_t                    width,

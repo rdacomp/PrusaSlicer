@@ -57,22 +57,39 @@ struct VoronoiGraph::Node::Neighbor
     const VD::edge_type *edge;
     // pointer on graph node structure
     const Node *node;
+        
+    /// <summary>
+    /// DTO represents size property of one Neighbor
+    /// </summary>
+    struct Size{
+        // length edge between vertices
+        double length;
 
-    // length edge between vertices
-    double edge_length;
+        // widht is distance between outlines
+        // maximal width
+        coord_t min_width;
+        // minimal widht
+        coord_t max_width;
 
-    // maximal widht of sland(distance to outline)
-    double max_width;
+        Size(double length, coord_t min_width, coord_t max_width)
+            : length(length), min_width(min_width), max_width(max_width)
+        {}
+    };    
+    std::shared_ptr<Size> size;
 
 public:
-    Neighbor(const VD::edge_type *edge, const Node *node, double edge_length, double max_width)
+    Neighbor(const VD::edge_type * edge,
+             const Node *          node,
+             std::shared_ptr<Size> size)
         : edge(edge)
         , node(node)
-        , edge_length(edge_length)
-        , max_width(max_width)
+        , size(std::move(size))
     {}
+    // accessor to member
+    double  length() const { return size->length; }
+    coord_t min_width() const { return size->min_width; }
+    coord_t max_width() const { return size->max_width; }
 };
-
 
 /// <summary>
 /// DTO represents path over nodes of VoronoiGraph

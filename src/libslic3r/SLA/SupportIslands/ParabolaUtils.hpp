@@ -2,6 +2,7 @@
 #define slic3r_SLA_SuppotstIslands_ParabolaUtils_hpp_
 
 #include "Parabola.hpp"
+#include <libslic3r/SVG.hpp>
 
 namespace Slic3r::sla {
 
@@ -43,6 +44,20 @@ public:
     /// <param name="parabola">Input segment of parabola</param>
     /// <returns>True when interval contain top of parabola otherwise False</returns>
     static bool is_over_zero(const ParabolaSegment &parabola);
+
+    /// <summary>
+    /// Connvert parabola to svg by sampling
+    /// </summary>
+    /// <param name="svg">outputfile</param>
+    /// <param name="parabola">parabola to draw</param>
+    /// <param name="color">color</param>
+    /// <param name="width">width</param>
+    /// <param name="discretization_step">step between discretized lines</param>
+    static void draw(SVG &                  svg,
+                     const ParabolaSegment &parabola,
+                     const char *           color,
+                     coord_t                width,
+                     double                 discretization_step = 1e3);
 
 private:
     /// <summary>

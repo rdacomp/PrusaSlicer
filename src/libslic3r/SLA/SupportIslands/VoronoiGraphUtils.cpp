@@ -423,6 +423,79 @@ double VoronoiGraphUtils::calculate_max_width(
     return max_width(parabola.focus);
 }
 
+std::pair<coord_t, coord_t> VoronoiGraphUtils::calculate_width(
+    const VD::edge_type &edge, const Lines &lines)
+{
+    if (edge.is_linear()) 
+        return calculate_width_for_line(edge, lines);
+    return calculate_width_for_parabola(edge, lines);
+}
+
+std::pair<coord_t, coord_t> VoronoiGraphUtils::calculate_width_for_line(
+    const VD::edge_type &line_edge, const Lines &lines)
+{
+    assert(line_edge.is_linear());
+    // edge line could be initialized by 2 points
+    if (line_edge.cell()->contains_point()) {
+        const Line &source_line = lines[line_edge.cell()->source_index()];
+        Point       source_point;
+        if (line_edge.cell()->source_category() ==
+            boost::polygon::SOURCE_CATEGORY_SEGMENT_START_POINT)
+            source_point = source_line.a;
+        else {
+            assert(line_edge.cell()->source_category() ==
+                   boost::polygon::SOURCE_CATEGORY_SEGMENT_END_POINT);
+            source_point = source_line.b;
+        }
+        return min_max_width(line_edge, source_point);
+    }
+    assert(line_edge.cell()->contains_segment());
+    assert(!line_edge.twin()->cell()->contains_point());
+    assert(line_edge.twin()->cell()->contains_segment());
+    const Line &                line = lines[line_edge.cell()->source_index()];
+    Point                       v0   = to_point(line_edge.vertex0());
+    Point                       v1   = to_point(line_edge.vertex1());
+    double                      distance0 = line.perp_distance_to(v0);
+    double                      distance1 = line.perp_distance_to(v1);
+    std::pair<coord_t, coord_t> min_max(2 * static_cast<coord_t>(distance0),
+                                        2 * static_cast<coord_t>(distance1));
+    if (min_max.first > min_max.second)
+        std::swap(min_max.first, min_max.second);
+    return min_max;
+}
+
+std::pair<coord_t, coord_t> VoronoiGraphUtils::calculate_width_for_parabola(
+    const VD::edge_type &parabola_edge, const Lines &lines)
+{
+    assert(parabola_edge.is_curved());
+    // distance to point and line on parabola is same
+    Parabola                    parabola = get_parabola(parabola_edge, lines);
+    Point                       v0       = to_point(parabola_edge.vertex0());
+    Point                       v1       = to_point(parabola_edge.vertex1());
+    ParabolaSegment             parabola_segment(parabola, v0, v1);
+    std::pair<coord_t, coord_t> min_max = min_max_width(parabola_edge, parabola.focus);        
+    if (ParabolaUtils::is_over_zero(parabola_segment)) {
+        min_max.first = parabola.directrix.perp_distance_to(parabola.focus);
+    }
+    return min_max;
+}
+
+std::pair<coord_t, coord_t> VoronoiGraphUtils::min_max_width(
+    const VD::edge_type &edge, const Point &point)
+{
+    auto distance = [](const VD::vertex_type *vertex,
+                       const Point &          point) -> coord_t {
+        Vec2d  point_d  = point.cast<double>();
+        Vec2d  diff     = point_d - to_point_d(vertex);
+        double distance = diff.norm();
+        return static_cast<coord_t>(std::round(distance));
+    };
+    std::pair<coord_t, coord_t> result(2 * distance(edge.vertex0(), point),
+                                       2 * distance(edge.vertex1(), point));
+    if (result.first > result.second) std::swap(result.first, result.second);
+    return result;
+};
+
 VoronoiGraph VoronoiGraphUtils::create_skeleton(const VD &vd, const Lines &lines)
 {
     // vd should be annotated.
@@ -458,16 +531,16 @@ VoronoiGraph VoronoiGraphUtils::create_skeleton(const VD &vd, const Lines &lines
             return {}; // vd must be annotated
 
         double length = calculate_length(edge, lines);
-        double max_width = calculate_max_width(edge, lines);
+        coord_t             min_width, max_width;
+        std::tie(min_width, max_width) = calculate_width(edge, lines);
+        auto neighbor_size = std::make_shared<VoronoiGraph::Node::Neighbor::Size>(
+            length, min_width, max_width);
+
         VoronoiGraph::Node *node0 = getNode(skeleton, v0, &edge, lines);
         VoronoiGraph::Node *node1 = getNode(skeleton, v1, &edge, lines);
-
-        // TODO: Do not store twice length and max_width.
         // add extended Edge to graph, both side
-        VoronoiGraph::Node::Neighbor neighbor0(&edge, node1, length, max_width);
-        node0->neighbors.push_back(neighbor0);
-        VoronoiGraph::Node::Neighbor neighbor1(edge.twin(), node0, length, max_width);
-        node1->neighbors.push_back(neighbor1);
+        node0->neighbors.emplace_back(&edge, node1, neighbor_size);
+        node1->neighbors.emplace_back(edge.twin(), node0, std::move(neighbor_size));
     }
     return skeleton;
 }
@@ -485,7 +558,7 @@ double VoronoiGraphUtils::get_neighbor_distance(const VoronoiGraph::Node *from,
 {
     const VoronoiGraph::Node::Neighbor *neighbor = get_neighbor(from, to);
     assert(neighbor != nullptr);
-    return neighbor->edge_length;
+    return neighbor->length();
 }
 
 VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circle(
@@ -608,7 +681,7 @@ VoronoiGraph::Path VoronoiGraphUtils::find_longest_path_on_circles(
                 continue; // out of circles
             if (done.find(neighbor.node) != done.end()) continue;
             VoronoiGraph::Path neighbor_path = path; // make copy
-            neighbor_path.append(neighbor.node, neighbor.edge_length);
+            neighbor_path.append(neighbor.node, neighbor.length());
             search_queue.push(neighbor_path);
 
             auto branches_item = ex_path.side_branches.find(neighbor.node);
@@ -655,7 +728,7 @@ std::optional<VoronoiGraph::Circle> VoronoiGraphUtils::create_circle(
     VoronoiGraph::Nodes circle_path(path_item, passed_nodes.end());
     // !!! Real circle lenght is calculated on detection of end circle
     // now circle_length contain also lenght of path before circle
-    double circle_length = path.length + neighbor.edge_length;
+    double circle_length = path.length + neighbor.length();
     // solve of branch length will be at begin of cirlce
     return VoronoiGraph::Circle(std::move(circle_path), circle_length);
 };
@@ -933,12 +1006,12 @@ VoronoiGraph::Position VoronoiGraphUtils::align(
     };
     std::queue<NodeDistance> process;
     const VoronoiGraph::Node::Neighbor* neighbor = position.neighbor;
-    double from_distance = neighbor->edge_length * position.ratio;
+    double from_distance = neighbor->length() * position.ratio;
     if (from_distance < max_distance) {
         const VoronoiGraph::Node *from_node = VoronoiGraphUtils::get_twin_node(neighbor);
         process.emplace(from_node, from_distance);
     }
-    double to_distance = neighbor->edge_length * (1 - position.ratio);
+    double to_distance = neighbor->length() * (1 - position.ratio);
     if (to_distance < max_distance) {
         const VoronoiGraph::Node *to_node = neighbor->node;
         process.emplace(to_node, to_distance);        
@@ -966,7 +1039,7 @@ VoronoiGraph::Position VoronoiGraphUtils::align(
                 closest_distance = distance;
                 closest = VoronoiGraph::Position(&neighbor, ratio);
             }
-            double from_start = nd.distance + neighbor.edge_length;
+            double from_start = nd.distance + neighbor.length();
             if (from_start < max_distance)
                 process.emplace(neighbor.node, from_start);
         }
@@ -1013,9 +1086,9 @@ const VoronoiGraph::Node *VoronoiGraphUtils::getFirstContourNode(
     return nullptr;
 }
 
-double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Nodes &path)
+coord_t VoronoiGraphUtils::get_max_width(const VoronoiGraph::Nodes &path)
 {
-    double max = 0.;
+    coord_t max = 0;
     const VoronoiGraph::Node *prev_node = nullptr;
     for (const VoronoiGraph::Node *node : path) { 
         if (prev_node == nullptr) {
@@ -1023,16 +1096,16 @@ double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Nodes &path)
             continue;
         }
         const VoronoiGraph::Node::Neighbor *neighbor = get_neighbor(prev_node, node);
-        if (max < neighbor->max_width)  max = neighbor->max_width;        
+        if (max < neighbor->max_width())  max = neighbor->max_width();        
         prev_node = node;
     }
     return max;
 }
 
-double VoronoiGraphUtils::get_max_width(
+coord_t VoronoiGraphUtils::get_max_width(
     const VoronoiGraph::ExPath &longest_path)
 {
-    double max = get_max_width(longest_path.nodes);
+    coord_t max = get_max_width(longest_path.nodes);
     for (const auto &side_branches_item : longest_path.side_branches) {
         const VoronoiGraph::Node *prev_node = side_branches_item.first;
         VoronoiGraph::ExPath::SideBranches side_branches = side_branches_item.second; // !!! copy
@@ -1040,8 +1113,8 @@ double VoronoiGraphUtils::get_max_width(
             const VoronoiGraph::Path &side_path = side_branches.top();
             const VoronoiGraph::Node::Neighbor *first_neighbor =
                 get_neighbor(prev_node, side_path.nodes.front());
-            double max_side_branch = std::max(
-                get_max_width(side_path.nodes), first_neighbor->max_width);
+            coord_t max_side_branch = std::max(
+                get_max_width(side_path.nodes), first_neighbor->max_width());
             if (max < max_side_branch) max = max_side_branch;
             side_branches.pop();
         }
@@ -1051,7 +1124,7 @@ double VoronoiGraphUtils::get_max_width(
         const VoronoiGraph::Node::Neighbor *first_neighbor =
             get_neighbor(circle.nodes.front(), circle.nodes.back());
         double max_circle = std::max(
-            first_neighbor->max_width, get_max_width(circle.nodes));
+            first_neighbor->max_width(), get_max_width(circle.nodes));
         if (max < max_circle) max = max_circle;
     }
 
@@ -1059,9 +1132,9 @@ double VoronoiGraphUtils::get_max_width(
 }
 
 // !!! is slower than go along path
-double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
+coord_t VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
 {
-    double max = 0.;
+    coord_t max = 0;
     std::set<const VoronoiGraph::Node *> done;
     std::queue<const VoronoiGraph::Node *> process;
     process.push(node);
@@ -1072,7 +1145,7 @@ double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
         for (const VoronoiGraph::Node::Neighbor& neighbor: actual_node->neighbors) {
             if (done.find(neighbor.node) != done.end()) continue;
             process.push(neighbor.node);
-            if (max < neighbor.max_width) max = neighbor.max_width;
+            if (max < neighbor.max_width()) max = neighbor.max_width();
         }
         done.insert(actual_node);
     }
@@ -1081,13 +1154,16 @@ double VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
 
 void VoronoiGraphUtils::draw(SVG &               svg,
                              const VoronoiGraph &graph,
+                             const Lines &       lines,
                              coord_t             width,
-                             bool pointer_caption)
+                             bool                pointer_caption)
 {
+    LineUtils::draw(svg, lines, "black", 0., true);
+
     auto print_address = [&](const Point& p, const char* prefix, void * addr, const char* color){
         if (pointer_caption) {
             std::stringstream ss;
-            ss << prefix << std::hex << (int) addr;
+            ss << prefix << std::hex << reinterpret_cast<intptr_t>(addr);
             std::string s = ss.str();
             svg.draw_text(p, s.c_str(), color);
         }
@@ -1096,7 +1172,7 @@ void VoronoiGraphUtils::draw(SVG &               svg,
     for (const auto &[key, value] : graph.data) {
         Point p(key->x(), key->y());
         svg.draw(p, "lightgray", width);
-        print_address(p, "v_",(void*)key, "lightgray");
+        print_address(p, "vertex ptr ",(void*)key, "lightgray");
         for (const auto &n : value.neighbors) {
             Point from = to_point(n.edge->vertex0());
             Point to   = to_point(n.edge->vertex1());
@@ -1104,16 +1180,33 @@ void VoronoiGraphUtils::draw(SVG &               svg,
             Point center    = (from + to) / 2;
             Point p        = center + ((is_second) ? Point(0., -2e6) :
                                                             Point(0., 2e6));
-            print_address(p, "n_", (void *) &n, "gray");
+            print_address(p, "neighbor ptr ", (void *) &n, "gray");
             if (is_second) continue;
-            svg.draw_text(center + Point(-6e6, 0.), ("w="+std::to_string(n.max_width)).c_str(), "gray");
-            svg.draw(Line(from, to), "gray", width);
-
-            // svg.draw_text(center,
-            // (std::to_string(std::round(n.edge_length/3e5)/100.)).c_str(), "gray");
+            std::string width_str = "width min=" + std::to_string(n.min_width()) +
+                                    " max=" + std::to_string(n.max_width());
+            svg.draw_text(center + Point(-6e6, 0.), width_str.c_str(), "gray");
+            draw(svg, *n.edge, lines, "gray", width);
         }
     }
 }
+
+void VoronoiGraphUtils::draw(SVG &                svg,
+                             const VD::edge_type &edge,
+                             const Lines &        lines,
+                             const char *         color,
+                             coord_t              width)
+{
+    Point from = to_point(edge.vertex0());
+    Point to   = to_point(edge.vertex1());
+    if (edge.is_curved()) { 
+        Parabola p = get_parabola(edge, lines);
+        ParabolaSegment ps(p, from, to);
+        ParabolaUtils::draw(svg, ps, color, width);
+        return;
+    }
+    svg.draw(Line(from, to), color, width);
+}
+
 
 void VoronoiGraphUtils::draw(SVG &                      svg,
                              const VoronoiGraph::Nodes &path,

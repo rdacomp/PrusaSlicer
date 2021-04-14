@@ -17,7 +17,7 @@
 #include <libslic3r/ClipperUtils.hpp> // allign
 
 // comment definition of NDEBUG to enable assert()
-// #define NDEBUG
+//#define NDEBUG
 
 #define SLA_SAMPLING_STORE_FIELD_TO_SVG
 #define SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
@@ -50,11 +50,11 @@ std::unique_ptr<SupportIslandPoint> SampleIslandUtils::create_point_on_path(
         }
         const VoronoiGraph::Node::Neighbor *neighbor =
             VoronoiGraphUtils::get_neighbor(prev_node, node);
-        actual_distance += neighbor->edge_length;
+        actual_distance += neighbor->length();
         if (actual_distance >= distance) {
             // over half point is on
             double previous_distance = actual_distance - distance;
-            double over_ratio = previous_distance / neighbor->edge_length;
+            double over_ratio = previous_distance / neighbor->length();
             double ratio      = 1. - over_ratio;
             return create_point(neighbor, ratio, type);
         }
@@ -126,14 +126,14 @@ SupportIslandPoints SampleIslandUtils::sample_side_branch(
                               std::move_iterator(side_samples.end()));
             }
         }
-        while (distance < neighbor->edge_length) {
-            double edge_ratio = distance / neighbor->edge_length;
+        while (distance < neighbor->length()) {
+            double edge_ratio = distance / neighbor->length();
             result.push_back(
                 create_point(neighbor, edge_ratio, SupportIslandPoint::Type::center_line)
             );
             distance += sample_distance;
         }
-        distance -= neighbor->edge_length;
+        distance -= neighbor->length();
         prev_node = node;
     }
     assert(fabs(distance - (sample_distance - cfg.side_distance)) < 1e-5);
@@ -310,12 +310,12 @@ void SampleIslandUtils::sample_center_circle_end(
     const CenterLineConfiguration &     cfg,
     SupportIslandPoints &               result)
 {
-    double distance = neighbor_distance + node_distance + neighbor.edge_length;
+    double distance = neighbor_distance + node_distance + neighbor.length();
     if (distance < cfg.max_sample_distance) { // no need add support point
-        if (neighbor_distance > node_distance + neighbor.edge_length)
-            neighbor_distance = node_distance + neighbor.edge_length;
-        if (node_distance > neighbor_distance + neighbor.edge_length)
-            node_distance = neighbor_distance + neighbor.edge_length;
+        if (neighbor_distance > node_distance + neighbor.length())
+            neighbor_distance = node_distance + neighbor.length();
+        if (node_distance > neighbor_distance + neighbor.length())
+            node_distance = neighbor_distance + neighbor.length();
         return;
     }
     size_t count_supports = static_cast<size_t>(
@@ -328,11 +328,11 @@ void SampleIslandUtils::sample_center_circle_end(
         neighbor_distance = 0.;
         count_supports -= 1;
         if (count_supports == 0) {
-            if (node_distance > neighbor.edge_length)
-                node_distance = neighbor.edge_length;
+            if (node_distance > neighbor.length())
+                node_distance = neighbor.length();
             return;
         }
-        distance         = node_distance + neighbor.edge_length;
+        distance         = node_distance + neighbor.length();
         distance_between = distance / (count_supports + 1);
     }
     VoronoiGraph::Nodes nodes = done_nodes; // copy, could be more neighbor
@@ -341,7 +341,7 @@ void SampleIslandUtils::sample_center_circle_end(
         double distance_from_neighbor = i * (distance_between) - neighbor_distance;
         result.push_back(
             create_point_on_path(nodes, distance_from_neighbor, SupportIslandPoint::Type::center_circle_end2));
-        double distance_support_to_node = fabs(neighbor.edge_length -
+        double distance_support_to_node = fabs(neighbor.length() -
                                                distance_from_neighbor);
         if (node_distance > distance_support_to_node)
             node_distance = distance_support_to_node;
@@ -396,7 +396,7 @@ double get_distance_to_support_point(const VoronoiGraph::Node *node,
     };
     std::priority_queue<Item, std::vector<Item>, OrderDistanceFromNearest> process;
     for (const VoronoiGraph::Node::Neighbor &neighbor : node->neighbors)
-        process.emplace(node, neighbor.node, neighbor.edge_length);
+        process.emplace(node, neighbor.node, neighbor.length());
     
     while (!process.empty()) { 
         Item i = process.top();
@@ -411,7 +411,7 @@ double get_distance_to_support_point(const VoronoiGraph::Node *node,
         }
         for (const VoronoiGraph::Node::Neighbor &neighbor :i.node->neighbors) {
             if (neighbor.node == i.prev_node) continue;
-            double distance = i.act_distance + neighbor.edge_length;
+            double distance = i.act_distance + neighbor.length();
             if (distance > maximal_search) continue;
             process.emplace(i.node, neighbor.node, distance);
         }
@@ -443,8 +443,8 @@ SupportDistanceMap create_support_distance_map(const SupportIslandPoints &suppor
         const VoronoiGraph::Position &position = ptr->position;
         const VoronoiGraph::Node *node = position.neighbor->node; 
         const VoronoiGraph::Node *twin_node = VoronoiGraphUtils::get_twin_node(position.neighbor);
-        double distance = (1 - position.ratio) * position.neighbor->edge_length;
-        double twin_distance = position.ratio * position.neighbor->edge_length;
+        double distance = (1 - position.ratio) * position.neighbor->length();
+        double twin_distance = position.ratio * position.neighbor->length();
 
         auto item = support_distance_map.find(node);
         if (item == support_distance_map.end()) { 
@@ -584,14 +584,14 @@ SupportIslandPoints SampleIslandUtils::sample_center_circle(
 
             NodeDistance next_nd = nd; // copy
             next_nd.nodes.insert(next_nd.nodes.begin(), neighbor.node);
-            next_nd.distance_from_support_point += neighbor.edge_length;
+            next_nd.distance_from_support_point += neighbor.length();
             // exist place for sample:
             while (next_nd.distance_from_support_point >
                    cfg.max_sample_distance) {
                 double distance_from_node = next_nd
                                                 .distance_from_support_point -
                                             nd.distance_from_support_point;
-                double ratio = distance_from_node / neighbor.edge_length;
+                double ratio = distance_from_node / neighbor.length();
                 result.push_back(
                     create_point(&neighbor, ratio, SupportIslandPoint::Type::center_circle));
                 next_nd.distance_from_support_point -= cfg.max_sample_distance;
@@ -602,20 +602,28 @@ SupportIslandPoints SampleIslandUtils::sample_center_circle(
     return result;
 }
 
-void SampleIslandUtils::sample_field(
-    VoronoiGraph::Position& field_start,
-    SupportIslandPoints& points,
-    CenterStarts& center_starts,
-    std::set<const VoronoiGraph::Node *>& done,
-    const Lines &       lines,
-                                     const SampleConfig &config)
+SupportIslandPoints SampleIslandUtils::sample_voronoi_graph(
+    const VoronoiGraph &  graph,
+    const Lines &         lines,
+    const SampleConfig &  config,
+    VoronoiGraph::ExPath &longest_path)
 {
-    auto field = create_field(field_start, center_starts, done, lines, config);
-    SupportIslandPoints outline_support = sample_outline(field, config);
-    points.insert(points.end(), std::move_iterator(outline_support.begin()),
-                  std::move_iterator(outline_support.end()));
-    // TODO: sample field inside
+    const VoronoiGraph::Node *start_node =
+        VoronoiGraphUtils::getFirstContourNode(graph);
+    // every island has to have a point on contour
+    assert(start_node != nullptr);
+    longest_path = VoronoiGraphUtils::create_longest_path(start_node);
+    // longest_path = create_longest_path_recursive(start_node);
 
+#ifdef SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
+    {
+        static int counter = 0;
+        SVG        svg("voronoiGraph" + std::to_string(counter++) + ".svg",
+                LineUtils::create_bounding_box(lines));
+        VoronoiGraphUtils::draw(svg, graph, lines, 1e6, true);
+    }
+#endif // SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
+    return sample_expath(longest_path, lines, config);
 }
 
 SupportIslandPoints SampleIslandUtils::sample_expath(
@@ -653,8 +661,7 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
     // TODO: 3) Triangle of points
     // eval outline and find three point create almost equilateral triangle
 
-    // IMPROVE: Erase continous sampling: Extract path and than sample uniformly whole path  
-
+    // IMPROVE: Erase continous sampling: Extract ExPath and than sample uniformly whole ExPath
     CenterStarts center_starts;
     const VoronoiGraph::Node *start_node = path.nodes.front();
     // CHECK> Front of path is outline node
@@ -662,26 +669,19 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
     const VoronoiGraph::Node::Neighbor *neighbor = &start_node->neighbors.front();
     std::set<const VoronoiGraph::Node *> done; // already done nodes
     SupportIslandPoints points; // result
-    if (neighbor->max_width > config.max_width_for_center_support_line) {
-        VoronoiGraph::Position field_start = VoronoiGraphUtils::get_position_with_distance(
-            neighbor, config.min_width_for_outline_support, lines);
-        double center_sample_distance = neighbor->edge_length * field_start.ratio;
-        if (center_sample_distance > config.max_distance / 2.) {
-            // sample field from node, start without change on begining
-            sample_field(field_start, points, center_starts, done, lines, config);
-        } else {
-            const VoronoiGraph::Node::Neighbor *twin = VoronoiGraphUtils::get_twin(neighbor);
-            done.insert(neighbor->node);
-            coord_t support_in = neighbor->edge_length - center_sample_distance +
-                                 config.max_distance / 2;
-            center_starts.push(CenterStart(twin, support_in, {neighbor->node}));
-            sample_field(field_start, points, center_starts, done, lines, config);
-        }
-    } else {
+    if (neighbor->max_width() < config.max_width_for_center_support_line) {
+        // start sample center
         done.insert(start_node);
-        center_starts.push(CenterStart(neighbor, config.minimal_distance_from_outline));
+        coord_t support_in = config.minimal_distance_from_outline;
+        center_starts.push(CenterStart(neighbor, support_in));
+    } else {
+        // start sample field
+        VoronoiGraph::Position field_start =
+            VoronoiGraphUtils::get_position_with_distance(
+                neighbor, config.min_width_for_outline_support, lines);
+        sample_field(field_start, points, center_starts, done, lines, config);
     }
-
+    // Main loop of sampling
     while (!center_starts.empty()) {
         std::optional<VoronoiGraph::Position> field_start = {};
         std::vector<CenterStart> new_starts =
@@ -693,8 +693,21 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
             field_start = {};
         }
     }
-
     return points;
+}
+
+void SampleIslandUtils::sample_field(VoronoiGraph::Position &field_start,
+                                     SupportIslandPoints &   points,
+                                     CenterStarts &          center_starts,
+                                     std::set<const VoronoiGraph::Node *> &done,
+                                     const Lines &       lines,
+                                     const SampleConfig &config)
+{
+    auto field = create_field(field_start, center_starts, done, lines, config);
+    SupportIslandPoints outline_support = sample_outline(field, config);
+    points.insert(points.end(), std::move_iterator(outline_support.begin()),
+                  std::move_iterator(outline_support.end()));
+    // TODO: sample field inside
 }
 
 std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample_center(
@@ -707,13 +720,13 @@ std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample_center(
 {
     const VoronoiGraph::Node::Neighbor *neighbor = start.neighbor;
     const VoronoiGraph::Node *node = neighbor->node;
+    // already sampled line
     if (done.find(node) != done.end()) return {};
-    done.insert(node);
     VoronoiGraph::Nodes path = start.path;
     std::vector<CenterStart> new_starts;
     double support_in = start.support_in;
     do {
-        double edge_length = neighbor->edge_length;
+        double edge_length = neighbor->length();
         while (edge_length >= support_in) {
             double ratio = support_in / edge_length;
             results.push_back(
@@ -724,6 +737,7 @@ std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample_center(
         support_in -= edge_length;
         const VoronoiGraph::Node *node = neighbor->node;
         path.push_back(node);
+        done.insert(node);
         const VoronoiGraph::Node::Neighbor *next_neighbor = nullptr;
         for (const auto &node_neighbor : node->neighbors) {
             if (done.find(node_neighbor.node) != done.end()) continue;
@@ -754,11 +768,14 @@ std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample_center(
         } else {
             neighbor = next_neighbor;
         }
-    } while (neighbor->max_width <= config.max_width_for_center_support_line);
+    } while (neighbor->max_width() <= config.max_width_for_center_support_line);
 
+    // create field start
     field_start = VoronoiGraphUtils::get_position_with_distance(
             neighbor, config.min_width_for_outline_support, lines);
-    double edge_length = neighbor->edge_length;
+
+    // sample rest of neighbor before field
+    double edge_length = neighbor->length();
     double sample_length = edge_length * field_start->ratio;
     while (sample_length > support_in) {
         double ratio = support_in / edge_length;
@@ -769,29 +786,6 @@ std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample_center(
     return new_starts;
 }
 
-SupportIslandPoints SampleIslandUtils::sample_voronoi_graph(
-    const VoronoiGraph &  graph,
-    const Lines &         lines,
-    const SampleConfig &  config,
-    VoronoiGraph::ExPath &longest_path)
-{
-    const VoronoiGraph::Node *start_node =
-        VoronoiGraphUtils::getFirstContourNode(graph);
-    // every island has to have a point on contour
-    assert(start_node != nullptr);
-    longest_path = VoronoiGraphUtils::create_longest_path(start_node);
-    // longest_path = create_longest_path_recursive(start_node);
-
-#ifdef SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
-    {
-        static int counter=0;
-        SVG svg("voronoiGraph"+std::to_string(counter++)+".svg", LineUtils::create_bounding_box(lines));
-        LineUtils::draw(svg, lines, "black",0., true);
-        VoronoiGraphUtils::draw(svg, graph, 1e6, true);
-    }
-#endif // SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
-    return sample_expath(longest_path, lines, config);
-}
 
 SampleIslandUtils::Field SampleIslandUtils::create_field(
     const VoronoiGraph::Position & field_start,
@@ -844,10 +838,11 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
             const VoronoiGraph::Node *    source_node)->bool {
         const VoronoiGraph::Node::Neighbor *neighbor = position.neighbor;
 
-        // TODO: check not only one neighbor but all path to edge
+        // IMPROVE: check not only one neighbor but all path to edge
+        coord_t rest_size = static_cast<coord_t>(neighbor->length() * (1. - position.ratio));
         if (VoronoiGraphUtils::is_last_neighbor(neighbor) &&
-            neighbor->edge_length * (1. - position.ratio) <= config.max_distance / 2)
-            return false;
+            rest_size <= config.max_distance / 2)
+            return false; // no change only rich outline
 
         // function to add sorted change from wide to tiny
         // stored uder line index or line shorten in point b
@@ -864,8 +859,7 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
         };
 
         Point p1, p2;
-        std::tie(p1, p2) = VoronoiGraphUtils::point_on_lines(position,
-                                                                lines);
+        std::tie(p1, p2) = VoronoiGraphUtils::point_on_lines(position, lines);
         const VD::edge_type *edge = neighbor->edge;
         size_t               i1   = edge->cell()->source_index();
         size_t               i2   = edge->twin()->cell()->source_index();
@@ -879,7 +873,7 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
             // line1 is shorten on side line1.b
             add(p1, p2, i1, i2);
         }
-        coord_t support_in = neighbor->edge_length * position.ratio + config.max_distance/2;
+        coord_t support_in = neighbor->length() * position.ratio + config.max_distance/2;
         CenterStart tiny_start(neighbor, support_in, {source_node});
         tiny_starts.push(tiny_start);
         tiny_done.insert(source_node);
@@ -893,14 +887,16 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
 
     std::set<const VoronoiGraph::Node*> done;
     done.insert(twin_neighbor->node);
-    std::queue<const VoronoiGraph::Node *> process;
-    process.push(neighbor->node);
+    using ProcessItem = std::pair<const VoronoiGraph::Node *, const VoronoiGraph::Node *>;
+    std::queue<ProcessItem> process;
+    process.push({twin_neighbor->node, neighbor->node});
 
     // all lines belongs to polygon
     std::set<size_t> field_line_indexes;
     while (!process.empty()) { 
-        const VoronoiGraph::Node *node = process.front();
-        const VoronoiGraph::Node *prev_node = nullptr;
+        const ProcessItem &item = process.front();
+        const VoronoiGraph::Node *node = item.second;
+        const VoronoiGraph::Node *prev_node = item.first;
         process.pop();
         if (done.find(node) != done.end()) continue;
         do {
@@ -913,7 +909,7 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
                 size_t index2 = edge->twin()->cell()->source_index();
                 field_line_indexes.insert(index1);
                 field_line_indexes.insert(index2);
-                if (VoronoiGraphUtils::is_last_neighbor(&neighbor) ||  neighbor.max_width < min_width) {
+                if (neighbor.min_width() < min_width) {
                     VoronoiGraph::Position position =
                         VoronoiGraphUtils::get_position_with_distance(&neighbor, min_width, lines);
                     if(add_wide_tiny_change(position, node))
@@ -923,7 +919,7 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
                 if (next_node == nullptr) { 
                     next_node = neighbor.node;
                 } else {
-                    process.push(neighbor.node);
+                    process.push({node, neighbor.node});
                 }
             }
             prev_node = node;
@@ -996,7 +992,9 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     points.reserve(field_line_indexes.size());
     std::vector<size_t> outline_indexes;
     outline_indexes.reserve(field_line_indexes.size());
-    size_t input_index = neighbor->edge->cell()->source_index();
+    size_t input_index1 = neighbor->edge->cell()->source_index();
+    size_t input_index2 = neighbor->edge->twin()->cell()->source_index();
+    size_t input_index  = std::min(input_index1, input_index2);
     size_t outline_index = input_index;
     std::set<size_t> done_indexes;
     do {

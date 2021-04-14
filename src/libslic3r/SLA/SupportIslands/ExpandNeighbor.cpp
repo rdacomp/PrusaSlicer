@@ -28,7 +28,7 @@ void ExpandNeighbor::process(CallStack &call_stack)
     const VoronoiGraph::Node &next_node = *neighbor.node;
     // is next node leaf ?
     if (next_node.neighbors.size() == 1) {
-        VoronoiGraph::Path side_branch({&next_node}, neighbor.edge_length);
+        VoronoiGraph::Path side_branch({&next_node}, neighbor.length());
         data.side_branches.push(std::move(side_branch));
         return;
     }
@@ -39,6 +39,6 @@ void ExpandNeighbor::process(CallStack &call_stack)
     call_stack.emplace(std::move(post_process_neighbor));
     call_stack.emplace(
         std::make_unique<EvaluateNeighbor>(neighbor_path, neighbor.node,
-                                           neighbor.edge_length,
+                                           neighbor.length(),
                                            data.act_path));
 }

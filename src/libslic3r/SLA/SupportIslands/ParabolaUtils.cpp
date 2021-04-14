@@ -72,6 +72,30 @@ bool ParabolaUtils::is_over_zero(const ParabolaSegment &parabola)
     return is_positive_x1 != is_positive_x2;
 }
 
+void ParabolaUtils::draw(SVG &                  svg,
+                         const ParabolaSegment &parabola,
+                         const char *           color,
+                         coord_t                width,
+                         double                 discretization_step)
+{
+    using VD = Slic3r::Geometry::VoronoiDiagram;
+    std::vector<Voronoi::Internal::point_type> parabola_samples(
+        {parabola.from, parabola.to});
+
+    VD::point_type   source_point = parabola.focus;
+    VD::segment_type source_segment(parabola.directrix.a,
+                                    parabola.directrix.b);
+    ::boost::polygon::voronoi_visual_utils<double>::discretize(
+        source_point, source_segment, discretization_step, &parabola_samples);
+
+    for (size_t index = 1; index < parabola_samples.size(); ++index) {
+        const auto& s0 = parabola_samples[index - 1];
+        const auto& s1 = parabola_samples[index];
+        Line        l(Point(s0.x(), s0.y()), Point(s1.x(), s1.y()));
+        svg.draw(l, color, width);
+    }    
+}
+
 // PRIVATE
 double ParabolaUtils::parabola_arc_length(double x)
 {

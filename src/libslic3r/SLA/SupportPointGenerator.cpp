@@ -352,7 +352,7 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     for (const Point &pt : island.contour.points) bb.merge(pt);
     SVG svg("voronoi-skeleton-" + std::to_string(++counter) + ".svg", bb);
     svg.draw(island, "blue", 0.5f);
-    VoronoiGraphUtils::draw(svg, skeleton, scale / 300);
+    VoronoiGraphUtils::draw(svg, skeleton, lines, scale / 300);
     for (auto l : lines) svg.draw(l, "black", coord_t(scale / 200));
     SampleIslandUtils::draw(svg, samples, support_point_radius, support_point_color);
     VoronoiGraphUtils::draw(svg, longest_path, scale / 200);

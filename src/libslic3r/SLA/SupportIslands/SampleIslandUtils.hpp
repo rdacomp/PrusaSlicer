@@ -109,17 +109,6 @@ public:
         SupportIslandPoints &               result);
 
     /// <summary>
-    /// Decide how to sample path
-    /// </summary>
-    /// <param name="path">Path inside voronoi diagram with side branches and circles</param>
-    /// <param name="lines">Source lines for VG --> outline of island.</param>
-    /// <param name="config">Definition how to sample</param>
-    /// <returns>Support points for island</returns>
-    static SupportIslandPoints sample_expath(const VoronoiGraph::ExPath &path,
-                                             const Lines &       lines,
-                                             const SampleConfig &config);
-
-    /// <summary>
     /// Sample voronoi skeleton
     /// </summary>
     /// <param name="graph">Inside skeleton of island</param>
@@ -133,6 +122,18 @@ public:
         const Lines & lines,
         const SampleConfig &  config,
         VoronoiGraph::ExPath &longest_path);
+
+    /// <summary>
+    /// Decide how to sample path
+    /// </summary>
+    /// <param name="path">Path inside voronoi diagram with side branches and circles</param>
+    /// <param name="lines">Source lines for VG --> outline of island.</param>
+    /// <param name="config">Definition how to sample</param>
+    /// <returns>Support points for island</returns>
+    static SupportIslandPoints sample_expath(const VoronoiGraph::ExPath &path,
+                                             const Lines &       lines,
+                                             const SampleConfig &config);
+
 
     /// <summary>
     /// Transform support point to slicer points
@@ -250,9 +251,9 @@ public:
     /// <summary>
     /// Create field from input neighbor
     /// </summary>
-    /// <param name="field_start">Start neighbor, first occur of wide neighbor.</param>
+    /// <param name="field_start">Start position, change from tiny to wide.</param>
     /// <param name="tiny_starts">Append new founded tiny parts of island.</param>
-    /// <param name="tiny_done">Already sampled node sets. Filled only node inside field imediate after change</param>
+    /// <param name="tiny_done">Already sampled node sets.</param>
     /// <param name="lines">Source lines for VG --> outline of island.</param>
     /// <param name="config">Containe Minimal width in field and sample distance for center line</param>
     /// <returns>New created field</returns>
