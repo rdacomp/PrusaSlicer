@@ -601,8 +601,8 @@ static void generic_exception_handle()
         std::terminate();
         throw;
     } catch (const std::exception& ex) {
-        wxLogError("Internal error: %s", ex.what());
-        BOOST_LOG_TRIVIAL(error) << boost::format("Uncaught exception: %1%") % ex.what();
+        wxLogError(GUI::format_wxstr("Internal error: %1%", ex.what()));
+        BOOST_LOG_TRIVIAL(error) << GUI::format_wxstr("Uncaught exception: %1%",ex.what()).mb_str();
         throw;
     }
 }
