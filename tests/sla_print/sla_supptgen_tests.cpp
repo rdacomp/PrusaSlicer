@@ -169,10 +169,10 @@ Slic3r::Polygon create_cross_roads(double size, double width)
 
 ExPolygon create_trinagle_with_hole(double size)
 {
-    return ExPolygon(PolygonUtils::create_equilateral_triangle(size),
-                     {{size / 4, size / 4},
-                                                  {size / 2, size / 2},
-                                                  {size / 2, size / 4}});
+    auto hole = PolygonUtils::create_equilateral_triangle(size / 3);
+    hole.reverse();
+    hole.rotate(3.14 / 4);
+    return ExPolygon(PolygonUtils::create_equilateral_triangle(size), hole);
 }
 
 ExPolygon create_square_with_hole(double size, double hole_size)
@@ -505,6 +505,54 @@ TEST_CASE("Speed align", "[VoronoiSkeleton]")
         auto samples = SampleIslandUtils::sample_voronoi_graph(skeleton, lines, cfg, longest_path);
         SampleIslandUtils::align_samples(samples, island, cfg);
     }
+}
+
+//#include <libslic3r/SLA/SupportPointGenerator.hpp>
+#include <libslic3r/SLA/SupportIslands/LineUtils.hpp>
+TEST_CASE("speed sampling", "[SupGen]") { 
+    double       size    = 3e7;
+    float      samples_per_mm2 = 0.01f;
+    ExPolygons   islands = createTestIslands(size);
+    std::random_device rd;
+    std::mt19937 m_rng;
+    m_rng.seed(rd());
+
+    size_t count = 1;
+    
+    std::vector<std::vector<Vec2f>> result1;
+    result1.reserve(islands.size()*count);
+    for (size_t i = 0; i<count; ++i)
+        for (const auto& island: islands)
+            result1.emplace_back(sample_expolygon(island, samples_per_mm2, m_rng));
+    
+    std::vector<std::vector<Vec2f>> result2;
+    result2.reserve(islands.size()*count);
+    for (size_t i = 0; i < count; ++i)
+        for (const auto &island : islands)
+            result2.emplace_back(SampleIslandUtils::sample_expolygon(island, samples_per_mm2)); //*/
+
+    /*size_t all = 0;
+    for (auto& result : result2) { 
+        //std::cout << "case " << &result - &result1[0] << " points " << result.size() << std::endl;
+        all += result.size();
+    }
+    std::cout << "All points " << all << std::endl;*/
+    
+    for (size_t i = 0; i < result1.size(); ++i) {
+        size_t     island_index = i % islands.size();
+        ExPolygon &island       = islands[island_index];
+
+        Lines       lines = to_lines(island.contour);
+        std::string name  = "sample_" + std::to_string(i) + ".svg";
+        SVG         svg(name, LineUtils::create_bounding_box(lines));
+        svg.draw(island, "lightgray");
+        svg.draw_text({0, 0}, ("random samples " + std::to_string(result1[i].size())).c_str(), "blue");
+        for (Vec2f &p : result1[i])
+            svg.draw((p * 1e6).cast<coord_t>(), "blue", 1e6);
+        svg.draw_text({0., 5e6}, ("uniform samples " + std::to_string(result2[i].size())).c_str(), "green");
+        for (Vec2f &p : result2[i]) 
+            svg.draw((p * 1e6).cast<coord_t>(), "green", 1e6);
+    }//*/
 }
 
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")

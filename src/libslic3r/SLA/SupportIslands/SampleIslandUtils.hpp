@@ -25,6 +25,14 @@ public:
     SampleIslandUtils() = delete;
 
     /// <summary>
+    /// Uniform sample expolygon area by points inside Equilateral triangle center
+    /// </summary>
+    /// <param name="expoly">Input area to sample. (scaled)</param>
+    /// <param name="samples_per_mm2">Density of sampling.</param>
+    /// <returns>Samples - 2d unscaled coordinates [in mm]</returns>
+    static std::vector<Vec2f> sample_expolygon(const ExPolygon &expoly, float samples_per_mm2);
+
+    /// <summary>
     /// Create support point on edge defined by neighbor
     /// </summary>
     /// <param name="neighbor">Source edge</param>

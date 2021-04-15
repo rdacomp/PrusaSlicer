@@ -26,6 +26,94 @@
 
 using namespace Slic3r::sla;
 
+std::vector<Slic3r::Vec2f> SampleIslandUtils::sample_expolygon(
+    const ExPolygon &expoly, float samples_per_mm2)
+{
+    const Points &points = expoly.contour.points;
+    assert(!points.empty());
+    // get y range
+    coord_t min_y = points.front().y();
+    coord_t max_y = min_y;
+    for (const Point &point : points) {
+        if (min_y > point.y())
+            min_y = point.y();
+        else if (max_y < point.y())
+            max_y = point.y();
+    }
+
+    static const float mm2_area = scale_(1) * scale_(1);
+    // Equilateral triangle area = (side * height) / 2
+    float triangle_area = mm2_area / samples_per_mm2;
+    // Triangle area = sqrt(3) / 4 * "triangle side"
+    static const float coef1         = sqrt(3.) / 4.;
+    coord_t            triangle_side = static_cast<coord_t>(
+        std::round(sqrt(triangle_area * coef1)));
+    coord_t            triangle_side_2 = triangle_side / 2;
+    static const float coef2           = sqrt(3.) / 2.;
+    coord_t            triangle_height = static_cast<coord_t>(
+        std::round(triangle_side * coef2));
+
+    // IMPROVE: use line end y
+    Lines lines = to_lines(expoly);
+    // remove lines with y direction
+    lines.erase(std::remove_if(lines.begin(), lines.end(),
+                               [](const Line &l) {
+                                   return l.a.y() == l.b.y();
+                               }),
+                lines.end());
+    // change line direction from top to bottom
+    for (Line &line : lines)
+        if (line.a.y() > line.b.y()) std::swap(line.a, line.b);
+    // sort by a.y()
+    std::sort(lines.begin(), lines.end(),
+              [](const Line &l1, const Line &l2) -> bool {
+                  return l1.a.y() < l2.a.y();
+              });
+
+    std::vector<Vec2f> out;
+    // size_t count_sample_lines = (max_y - min_y) / triangle_height;
+    // out.reserve(count_sample_lines * count_sample_lines);
+
+    bool is_odd = false;
+    for (coord_t y = min_y + triangle_height / 2; y < max_y;
+         y += triangle_height) {
+        is_odd = !is_odd;
+        std::vector<coord_t> intersections;
+
+        for (auto line = std::begin(lines); line != std::end(lines); ++line) {
+            const Point &b = line->b;
+            if (b.y() <= y) {
+                // line = lines.erase(line);
+                continue;
+            }
+            const Point &a = line->a;
+            if (a.y() >= y) break;
+            float   y_range      = static_cast<float>(b.y() - a.y());
+            float   x_range      = static_cast<float>(b.x() - a.x());
+            float   ratio        = (y - a.y()) / y_range;
+            coord_t intersection = a.x() +
+                                   static_cast<coord_t>(x_range * ratio);
+            intersections.push_back(intersection);
+        }
+        assert(intersections.size() % 2 == 0);
+        std::sort(intersections.begin(), intersections.end());
+        for (size_t index = 0; index + 1 < intersections.size(); index += 2) {
+            coord_t start_x = intersections[index];
+            coord_t end_x   = intersections[index + 1];
+            if (is_odd) start_x += triangle_side_2;
+            coord_t div = start_x / triangle_side;
+            if (start_x > 0) div += 1;
+            coord_t x = div * triangle_side;
+            if (is_odd) x -= triangle_side_2;
+            while (x < end_x) {
+                out.push_back(unscale(x, y).cast<float>());
+                x += triangle_side;
+            }
+        }
+    }
+    return out;
+}
+
 std::unique_ptr<SupportIslandPoint> SampleIslandUtils::create_point(
     const VoronoiGraph::Node::Neighbor *neighbor,
     double                              ratio,
