@@ -967,11 +967,9 @@ std::pair<Slic3r::Point, Slic3r::Point> VoronoiGraphUtils::point_on_lines(
     bool is_linear = edge->is_linear();
 
     Point edge_point = create_edge_point(position);
-    Point dir        = to_point(edge->vertex0()) - to_point(edge->vertex1());
-    Line  intersecting_line(edge_point, edge_point + PointUtils::perp(dir));
 
     auto point_on_line           = [&](const VD::edge_type *edge) -> Point {
-        assert(edge->is_finite());        
+        assert(edge->is_finite());
         const VD::cell_type *cell = edge->cell();
         size_t line_index = cell->source_index();
         const Line &line = lines[line_index];
@@ -984,6 +982,9 @@ std::pair<Slic3r::Point, Slic3r::Point> VoronoiGraphUtils::point_on_lines(
         if (cell->source_category() == SOURCE_CATEGORY_SEGMENT_END_POINT) {
             return line.b;
         }
+        
+        Point dir = LineUtils::direction(line);
+        Line intersecting_line(edge_point, edge_point + PointUtils::perp(dir));
         std::optional<Vec2d> intersection = LineUtils::intersection(line, intersecting_line);
         assert(intersection.has_value());
         return intersection->cast<coord_t>();
