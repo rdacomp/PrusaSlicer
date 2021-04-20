@@ -33,6 +33,14 @@ public:
     static std::vector<Vec2f> sample_expolygon(const ExPolygon &expoly, float samples_per_mm2);
 
     /// <summary>
+    /// Uniform sample expolygon area by points inside Equilateral triangle center
+    /// </summary>
+    /// <param name="expoly">Input area to sample.(scaled)</param>
+    /// <param name="triangle_side">Distance between samples.</param>
+    /// <returns>Uniform samples(scaled)</returns>
+    static Points sample_expolygon(const ExPolygon &expoly, coord_t triangle_side);
+
+    /// <summary>
     /// Create support point on edge defined by neighbor
     /// </summary>
     /// <param name="neighbor">Source edge</param>

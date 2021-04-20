@@ -16,11 +16,14 @@
 
 #include <libslic3r/ClipperUtils.hpp> // allign
 
+#include "libslic3r/SLA/SupportPointGenerator.hpp"
+
 // comment definition of NDEBUG to enable assert()
 //#define NDEBUG
 
-#define SLA_SAMPLING_STORE_FIELD_TO_SVG
-#define SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
+//#define SLA_SAMPLING_STORE_VORONOI_GRAPH_TO_SVG
+//#define SLA_SAMPLING_STORE_FIELD_TO_SVG
+//#define SLA_SAMPLING_STORE_POISSON_SAMPLING_TO_SVG
 
 #include <cassert>
 
@@ -28,6 +31,27 @@ using namespace Slic3r::sla;
 
 std::vector<Slic3r::Vec2f> SampleIslandUtils::sample_expolygon(
     const ExPolygon &expoly, float samples_per_mm2)
+{
+    static const float mm2_area = scale_(1) * scale_(1);
+    // Equilateral triangle area = (side * height) / 2
+    float triangle_area = mm2_area / samples_per_mm2;
+    // Triangle area = sqrt(3) / 4 * "triangle side"
+    static const float coef1         = sqrt(3.) / 4.;
+    coord_t            triangle_side = static_cast<coord_t>(
+        std::round(sqrt(triangle_area * coef1)));
+
+    Points points = sample_expolygon(expoly, triangle_side);
+
+    std::vector<Vec2f> result;
+    result.reserve(points.size());
+    std::transform(points.begin(), points.end(), std::back_inserter(result), 
+        [](const Point &p) { return unscale(p).cast<float>(); });
+
+    return result;
+}
+
+Slic3r::Points SampleIslandUtils::sample_expolygon(const ExPolygon &expoly,
+                                                   coord_t triangle_side)
 {
     const Points &points = expoly.contour.points;
     assert(!points.empty());
@@ -41,51 +65,45 @@ std::vector<Slic3r::Vec2f> SampleIslandUtils::sample_expolygon(
             max_y = point.y();
     }
 
-    static const float mm2_area = scale_(1) * scale_(1);
-    // Equilateral triangle area = (side * height) / 2
-    float triangle_area = mm2_area / samples_per_mm2;
-    // Triangle area = sqrt(3) / 4 * "triangle side"
-    static const float coef1         = sqrt(3.) / 4.;
-    coord_t            triangle_side = static_cast<coord_t>(
-        std::round(sqrt(triangle_area * coef1)));
-    coord_t            triangle_side_2 = triangle_side / 2;
+    coord_t triangle_side_2 = triangle_side / 2;
     static const float coef2           = sqrt(3.) / 2.;
-    coord_t            triangle_height = static_cast<coord_t>(
-        std::round(triangle_side * coef2));
+    coord_t triangle_height = static_cast<coord_t>(std::round(triangle_side * coef2));
 
     // IMPROVE: use line end y
     Lines lines = to_lines(expoly);
-    // remove lines with y direction
+    // remove lines paralel with axe x
     lines.erase(std::remove_if(lines.begin(), lines.end(),
                                [](const Line &l) {
                                    return l.a.y() == l.b.y();
-                               }),
-                lines.end());
+                               }), lines.end());
+
     // change line direction from top to bottom
     for (Line &line : lines)
         if (line.a.y() > line.b.y()) std::swap(line.a, line.b);
+    
     // sort by a.y()
     std::sort(lines.begin(), lines.end(),
               [](const Line &l1, const Line &l2) -> bool {
                   return l1.a.y() < l2.a.y();
               });
-
-    std::vector<Vec2f> out;
-    // size_t count_sample_lines = (max_y - min_y) / triangle_height;
-    // out.reserve(count_sample_lines * count_sample_lines);
-
+    // IMPROVE: guess size and reserve points
+    Points result;
+    size_t start_index = 0;
     bool is_odd = false;
     for (coord_t y = min_y + triangle_height / 2; y < max_y;
          y += triangle_height) {
         is_odd = !is_odd;
         std::vector<coord_t> intersections;
-
-        for (auto line = std::begin(lines); line != std::end(lines); ++line) {
+        bool increase_start_index = true;
+        for (auto line = std::begin(lines)+start_index; line != std::end(lines); ++line) {
             const Point &b = line->b;
             if (b.y() <= y) {
-                // line = lines.erase(line);
+                // removing lines is slow, start index is faster
+                // line = lines.erase(line); 
+                if (increase_start_index) ++start_index;
                 continue;
             }
+            increase_start_index = false;
             const Point &a = line->a;
             if (a.y() >= y) break;
             float   y_range      = static_cast<float>(b.y() - a.y());
@@ -106,12 +124,12 @@ std::vector<Slic3r::Vec2f> SampleIslandUtils::sample_expolygon(
             coord_t x = div * triangle_side;
             if (is_odd) x -= triangle_side_2;
             while (x < end_x) {
-                out.push_back(unscale(x, y).cast<float>());
+                result.emplace_back(x, y);
                 x += triangle_side;
             }
         }
     }
-    return out;
+    return result;
 }
 
 std::unique_ptr<SupportIslandPoint> SampleIslandUtils::create_point(
@@ -224,7 +242,14 @@ SupportIslandPoints SampleIslandUtils::sample_side_branch(
         distance -= neighbor->length();
         prev_node = node;
     }
-    assert(fabs(distance - (sample_distance - cfg.side_distance)) < 1e-5);
+    //if (cfg.side_distance > sample_distance) {
+    //    int count = static_cast<int>(std::floor(cfg.side_distance / sample_distance));
+    //    for (int i = 0; i < count; ++i) { 
+    //        distance += sample_distance;
+    //        result.pop_back();
+    //    }
+    //}
+    //assert(fabs(distance - (sample_distance - cfg.side_distance)) < 1e-5);
     result.back()->type = SupportIslandPoint::Type::center_line_end;
     return std::move(result);
 }
@@ -777,8 +802,7 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
         center_starts.pop();
         for (const CenterStart &start : new_starts) center_starts.push(start);
         if (field_start.has_value()){ // exist new field start?
-            sample_field(field_start.value(), points, center_starts, done, lines, config);
-            field_start = {};
+            sample_field(*field_start, points, center_starts, done, lines, config);
         }
     }
     return points;
@@ -795,7 +819,23 @@ void SampleIslandUtils::sample_field(VoronoiGraph::Position &field_start,
     SupportIslandPoints outline_support = sample_outline(field, config);
     points.insert(points.end(), std::move_iterator(outline_support.begin()),
                   std::move_iterator(outline_support.end()));
-    // TODO: sample field inside
+
+    // Erode island to not sampled island around border,
+    // minimal value must be -config.minimal_distance_from_outline
+    Polygons polygons = offset(field.border, -2.f * config.minimal_distance_from_outline,
+                               ClipperLib::jtSquare);
+    if (polygons.empty()) return;
+    ExPolygon inner(polygons.front());
+    for (size_t i = 1; i < polygons.size(); ++i) {
+        Polygon &hole = polygons[i];
+        inner.holes.push_back(hole);
+    }
+    Points inner_points = sample_expolygon(inner, config.max_distance);    
+    std::transform(inner_points.begin(), inner_points.end(), std::back_inserter(points), 
+        [](const Point &point) { 
+            return std::make_unique<SupportIslandPoint>(
+                           point, SupportIslandPoint::Type::inner);
+        });
 }
 
 std::vector<SampleIslandUtils::CenterStart> SampleIslandUtils::sample_center(
@@ -919,6 +959,7 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     //   line index, vector<next line index + 2x shortening points>
     std::map<size_t, WideTinyChanges> wide_tiny_changes;
 
+    coord_t minimal_edge_length = std::max(config.max_distance / 2, 2*config.minimal_distance_from_outline);
     // cut lines at place where neighbor has width = min_width_for_outline_support
     // neighbor must be in direction from wide part to tiny part of island
     auto add_wide_tiny_change =
@@ -929,7 +970,7 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
         // IMPROVE: check not only one neighbor but all path to edge
         coord_t rest_size = static_cast<coord_t>(neighbor->length() * (1. - position.ratio));
         if (VoronoiGraphUtils::is_last_neighbor(neighbor) &&
-            rest_size <= config.max_distance / 2)
+            rest_size <= minimal_edge_length)
             return false; // no change only rich outline
 
         // function to add sorted change from wide to tiny
@@ -968,16 +1009,19 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
         return true;
     };
 
-    const VoronoiGraph::Node::Neighbor *neighbor = field_start.neighbor;
-    const VoronoiGraph::Node::Neighbor *twin_neighbor = VoronoiGraphUtils::get_twin(neighbor);
-    VoronoiGraph::Position position(twin_neighbor, 1. - field_start.ratio);
-    add_wide_tiny_change(position, neighbor->node);
+    const VoronoiGraph::Node::Neighbor *tiny_wide_neighbor = field_start.neighbor;
+    const VoronoiGraph::Node::Neighbor *wide_tiny_neighbor = VoronoiGraphUtils::get_twin(tiny_wide_neighbor);
+    VoronoiGraph::Position position(wide_tiny_neighbor, 1. - field_start.ratio);
+    add_wide_tiny_change(position, tiny_wide_neighbor->node);
 
     std::set<const VoronoiGraph::Node*> done;
-    done.insert(twin_neighbor->node);
+    done.insert(wide_tiny_neighbor->node);
+    //                                    prev node         ,           node
     using ProcessItem = std::pair<const VoronoiGraph::Node *, const VoronoiGraph::Node *>;
+    // initial proccess item from tiny part to wide part of island
+    ProcessItem start(wide_tiny_neighbor->node, tiny_wide_neighbor->node);
     std::queue<ProcessItem> process;
-    process.push({twin_neighbor->node, neighbor->node});
+    process.push(start);
 
     // all lines belongs to polygon
     std::set<size_t> field_line_indexes;
@@ -1051,6 +1095,14 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
                     }
                 }
                 if (no_change) break;
+
+                // Field ends with change into first index
+                if (!is_first && change_item->first == input_index &&
+                    change_index == 0) {
+                    return false;
+                } else {
+                    is_first = false;
+                }
             }
             const WideTinyChange &change = changes[change_index];
             // prevent double points
@@ -1069,8 +1121,6 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
             }
             done.insert(index);
             index = change.next_line_index;
-            // end of conture
-            if (!is_first && index == input_index) return false;
             change_item = wide_tiny_changes.find(index);
         }
         return true;
@@ -1080,8 +1130,8 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     points.reserve(field_line_indexes.size());
     std::vector<size_t> outline_indexes;
     outline_indexes.reserve(field_line_indexes.size());
-    size_t input_index1 = neighbor->edge->cell()->source_index();
-    size_t input_index2 = neighbor->edge->twin()->cell()->source_index();
+    size_t input_index1 = tiny_wide_neighbor->edge->cell()->source_index();
+    size_t input_index2 = tiny_wide_neighbor->edge->twin()->cell()->source_index();
     size_t input_index  = std::min(input_index1, input_index2);
     size_t outline_index = input_index;
     std::set<size_t> done_indexes;
@@ -1129,6 +1179,16 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
 SupportIslandPoints SampleIslandUtils::sample_outline(
     const Field &field, const SampleConfig &config)
 {
+    // TODO: fix it by neighbor line angles
+    // Do not create inner expoly and test all points to lay inside
+    Polygons polygons = offset(field.border,-config.minimal_distance_from_outline + 5, ClipperLib::jtSquare);
+    if (polygons.empty()) return {}; // no place for support point
+    ExPolygon inner(polygons.front());
+    for (size_t i = 1; i < polygons.size(); ++i) {
+        Polygon &hole = polygons[i];
+        inner.holes.push_back(hole);
+    }
+
     coord_t sample_distance = config.outline_sample_distance;
     coord_t outline_distance = config.minimal_distance_from_outline;
     SupportIslandPoints result;
@@ -1143,8 +1203,13 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
             do {
                 double ratio = (sample_distance - last_support) / line_length_double;
                 Point point = line.a + dir * ratio + move_from_outline;
-                result.emplace_back(std::make_unique<SupportOutlineIslandPoint>(
-                    point, source_index, SupportIslandPoint::Type::outline));
+
+                // TODO: improve prevent sampling out of field near sharp corner
+                // use range for possible ratio
+                if (inner.contains(point))
+                    result.emplace_back(std::make_unique<SupportOutlineIslandPoint>(
+                        point, source_index, SupportIslandPoint::Type::outline));
+
                 last_support -= sample_distance;
             } while (last_support + line_length > sample_distance);
         }

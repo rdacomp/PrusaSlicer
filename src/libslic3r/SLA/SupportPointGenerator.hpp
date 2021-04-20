@@ -16,7 +16,7 @@
 
 #include "libslic3r/SLA/SupportIslands/SupportIslandPoint.hpp"
 
-#define SLA_SUPPORTPOINTGEN_DEBUG
+//#define SLA_SUPPORTPOINTGEN_DEBUG
 
 namespace Slic3r::sla {
 
@@ -211,7 +211,7 @@ private:
     void process(const std::vector<ExPolygons>& slices, const std::vector<float>& heights);
 
     void supportCenterPoint(Structure &structure, PointGrid3D &grid3d);
-    std::vector<Vec2f> uniform_cover_island(SupportPointGenerator::Structure &structure);
+    std::vector<Vec2f> uniform_cover_island(const ExPolygon &island);
 
 public: // for testing
     /// <summary>
@@ -224,9 +224,10 @@ public: // for testing
 public:
     enum IslandCoverageFlags : uint8_t { icfNone = 0x0, icfIsNew = 0x1, icfWithBoundary = 0x2 };
 
-private:
+public: // only for test
     void uniformly_cover(const ExPolygons& islands, Structure& structure, float deficit, PointGrid3D &grid3d, IslandCoverageFlags flags = icfNone);
 
+private:
     void add_support_points(Structure& structure, PointGrid3D &grid3d);
 
     void project_onto_mesh(std::vector<SupportPoint> &points, const double &allowed_move = std::numeric_limits<float>::epsilon()) const;

@@ -381,7 +381,7 @@ public:
         const Lines &        lines);
 
     /// <summary>
-    /// calculate both point on source lines correspond to edge postion
+    /// Calculate both point on source lines correspond to edge postion
     /// Faster way to get both point_on_line
     /// </summary>
     /// <param name="position">Position on edge</param>

@@ -557,9 +557,16 @@ TEST_CASE("speed sampling", "[SupGen]") {
 
 TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
 {
-    double       size = 3e7;
+    double       size    = 3e7;
     SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
+
+    // TODO: remove next 3 lines, debug sharp triangle
+    auto triangle = PolygonUtils::create_isosceles_triangle(8. * size, 40. * size);
+    islands = {ExPolygon(triangle)};
+    auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
+    islands          = {test_island};
+
     for (ExPolygon &island : islands) {
         size_t debug_index = &island - &islands.front();
         auto   points = test_island_sampling(island, cfg);
@@ -572,3 +579,109 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
         // points should be equal to pointsR
     }
 }
+
+std::vector<Vec2f> sample_old(const ExPolygon &island)
+{
+    // Create the support point generator
+    static TriangleMesh                       mesh;
+    static sla::IndexedMesh                   emesh{mesh};
+    static sla::SupportPointGenerator::Config autogencfg;
+    //autogencfg.minimal_distance = 8.f;
+    static sla::SupportPointGenerator generator{emesh, autogencfg, [] {}, [](int) {}};
+
+    // tear preasure
+    float tp = autogencfg.tear_pressure();
+    size_t layer_id = 13;
+    coordf_t print_z = 11.f;
+    SupportPointGenerator::MyLayer layer(layer_id, print_z);
+    ExPolygon                      poly = island;
+    BoundingBox                    bbox(island);
+    Vec2f                          centroid;
+    float                          area = island.area();
+    float                                 h    = 17.f;
+    sla::SupportPointGenerator::Structure s(layer, poly, bbox, centroid,area,h);
+    auto flag = sla::SupportPointGenerator::IslandCoverageFlags(
+        sla::SupportPointGenerator::icfIsNew | sla::SupportPointGenerator::icfWithBoundary);
+    SupportPointGenerator::PointGrid3D grid3d;
+    generator.uniformly_cover({island}, s, s.area * tp, grid3d, flag);
+
+    std::vector<Vec2f> result;
+    result.reserve(grid3d.grid.size());
+    for (auto g : grid3d.grid) { 
+        const Vec3f &p = g.second.position;
+        Vec2f        p2f(p.x(), p.y());
+        result.emplace_back(scale_(p2f));
+    }
+    return result;
+}
+
+#include <libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp>
+std::vector<Vec2f> sample_filip(const ExPolygon &island)
+{
+    static SampleConfig cfg = create_sample_config(1e6);
+    SupportIslandPoints points = SupportPointGenerator::uniform_cover_island(island, cfg);
+
+    std::vector<Vec2f> result;
+    result.reserve(points.size());
+    for (auto &p : points) { 
+        result.push_back(p->point.cast<float>());
+    }
+    return result;
+}
+
+void store_sample(const std::vector<Vec2f> &samples, const ExPolygon& island)
+{ 
+    static int counter = 0;
+    BoundingBox bb(island);
+    SVG svg(("sample_"+std::to_string(counter++)+".svg").c_str(), bb); 
+
+    double mm = scale_(1);
+    svg.draw(island, "lightgray");
+    for (const auto &s : samples) { 
+        svg.draw(s.cast<coord_t>(), "blue", 0.2*mm);
+    }
+
+    // draw resolution
+    Point p(bb.min.x() + 1e6, bb.max.y() - 2e6);
+    svg.draw_text(p, (std::to_string(samples.size()) + " samples").c_str(), "black");
+    svg.draw_text(p - Point(0., 1.8e6), "Scale 1 cm ", "black");
+    Point  start = p - Point(0., 2.3e6);
+    svg.draw(Line(start + Point(0., 5e5), start + Point(10*mm, 5e5)), "black", 2e5);
+    svg.draw(Line(start + Point(0., -5e5), start + Point(10*mm, -5e5)), "black", 2e5);
+    svg.draw(Line(start + Point(10*mm, 5e5), start + Point(10*mm, -5e5)), "black", 2e5);
+    for (int i=0; i<10;i+=2)
+        svg.draw(Line(start + Point(i*mm, 0.), start + Point((i+1)*mm, 0.)), "black", 1e6);
+}
+
+TEST_CASE("Compare sampling test")
+{
+    enum class Sampling {
+        old,
+        filip 
+    } sample_type = Sampling::old;
+    
+    std::function<std::vector<Vec2f>(const ExPolygon &)> sample =
+        (sample_type == Sampling::old)   ? sample_old :
+        (sample_type == Sampling::filip) ? sample_filip :
+                                           nullptr;
+    
+    double       size1   = 1e6;
+    double       size2    = 3e6;
+    ExPolygons   islands  = createTestIslands(1e6);
+    ExPolygons   islands_big = createTestIslands(3e6);
+    islands.insert(islands.end(), islands_big.begin(), islands_big.end());
+
+    islands = {ExPolygon(PolygonUtils::create_rect(size1 / 2, size1))};
+
+    for (ExPolygon &island : islands) {
+        size_t debug_index = &island - &islands.front();
+        auto samples = sample(island);
+        store_sample(samples, island);
+        
+        double angle = 3.14 / 3; // cca 60 degree
+        island.rotate(angle);
+        samples = sample(island);
+        store_sample(samples, island);
+    }
+}
+

@@ -11,8 +11,9 @@ namespace Slic3r::sla {
 /// <summary>
 /// DTO position with information about source of support point
 /// </summary>
-struct SupportIslandPoint
+class SupportIslandPoint
 {
+public:
     enum class Type: unsigned char {
         one_center_point,
         two_points,
@@ -26,41 +27,41 @@ struct SupportIslandPoint
                            // need allign)
         center_circle_end2, // circle finish by multi points (one end per
                             // circle - need allign)
-
         outline, // keep position align with island outline 
+        inner, // point inside wide part, without restriction on move
+
         undefined
     };
 
-    Type type;
-    Slic3r::Point point; // 2 coordinate point in a layer (in one slice)
+    Type type; 
+    Point point;
 
-    //SupportIslandPoint() : point(0, 0), type(Type::undefined) {}
-    SupportIslandPoint(Slic3r::Point point, Type type = Type::undefined);
+public:
+    /// <summary>
+    /// constructor
+    /// </summary>
+    /// <param name="point">coordinate point inside a layer (in one slice)</param>
+    /// <param name="type">type of support point</param>
+    SupportIslandPoint(Point point, Type type = Type::undefined);
+
+    /// <summary>
+    /// virtual destructor to be inheritable
+    /// </summary>
     virtual ~SupportIslandPoint() = default;
 
-    static bool can_move(const Type &type)
-    {
-        // use shorter list
-        /*
-        static const std::set<Type> can_move({
-            Type::center_line,
-            Type::center_circle,
-            Type::center_circle_end,
-            Type::center_circle_end2});
-        return can_move.find(type) != can_move.end();
-        /*/     // switch comment center
-        static const std::set<Type> cant_move({
-            Type::one_center_point,
-            Type::two_points,
-            Type::center_line_end,
-            Type::center_line_end2,
-            Type::center_line_end3,
-            Type::center_line_start});
-        return cant_move.find(type) == cant_move.end();
-        //*/
-    }
-
-    virtual bool can_move() const { return can_move(type); }
+    /// <summary>
+    /// static function to decide if type is possible to move or not
+    /// </summary>
+    /// <param name="type">type to distinguish</param>
+    /// <returns>True when is possible to move, otherwise FALSE</returns>
+    static bool can_move(const Type &type);
+        
+    /// <summary>
+    /// static function to decide if type is possible to move or not
+    /// </summary>
+    /// <param name="type">type to distinguish</param>
+    /// <returns>True when is possible to move, otherwise FALSE</returns>
+    virtual bool can_move() const;
 
     /// <summary>
     /// Move position of support point close to destination
@@ -74,8 +75,13 @@ struct SupportIslandPoint
 using SupportIslandPointPtr = std::unique_ptr<SupportIslandPoint>;
 using SupportIslandPoints = std::vector<SupportIslandPointPtr>;
 
-struct SupportCenterIslandPoint : public SupportIslandPoint
+/// <summary>
+/// DTO Support point laying on voronoi graph edge
+/// Restriction to move only on Voronoi graph
+/// </summary>
+class SupportCenterIslandPoint : public SupportIslandPoint
 {
+public:
     // Define position on voronoi graph
     // Lose data when voronoi graph does NOT exist
     VoronoiGraph::Position position;
@@ -85,20 +91,26 @@ struct SupportCenterIslandPoint : public SupportIslandPoint
     // TODO: should earn when created
     const double max_distance = 1e6; // [in nm] --> 1 mm
 
-    SupportCenterIslandPoint(Slic3r::Point          point,
+public:
+    SupportCenterIslandPoint(Point                  point,
                              VoronoiGraph::Position position,
-                             Type                   type = Type::center_line)
-        : SupportIslandPoint(point, type), position(position)
-    {}
-
+                             Type                   type = Type::center_line);
+    
     bool can_move() const override{ return true; }
     coord_t move(const Point &destination) override;
 };
 
-struct SupportOutlineIslandPoint : public SupportIslandPoint
+/// <summary>
+/// DTO Support point laying on Outline of island
+/// Restriction to move only on outline
+/// </summary>
+class SupportOutlineIslandPoint : public SupportIslandPoint
 {
+public:
     // index of line form island outline 
     size_t index;
+
+public:
     SupportOutlineIslandPoint(Slic3r::Point point,
                               size_t        index,
                               Type          type = Type::outline)

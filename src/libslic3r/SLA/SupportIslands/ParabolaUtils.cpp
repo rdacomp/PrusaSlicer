@@ -1,5 +1,5 @@
 #include "ParabolaUtils.hpp"
-
+#include "PointUtils.hpp"
 using namespace Slic3r::sla;
 
 double ParabolaUtils::length(const ParabolaSegment &parabola)
@@ -79,6 +79,8 @@ void ParabolaUtils::draw(SVG &                  svg,
                          double                 discretization_step)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
+    if (PointUtils::is_equal(parabola.from, parabola.to)) return;
+
     std::vector<Voronoi::Internal::point_type> parabola_samples(
         {parabola.from, parabola.to});
 

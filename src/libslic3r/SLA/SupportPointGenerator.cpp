@@ -22,6 +22,7 @@
 #include "libslic3r/SLA/SupportIslands/VoronoiGraphUtils.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleIslandUtils.hpp"
 #include "libslic3r/SLA/SupportIslands/SampleConfigFactory.hpp"
+#include "libslic3r/SLA/SupportIslands/VectorUtils.hpp"
 
 #include <iostream>
 #include <random>
@@ -318,13 +319,15 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
     }
 }
 
-std::vector<Vec2f> SupportPointGenerator::uniform_cover_island(
-        SupportPointGenerator::Structure &structure)
+std::vector<Vec2f> SupportPointGenerator::uniform_cover_island(const ExPolygon &island)
 {
     SampleConfig        cfg    = SampleConfigFactory::create(m_config);
-    const ExPolygon &   island = *structure.polygon;
     SupportIslandPoints points = uniform_cover_island(island, cfg);
-    return SampleIslandUtils::to_points_f(points);
+    std::function<Vec2f(const std::unique_ptr<SupportIslandPoint> &)>
+        transform_func = [](const std::unique_ptr<SupportIslandPoint> &p)->Vec2f{
+            return unscale(p->point).cast<float>();
+        };
+    return VectorUtils::transform(points, transform_func);
 }
 
 SupportIslandPoints SupportPointGenerator::uniform_cover_island(
@@ -340,8 +343,9 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     SupportIslandPoints  samples = SampleIslandUtils::sample_voronoi_graph(
             skeleton, lines, config, longest_path);
 
-    if (samples.size() > 2)
-        SampleIslandUtils::align_samples(samples, island, config);
+    // allign samples
+    /*if (samples.size() > 2)
+        SampleIslandUtils::align_samples(samples, island, config);*/
 
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
     const char* support_point_color = "lightgreen";
@@ -362,19 +366,6 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
     return samples;
 }
 
-void SupportPointGenerator::supportCenterPoint(
-    SupportPointGenerator::Structure &  structure,
-                     SupportPointGenerator::PointGrid3D &grid3d)
-{ 
-    const ExPolygon &island = *structure.polygon; 
-    Point center             = island.contour.centroid();
-    Vec2f            centerf = unscaled(center).cast<float>();
-    m_output.emplace_back(centerf(0), centerf(1), structure.zlevel,
-                          m_config.head_diameter / 2.f, icfIsNew);
-    structure.supports_force_this_layer += m_config.support_force();
-    grid3d.insert(centerf, &structure);
-}
-
 void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure &s, SupportPointGenerator::PointGrid3D &grid3d)
 {
     // Select each type of surface (overrhang, dangling, slope), derive the support
@@ -386,9 +377,8 @@ void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure 
     if (s.islands_below.empty()) {
         // completely new island - needs support no doubt
         // deficit is full, there is nothing below that would hold this island
-        //uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
-        //supportCenterPoint(s, grid3d);
-        grid3d.insert(uniform_cover_island(s), &s);
+        uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
+        //grid3d.insert(uniform_cover_island(*s.polygon), &s);
         return;
     }
 
@@ -657,15 +647,12 @@ void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure
     // Minimum distance between samples, in 3D space.
 //    float min_spacing			= poisson_radius / 3.f;
     float min_spacing			= poisson_radius;
-
-    //FIXME share the random generator. The random generator may be not so cheap to initialize, also we don't want the random generator to be restarted for each polygon.
-
-    std::vector<Vec2f> raw_samples =
-        flags & icfWithBoundary ?
-            sample_expolygon_with_boundary(islands, samples_per_mm2,
-                                           5.f / poisson_radius, m_rng) :
+    std::vector<Vec2f> raw_samples = 
+        flags & icfIsNew ? uniform_cover_island(*structure.polygon):
+        flags & icfWithBoundary ? sample_expolygon_with_boundary(
+            islands, samples_per_mm2, 5.f / poisson_radius, m_rng) :
             sample_expolygon(islands, samples_per_mm2, m_rng);
-
+    
     std::vector<Vec2f>  poisson_samples;
     for (size_t iter = 0; iter < 4; ++ iter) {
         poisson_samples = poisson_disk_from_samples(raw_samples, poisson_radius,
