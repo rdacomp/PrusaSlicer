@@ -40,14 +40,8 @@ TEST_CASE("Pillar pairhash should be unique", "[SLASupportGeneration]") {
 
 TEST_CASE("Support point generator should be deterministic if seeded", 
           "[SLASupportGeneration], [SLAPointGen]") {
-    //TriangleMesh mesh = load_model("A_upsidedown.obj");
-    //TriangleMesh mesh = load_model("smallIslands.obj");
-    TriangleMesh mesh = load_model("triangleStick.obj");
-    //TriangleMesh mesh = load_model("triangleSticks.obj");
-    //TriangleMesh mesh = load_model("StarStick.obj");
-    
-    sla::IndexedMesh emesh{mesh};
-    
+    TriangleMesh mesh = load_model("A_upsidedown.obj");    
+    sla::IndexedMesh emesh{mesh};    
     sla::SupportTreeConfig supportcfg;
     sla::SupportPointGenerator::Config autogencfg;
     autogencfg.head_diameter = float(2 * supportcfg.head_front_radius_mm);

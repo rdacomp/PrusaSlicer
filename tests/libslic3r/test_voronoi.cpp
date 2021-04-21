@@ -7,8 +7,6 @@
 #include <libslic3r/Geometry.hpp>
 
 #include <libslic3r/VoronoiOffset.hpp>
-#include <libslic3r/VoronoiVisualUtils.hpp>
-
 #include <numeric>
 
 #define VORONOI_DEBUG_OUT

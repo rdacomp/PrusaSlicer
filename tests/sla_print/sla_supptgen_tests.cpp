@@ -15,6 +15,8 @@
 using namespace Slic3r;
 using namespace Slic3r::sla;
 
+//#define STORE_SAMPLE_INTO_SVG_FILES
+
 TEST_CASE("Overhanging point should be supported", "[SupGen]") {
 
     // Pyramid with 45 deg slope
@@ -461,7 +463,7 @@ SampleConfig create_sample_config(double size) {
 
 #include <libslic3r/Geometry.hpp>
 #include <libslic3r/VoronoiOffset.hpp>
-TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
+TEST_CASE("Sampling speed test on FrogLegs", "[hide], [VoronoiSkeleton]")
 {
     TriangleMesh            mesh = load_model("frog_legs.obj");
     TriangleMeshSlicer      slicer{&mesh};
@@ -484,7 +486,7 @@ TEST_CASE("Sampling speed test on FrogLegs", "[VoronoiSkeleton]")
     }
 }
 
-TEST_CASE("Speed align", "[VoronoiSkeleton]")
+TEST_CASE("Speed align", "[hide], [VoronoiSkeleton]")
 {
     SampleConfig cfg      = create_sample_config(3e7);
     cfg.max_align_distance = 1000;
@@ -507,9 +509,12 @@ TEST_CASE("Speed align", "[VoronoiSkeleton]")
     }
 }
 
-//#include <libslic3r/SLA/SupportPointGenerator.hpp>
 #include <libslic3r/SLA/SupportIslands/LineUtils.hpp>
-TEST_CASE("speed sampling", "[SupGen]") { 
+/// <summary>
+/// Check speed of sampling,
+/// for be sure that code is not optimized out store result to svg or print count.
+/// </summary>
+TEST_CASE("speed sampling", "[hide], [SupGen]") { 
     double       size    = 3e7;
     float      samples_per_mm2 = 0.01f;
     ExPolygons   islands = createTestIslands(size);
@@ -538,6 +543,8 @@ TEST_CASE("speed sampling", "[SupGen]") {
     }
     std::cout << "All points " << all << std::endl;*/
     
+    
+#ifdef STORE_SAMPLE_INTO_SVG_FILES
     for (size_t i = 0; i < result1.size(); ++i) {
         size_t     island_index = i % islands.size();
         ExPolygon &island       = islands[island_index];
@@ -552,16 +559,21 @@ TEST_CASE("speed sampling", "[SupGen]") {
         svg.draw_text({0., 5e6}, ("uniform samples " + std::to_string(result2[i].size())).c_str(), "green");
         for (Vec2f &p : result2[i]) 
             svg.draw((p * 1e6).cast<coord_t>(), "green", 1e6);
-    }//*/
+    }
+#endif // STORE_SAMPLE_INTO_SVG_FILES
 }
 
-TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkeleton]")
+/// <summary>
+/// Check for correct sampling of island
+/// 
+/// </summary>
+TEST_CASE("Small islands should be supported in center", "[SupGen], [VoronoiSkeleton]")
 {
     double       size    = 3e7;
     SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
 
-    // TODO: remove next 3 lines, debug sharp triangle
+    // TODO: remove next 4 lines, debug sharp triangle
     auto triangle = PolygonUtils::create_isosceles_triangle(8. * size, 40. * size);
     islands = {ExPolygon(triangle)};
     auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
@@ -570,13 +582,13 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
     for (ExPolygon &island : islands) {
         size_t debug_index = &island - &islands.front();
         auto   points = test_island_sampling(island, cfg);
-        //cgal_test(points, island);
         double angle  = 3.14 / 3; // cca 60 degree
 
         island.rotate(angle);
         auto pointsR = test_island_sampling(island, cfg);
-        //for (Point &p : pointsR) p.rotate(-angle);
-        // points should be equal to pointsR
+
+        // points count should be the same
+        //CHECK(points.size() == pointsR.size())
     }
 }
 
@@ -653,7 +665,7 @@ void store_sample(const std::vector<Vec2f> &samples, const ExPolygon& island)
         svg.draw(Line(start + Point(i*mm, 0.), start + Point((i+1)*mm, 0.)), "black", 1e6);
 }
 
-TEST_CASE("Compare sampling test")
+TEST_CASE("Compare sampling test", "[hide]")
 {
     enum class Sampling {
         old,
@@ -671,17 +683,27 @@ TEST_CASE("Compare sampling test")
     ExPolygons   islands_big = createTestIslands(3e6);
     islands.insert(islands.end(), islands_big.begin(), islands_big.end());
 
-    islands = {ExPolygon(PolygonUtils::create_rect(size1 / 2, size1))};
-
     for (ExPolygon &island : islands) {
         size_t debug_index = &island - &islands.front();
         auto samples = sample(island);
+#ifdef STORE_SAMPLE_INTO_SVG_FILES
         store_sample(samples, island);
+#endif // STORE_SAMPLE_INTO_SVG_FILES
         
         double angle = 3.14 / 3; // cca 60 degree
         island.rotate(angle);
         samples = sample(island);
+#ifdef STORE_SAMPLE_INTO_SVG_FILES
         store_sample(samples, island);
+#endif // STORE_SAMPLE_INTO_SVG_FILES
     }
+}
+
+TEST_CASE("Disable visualization", "[hide]") 
+{
+    CHECK(true);
+#ifdef STORE_SAMPLE_INTO_SVG_FILES
+    CHECK(false);
+#endif // STORE_SAMPLE_INTO_SVG_FILES
 }
 
