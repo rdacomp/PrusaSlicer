@@ -1931,11 +1931,9 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     this->q->Bind(EVT_HID_DEVICE_ATTACHED, [this](HIDDeviceAttachedEvent &evt) {
     	mouse3d_controller.device_attached(evt.data);
         });
-#if ENABLE_CTRL_M_ON_WINDOWS
     this->q->Bind(EVT_HID_DEVICE_DETACHED, [this](HIDDeviceAttachedEvent& evt) {
         mouse3d_controller.device_detached(evt.data);
         });
-#endif // ENABLE_CTRL_M_ON_WINDOWS
 #endif /* _WIN32 */
 
 	notification_manager = new NotificationManager(this->q);
@@ -3336,16 +3334,14 @@ void Plater::priv::set_current_panel(wxPanel* panel)
 
 void Plater::priv::on_select_preset(wxCommandEvent &evt)
 {
-    auto preset_type = static_cast<Preset::Type>(evt.GetInt());
-    auto *combo = static_cast<PlaterPresetComboBox*>(evt.GetEventObject());
+    PlaterPresetComboBox* combo = static_cast<PlaterPresetComboBox*>(evt.GetEventObject());
+    Preset::Type preset_type    = combo->get_type();
 
     // see https://github.com/prusa3d/PrusaSlicer/issues/3889
     // Under OSX: in case of use of a same names written in different case (like "ENDER" and "Ender"),
     // m_presets_choice->GetSelection() will return first item, because search in PopupListCtrl is case-insensitive.
     // So, use GetSelection() from event parameter 
-    // But in this function we couldn't use evt.GetSelection(), because m_commandInt is used for preset_type
-    // Thus, get selection in this way:
-    int selection = combo->FindString(evt.GetString(), true);
+    int selection = evt.GetSelection();
 
     auto idx = combo->get_extruder_idx();
 

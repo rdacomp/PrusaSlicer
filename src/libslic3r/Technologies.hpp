@@ -27,41 +27,10 @@
 #define ENABLE_GCODE_VIEWER_STATISTICS 0
 // Enable G-Code viewer comparison between toolpaths height and width detected from gcode and calculated at gcode generation 
 #define ENABLE_GCODE_VIEWER_DATA_CHECKING 0
-
-
-//=================
-// 2.2.0.rc1 techs
-//=================
-#define ENABLE_2_2_0_RC1 1
-
-// Enable hack to remove crash when closing on OSX 10.9.5
-#define ENABLE_HACK_CLOSING_ON_OSX_10_9_5 (1 && ENABLE_2_2_0_RC1)
-
-
-//====================
-// 2.3.0.alpha1 techs
-//====================
-#define ENABLE_2_3_0_ALPHA1 1
-
 // Enable rendering of objects using environment map
-#define ENABLE_ENVIRONMENT_MAP (0 && ENABLE_2_3_0_ALPHA1)
-
+#define ENABLE_ENVIRONMENT_MAP 0
 // Enable smoothing of objects normals
-#define ENABLE_SMOOTH_NORMALS (0 && ENABLE_2_3_0_ALPHA1)
-
-// Enable error logging for OpenGL calls when SLIC3R_LOGLEVEL >= 5
-#define ENABLE_OPENGL_ERROR_LOGGING (1 && ENABLE_2_3_0_ALPHA1)
-
-// Enable built-in DPI changed event handler of wxWidgets 3.1.3
-#define ENABLE_WX_3_1_3_DPI_CHANGED_EVENT (1 && ENABLE_2_3_0_ALPHA1)
-
-
-//====================
-// 2.3.0.alpha3 techs
-//====================
-#define ENABLE_2_3_0_ALPHA3 1
-
-#define ENABLE_CTRL_M_ON_WINDOWS (1 && ENABLE_2_3_0_ALPHA3)
+#define ENABLE_SMOOTH_NORMALS 0
 
 
 //====================
@@ -80,22 +49,14 @@
 #define ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN (1 && ENABLE_2_3_0_BETA1)
 
 
-//=================
-// 2.3.0.rc1 techs
-//=================
-#define ENABLE_2_3_0_RC1 1
-
-#define ENABLE_VOLUMETRIC_EXTRUSION_PROCESSING (1 && ENABLE_2_3_0_RC1)
-
-
 //====================
 // 2.3.1.alpha1 techs
 //====================
 #define ENABLE_2_3_1_ALPHA1 1
 
 #define ENABLE_SPLITTED_VERTEX_BUFFER (1 && ENABLE_2_3_1_ALPHA1)
-#define ENABLE_RELOAD_FROM_DISK_FOR_3MF (1 && ENABLE_2_3_1_ALPHA1)
 #define ENABLE_REDUCED_TOOLPATHS_SEGMENT_CAPS (1 && ENABLE_SPLITTED_VERTEX_BUFFER)
+#define ENABLE_RELOAD_FROM_DISK_FOR_3MF (1 && ENABLE_2_3_1_ALPHA1)
 #define ENABLE_WARNING_TEXTURE_REMOVAL (1 && ENABLE_2_3_1_ALPHA1)
 #define ENABLE_GCODE_LINES_ID_IN_H_SLIDER (1 && ENABLE_2_3_1_ALPHA1)
 #define ENABLE_VALIDATE_CUSTOM_GCODE (1 && ENABLE_2_3_1_ALPHA1)
