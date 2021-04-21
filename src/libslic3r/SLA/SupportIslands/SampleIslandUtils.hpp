@@ -57,10 +57,16 @@ public:
     /// </summary>
     /// <param name="path">Neighbor connected Nodes</param>
     /// <param name="distance">Distance to final point</param>
-    /// <returns>Points with distance to first node</returns>
+    /// <returns>Position on VG with distance to first node when exists. 
+    /// When distance is out of path return null optional</returns>
+    static std::optional<VoronoiGraph::Position> create_position_on_path(
+        const VoronoiGraph::Nodes &path,
+        double                     distance);
+
     static SupportIslandPointPtr create_point_on_path(
         const VoronoiGraph::Nodes &path,
         double                     distance,
+        const SampleConfig &       config,
         SupportIslandPoint::Type type = SupportIslandPoint::Type::undefined);
 
     /// <summary>
@@ -69,7 +75,7 @@ public:
     /// is same as distance to back of path
     /// </summary>
     /// <param name="path">Queue of neighbor nodes.(must be neighbor)</param>
-    /// <param name="path_length">length of path</param>
+    /// <param name="type">Type of result island point</param>
     /// <returns>Point laying on voronoi diagram</returns>
     static SupportIslandPointPtr create_middle_path_point(
         const VoronoiGraph::Path &path,
@@ -82,20 +88,16 @@ public:
     struct CenterLineConfiguration
     {
         const VoronoiGraph::ExPath::SideBranchesMap &branches_map;
-        double min_length;
-        double max_sample_distance;
-        double side_distance;
+        const SampleConfig &                         sample_config;
+
         CenterLineConfiguration(
             const VoronoiGraph::ExPath::SideBranchesMap &branches_map,
-            double                                       min_length,
-            double                                       max_sample_distance,
-            double                                       side_distance)
+            const SampleConfig &                         sample_config)
             : branches_map(branches_map)
-            , min_length(min_length)
-            , max_sample_distance(max_sample_distance)
-            , side_distance(side_distance)
+            , sample_config(sample_config)
         {}
     };
+
     // create points along path and its side branches(recursively)
     static SupportIslandPoints sample_side_branch(
         const VoronoiGraph::Node *     first_node,

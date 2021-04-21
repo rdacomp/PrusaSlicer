@@ -28,6 +28,10 @@ struct SampleConfig
     // MUST be bigger than minimal_distance_from_outline
     coord_t minimal_support_distance = 0;
 
+    // minimal length of side branch to be sampled
+    // it is used for sampling in center only
+    coord_t min_side_branch_length = 0;
+
     // Maximal length of longest path in voronoi diagram to be island
     // supported only by one single support point this point will be in center of path.
     coord_t max_length_for_one_support_point = 1.;

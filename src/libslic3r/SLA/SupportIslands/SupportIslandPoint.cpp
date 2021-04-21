@@ -35,31 +35,39 @@ bool SupportIslandPoint::can_move(const Type &type)
 
 bool SupportIslandPoint::can_move() const { return can_move(type); }
 
-SupportCenterIslandPoint::SupportCenterIslandPoint(
-    Point point, VoronoiGraph::Position position, Type type)
-    : SupportIslandPoint(point, type), position(position)
-{}
-    
 coord_t SupportIslandPoint::move(const Point &destination)
 {
     Point diff = destination - point;
-    point = destination;
+    point      = destination;
     // TODO: check move out of island !!
     // + need island ExPolygon
     return diff.x() + diff.y(); // Manhatn distance
 }
 
-coord_t SupportCenterIslandPoint::move(const Point &destination)
-{
-    // TODO: For decide of move need information about
-    // + search distance for allowed move over VG(count or distance)
-        
-    // move only along VD
-    position = VoronoiGraphUtils::align(position, destination, max_distance);
+///////////////
+// Point on VD
+///////////////
 
+SupportCenterIslandPoint::SupportCenterIslandPoint(
+    VoronoiGraph::Position         position,
+    const SampleConfig *   configuration,
+    Type                           type)
+    : SupportIslandPoint(VoronoiGraphUtils::create_edge_point(position), type)
+    , configuration(configuration)
+    , position(position)
+{}
+
+coord_t SupportCenterIslandPoint::move(const Point &destination)
+{        
+    // move only along VD
+    // TODO: Start respect minimum distance from outline !!
+    position =
+        VoronoiGraphUtils::align(position, destination,
+                                 configuration->max_align_distance);
     Point new_point  = VoronoiGraphUtils::create_edge_point(position);
     Point move       = new_point - point;
     point    = new_point;
-    return abs(move.x()) + abs(move.y());
+    coord_t manhatn_distance = abs(move.x()) + abs(move.y());
+    return manhatn_distance;
 }
 

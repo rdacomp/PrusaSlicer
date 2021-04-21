@@ -344,8 +344,8 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
             skeleton, lines, config, longest_path);
 
     // allign samples
-    /*if (samples.size() > 2)
-        SampleIslandUtils::align_samples(samples, island, config);*/
+    if (samples.size() > 2)
+        SampleIslandUtils::align_samples(samples, island, config);
 
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
     const char* support_point_color = "lightgreen";
@@ -648,7 +648,7 @@ void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure
 //    float min_spacing			= poisson_radius / 3.f;
     float min_spacing			= poisson_radius;
     std::vector<Vec2f> raw_samples = 
-        flags & icfIsNew ? uniform_cover_island(*structure.polygon):
+    //    flags & icfIsNew ? uniform_cover_island(*structure.polygon):
         flags & icfWithBoundary ? sample_expolygon_with_boundary(
             islands, samples_per_mm2, 5.f / poisson_radius, m_rng) :
             sample_expolygon(islands, samples_per_mm2, m_rng);

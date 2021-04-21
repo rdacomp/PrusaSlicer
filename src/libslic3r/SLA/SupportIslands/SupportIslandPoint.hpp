@@ -5,6 +5,7 @@
 #include <memory>
 #include <libslic3r/Point.hpp>
 #include "VoronoiGraph.hpp"
+#include "SampleConfig.hpp"
 
 namespace Slic3r::sla {
 
@@ -83,17 +84,15 @@ class SupportCenterIslandPoint : public SupportIslandPoint
 {
 public:
     // Define position on voronoi graph
-    // Lose data when voronoi graph does NOT exist
+    // FYI: Lose data when voronoi graph does NOT exist
     VoronoiGraph::Position position;
-    // IMPROVE: not need ratio, only neighbor
-    // const VoronoiGraph::Node::Neighbor* neighbor;
 
-    // TODO: should earn when created
-    const double max_distance = 1e6; // [in nm] --> 1 mm
-
+    // hold pointer to configuration
+    // FYI: Lose data when configuration destruct
+    const SampleConfig *configuration;
 public:
-    SupportCenterIslandPoint(Point                  point,
-                             VoronoiGraph::Position position,
+    SupportCenterIslandPoint(VoronoiGraph::Position position,
+                             const SampleConfig *configuration,
                              Type                   type = Type::center_line);
     
     bool can_move() const override{ return true; }

@@ -446,6 +446,7 @@ SampleConfig create_sample_config(double size) {
     cfg.half_distance = cfg.max_distance/2;
     cfg.head_radius = size / 4;
     cfg.minimal_distance_from_outline = cfg.head_radius + size/10;
+    cfg.min_side_branch_length = 2 * cfg.minimal_distance_from_outline;
     cfg.minimal_support_distance = cfg.minimal_distance_from_outline + cfg.half_distance;
     cfg.max_length_for_one_support_point = 2*size;
     cfg.max_length_for_two_support_points = 4*size;
@@ -564,8 +565,8 @@ TEST_CASE("Small islands should be supported in center", "[SupGen][VoronoiSkelet
     // TODO: remove next 3 lines, debug sharp triangle
     auto triangle = PolygonUtils::create_isosceles_triangle(8. * size, 40. * size);
     islands = {ExPolygon(triangle)};
-    auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
-    islands          = {test_island};
+    //auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
+    //islands          = {test_island};
 
     for (ExPolygon &island : islands) {
         size_t debug_index = &island - &islands.front();
@@ -658,7 +659,7 @@ TEST_CASE("Compare sampling test")
     enum class Sampling {
         old,
         filip 
-    } sample_type = Sampling::old;
+    } sample_type = Sampling::filip;
     
     std::function<std::vector<Vec2f>(const ExPolygon &)> sample =
         (sample_type == Sampling::old)   ? sample_old :

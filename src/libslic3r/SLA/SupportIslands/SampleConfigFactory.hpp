@@ -31,6 +31,8 @@ public:
         result.minimal_support_distance = result.minimal_distance_from_outline +
                                           result.half_distance;
 
+        result.min_side_branch_length = 2 * result.minimal_distance_from_outline;
+
         result.max_length_for_one_support_point =
             2 * result.minimal_distance_from_outline + 
             head_diameter;

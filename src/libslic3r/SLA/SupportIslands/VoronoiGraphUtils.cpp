@@ -1055,22 +1055,22 @@ double VoronoiGraphUtils::get_distance(const VD::edge_type &edge,
     // TODO: find closest point on curve edge
     //if (edge.is_linear()) {
     
-        // get line foot point, inspired Geometry::foot_pt
-        Vec2d v0 = to_point_d(edge.vertex0());
-        Vec2d v  = point.cast<double>() - v0;
-        Vec2d v1 = to_point_d(edge.vertex1());
-        Vec2d edge_dir = v1 - v0;
-        double l2 = edge_dir.squaredNorm();
-        edge_ratio = v.dot(edge_dir) / l2;
-        // IMPROVE: not neccesary to calculate point if (edge_ratio > 1 || edge_ratio < 0)
-        Point edge_point;
-        if (edge_ratio > 1.) edge_point = v1.cast<coord_t>();
-        else if (edge_ratio < 0.) edge_point = v0.cast<coord_t>();
-        else { // foot point
-            edge_point = (v0 + edge_dir * edge_ratio).cast<coord_t>();
-        }
-        double distance = (point - edge_point).cast<double>().norm();
-        return distance;
+    // get line foot point, inspired Geometry::foot_pt
+    Vec2d v0 = to_point_d(edge.vertex0());
+    Vec2d v  = point.cast<double>() - v0;
+    Vec2d v1 = to_point_d(edge.vertex1());
+    Vec2d edge_dir = v1 - v0;
+    double l2 = edge_dir.squaredNorm();
+    edge_ratio = v.dot(edge_dir) / l2;
+    // IMPROVE: not neccesary to calculate point if (edge_ratio > 1 || edge_ratio < 0)
+    Point edge_point;
+    if (edge_ratio > 1.) edge_point = v1.cast<coord_t>();
+    else if (edge_ratio < 0.) edge_point = v0.cast<coord_t>();
+    else { // foot point
+        edge_point = (v0 + edge_dir * edge_ratio).cast<coord_t>();
+    }
+    double distance = (point - edge_point).cast<double>().norm();
+    return distance;
 }
 
 
