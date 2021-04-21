@@ -296,6 +296,13 @@ void Preset::normalize(DynamicPrintConfig &config)
         if (auto *gap_fill_enabled = config.option<ConfigOptionBool>("gap_fill_enabled", false); gap_fill_enabled)
             gap_fill_enabled->value = false;
     }
+    if (auto *first_layer_height = config.option<ConfigOptionFloatOrPercent>("first_layer_height", false); first_layer_height && first_layer_height->percent)
+        if (const auto *layer_height = config.option<ConfigOptionFloat>("layer_height", false); layer_height) {
+            // Legacy conversion - first_layer_height moved from PrintObject setting to a Print setting, thus we are getting rid of the dependency
+            // of first_layer_height on PrintObject specific layer_height. Covert the first layer heigth to an absolute value.
+            first_layer_height->value   = first_layer_height->get_abs_value(layer_height->value);
+            first_layer_height->percent = false;
+        }
 }
 
 std::string Preset::remove_invalid_keys(DynamicPrintConfig &config, const DynamicPrintConfig &default_config)
@@ -427,17 +434,18 @@ const std::vector<std::string>& Preset::print_options()
         "bridge_acceleration", "first_layer_acceleration", "default_acceleration", "skirts", "skirt_distance", "skirt_height", "draft_shield",
         "min_skirt_length", "brim_width", "brim_offset", "brim_type", "support_material", "support_material_auto", "support_material_threshold", "support_material_enforce_layers",
         "raft_layers", "raft_first_layer_density", "raft_first_layer_expansion", "raft_contact_distance", "raft_expansion",
-        "support_material_pattern", "support_material_with_sheath", "support_material_spacing",
-        "support_material_synchronize_layers", "support_material_angle", "support_material_interface_layers",
-        "support_material_interface_pattern", "support_material_interface_spacing", "support_material_interface_contact_loops", "support_material_contact_distance",
-        "support_material_buildplate_only", "dont_support_bridges", "notes", "complete_objects", "extruder_clearance_radius",
+        "support_material_pattern", "support_material_with_sheath", "support_material_spacing", "support_material_closing_radius", "support_material_style",
+        "support_material_synchronize_layers", "support_material_angle", "support_material_interface_layers", "support_material_bottom_interface_layers",
+        "support_material_interface_pattern", "support_material_interface_spacing", "support_material_interface_contact_loops", 
+        "support_material_contact_distance", "support_material_bottom_contact_distance",
+        "support_material_buildplate_only", "dont_support_bridges", "thick_bridges", "notes", "complete_objects", "extruder_clearance_radius",
         "extruder_clearance_height", "gcode_comments", "gcode_label_objects", "output_filename_format", "post_process", "perimeter_extruder",
         "infill_extruder", "solid_infill_extruder", "support_material_extruder", "support_material_interface_extruder",
         "ooze_prevention", "standby_temperature_delta", "interface_shells", "extrusion_width", "first_layer_extrusion_width",
         "perimeter_extrusion_width", "external_perimeter_extrusion_width", "infill_extrusion_width", "solid_infill_extrusion_width",
         "top_infill_extrusion_width", "support_material_extrusion_width", "infill_overlap", "infill_anchor", "infill_anchor_max", "bridge_flow_ratio", "clip_multipart_objects",
         "elefant_foot_compensation", "xy_size_compensation", "threads", "resolution", "wipe_tower", "wipe_tower_x", "wipe_tower_y",
-        "wipe_tower_width", "wipe_tower_rotation_angle", "wipe_tower_bridging", "single_extruder_multi_material_priming",
+        "wipe_tower_width", "wipe_tower_rotation_angle", "wipe_tower_brim_width", "wipe_tower_bridging", "single_extruder_multi_material_priming",
         "wipe_tower_no_sparse_layers", "compatible_printers", "compatible_printers_condition", "inherits"
     };
     return s_opts;
@@ -467,7 +475,7 @@ const std::vector<std::string>& Preset::machine_limits_options()
     static std::vector<std::string> s_opts;
     if (s_opts.empty()) {
         s_opts = {
-			"machine_max_acceleration_extruding", "machine_max_acceleration_retracting",
+            "machine_max_acceleration_extruding", "machine_max_acceleration_retracting", "machine_max_acceleration_travel",
 		    "machine_max_acceleration_x", "machine_max_acceleration_y", "machine_max_acceleration_z", "machine_max_acceleration_e",
 		    "machine_max_feedrate_x", "machine_max_feedrate_y", "machine_max_feedrate_z", "machine_max_feedrate_e",
 		    "machine_min_extruding_rate", "machine_min_travel_rate",
@@ -1393,9 +1401,8 @@ const std::vector<std::string>& PhysicalPrinter::printer_options()
     static std::vector<std::string> s_opts;
     if (s_opts.empty()) {
         s_opts = {
-            "preset_name",
+            "preset_names",
             "printer_technology",
-//            "printer_model",
             "host_type",
             "print_host",
             "printhost_apikey",
@@ -1453,11 +1460,10 @@ bool PhysicalPrinter::has_empty_config() const
 void PhysicalPrinter::update_preset_names_in_config()
 {
     if (!preset_names.empty()) {
-        std::string name;
-        for (auto el : preset_names)
-            name += el + ";";
-        name.pop_back();
-        config.set_key_value("preset_name", new ConfigOptionString(name));
+        std::vector<std::string>& values = config.option<ConfigOptionStrings>("preset_names")->values;
+        values.clear();
+        for (auto preset : preset_names)
+            values.push_back(preset);
     }
 }
 
@@ -1482,14 +1488,13 @@ void PhysicalPrinter::update_from_config(const DynamicPrintConfig& new_config)
 {
     config.apply_only(new_config, printer_options(), false);
 
-    std::string str = config.opt_string("preset_name");
-    std::set<std::string> values{};
-    if (!str.empty()) {
-        boost::split(values, str, boost::is_any_of(";"));
+    const std::vector<std::string>& values = config.option<ConfigOptionStrings>("preset_names")->values;
+
+    if (values.empty())
+        preset_names.clear();
+    else
         for (const std::string& val : values)
             preset_names.emplace(val);
-    }
-    preset_names = values;
 }
 
 void PhysicalPrinter::reset_presets()
@@ -1817,7 +1822,7 @@ bool PhysicalPrinterCollection::delete_preset_from_printers( const std::string& 
     return true;
 }
 
-// Get list of printers which have more than one preset and "preset_name" preset is one of them
+// Get list of printers which have more than one preset and "preset_names" preset is one of them
 std::vector<std::string> PhysicalPrinterCollection::get_printers_with_preset(const std::string& preset_name)
 {
     std::vector<std::string> printers;
@@ -1832,7 +1837,7 @@ std::vector<std::string> PhysicalPrinterCollection::get_printers_with_preset(con
     return printers;
 }
 
-// Get list of printers which has only "preset_name" preset
+// Get list of printers which has only "preset_names" preset
 std::vector<std::string> PhysicalPrinterCollection::get_printers_with_only_preset(const std::string& preset_name)
 {
     std::vector<std::string> printers;

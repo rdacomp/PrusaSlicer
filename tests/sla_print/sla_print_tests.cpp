@@ -1,6 +1,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <random>
+#include <numeric>
 #include <cstdint>
 
 #include "sla_test_utils.hpp"
@@ -39,14 +40,8 @@ TEST_CASE("Pillar pairhash should be unique", "[SLASupportGeneration]") {
 
 TEST_CASE("Support point generator should be deterministic if seeded", 
           "[SLASupportGeneration], [SLAPointGen]") {
-    //TriangleMesh mesh = load_model("A_upsidedown.obj");
-    //TriangleMesh mesh = load_model("smallIslands.obj");
-    TriangleMesh mesh = load_model("triangleStick.obj");
-    //TriangleMesh mesh = load_model("triangleSticks.obj");
-    //TriangleMesh mesh = load_model("StarStick.obj");
-    
-    sla::IndexedMesh emesh{mesh};
-    
+    TriangleMesh mesh = load_model("A_upsidedown.obj");    
+    sla::IndexedMesh emesh{mesh};    
     sla::SupportTreeConfig supportcfg;
     sla::SupportPointGenerator::Config autogencfg;
     autogencfg.head_diameter = float(2 * supportcfg.head_front_radius_mm);
@@ -253,7 +248,7 @@ TEST_CASE("Test concurrency")
 
     double ref = std::accumulate(vals.begin(), vals.end(), 0.);
 
-    double s = sla::ccr_par::reduce(vals.begin(), vals.end(), 0., std::plus<double>{});
+    double s = execution::accumulate(ex_tbb, vals.begin(), vals.end(), 0.);
 
     REQUIRE(s == Approx(ref));
 }

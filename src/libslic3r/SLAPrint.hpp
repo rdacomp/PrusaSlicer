@@ -85,6 +85,10 @@ public:
     // Get the mesh that is going to be printed with all the modifications
     // like hollowing and drilled holes.
     const TriangleMesh & get_mesh_to_print() const {
+        return (m_hollowing_data && is_step_done(slaposDrillHoles)) ? m_hollowing_data->hollow_mesh_with_holes_trimmed : transformed_mesh();
+    }
+
+    const TriangleMesh & get_mesh_to_slice() const {
         return (m_hollowing_data && is_step_done(slaposDrillHoles)) ? m_hollowing_data->hollow_mesh_with_holes : transformed_mesh();
     }
 
@@ -327,9 +331,10 @@ private:
     class HollowingData
     {
     public:
-        
-        TriangleMesh interior;
+
+        sla::InteriorPtr interior;
         mutable TriangleMesh hollow_mesh_with_holes; // caching the complete hollowed mesh
+        mutable TriangleMesh hollow_mesh_with_holes_trimmed;
     };
     
     std::unique_ptr<HollowingData> m_hollowing_data;
@@ -385,16 +390,25 @@ public:
     virtual void apply(const SLAPrinterConfig &cfg) = 0;
     
     // Fn have to be thread safe: void(sla::RasterBase& raster, size_t lyrid);
-    template<class Fn> void draw_layers(size_t layer_num, Fn &&drawfn)
+    template<class Fn, class CancelFn, class EP = ExecutionTBB>
+    void draw_layers(
+        size_t     layer_num,
+        Fn &&      drawfn,
+        CancelFn cancelfn = []() { return false; },
+        const EP & ep       = {})
     {
         m_layers.resize(layer_num);
-        sla::ccr::for_each(size_t(0), m_layers.size(),
-                           [this, &drawfn] (size_t idx) {
-                               sla::EncodedRaster& enc = m_layers[idx];
-                               auto rst = create_raster();
-                               drawfn(*rst, idx);
-                               enc = rst->encode(get_encoder());
-                           });
+        execution::for_each(
+            ep, size_t(0), m_layers.size(),
+            [this, &drawfn, &cancelfn](size_t idx) {
+                if (cancelfn()) return;
+
+                sla::EncodedRaster &enc = m_layers[idx];
+                auto                rst = create_raster();
+                drawfn(*rst, idx);
+                enc = rst->encode(get_encoder());
+            },
+            execution::max_concurrency(ep));
     }
 };
 
@@ -458,7 +472,7 @@ public:
 
     const SLAPrintStatistics&   print_statistics() const { return m_print_statistics; }
 
-    std::string validate() const override;
+    std::string validate(std::string* warning = nullptr) const override;
 
     // An aggregation of SliceRecord-s from all the print objects for each
     // occupied layer. Slice record levels dont have to match exactly.

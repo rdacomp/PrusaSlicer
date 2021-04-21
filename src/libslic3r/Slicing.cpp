@@ -64,9 +64,9 @@ SlicingParameters SlicingParameters::create_from_config(
 	coordf_t				 object_height,
 	const std::vector<unsigned int> &object_extruders)
 {
-    coordf_t first_layer_height                      = (object_config.first_layer_height.value <= 0) ? 
-        object_config.layer_height.value : 
-        object_config.first_layer_height.get_abs_value(object_config.layer_height.value);
+    assert(! print_config.first_layer_height.percent);
+    coordf_t first_layer_height                      = (print_config.first_layer_height.value <= 0) ? 
+        object_config.layer_height.value : print_config.first_layer_height.value;
     // If object_config.support_material_extruder == 0 resp. object_config.support_material_interface_extruder == 0,
     // print_config.nozzle_diameter.get_at(size_t(-1)) returns the 0th nozzle diameter,
     // which is consistent with the requirement that if support_material_extruder == 0 resp. support_material_interface_extruder == 0,
@@ -112,8 +112,10 @@ SlicingParameters SlicingParameters::create_from_config(
 
     if (! soluble_interface) {
         params.gap_raft_object    = object_config.raft_contact_distance.value;
-        params.gap_object_support = object_config.support_material_contact_distance.value;
+        params.gap_object_support = object_config.support_material_bottom_contact_distance.value;
         params.gap_support_object = object_config.support_material_contact_distance.value;
+        if (params.gap_object_support <= 0)
+            params.gap_object_support = params.gap_support_object;
     }
 
     if (params.base_raft_layers > 0) {

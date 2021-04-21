@@ -147,17 +147,11 @@ void KBShortcutsDialog::fill_shortcuts()
             { "O", L("Zoom out") },
             { "Tab", L("Switch between Editor/Preview") },
             { "Shift+Tab", L("Collapse/Expand the sidebar") },
-#if ENABLE_CTRL_M_ON_WINDOWS
 #ifdef _WIN32
             { ctrl + "M", L("Show/Hide 3Dconnexion devices settings dialog, if enabled") },
 #else
             { ctrl + "M", L("Show/Hide 3Dconnexion devices settings dialog") },
 #endif // _WIN32
-#else
-#if defined(__linux__) || defined(__APPLE__)
-            { ctrl + "M", L("Show/Hide 3Dconnexion devices settings dialog") },
-#endif // __linux__
-#endif // ENABLE_CTRL_M_ON_WINDOWS
 #if ENABLE_RENDER_PICKING_PASS
             // Don't localize debugging texts.
             { "P", "Toggle picking pass texture rendering on/off" },
@@ -202,6 +196,9 @@ void KBShortcutsDialog::fill_shortcuts()
         { "D", L("Horizontal slider - Move active thumb Right") },
         { "X", L("On/Off one layer mode of the vertical slider") },
         { "L", L("Show/Hide Legend and Estimated printing time") },
+#if ENABLE_GCODE_WINDOW
+        { "C", L("Show/Hide G-code window") },
+#endif // ENABLE_GCODE_WINDOW
     };
 
     m_full_shortcuts.push_back({ { _L("Preview"), "" }, preview_shortcuts });

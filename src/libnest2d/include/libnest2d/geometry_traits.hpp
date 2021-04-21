@@ -47,7 +47,8 @@ using TPoint = typename PointType<remove_cvref_t<Shape>>::Type;
 
 /// Getting the coordinate data type for a geometry class.
 template<class GeomClass> struct CoordType { 
-    using Type = typename CoordType<TPoint<GeomClass>>::Type; 
+    using Type = typename CoordType<TPoint<GeomClass>>::Type;
+    static const constexpr Type MM_IN_COORDS = Type{1};
 };
 
 /// TCoord<GeomType> as shorthand for typename `CoordType<GeomType>::Type`.
@@ -473,8 +474,8 @@ inline _Box<P> _Box<P>::infinite(const P& center) {
     
     // It is important for Mx and My to be strictly less than half of the
     // range of type C. width(), height() and area() will not overflow this way.
-    C Mx = C((std::numeric_limits<C>::lowest() + 2 * getX(center)) / 2.01);
-    C My = C((std::numeric_limits<C>::lowest() + 2 * getY(center)) / 2.01);
+    C Mx = C((std::numeric_limits<C>::lowest() + 2 * getX(center)) / 4.01);
+    C My = C((std::numeric_limits<C>::lowest() + 2 * getY(center)) / 4.01);
     
     ret.maxCorner() = center - P{Mx, My};
     ret.minCorner() = center + P{Mx, My};

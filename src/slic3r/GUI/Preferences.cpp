@@ -51,6 +51,9 @@ void PreferencesDialog::build()
 	auto app_config = get_app_config();
 
 	wxNotebook* tabs = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
+#ifdef __WXMSW__
+    tabs->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+#endif
 
 	// Add "General" tab
 	m_optgroup_general = create_options_tab(_L("General"), tabs);
@@ -106,7 +109,6 @@ void PreferencesDialog::build()
 		option = Option(def, "export_sources_full_pathnames");
 		m_optgroup_general->append_single_option_line(option);
 
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
 		// Please keep in sync with ConfigWizard
 		def.label = L("Associate .3mf files to PrusaSlicer");
@@ -123,7 +125,6 @@ void PreferencesDialog::build()
 		option = Option(def, "associate_stl");
 		m_optgroup_general->append_single_option_line(option);
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 
 		// Please keep in sync with ConfigWizard
 		def.label = L("Update built-in Presets automatically");
@@ -184,7 +185,6 @@ void PreferencesDialog::build()
 		option = Option(def, "default_action_on_select_preset");
 		m_optgroup_general->append_single_option_line(option);
 	}
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
 	else {
 		def.label = L("Associate .gcode files to PrusaSlicer G-code Viewer");
@@ -195,7 +195,6 @@ void PreferencesDialog::build()
 		m_optgroup_general->append_single_option_line(option);
 	}
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 
 #if __APPLE__
 	def.label = L("Use Retina resolution for the 3D scene");
@@ -215,7 +214,6 @@ void PreferencesDialog::build()
 	option = Option(def, "show_splash_screen");
 	m_optgroup_general->append_single_option_line(option);
 
-#if ENABLE_CTRL_M_ON_WINDOWS
 #if defined(_WIN32) || defined(__APPLE__)
 	def.label = L("Enable support for legacy 3DConnexion devices");
 	def.type = coBool;
@@ -224,7 +222,6 @@ void PreferencesDialog::build()
 	option = Option(def, "use_legacy_3DConnexion");
 	m_optgroup_general->append_single_option_line(option);
 #endif // _WIN32 || __APPLE__
-#endif // ENABLE_CTRL_M_ON_WINDOWS
 
 	activate_options_tab(m_optgroup_general);
 

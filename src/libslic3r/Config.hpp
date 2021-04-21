@@ -1441,6 +1441,24 @@ private:
 class ConfigOptionDef
 {
 public:
+    enum class GUIType {
+        undefined,
+        // Open enums, integer value could be one of the enumerated values or something else.
+        i_enum_open,
+        // Open enums, float value could be one of the enumerated values or something else.
+        f_enum_open,
+        // Color picker, string value.
+        color,
+        // ???
+        select_open,
+        // Currently unused.
+        slider,
+        // Static text
+        legend,
+        // Vector value, but edited as a single string.
+        one_string,
+    };
+
 	// Identifier of this option. It is stored here so that it is accessible through the by_serialization_key_ordinal map.
 	t_config_option_key 				opt_key;
     // What type? bool, int, string etc.
@@ -1524,7 +1542,7 @@ public:
     // Usually empty. 
     // Special values - "i_enum_open", "f_enum_open" to provide combo box for int or float selection,
     // "select_open" - to open a selection dialog (currently only a serial port selection).
-    std::string                         gui_type;
+    GUIType                             gui_type { GUIType::undefined };
     // Usually empty. Otherwise "serialized" or "show_value"
     // The flags may be combined.
     // "serialized" - vector valued option is entered in a single edit field. Values are separated by a semicolon.
@@ -1949,8 +1967,9 @@ public:
     int                 opt_int(const t_config_option_key &opt_key, unsigned int idx) const     { return dynamic_cast<const ConfigOptionInts*>(this->option(opt_key))->get_at(idx); }
 
     // In ConfigManipulation::toggle_print_fff_options, it is called on option with type ConfigOptionEnumGeneric* and also ConfigOptionEnum*.
+    // Thus the virtual method getInt() is used to retrieve the enum value.
     template<typename ENUM>
-    ENUM                opt_enum(const t_config_option_key &opt_key) const                      { return this->option<ConfigOptionEnum<ENUM>>(opt_key)->value; }
+    ENUM                opt_enum(const t_config_option_key &opt_key) const                      { return static_cast<ENUM>(this->option(opt_key)->getInt()); }
 
     bool                opt_bool(const t_config_option_key &opt_key) const                      { return this->option<ConfigOptionBool>(opt_key)->value != 0; }
     bool                opt_bool(const t_config_option_key &opt_key, unsigned int idx) const    { return this->option<ConfigOptionBools>(opt_key)->get_at(idx) != 0; }

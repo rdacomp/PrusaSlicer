@@ -351,6 +351,7 @@ public:
 #if ENABLE_VALIDATE_CUSTOM_GCODE
 	static bool validate_custom_gcode(const wxString& title, const std::string& gcode);
 	bool        validate_custom_gcodes();
+    bool        validate_custom_gcodes_was_shown { false };
 #endif // ENABLE_VALIDATE_CUSTOM_GCODE
 
 protected:
@@ -424,6 +425,7 @@ class TabPrinter : public Tab
 private:
 	bool		m_has_single_extruder_MM_page = false;
 	bool		m_use_silent_mode = false;
+    bool        m_supports_travel_acceleration = false;
 	void		append_option_line(ConfigOptionsGroupShp optgroup, const std::string opt_key);
 	bool		m_rebuild_kinematics_page = false;
 	ogStaticText* m_machine_limits_description_line {nullptr};
