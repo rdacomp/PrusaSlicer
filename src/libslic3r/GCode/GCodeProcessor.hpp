@@ -121,6 +121,7 @@ namespace Slic3r {
     private:
         using AxisCoords = std::array<float, 4>;
         using ExtruderColors = std::vector<unsigned char>;
+        using ExtruderTemps = std::vector<float>;
 
         enum class EUnits : unsigned char
         {
@@ -211,6 +212,7 @@ namespace Slic3r {
             float height{ 0.0f }; // mm
             float mm3_per_mm{ 0.0f };
             float fan_speed{ 0.0f }; // percentage
+            float temperature{ 0.0f }; // Celsius degrees
             float time{ 0.0f }; // s
 
             float volumetric_rate() const { return feedrate * mm3_per_mm; }
@@ -249,9 +251,23 @@ namespace Slic3r {
             float acceleration; // mm/s^2
             // hard limit for the acceleration, to which the firmware will clamp.
             float max_acceleration; // mm/s^2
+            float travel_acceleration; // mm/s^2
+            // hard limit for the travel acceleration, to which the firmware will clamp.
+            float max_travel_acceleration; // mm/s^2
             float extrude_factor_override_percentage;
             float time; // s
+#if ENABLE_EXTENDED_M73_LINES
+            struct StopTime
+            {
+                unsigned int g1_line_id;
+                float elapsed_time;
+            };
+            std::vector<StopTime> stop_times;
+            std::string line_m73_main_mask;
+            std::string line_m73_stop_mask;
+#else
             std::string line_m73_mask;
+#endif // ENABLE_EXTENDED_M73_LINES
             State curr;
             State prev;
             CustomGCodeTime gcode_time;
@@ -320,6 +336,7 @@ namespace Slic3r {
             float height{ 0.0f }; // mm
             float mm3_per_mm{ 0.0f };
             float fan_speed{ 0.0f }; // percentage
+            float temperature{ 0.0f }; // Celsius degrees
             float time{ 0.0f }; // s
 
             float volumetric_rate() const { return feedrate * mm3_per_mm; }
@@ -334,13 +351,15 @@ namespace Slic3r {
                 std::vector<std::string> filament;
                 std::string printer;
 
-                void reset()
-                {
+                void reset() {
                     print = "";
                     filament = std::vector<std::string>();
                     printer = "";
                 }
             };
+#if ENABLE_GCODE_WINDOW
+            std::string filename;
+#endif // ENABLE_GCODE_WINDOW
             unsigned int id;
             std::vector<MoveVertex> moves;
             Pointfs bed_shape;
@@ -468,6 +487,7 @@ namespace Slic3r {
         ExtrusionRole m_extrusion_role;
         unsigned char m_extruder_id;
         ExtruderColors m_extruder_colors;
+        ExtruderTemps m_extruder_temps;
         std::vector<float> m_filament_diameters;
         float m_extruded_last_z;
         unsigned int m_g1_line_id;
@@ -507,7 +527,6 @@ namespace Slic3r {
         GCodeProcessor();
 
         void apply_config(const PrintConfig& config);
-        void apply_config(const DynamicPrintConfig& config);
         void enable_stealth_time_estimator(bool enabled);
         bool is_stealth_time_estimator_enabled() const {
             return m_time_processor.machines[static_cast<size_t>(PrintEstimatedTimeStatistics::ETimeMode::Stealth)].enabled;
@@ -532,6 +551,8 @@ namespace Slic3r {
         std::vector<float> get_layers_time(PrintEstimatedTimeStatistics::ETimeMode mode) const;
 
     private:
+        void apply_config(const DynamicPrintConfig& config);
+        void apply_config_simplify3d(const std::string& filename);
         void process_gcode_line(const GCodeReader::GCodeLine& line);
 
         // Process tags embedded into comments
@@ -568,6 +589,9 @@ namespace Slic3r {
         // Firmware controlled Unretract
         void process_G23(const GCodeReader::GCodeLine& line);
 
+        // Move to origin
+        void process_G28(const GCodeReader::GCodeLine& line);
+
         // Set to Absolute Positioning
         void process_G90(const GCodeReader::GCodeLine& line);
 
@@ -586,6 +610,9 @@ namespace Slic3r {
         // Set extruder to relative mode
         void process_M83(const GCodeReader::GCodeLine& line);
 
+        // Set extruder temperature
+        void process_M104(const GCodeReader::GCodeLine& line);
+
         // Set fan speed
         void process_M106(const GCodeReader::GCodeLine& line);
 
@@ -594,6 +621,9 @@ namespace Slic3r {
 
         // Set tool (Sailfish)
         void process_M108(const GCodeReader::GCodeLine& line);
+
+        // Set extruder temperature and wait
+        void process_M109(const GCodeReader::GCodeLine& line);
 
         // Recall stored home offsets
         void process_M132(const GCodeReader::GCodeLine& line);
@@ -641,7 +671,9 @@ namespace Slic3r {
         float get_axis_max_jerk(PrintEstimatedTimeStatistics::ETimeMode mode, Axis axis) const;
         float get_retract_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode) const;
         float get_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode) const;
-        void set_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode, float value);
+        void  set_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode, float value);
+        float get_travel_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode) const;
+        void  set_travel_acceleration(PrintEstimatedTimeStatistics::ETimeMode mode, float value);
         float get_filament_load_time(size_t extruder_id);
         float get_filament_unload_time(size_t extruder_id);
 

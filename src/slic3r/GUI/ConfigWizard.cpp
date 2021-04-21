@@ -819,7 +819,22 @@ void PageMaterials::update_lists(int sel_type, int sel_vendor, int last_selected
 	wxArrayInt sel_printers;
 	int sel_printers_count = list_printer->GetSelections(sel_printers);
 
-	if (sel_printers != sel_printers_prev) {
+    // Does our wxWidgets version support operator== for wxArrayInt ?
+    // https://github.com/prusa3d/PrusaSlicer/issues/5152#issuecomment-787208614
+#if wxCHECK_VERSION(3, 1, 1)
+    if (sel_printers != sel_printers_prev) {
+#else
+    auto are_equal = [](const wxArrayInt& arr_first, const wxArrayInt& arr_second) {
+        if (arr_first.GetCount() != arr_second.GetCount())
+            return false;
+        for (size_t i = 0; i < arr_first.GetCount(); i++)
+            if (arr_first[i] != arr_second[i])
+                return false;
+        return true;
+    };
+    if (!are_equal(sel_printers, sel_printers_prev)) {
+#endif
+
         // Refresh type list
 		list_type->Clear();
 		list_type->append(_L("(All)"), &EMPTY);
@@ -1186,7 +1201,6 @@ PageReloadFromDisk::PageReloadFromDisk(ConfigWizard* parent)
     box_pathnames->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) { this->full_pathnames = event.IsChecked(); });
 }
 
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
 PageFilesAssociation::PageFilesAssociation(ConfigWizard* parent)
     : ConfigWizardPage(parent, _L("Files association"), _L("Files association"))
@@ -1200,7 +1214,6 @@ PageFilesAssociation::PageFilesAssociation(ConfigWizard* parent)
 //    append(cb_gcode);
 }
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 
 PageMode::PageMode(ConfigWizard *parent)
     : ConfigWizardPage(parent, _L("View mode"), _L("View mode"))
@@ -1813,11 +1826,9 @@ void ConfigWizard::priv::load_pages()
 
     index->add_page(page_update);
     index->add_page(page_reload_from_disk);
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
     index->add_page(page_files_association);
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
     index->add_page(page_mode);
 
     index->go_to(former_active);   // Will restore the active item/page if possible
@@ -2411,7 +2422,6 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
     app_config->set("preset_update", page_update->preset_update ? "1" : "0");
     app_config->set("export_sources_full_pathnames", page_reload_from_disk->full_pathnames ? "1" : "0");
 
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
     app_config->set("associate_3mf", page_files_association->associate_3mf() ? "1" : "0");
     app_config->set("associate_stl", page_files_association->associate_stl() ? "1" : "0");
@@ -2429,7 +2439,6 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
 //    }
 
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 
     page_mode->serialize_mode(app_config);
 
@@ -2594,11 +2603,9 @@ ConfigWizard::ConfigWizard(wxWindow *parent)
     
     p->add_page(p->page_update   = new PageUpdate(this));
     p->add_page(p->page_reload_from_disk = new PageReloadFromDisk(this));
-#if ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
 #ifdef _WIN32
     p->add_page(p->page_files_association = new PageFilesAssociation(this));
 #endif // _WIN32
-#endif // ENABLE_CUSTOMIZABLE_FILES_ASSOCIATION_ON_WIN
     p->add_page(p->page_mode     = new PageMode(this));
     p->add_page(p->page_firmware = new PageFirmware(this));
     p->add_page(p->page_bed      = new PageBedShape(this));

@@ -65,7 +65,7 @@ public:
     const PrintRegionConfig&    config() const { return m_config; }
 	// 1-based extruder identifier for this region and role.
 	unsigned int 				extruder(FlowRole role) const;
-    Flow                        flow(FlowRole role, double layer_height, bool bridge, bool first_layer, double width, const PrintObject &object) const;
+    Flow                        flow(const PrintObject &object, FlowRole role, double layer_height, bool first_layer = false) const;
     // Average diameter of nozzles participating on extruding this region.
     coordf_t                    nozzle_dmr_avg(const PrintConfig &print_config) const;
     // Average diameter of nozzles participating on extruding this region.
@@ -444,7 +444,7 @@ public:
     bool                has_brim() const;
 
     // Returns an empty string if valid, otherwise returns an error message.
-    std::string         validate() const override;
+    std::string         validate(std::string* warning = nullptr) const override;
     double              skirt_first_layer_height() const;
     Flow                brim_flow() const;
     Flow                skirt_flow() const;
@@ -493,7 +493,7 @@ public:
 
     // Wipe tower support.
     bool                        has_wipe_tower() const;
-    const WipeTowerData&        wipe_tower_data(size_t extruders_cnt = 0, double first_layer_height = 0., double nozzle_diameter = 0.) const;
+    const WipeTowerData&        wipe_tower_data(size_t extruders_cnt = 0) const;
     const ToolOrdering& 		tool_ordering() const { return m_tool_ordering; }
 
 	std::string                 output_filename(const std::string &filename_base = std::string()) const override;

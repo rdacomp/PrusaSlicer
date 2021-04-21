@@ -56,11 +56,21 @@ typedef Eigen::Transform<double, 3, Eigen::Affine, Eigen::DontAlign> Transform3d
 
 inline bool operator<(const Vec2d &lhs, const Vec2d &rhs) { return lhs(0) < rhs(0) || (lhs(0) == rhs(0) && lhs(1) < rhs(1)); }
 
-// One likely does not want to perform the cross product with a 32bit accumulator.
-//inline int32_t cross2(const Vec2i32 &v1, const Vec2i32 &v2) { return v1(0) * v2(1) - v1(1) * v2(0); }
-inline int64_t cross2(const Vec2i64 &v1, const Vec2i64 &v2) { return v1(0) * v2(1) - v1(1) * v2(0); }
-inline float   cross2(const Vec2f   &v1, const Vec2f   &v2) { return v1(0) * v2(1) - v1(1) * v2(0); }
-inline double  cross2(const Vec2d   &v1, const Vec2d   &v2) { return v1(0) * v2(1) - v1(1) * v2(0); }
+template<int Options>
+int32_t cross2(const Eigen::MatrixBase<Eigen::Matrix<int32_t, 2, 1, Options>> &v1, const Eigen::MatrixBase<Eigen::Matrix<int32_t, 2, 1, Options>> &v2) = delete;
+
+template<typename T, int Options>
+inline T cross2(const Eigen::MatrixBase<Eigen::Matrix<T, 2, 1, Options>> &v1, const Eigen::MatrixBase<Eigen::Matrix<T, 2, 1, Options>> &v2)
+{
+    return v1(0) * v2(1) - v1(1) * v2(0);
+}
+
+template<typename Derived, typename Derived2>
+inline typename Derived::Scalar cross2(const Eigen::MatrixBase<Derived> &v1, const Eigen::MatrixBase<Derived2> &v2)
+{
+    static_assert(std::is_same<typename Derived::Scalar, typename Derived2::Scalar>::value, "cross2(): Scalar types of 1st and 2nd operand must be equal.");
+    return v1(0) * v2(1) - v1(1) * v2(0);
+}
 
 template<typename T, int Options>
 inline Eigen::Matrix<T, 2, 1, Eigen::DontAlign> perp(const Eigen::MatrixBase<Eigen::Matrix<T, 2, 1, Options>> &v) { return Eigen::Matrix<T, 2, 1, Eigen::DontAlign>(- v.y(), v.x()); }
@@ -402,6 +412,25 @@ unscaled(const Eigen::Matrix<Tin, N, EigenArgs...> &v) noexcept
 {
     return v.template cast<Tout>() * SCALING_FACTOR;
 }
+
+// Align a coordinate to a grid. The coordinate may be negative,
+// the aligned value will never be bigger than the original one.
+inline coord_t align_to_grid(const coord_t coord, const coord_t spacing) {
+    // Current C++ standard defines the result of integer division to be rounded to zero,
+    // for both positive and negative numbers. Here we want to round down for negative
+    // numbers as well.
+    coord_t aligned = (coord < 0) ?
+            ((coord - spacing + 1) / spacing) * spacing :
+            (coord / spacing) * spacing;
+    assert(aligned <= coord);
+    return aligned;
+}
+inline Point   align_to_grid(Point   coord, Point   spacing) 
+    { return Point(align_to_grid(coord.x(), spacing.x()), align_to_grid(coord.y(), spacing.y())); }
+inline coord_t align_to_grid(coord_t coord, coord_t spacing, coord_t base) 
+    { return base + align_to_grid(coord - base, spacing); }
+inline Point   align_to_grid(Point   coord, Point   spacing, Point   base)
+    { return Point(align_to_grid(coord.x(), spacing.x(), base.x()), align_to_grid(coord.y(), spacing.y(), base.y())); }
 
 } // namespace Slic3r
 

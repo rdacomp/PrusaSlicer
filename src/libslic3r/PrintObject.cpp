@@ -430,6 +430,24 @@ void PrintObject::generate_support_material()
                 if (layer->empty())
                     throw Slic3r::SlicingError("Levitating objects cannot be printed without supports.");
 #endif
+
+            // Do we have custom support data that would not be used?
+            // Notify the user in that case.
+            if (! this->has_support()) {
+                for (const ModelVolume* mv : this->model_object()->volumes) {
+                    bool has_enforcers = mv->is_support_enforcer()
+                        || (mv->is_model_part()
+                            && ! mv->supported_facets.empty()
+                            && ! mv->supported_facets.get_facets(*mv, EnforcerBlockerType::ENFORCER).indices.empty());
+                    if (has_enforcers) {
+                        this->active_step_add_warning(PrintStateBase::WarningLevel::CRITICAL,
+                            L("An object has custom support enforcers which will not be used "
+                              "because supports are off. Consider turning them on.") + "\n" +
+                            (L("Object name")) + ": " + this->model_object()->name);
+                        break;
+                    }
+                }
+            }
         }
         this->set_done(posSupportMaterial);
     }
@@ -528,14 +546,9 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "extra_perimeters"
             || opt_key == "gap_fill_enabled"
             || opt_key == "gap_fill_speed"
-            || opt_key == "overhangs"
             || opt_key == "first_layer_extrusion_width"
-            || opt_key == "fuzzy_skin"
-            || opt_key == "fuzzy_skin_thickness"
-            || opt_key == "fuzzy_skin_point_dist"
             || opt_key == "perimeter_extrusion_width"
             || opt_key == "infill_overlap"
-            || opt_key == "thin_walls"
             || opt_key == "external_perimeters_first") {
             steps.emplace_back(posPerimeters);
         } else if (
@@ -567,14 +580,18 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "support_material_enforce_layers"
             || opt_key == "support_material_extruder"
             || opt_key == "support_material_extrusion_width"
+            || opt_key == "support_material_bottom_contact_distance"
             || opt_key == "support_material_interface_layers"
+            || opt_key == "support_material_bottom_interface_layers"
             || opt_key == "support_material_interface_pattern"
             || opt_key == "support_material_interface_contact_loops"
             || opt_key == "support_material_interface_extruder"
             || opt_key == "support_material_interface_spacing"
             || opt_key == "support_material_pattern"
+            || opt_key == "support_material_style"
             || opt_key == "support_material_xy_spacing"
             || opt_key == "support_material_spacing"
+            || opt_key == "support_material_closing_radius"
             || opt_key == "support_material_synchronize_layers"
             || opt_key == "support_material_threshold"
             || opt_key == "support_material_with_sheath"
@@ -634,7 +651,13 @@ bool PrintObject::invalidate_state_by_config_options(
             steps.emplace_back(posPrepareInfill);
         } else if (
                opt_key == "external_perimeter_extrusion_width"
-            || opt_key == "perimeter_extruder") {
+            || opt_key == "perimeter_extruder"
+            || opt_key == "fuzzy_skin"
+            || opt_key == "fuzzy_skin_thickness"
+            || opt_key == "fuzzy_skin_point_dist"
+            || opt_key == "overhangs"
+            || opt_key == "thin_walls"
+            || opt_key == "thick_bridges") {
             steps.emplace_back(posPerimeters);
             steps.emplace_back(posSupportMaterial);
         } else if (opt_key == "bridge_flow_ratio") {
@@ -1438,26 +1461,18 @@ void PrintObject::bridge_over_infill()
         const PrintRegion &region = *m_print->regions()[region_id];
         
         // skip bridging in case there are no voids
-        if (region.config().fill_density.value == 100) continue;
-        
-        // get bridge flow
-        Flow bridge_flow = region.flow(
-            frSolidInfill,
-            -1,     // layer height, not relevant for bridge flow
-            true,   // bridge
-            false,  // first layer
-            -1,     // custom width, not relevant for bridge flow
-            *this
-        );
-        
+        if (region.config().fill_density.value == 100)
+            continue;
+
 		for (LayerPtrs::iterator layer_it = m_layers.begin(); layer_it != m_layers.end(); ++ layer_it) {
             // skip first layer
 			if (layer_it == m_layers.begin())
                 continue;
             
-            Layer* layer        = *layer_it;
-            LayerRegion* layerm = layer->m_regions[region_id];
-            
+            Layer       *layer       = *layer_it;
+            LayerRegion *layerm      = layer->m_regions[region_id];
+            Flow         bridge_flow = layerm->bridging_flow(frSolidInfill);
+
             // extract the stInternalSolid surfaces that might be transformed into bridges
             Polygons internal_solid;
             layerm->fill_surfaces.filter_by_type(stInternalSolid, &internal_solid);
@@ -1470,7 +1485,7 @@ void PrintObject::bridge_over_infill()
                 Polygons to_bridge_pp = internal_solid;
                 
                 // iterate through lower layers spanned by bridge_flow
-                double bottom_z = layer->print_z - bridge_flow.height;
+                double bottom_z = layer->print_z - bridge_flow.height();
                 for (int i = int(layer_it - m_layers.begin()) - 1; i >= 0; --i) {
                     const Layer* lower_layer = m_layers[i];
                     

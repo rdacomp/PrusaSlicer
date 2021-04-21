@@ -278,15 +278,18 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
     bool have_support_material_auto = have_support_material && config->opt_bool("support_material_auto");
     bool have_support_interface = config->opt_int("support_material_interface_layers") > 0;
     bool have_support_soluble = have_support_material && config->opt_float("support_material_contact_distance") == 0;
-    for (auto el : { "support_material_pattern", "support_material_with_sheath",
+    auto support_material_style = config->opt_enum<SupportMaterialStyle>("support_material_style");
+    for (auto el : { "support_material_style", "support_material_pattern", "support_material_with_sheath",
                     "support_material_spacing", "support_material_angle", 
                     "support_material_interface_pattern", "support_material_interface_layers",
                     "dont_support_bridges", "support_material_extrusion_width", "support_material_contact_distance",
                     "support_material_xy_spacing" })
         toggle_field(el, have_support_material);
     toggle_field("support_material_threshold", have_support_material_auto);
+    toggle_field("support_material_bottom_contact_distance", have_support_material && ! have_support_soluble);
+    toggle_field("support_material_closing_radius", have_support_material && support_material_style == smsSnug);
 
-    for (auto el : { "support_material_interface_spacing", "support_material_interface_extruder",
+    for (auto el : { "support_material_bottom_interface_layers", "support_material_interface_spacing", "support_material_interface_extruder",
                     "support_material_interface_speed", "support_material_interface_contact_loops" })
         toggle_field(el, have_support_material && have_support_interface);
     toggle_field("support_material_synchronize_layers", have_support_soluble);
@@ -310,7 +313,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig* config)
     toggle_field("standby_temperature_delta", have_ooze_prevention);
 
     bool have_wipe_tower = config->opt_bool("wipe_tower");
-    for (auto el : { "wipe_tower_x", "wipe_tower_y", "wipe_tower_width", "wipe_tower_rotation_angle",
+    for (auto el : { "wipe_tower_x", "wipe_tower_y", "wipe_tower_width", "wipe_tower_rotation_angle", "wipe_tower_brim_width",
                      "wipe_tower_bridging", "wipe_tower_no_sparse_layers", "single_extruder_multi_material_priming" })
         toggle_field(el, have_wipe_tower);
 

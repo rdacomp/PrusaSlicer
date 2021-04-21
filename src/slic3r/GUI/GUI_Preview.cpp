@@ -1,4 +1,6 @@
+//#include "stdlib.h"
 #include "libslic3r/libslic3r.h"
+#include "libslic3r/Layer.hpp"
 #include "GUI_Preview.hpp"
 #include "GUI_App.hpp"
 #include "GUI.hpp"
@@ -24,6 +26,7 @@
 // this include must follow the wxWidgets ones or it won't compile on Windows -> see http://trac.wxwidgets.org/ticket/2421
 #include "libslic3r/Print.hpp"
 #include "libslic3r/SLAPrint.hpp"
+#include "NotificationManager.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -211,6 +214,7 @@ bool Preview::init(wxWindow* parent, Model* model)
     m_choice_view_type->Append(_L("Width"));
     m_choice_view_type->Append(_L("Speed"));
     m_choice_view_type->Append(_L("Fan speed"));
+    m_choice_view_type->Append(_L("Temperature"));
     m_choice_view_type->Append(_L("Volumetric flow rate"));
     m_choice_view_type->Append(_L("Tool"));
     m_choice_view_type->Append(_L("Color Print"));
@@ -635,8 +639,70 @@ void Preview::update_layers_slider(const std::vector<double>& layers_z, bool kee
     m_layers_slider->SetDrawMode(sla_print_technology, sequential_print);
     if (sla_print_technology)
         m_layers_slider->SetLayersTimes(plater->sla_print().print_statistics().layers_times);
-    else
-        m_layers_slider->SetLayersTimes(m_gcode_result->time_statistics.modes.front().layers_times);
+    else {
+        auto print_mode_stat = m_gcode_result->time_statistics.modes.front();
+        m_layers_slider->SetLayersTimes(print_mode_stat.layers_times, print_mode_stat.time);
+    }
+
+    // Suggest the auto color change, if model looks like sign
+    if (m_layers_slider->IsNewPrint())
+    {
+        const Print& print = wxGetApp().plater()->fff_print();
+        double delta_area = scale_(scale_(25)); // equal to 25 mm2
+
+        //bool is_possible_auto_color_change = false;
+        for (auto object : print.objects()) {
+            double object_x = double(object->size().x());
+            double object_y = double(object->size().y());
+
+            // if it's sign, than object have not to be a too height
+            double height = object->height();
+            coord_t longer_side = std::max(object_x, object_y);
+            if (height / longer_side > 0.3)
+                continue;
+
+            const ExPolygons& bottom = object->get_layer(0)->lslices;
+            double bottom_area = area(bottom);
+
+            // at least 30% of object's height have to be a solid 
+            size_t i;
+            for (i = 1; i < size_t(0.3 * object->layers().size()); i++) {
+                double cur_area = area(object->get_layer(i)->lslices);
+                if (cur_area != bottom_area && fabs(cur_area - bottom_area) > scale_(scale_(1)))
+                    break;
+            }
+            if (i < size_t(0.3 * object->layers().size()))
+                continue;
+
+            // bottom layer have to be a biggest, so control relation between bottom layer and object size
+            double prev_area = area(object->get_layer(i)->lslices);
+            for ( i++; i < object->layers().size(); i++) {
+                double cur_area = area(object->get_layer(i)->lslices);
+                if (cur_area > prev_area && prev_area - cur_area > scale_(scale_(1)))
+                    break;
+                prev_area = cur_area;
+            }
+            if (i < object->layers().size())
+                continue;
+
+            double top_area = area(object->get_layer(int(object->layers().size()) - 1)->lslices);
+            if( bottom_area - top_area > delta_area) {
+                NotificationManager* notif_mngr = wxGetApp().plater()->get_notification_manager();
+                notif_mngr->push_notification(
+                    NotificationType::SignDetected, NotificationManager::NotificationLevel::RegularNotification,
+                    _u8L("NOTE:") + "\n" + _u8L("Sliced object looks like the sign") + "\n",
+                    _u8L("Apply auto color change to print"),
+                    [this](wxEvtHandler*) {
+                        m_layers_slider->auto_color_change();
+                        return true;
+                    });
+
+                notif_mngr->apply_in_preview();
+
+                break;
+            }
+        }
+    }
 
     m_layers_slider_sizer->Show((size_t)0);
     Layout();
