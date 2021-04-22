@@ -1,7 +1,7 @@
 #ifndef slic3r_SLA_SuppotstIslands_SampleConfigFactory_hpp_
 #define slic3r_SLA_SuppotstIslands_SampleConfigFactory_hpp_
 
-#include <libslic3r/sla/SupportPointGenerator.hpp>
+#include "../SupportPointGenerator.hpp"
 
 namespace Slic3r::sla {
 
