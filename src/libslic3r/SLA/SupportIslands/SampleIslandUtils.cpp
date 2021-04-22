@@ -32,7 +32,7 @@ using namespace Slic3r::sla;
 std::vector<Slic3r::Vec2f> SampleIslandUtils::sample_expolygon(
     const ExPolygon &expoly, float samples_per_mm2)
 {
-    static const float mm2_area = scale_(1) * scale_(1);
+    static const float mm2_area = static_cast<float>(scale_(1) * scale_(1));
     // Equilateral triangle area = (side * height) / 2
     float triangle_area = mm2_area / samples_per_mm2;
     // Triangle area = sqrt(3) / 4 * "triangle side"
