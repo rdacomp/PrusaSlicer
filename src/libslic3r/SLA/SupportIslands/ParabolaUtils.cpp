@@ -1,5 +1,11 @@
 #include "ParabolaUtils.hpp"
 #include "PointUtils.hpp"
+
+// sampling parabola
+#include <libslic3r/Geometry.hpp>
+#include <libslic3r/VoronoiOffset.hpp>
+#include <libslic3r/VoronoiVisualUtils.hpp>
+
 using namespace Slic3r::sla;
 
 double ParabolaUtils::length(const ParabolaSegment &parabola)
@@ -24,10 +30,6 @@ double ParabolaUtils::length(const ParabolaSegment &parabola)
                (length_x1 + length_x2) :    // interval is over zero
                fabs(length_x1 - length_x2); // interval is on same side of parabola
 }
-
-#include <Libslic3r/Geometry.hpp>
-#include <Libslic3r/VoronoiOffset.hpp>
-#include <Libslic3r/VoronoiVisualUtils.hpp>
 double ParabolaUtils::length_by_sampling(
     const ParabolaSegment &parabola,
     double          discretization_step)

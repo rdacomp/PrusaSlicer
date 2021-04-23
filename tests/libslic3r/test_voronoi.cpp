@@ -2195,17 +2195,17 @@ TEST_CASE("bad vertex cause overflow of data type precisin when use VD result", 
             Vec2d vertex(vrtx->x(), vrtx->y());
 
             double point_distance = (p1 - p2).norm();
-            double half_point_distance = point_distance / 2;
+            [[maybe_unused]] double half_point_distance = point_distance / 2;
 
             Linef line_from_middle(middle, middle + direction); // line between source points
             double distance_vertex = perp_distance(line_from_middle, vertex);
-            double distance_p1 = perp_distance(line_from_middle, p1);
-            double distance_p2 = perp_distance(line_from_middle, p2);
+            [[maybe_unused]] double distance_p1 = perp_distance(line_from_middle, p1);
+            [[maybe_unused]] double distance_p2 = perp_distance(line_from_middle, p2);
 
             Linef line_from_vertex(vertex, vertex + direction);
-            double distance_middle = perp_distance(line_from_vertex, middle);
-            double distance_p1_ = perp_distance(line_from_vertex, p1);
-            double distance_p2_ = perp_distance(line_from_vertex, p2);
+            [[maybe_unused]] double distance_middle = perp_distance(line_from_vertex, middle);
+            [[maybe_unused]] double distance_p1_ = perp_distance(line_from_vertex, p1);
+            [[maybe_unused]] double distance_p2_ = perp_distance(line_from_vertex, p2);
 
             double maximal_distance = 9e6;
             Vec2d  vertex_direction = (vertex - middle);
@@ -2219,8 +2219,8 @@ TEST_CASE("bad vertex cause overflow of data type precisin when use VD result", 
             Linef  line_short(start_point, start_point + direction);
             double distance_short_vertex = perp_distance(line_short, vertex);
             double distance_short_middle = perp_distance(line_short, middle);
-            double distance_p1_short = perp_distance(line_short, p1);
-            double distance_p2_short = perp_distance(line_short, p2);
+            [[maybe_unused]] double distance_p1_short = perp_distance(line_short, p1);
+            [[maybe_unused]] double distance_p2_short = perp_distance(line_short, p2);
 
             CHECK(distance_vertex < 10);
             //CHECK(distance_middle < 10); // This is bad

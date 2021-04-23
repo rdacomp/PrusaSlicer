@@ -278,7 +278,7 @@ VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
                                                const Lines &          lines)
 {
     std::map<const VD::vertex_type *, VoronoiGraph::Node> &data = graph.data;
-    auto &mapItem = data.find(vertex);
+    auto mapItem = data.find(vertex);
     // return when exists
     if (mapItem != data.end()) return &mapItem->second;
 
@@ -291,9 +291,7 @@ VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
     Point  point = to_point(vertex);
     double distance = line.distance_to(point);
 
-    auto &[iterator,
-           success] = data.emplace(vertex,
-                                   VoronoiGraph::Node(vertex, distance));
+    auto [iterator, success] = data.emplace(vertex, VoronoiGraph::Node(vertex, distance));
     assert(success);
     return &iterator->second;
 }
@@ -501,10 +499,8 @@ VoronoiGraph VoronoiGraphUtils::create_skeleton(const VD &vd, const Lines &lines
     // vd should be annotated.
     // assert(Voronoi::debug::verify_inside_outside_annotations(vd));
 
-    VoronoiGraph         skeleton;
-    const VD::edge_type *first_edge = &vd.edges().front();
+    VoronoiGraph skeleton;
     for (const VD::edge_type &edge : vd.edges()) {
-        size_t edge_idx = &edge - first_edge;
         if (
             // Ignore secondary and unbounded edges, they shall never be part
             // of the skeleton.
@@ -964,18 +960,14 @@ std::pair<Slic3r::Point, Slic3r::Point> VoronoiGraphUtils::point_on_lines(
 
     // TODO: solve point on parabola
     //assert(edge->is_linear());
-    bool is_linear = edge->is_linear();
 
     Point edge_point = create_edge_point(position);
-
     auto point_on_line           = [&](const VD::edge_type *edge) -> Point {
         assert(edge->is_finite());
         const VD::cell_type *cell = edge->cell();
         size_t line_index = cell->source_index();
         const Line &line = lines[line_index];
         using namespace boost::polygon;
-        bool is_single_point = cell->source_category() ==
-                               SOURCE_CATEGORY_SINGLE_POINT;
         if (cell->source_category() == SOURCE_CATEGORY_SEGMENT_START_POINT) {
             return line.a;
         }

@@ -16,7 +16,7 @@ Slic3r::Polygon PolygonUtils::create_regular(size_t       count_points,
     Points points;
     points.reserve(count_points);
     double increase_angle = 2 * M_PI / count_points;
-    for (int i = 0; i < count_points; ++i) {
+    for (size_t i = 0; i < count_points; ++i) {
         double angle = i * increase_angle;
         double x = cos(angle) * radius + center.x();
         assert(is_in_limits(x));

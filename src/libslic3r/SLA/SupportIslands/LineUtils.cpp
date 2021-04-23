@@ -85,7 +85,7 @@ std::optional<Slic3r::Line> LineUtils::crop_half_ray(const Line & half_ray,
                                                      const Point &center,
                                                      double       radius)
 {
-    auto segment = crop_ray(half_ray, center, radius);
+    std::optional<Line> segment = crop_ray(half_ray, center, radius);
     if (!segment.has_value()) return {};
     Point dir = half_ray.b - half_ray.a;
     using fnc = std::function<bool(const Point &)>;
@@ -108,7 +108,7 @@ std::optional<Slic3r::Linef> LineUtils::crop_half_ray(const Linef & half_ray,
                                                      const Point &center,
                                                      double       radius)
 {
-    auto segment = crop_ray(half_ray, center, radius);
+    std::optional<Linef> segment = crop_ray(half_ray, center, radius);
     if (!segment.has_value()) return {};
     Vec2d dir       = half_ray.b - half_ray.a;
     using fnc       = std::function<bool(const Vec2d &)>;
@@ -131,7 +131,7 @@ std::optional<Slic3r::Line> LineUtils::crop_line(const Line & line,
                                                  const Point &center,
                                                  double       radius)
 {
-    auto segment = crop_ray(line, center, radius);
+    std::optional<Line> segment = crop_ray(line, center, radius);
     if (!segment.has_value()) return {};
 
     Point dir       = line.b - line.a;
@@ -151,8 +151,8 @@ std::optional<Slic3r::Line> LineUtils::crop_line(const Line & line,
     if (!use_a && !use_b) return {};
     if (use_a && use_b) return segment;
     bool same_dir = (use_x) ?
-        ((dir.x() > 0) == (segment->b.x() - segment->a.x()) > 0) :
-        ((dir.y() > 0) == (segment->b.y() - segment->a.y()) > 0) ;
+        ((dir.x() > 0) == ((segment->b.x() - segment->a.x()) > 0)) :
+        ((dir.y() > 0) == ((segment->b.y() - segment->a.y()) > 0)) ;
     if (use_a) { 
         if (same_dir) 
             return Line(segment->a, line.b);
@@ -170,7 +170,7 @@ std::optional<Slic3r::Linef> LineUtils::crop_line(const Linef & line,
                                                  const Point &center,
                                                  double       radius)
 {
-    auto segment = crop_ray(line, center, radius);
+    std::optional<Linef> segment = crop_ray(line, center, radius);
     if (!segment.has_value()) return {};
 
     Vec2d dir       = line.b - line.a;
@@ -190,9 +190,9 @@ std::optional<Slic3r::Linef> LineUtils::crop_line(const Linef & line,
     if (!use_a && !use_b) return {};
     if (use_a && use_b) return segment;
     bool same_dir = (use_x) ? ((dir.x() > 0) ==
-                               (segment->b.x() - segment->a.x()) > 0) :
+                               ((segment->b.x() - segment->a.x()) > 0)) :
                               ((dir.y() > 0) ==
-                               (segment->b.y() - segment->a.y()) > 0);
+                               ((segment->b.y() - segment->a.y()) > 0));
     if (use_a) {
         if (same_dir)
             return Linef(segment->a, line.b);
@@ -351,12 +351,10 @@ Slic3r::BoundingBox LineUtils::create_bounding_box(const Lines &lines) {
 
 std::map<size_t, size_t> LineUtils::create_line_connection_over_b(const Lines &lines)
 {
-    static const size_t bad_index = -1;
     std::map<size_t, size_t> line_connection;
     auto inserts = [&](size_t i1, size_t i2) -> bool {
         const Line &l1 = lines[i1];
         const Line &l2 = lines[i2];
-        bool is_connected = PointUtils::is_equal(l1.b, l2.a);
         if (!PointUtils::is_equal(l1.b, l2.a))
             return false;
         assert(line_connection.find(i1) == line_connection.end());
