@@ -73,9 +73,9 @@ public:
                         order_iterator order_end,
                         value_iterator v)
     {
-        using value_t = std::iterator_traits<value_iterator>::value_type;
-        using index_t = std::iterator_traits<order_iterator>::value_type;
-        using diff_t = std::iterator_traits<order_iterator>::difference_type;
+        typedef typename std::iterator_traits<value_iterator>::value_type value_t;
+        typedef typename std::iterator_traits<order_iterator>::value_type index_t;
+        typedef typename std::iterator_traits<order_iterator>::difference_type diff_t;
 
         diff_t remaining = order_end - 1 - order_begin;
         for (index_t s = index_t(), d; remaining > 0; ++s) {
@@ -104,9 +104,9 @@ public:
                                     order_iterator order_end,
                                     value_iterator v)
     {
-        using value_t = std::iterator_traits<value_iterator>::value_type;
-        using index_t = std::iterator_traits<order_iterator>::value_type;
-        using diff_t = std::iterator_traits<order_iterator>::difference_type;
+        typedef typename std::iterator_traits<value_iterator>::value_type value_t;
+        typedef typename std::iterator_traits<order_iterator>::value_type index_t;
+        typedef typename std::iterator_traits<order_iterator>::difference_type diff_t;
         static const index_t done_index = static_cast<index_t>(-1);
         diff_t remaining = order_end - 1 - order_begin;
         // s = start sequence index
