@@ -35,9 +35,7 @@ double ParabolaUtils::length_by_sampling(
     double          discretization_step)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
-    std::vector<Voronoi::Internal::point_type> parabola_samples(
-        {parabola.from, parabola.to});
-
+    std::vector<VD::point_type> parabola_samples({parabola.from, parabola.to});
     VD::point_type   source_point = parabola.focus;
     VD::segment_type source_segment(parabola.directrix.a, parabola.directrix.b);
     ::boost::polygon::voronoi_visual_utils<double>::discretize(
