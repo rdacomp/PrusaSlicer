@@ -15,7 +15,6 @@
 #include "MinAreaBoundingBox.hpp"
 #include "libslic3r.h"
 
-#include "libnest2d/backends/clipper/geometries.hpp"
 #include "libnest2d/utils/rotcalipers.hpp"
 
 #include "libslic3r/EdgeGrid.hpp"
