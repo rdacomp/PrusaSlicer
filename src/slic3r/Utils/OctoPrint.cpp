@@ -73,6 +73,9 @@ bool OctoPrint::test(wxString &msg) const
                 msg = "Could not parse server response";
             }
         })
+#ifdef WIN32
+        .revoke_best_effort(curl_revoke_best_effort)
+#endif
         .perform_sync();
 
     return res;
@@ -137,6 +140,9 @@ bool OctoPrint::upload(PrintHostUpload upload_data, ProgressFn prorgess_fn, Erro
                 res = false;
             }
         })
+#ifdef WIN32
+        .revoke_best_effort(curl_revoke_best_effort)
+#endif
         .perform_sync();
 
     return res;
