@@ -575,13 +575,14 @@ TEST_CASE("Small islands should be supported in center", "[SupGen], [VoronoiSkel
     ExPolygons islands = createTestIslands(size);
 
     // TODO: remove next 4 lines, debug sharp triangle
-    auto triangle = PolygonUtils::create_isosceles_triangle(8. * size, 40. * size);
+    /*auto triangle = PolygonUtils::create_isosceles_triangle(8. * size, 40. * size);
     islands = {ExPolygon(triangle)};
-    //auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
-    //islands          = {test_island};
+    auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
+    islands          = {test_island};*/
 
     for (ExPolygon &island : islands) {
-        size_t debug_index = &island - &islands.front();
+        // information for debug which island cause problem
+        [[maybe_unused]] size_t debug_index = &island - &islands.front(); 
         auto   points = test_island_sampling(island, cfg);
         double angle  = 3.14 / 3; // cca 60 degree
 
@@ -677,15 +678,13 @@ TEST_CASE("Compare sampling test", "[hide]")
         (sample_type == Sampling::old)   ? sample_old :
         (sample_type == Sampling::filip) ? sample_filip :
                                            nullptr;
-    
-    double       size1   = 1e6;
-    double       size2    = 3e6;
     ExPolygons   islands  = createTestIslands(1e6);
     ExPolygons   islands_big = createTestIslands(3e6);
     islands.insert(islands.end(), islands_big.begin(), islands_big.end());
 
     for (ExPolygon &island : islands) {
-        size_t debug_index = &island - &islands.front();
+        // information for debug which island cause problem
+        [[maybe_unused]] size_t debug_index = &island - &islands.front();
         auto samples = sample(island);
 #ifdef STORE_SAMPLE_INTO_SVG_FILES
         store_sample(samples, island);
@@ -697,6 +696,17 @@ TEST_CASE("Compare sampling test", "[hide]")
 #ifdef STORE_SAMPLE_INTO_SVG_FILES
         store_sample(samples, island);
 #endif // STORE_SAMPLE_INTO_SVG_FILES
+    }
+}
+
+#include <libslic3r/SLA/SupportIslands/VectorUtils.hpp>
+TEST_CASE("Reorder destructive", "[hide]"){
+    std::vector<int> data {0, 1, 3, 2, 4, 7, 6, 5, 8};
+    std::vector<int> order{0, 1, 3, 2, 4, 7, 6, 5, 8};
+
+    VectorUtils::reorder_destructive(order.begin(), order.end(), data.begin());
+    for (size_t i = 0; i < data.size() - 1;++i) { 
+        CHECK(data[i] < data[i + 1]);
     }
 }
 

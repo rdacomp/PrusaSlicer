@@ -1,5 +1,12 @@
 #include "ParabolaUtils.hpp"
 #include "PointUtils.hpp"
+#include "VoronoiGraphUtils.hpp"
+
+// sampling parabola
+#include <libslic3r/Geometry.hpp>
+#include <libslic3r/VoronoiOffset.hpp>
+#include <libslic3r/VoronoiVisualUtils.hpp>
+
 using namespace Slic3r::sla;
 
 double ParabolaUtils::length(const ParabolaSegment &parabola)
@@ -24,20 +31,16 @@ double ParabolaUtils::length(const ParabolaSegment &parabola)
                (length_x1 + length_x2) :    // interval is over zero
                fabs(length_x1 - length_x2); // interval is on same side of parabola
 }
-
-#include <Libslic3r/Geometry.hpp>
-#include <Libslic3r/VoronoiOffset.hpp>
-#include <Libslic3r/VoronoiVisualUtils.hpp>
 double ParabolaUtils::length_by_sampling(
     const ParabolaSegment &parabola,
     double          discretization_step)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
-    std::vector<Voronoi::Internal::point_type> parabola_samples(
-        {parabola.from, parabola.to});
-
-    VD::point_type   source_point = parabola.focus;
-    VD::segment_type source_segment(parabola.directrix.a, parabola.directrix.b);
+    std::vector<VD::point_type> parabola_samples({
+        VoronoiGraphUtils::to_point(parabola.from),
+        VoronoiGraphUtils::to_point(parabola.to)});
+    VD::point_type source_point = VoronoiGraphUtils::to_point(parabola.focus);
+    VD::segment_type source_segment = VoronoiGraphUtils::to_segment(parabola.directrix);
     ::boost::polygon::voronoi_visual_utils<double>::discretize(
         source_point, source_segment, discretization_step, &parabola_samples);
 
@@ -81,12 +84,12 @@ void ParabolaUtils::draw(SVG &                  svg,
     using VD = Slic3r::Geometry::VoronoiDiagram;
     if (PointUtils::is_equal(parabola.from, parabola.to)) return;
 
-    std::vector<Voronoi::Internal::point_type> parabola_samples(
-        {parabola.from, parabola.to});
+    std::vector<VD::point_type> parabola_samples(
+        {VoronoiGraphUtils::to_point(parabola.from),
+         VoronoiGraphUtils::to_point(parabola.to)});  
+    VD::point_type source_point = VoronoiGraphUtils::to_point(parabola.focus);
+    VD::segment_type source_segment = VoronoiGraphUtils::to_segment(parabola.directrix);
 
-    VD::point_type   source_point = parabola.focus;
-    VD::segment_type source_segment(parabola.directrix.a,
-                                    parabola.directrix.b);
     ::boost::polygon::voronoi_visual_utils<double>::discretize(
         source_point, source_segment, discretization_step, &parabola_samples);
 

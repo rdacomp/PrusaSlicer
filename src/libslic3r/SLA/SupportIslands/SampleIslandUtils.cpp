@@ -11,7 +11,6 @@
 #include "LineUtils.hpp"
 #include "PointUtils.hpp"
 
-#include <magic_enum/magic_enum.hpp>
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
 #include <libslic3r/ClipperUtils.hpp> // allign
@@ -32,7 +31,7 @@ using namespace Slic3r::sla;
 std::vector<Slic3r::Vec2f> SampleIslandUtils::sample_expolygon(
     const ExPolygon &expoly, float samples_per_mm2)
 {
-    static const float mm2_area = scale_(1) * scale_(1);
+    static const float mm2_area = static_cast<float>(scale_(1) * scale_(1));
     // Equilateral triangle area = (side * height) / 2
     float triangle_area = mm2_area / samples_per_mm2;
     // Triangle area = sqrt(3) / 4 * "triangle side"
@@ -228,7 +227,7 @@ SupportIslandPoints SampleIslandUtils::sample_side_branch(
         result.push_back(
             create_point_on_path(reverse_path, side_distance, cfg.sample_config,
                                  SupportIslandPoint::Type::center_line_end));
-        return std::move(result);
+        return result;
     }
     // count of segment between points on main path
     size_t segment_count = static_cast<size_t>(
@@ -272,7 +271,7 @@ SupportIslandPoints SampleIslandUtils::sample_side_branch(
     //}
     //assert(fabs(distance - (sample_distance - cfg.side_distance)) < 1e-5);
     result.back()->type = SupportIslandPoint::Type::center_line_end;
-    return std::move(result);
+    return result;
 }
 
 SupportIslandPoints SampleIslandUtils::sample_side_branches(
@@ -299,7 +298,7 @@ SupportIslandPoints SampleIslandUtils::sample_side_branches(
             std::move_iterator(samples.end()));
         side_branches_cpy.pop();
     }
-    return std::move(result);
+    return result;
 }
 
 std::vector<std::set<const VoronoiGraph::Node *>> create_circles_sets(
@@ -434,7 +433,7 @@ SupportIslandPoints SampleIslandUtils::sample_center_line(
     if (path.circles.empty()) return result;
     sample_center_circles(path, cfg, result);
     
-    return std::move(result);
+    return result;
 }
 
 void SampleIslandUtils::sample_center_circle_end(
@@ -474,8 +473,8 @@ void SampleIslandUtils::sample_center_circle_end(
     }
     VoronoiGraph::Nodes nodes = done_nodes; // copy, could be more neighbor
     nodes.insert(nodes.begin(), neighbor.node);
-    for (int i = 1; i <= count_supports; ++i) {
-        double distance_from_neighbor = i * (distance_between) - neighbor_distance;
+    for (size_t i = 1; i <= count_supports; ++i) {
+        double distance_from_neighbor = i * distance_between - neighbor_distance;
         auto position = create_position_on_path(nodes, distance_from_neighbor);
         assert(position.has_value());
         result.push_back(
@@ -782,7 +781,7 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
         SupportIslandPoints result;
         result.push_back(create_middle_path_point(
             path, SupportIslandPoint::Type::one_center_point));
-        return std::move(result);
+        return result;
     }
 
     double max_width = VoronoiGraphUtils::get_max_width(path);
@@ -797,7 +796,7 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
             centerLineConfiguration(path.side_branches, config);
         SupportIslandPoints samples = sample_center_line(path, centerLineConfiguration);
         samples.front()->type = SupportIslandPoint::Type::center_line_end2;
-        return std::move(samples);
+        return samples;
     }
 
     // TODO: 3) Triangle of points
@@ -1309,7 +1308,7 @@ void SampleIslandUtils::draw(SVG &                      svg,
     for (const auto &p : supportIslandPoints) {
         svg.draw(p->point, color, size);
         if (write_type && p->type != SupportIslandPoint::Type::undefined) {
-            auto type_name = magic_enum::enum_name(p->type);
+            auto type_name = SupportIslandPoint::to_string(p->type);
             Point start     = p->point + Point(size, 0.);
             svg.draw_text(start, std::string(type_name).c_str(), color);
         }

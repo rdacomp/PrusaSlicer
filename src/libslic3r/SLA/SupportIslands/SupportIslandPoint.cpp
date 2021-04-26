@@ -44,6 +44,27 @@ coord_t SupportIslandPoint::move(const Point &destination)
     return diff.x() + diff.y(); // Manhatn distance
 }
 
+std::string SupportIslandPoint::to_string(const Type &type)
+{
+    static std::map<Type, std::string> type_to_tring=
+        {{Type::one_center_point, "one_center_point"},
+         {Type::two_points,"two_points"},
+         {Type::center_line, "center_line"},
+         {Type::center_line_end, "center_line_end"},
+         {Type::center_line_end2, "center_line_end2"},
+         {Type::center_line_end3, "center_line_end3"},
+         {Type::center_line_start, "center_line_start"},
+         {Type::center_circle, "center_circle"},
+         {Type::center_circle_end, "center_circle_end"},
+         {Type::center_circle_end2, "center_circle_end2"},
+         {Type::outline, "outline"},
+         {Type::inner, "inner"},
+         {Type::undefined, "undefined"}};
+    auto it = type_to_tring.find(type);
+    if (it == type_to_tring.end()) return "UNDEFINED";
+    return it->second;
+}
+
 ///////////////
 // Point on VD
 ///////////////

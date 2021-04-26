@@ -71,6 +71,13 @@ public:
     /// <param name="destination">Wanted position</param>
     /// <returns>Move distance</returns>
     virtual coord_t move(const Point &destination);
+
+    /// <summary>
+    /// Convert type to string value
+    /// </summary>
+    /// <param name="type">Input type</param>
+    /// <returns>String type</returns>
+    static std::string to_string(const Type &type);
 };
 
 using SupportIslandPointPtr = std::unique_ptr<SupportIslandPoint>;
