@@ -252,7 +252,7 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const VD::cell_type & cell,
             continue;
         if (orientation == Geometry::Orientation::ORIENTATION_CW)
             std::swap(line->a, line->b);
-        lines.push_back(line.value());
+        lines.push_back(*line);
     } while ((edge = edge->next()) && edge != cell.incident_edge());
     assert(!lines.empty());
     LineUtils::sort_CCW(lines, center);

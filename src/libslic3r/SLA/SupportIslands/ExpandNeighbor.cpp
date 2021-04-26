@@ -20,7 +20,7 @@ void ExpandNeighbor::process(CallStack &call_stack)
     if (circle_opt.has_value()) {
         size_t circle_index = data.result.circles.size();
         data.circle_indexes.push_back(circle_index);
-        data.result.circles.push_back(circle_opt.value());
+        data.result.circles.push_back(*circle_opt);
         return;
     }
 
