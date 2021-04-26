@@ -316,9 +316,6 @@ void PhysicalPrinterDialog::build_printhost_settings(ConfigOptionsGroup* m_optgr
                 show_error(this, text);
                 return;
             }
-#ifdef WIN32
-            host->curl_revoke_best_effort = get_disable_check();
-#endif
             wxString msg;
             bool result;
             {
@@ -418,18 +415,9 @@ void PhysicalPrinterDialog::build_printhost_settings(ConfigOptionsGroup* m_optgr
         m_optgroup->append_line(line);
 
 #ifdef WIN32
-        Line line_check{ "", "" };
-        line_check.full_width = 1;
-        line_check.widget = [=](wxWindow* parent) {
-            auto sizer = new wxBoxSizer(wxHORIZONTAL);
-            //auto txt = new wxStaticText(parent, wxID_ANY, "\t");
-            m_cbox_disable_check = new wxCheckBox(parent, wxID_ANY, _L("Ignore certificate revocation checks."));
-            //sizer->Add(txt);
-            m_cbox_disable_check->SetFont(wxGetApp().normal_font());
-            sizer->Add(m_cbox_disable_check);
-            return sizer;
-        };
-        m_optgroup->append_line(line_check);
+        option = m_optgroup->get_option("printhost_ignore_check");
+        option.opt.width = Field::def_width_wider();
+        m_optgroup->append_single_option_line(option);
 #endif
        
     }
@@ -684,12 +672,6 @@ void PhysicalPrinterDialog::OnOK(wxEvent& event)
         if (dialog.ShowModal() == wxID_CANCEL)
             return;
     }
-
-#ifdef WIN32
-    std::unique_ptr<PrintHost> host(PrintHost::get_print_host(m_config));
-    if(host)
-        host->curl_revoke_best_effort = get_disable_check();
-#endif
 
     std::string renamed_from;
     // temporary save previous printer name if it was edited
