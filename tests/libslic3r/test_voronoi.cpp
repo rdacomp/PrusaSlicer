@@ -2181,8 +2181,8 @@ TEST_CASE("bad vertex cause overflow of data type precisin when use VD result", 
     for (auto& edge : vd.edges()) {
         size_t i1 = edge.cell()->source_index();
         size_t i2 = edge.twin()->cell()->source_index();
-        if (i1 == bad_index0 && i2 == bad_index1 ||
-            i1 == bad_index1 && i2 == bad_index0) {
+        if ((i1 == bad_index0 && i2 == bad_index1) ||
+            (i1 == bad_index1 && i2 == bad_index0)) {
             Vec2d p1 = points[bad_index0].cast<double>();
             Vec2d p2 = points[bad_index1].cast<double>();
             Vec2d middle = (p1 + p2) / 2;
