@@ -18,10 +18,52 @@
 
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/format/format_fwd.hpp>
+#include <boost/functional/hash.hpp>
 #include <boost/property_tree/ptree_fwd.hpp>
 
 #include <cereal/access.hpp>
 #include <cereal/types/base_class.hpp>
+
+namespace Slic3r {
+    struct FloatOrPercent
+    {
+        double  value;
+        bool    percent;
+
+    private:
+        friend class cereal::access;
+        template<class Archive> void serialize(Archive& ar) { ar(this->value); ar(this->percent); }
+    };
+
+    inline bool operator==(const FloatOrPercent& l, const FloatOrPercent& r) { return l.value == r.value && l.percent == r.percent; }
+    inline bool operator!=(const FloatOrPercent& l, const FloatOrPercent& r) { return !(l == r); }
+}
+
+namespace std {
+    template<> struct hash<Slic3r::FloatOrPercent> {
+        std::size_t operator()(const Slic3r::FloatOrPercent& v) const noexcept {
+            std::size_t seed = std::hash<double>{}(v.value);
+            return v.percent ? seed ^ 0x9e3779b9 : seed;
+        }
+    };
+
+    template<> struct hash<Slic3r::Vec2d> {
+        std::size_t operator()(const Slic3r::Vec2d& v) const noexcept {
+            std::size_t seed = std::hash<double>{}(v.x());
+            boost::hash_combine(seed, std::hash<double>{}(v.y()));
+            return seed;
+        }
+    };
+
+    template<> struct hash<Slic3r::Vec3d> {
+        std::size_t operator()(const Slic3r::Vec3d& v) const noexcept {
+            std::size_t seed = std::hash<double>{}(v.x());
+            boost::hash_combine(seed, std::hash<double>{}(v.y()));
+            boost::hash_combine(seed, std::hash<double>{}(v.z()));
+            return seed;
+        }
+    };
+}
 
 namespace Slic3r {
 
@@ -137,6 +179,7 @@ public:
     virtual void                setInt(int /* val */) { throw BadOptionTypeException("Calling ConfigOption::setInt on a non-int ConfigOption"); }
     virtual bool                operator==(const ConfigOption &rhs) const = 0;
     bool                        operator!=(const ConfigOption &rhs) const { return ! (*this == rhs); }
+    virtual size_t              hash()          const throw() = 0;
     bool                        is_scalar()     const { return (int(this->type()) & int(coVectorType)) == 0; }
     bool                        is_vector()     const { return ! this->is_scalar(); }
     // If this option is nullable, then it may have its value or values set to nil.
@@ -187,6 +230,8 @@ public:
 
     bool operator==(const T &rhs) const { return this->value == rhs; }
     bool operator!=(const T &rhs) const { return this->value != rhs; }
+
+    size_t hash() const throw() override { return std::hash<T>{}(this->value); }
 
 private:
 	friend class cereal::access;
@@ -341,6 +386,14 @@ public:
 
     bool operator==(const std::vector<T> &rhs) const { return this->values == rhs; }
     bool operator!=(const std::vector<T> &rhs) const { return this->values != rhs; }
+
+    size_t hash() const throw() override {
+        std::hash<T> hasher;
+        size_t seed = 0;
+        for (const auto &v : this->values)
+            boost::hash_combine(seed, hasher(v));
+        return seed;
+    }
 
     // Is this option overridden by another option?
     // An option overrides another option if it is not nil and not equal.
@@ -758,6 +811,7 @@ public:
     ConfigOption*           clone() const override { return new ConfigOptionPercent(*this); }
     ConfigOptionPercent&    operator=(const ConfigOption *opt) { this->set(opt); return *this; }
     bool                    operator==(const ConfigOptionPercent &rhs) const { return this->value == rhs.value; }
+
     double                  get_abs_value(double ratio_over) const { return ratio_over * this->value / 100; }
     
     std::string serialize() const override 
@@ -858,6 +912,10 @@ public:
     }
     bool                        operator==(const ConfigOptionFloatOrPercent &rhs) const 
         { return this->value == rhs.value && this->percent == rhs.percent; }
+    size_t                      hash() const throw() override {
+        size_t seed = std::hash<double>{}(this->value);
+        return this->percent ? seed ^ 0x9e3779b9 : seed;
+    }
     double                      get_abs_value(double ratio_over) const 
         { return this->percent ? (ratio_over * this->value / 100) : this->value; }
 
@@ -891,27 +949,6 @@ private:
 	template<class Archive> void serialize(Archive &ar) { ar(cereal::base_class<ConfigOptionPercent>(this), percent); }
 };
 
-
-struct FloatOrPercent
-{
-    double  value;
-    bool    percent;
-
-private:
-    friend class cereal::access;
-    template<class Archive> void serialize(Archive & ar) { ar(this->value); ar(this->percent); }
-};
-
-inline bool operator==(const FloatOrPercent &l, const FloatOrPercent &r)
-{
-    return l.value == r.value && l.percent == r.percent;
-}
-
-inline bool operator!=(const FloatOrPercent& l, const FloatOrPercent& r)
-{
-    return !(l == r);
-}
-
 template<bool NULLABLE>
 class ConfigOptionFloatsOrPercentsTempl : public ConfigOptionVector<FloatOrPercent>
 {
@@ -932,6 +969,7 @@ public:
         assert(dynamic_cast<const ConfigOptionVector<FloatOrPercent>*>(&rhs));
         return vectors_equal(this->values, static_cast<const ConfigOptionVector<FloatOrPercent>*>(&rhs)->values);
     }
+
     // Could a special "nil" value be stored inside the vector, indicating undefined value?
     bool                    nullable() const override { return NULLABLE; }
     // Special "nil" value to be stored into the vector if this->supports_nil().
