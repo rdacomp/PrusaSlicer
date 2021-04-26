@@ -36,9 +36,19 @@ Slic3r::Point VoronoiGraphUtils::to_point(const VD::vertex_type *vertex)
     return Point(to_coord(vertex->x()), to_coord(vertex->y()));
 }
 
+VoronoiGraphUtils::VD::point_type VoronoiGraphUtils::to_point(const Point &point)
+{
+    return VD::point_type(point.x(), point.y());
+}
+
 Slic3r::Vec2d VoronoiGraphUtils::to_point_d(const VD::vertex_type *vertex)
 {
     return Vec2d(vertex->x(), vertex->y());
+}
+
+VoronoiGraphUtils::VD::segment_type VoronoiGraphUtils::to_segment(const Line &line)
+{
+    return VD::segment_type(to_point(line.a), to_point(line.b));
 }
 
 Slic3r::Point VoronoiGraphUtils::to_direction(const VD::edge_type *edge)

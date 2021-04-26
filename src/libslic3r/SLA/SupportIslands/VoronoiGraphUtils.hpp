@@ -35,10 +35,19 @@ public:
 
     /// <summary>
     /// Convert Vodonoi diagram vertex type to Slicer Point
+    /// decrease precission by rounding
     /// </summary>
     /// <param name="vertex">Input point pointer(double precission)</param>
-    /// <returns>Convertedf point(int preccission)</returns>
+    /// <returns>Converted point(int preccission)</returns>
     static Point to_point(const VD::vertex_type *vertex);
+
+    /// <summary>
+    /// Convert Slic3r point to Vodonoi point type
+    /// extend precission
+    /// </summary>
+    /// <param name="vertex">Input point(int preccission)</param>
+    /// <returns>Converted vertex(double precission)</returns>
+    static VD::point_type to_point(const Point &point);
 
     /// <summary>
     /// Convert point type between voronoi and slicer format
@@ -46,6 +55,13 @@ public:
     /// <param name="vertex">Input vertex</param>
     /// <returns>created vector</returns>
     static Vec2d to_point_d(const VD::vertex_type* vertex);
+
+    /// <summary>
+    /// Convert Slic3r Line to Voronoi segment type
+    /// </summary>
+    /// <param name="line">input line(int preccission)</param>
+    /// <returns>output segment(double precission)</returns>
+    static VD::segment_type to_segment(const Line &line);
 
     /// <summary>
     /// create direction from Voronoi edge

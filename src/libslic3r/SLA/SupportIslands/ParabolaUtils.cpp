@@ -1,5 +1,6 @@
 #include "ParabolaUtils.hpp"
 #include "PointUtils.hpp"
+#include "VoronoiGraphUtils.hpp"
 
 // sampling parabola
 #include <libslic3r/Geometry.hpp>
@@ -35,14 +36,11 @@ double ParabolaUtils::length_by_sampling(
     double          discretization_step)
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
-    std::vector<VD::point_type> parabola_samples({parabola.from, parabola.to});
-    const Point &f = parabola.focus;
-    VD::point_type source_point(f.x(), f.y());
-    const Point & a = parabola.directrix.a;
-    const Point & b = parabola.directrix.b;
-    VD::segment_type source_segment(VD::point_type(a.x(), a.y()),
-                                    VD::point_type(b.x(), b.y()));
-
+    std::vector<VD::point_type> parabola_samples({
+        VoronoiGraphUtils::to_point(parabola.from),
+        VoronoiGraphUtils::to_point(parabola.to)});
+    VD::point_type source_point = VoronoiGraphUtils::to_point(parabola.focus);
+    VD::segment_type source_segment = VoronoiGraphUtils::to_segment(parabola.directrix);
     ::boost::polygon::voronoi_visual_utils<double>::discretize(
         source_point, source_segment, discretization_step, &parabola_samples);
 
@@ -86,12 +84,12 @@ void ParabolaUtils::draw(SVG &                  svg,
     using VD = Slic3r::Geometry::VoronoiDiagram;
     if (PointUtils::is_equal(parabola.from, parabola.to)) return;
 
-    std::vector<Voronoi::Internal::point_type> parabola_samples(
-        {parabola.from, parabola.to});
+    std::vector<VD::point_type> parabola_samples(
+        {VoronoiGraphUtils::to_point(parabola.from),
+         VoronoiGraphUtils::to_point(parabola.to)});  
+    VD::point_type source_point = VoronoiGraphUtils::to_point(parabola.focus);
+    VD::segment_type source_segment = VoronoiGraphUtils::to_segment(parabola.directrix);
 
-    VD::point_type   source_point = parabola.focus;
-    VD::segment_type source_segment(parabola.directrix.a,
-                                    parabola.directrix.b);
     ::boost::polygon::voronoi_visual_utils<double>::discretize(
         source_point, source_segment, discretization_step, &parabola_samples);
 
