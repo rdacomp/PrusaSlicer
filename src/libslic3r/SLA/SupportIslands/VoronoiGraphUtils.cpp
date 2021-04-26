@@ -291,9 +291,11 @@ VoronoiGraph::Node *VoronoiGraphUtils::getNode(VoronoiGraph &         graph,
     Point  point = to_point(vertex);
     double distance = line.distance_to(point);
 
-    [[maybe_unused]] auto [iterator, success] =
-        data.emplace(vertex, VoronoiGraph::Node(vertex, distance));
+    auto [iterator, success] = data.emplace(vertex, VoronoiGraph::Node(vertex, distance));
+
     assert(success);
+    if (!success) return nullptr;
+
     return &iterator->second;
 }
 

@@ -3,25 +3,26 @@
 
 using namespace Slic3r::sla;
 
+inline bool is_in_coord_limits(const double& value) {
+    return (value < std::numeric_limits<coord_t>::max()) &&
+           (value > std::numeric_limits<coord_t>::min());
+}
+
 Slic3r::Polygon PolygonUtils::create_regular(size_t       count_points,
                                              double       radius,
                                              const Point &center)
 {
     assert(radius >= 1.);
     assert(count_points >= 3);
-    auto is_in_limits = [](double value) {
-        return (value < std::numeric_limits<coord_t>::max()) &&
-               (value > std::numeric_limits<coord_t>::min());
-    };
     Points points;
     points.reserve(count_points);
     double increase_angle = 2 * M_PI / count_points;
     for (size_t i = 0; i < count_points; ++i) {
         double angle = i * increase_angle;
         double x = cos(angle) * radius + center.x();
-        assert(is_in_limits(x));
+        assert(is_in_coord_limits(x));
         double y = sin(angle) * radius + center.y();
-        assert(is_in_limits(y));
+        assert(is_in_coord_limits(y));
         points.emplace_back(x, y);
     }
     return Polygon(points);
