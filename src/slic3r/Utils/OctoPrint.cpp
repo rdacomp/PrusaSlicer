@@ -25,7 +25,8 @@ namespace Slic3r {
 OctoPrint::OctoPrint(DynamicPrintConfig *config) :
     host(config->opt_string("print_host")),
     apikey(config->opt_string("printhost_apikey")),
-    cafile(config->opt_string("printhost_cafile"))
+    cafile(config->opt_string("printhost_cafile")),
+    ignore_checks(config->opt_bool("printhost_ignore_check"))
 {}
 
 const char* OctoPrint::get_name() const { return "OctoPrint"; }
@@ -74,7 +75,7 @@ bool OctoPrint::test(wxString &msg) const
             }
         })
 #ifdef WIN32
-        .revoke_best_effort(curl_revoke_best_effort)
+        .revoke_best_effort(ignore_checks)
 #endif
         .perform_sync();
 
@@ -141,7 +142,7 @@ bool OctoPrint::upload(PrintHostUpload upload_data, ProgressFn prorgess_fn, Erro
             }
         })
 #ifdef WIN32
-        .revoke_best_effort(curl_revoke_best_effort)
+        .revoke_best_effort(ignore_checks)
 #endif
         .perform_sync();
 

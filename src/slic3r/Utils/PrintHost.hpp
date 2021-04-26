@@ -56,9 +56,6 @@ public:
 
     static PrintHost* get_print_host(DynamicPrintConfig *config);
 
-#ifdef WIN32
-    bool curl_revoke_best_effort {false};
-#endif
 protected:
     virtual wxString format_error(const std::string &body, const std::string &error, unsigned status) const;
 };

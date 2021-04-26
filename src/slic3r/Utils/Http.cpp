@@ -494,8 +494,7 @@ Http& Http::form_add_file(const std::string &name, const fs::path &path, const s
 Http& Http::revoke_best_effort(bool set)
 {
 	if(p && set){
-		// Needs curl 7.70.0
-		//::curl_easy_setopt(p->curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_REVOKE_BEST_EFFORT);
+		::curl_easy_setopt(p->curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_REVOKE_BEST_EFFORT);
 	}
 	return *this;
 }
