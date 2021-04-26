@@ -77,10 +77,13 @@ class PhysicalPrinterDialog : public DPIDialog
 
     wxBoxSizer*         m_presets_sizer                 {nullptr};
 
+    wxCheckBox*         m_cbox_disable_check            {nullptr};
+
     void build_printhost_settings(ConfigOptionsGroup* optgroup);
     void OnOK(wxEvent& event);
     void AddPreset(wxEvent& event);
 
+    bool get_disable_check() const { return m_cbox_disable_check != nullptr ? m_cbox_disable_check->GetValue() : false; }
 public:
     PhysicalPrinterDialog(wxWindow* parent, wxString printer_name);
     ~PhysicalPrinterDialog();
