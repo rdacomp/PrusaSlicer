@@ -11,7 +11,6 @@
 #include "LineUtils.hpp"
 #include "PointUtils.hpp"
 
-#include <magic_enum/magic_enum.hpp>
 #include <libslic3r/VoronoiVisualUtils.hpp>
 
 #include <libslic3r/ClipperUtils.hpp> // allign
@@ -1275,7 +1274,7 @@ void SampleIslandUtils::draw(SVG &                      svg,
     for (const auto &p : supportIslandPoints) {
         svg.draw(p->point, color, size);
         if (write_type && p->type != SupportIslandPoint::Type::undefined) {
-            auto type_name = magic_enum::enum_name(p->type);
+            auto type_name = SupportIslandPoint::to_string(p->type);
             Point start     = p->point + Point(size, 0.);
             svg.draw_text(start, std::string(type_name).c_str(), color);
         }
