@@ -36,8 +36,13 @@ double ParabolaUtils::length_by_sampling(
 {
     using VD = Slic3r::Geometry::VoronoiDiagram;
     std::vector<VD::point_type> parabola_samples({parabola.from, parabola.to});
-    VD::point_type   source_point = parabola.focus;
-    VD::segment_type source_segment(parabola.directrix.a, parabola.directrix.b);
+    const Point &f = parabola.focus;
+    VD::point_type source_point(f.x(), f.y());
+    const Point & a = parabola.directrix.a;
+    const Point & b = parabola.directrix.b;
+    VD::segment_type source_segment(VD::point_type(a.x(), a.y()),
+                                    VD::point_type(b.x(), b.y()));
+
     ::boost::polygon::voronoi_visual_utils<double>::discretize(
         source_point, source_segment, discretization_step, &parabola_samples);
 
