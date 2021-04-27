@@ -106,14 +106,22 @@ bool OctoPrint::upload(PrintHostUpload upload_data, ProgressFn prorgess_fn, Erro
         error_fn(std::move(test_msg));
         return false;
     }
-    // Curl uses easy_getinfo to get ip address of last successful transaction.
-    // If it got the address use it instead of the stored in "host" variable.
-    // This new address returns in "test_msg" variable.
-    // Solves troubles of uploades failing with name address.
-    std::string resolved_addr = test_msg.empty() ? host : "[" + boost::nowide::narrow(test_msg) + "]";
+
+    std::string url;
     bool res = true;
 
-    auto url = make_url("api/files/local", resolved_addr);
+    if (host.find("https://") == 0)
+    {
+        url = make_url("api/files/local");
+    } else {
+        // If not https is entered - thus we assume signed ceritificate is being used
+        // Curl uses easy_getinfo to get ip address of last successful transaction.
+        // If it got the address use it instead of the stored in "host" variable.
+        // This new address returns in "test_msg" variable.
+        // Solves troubles of uploades failing with name address.
+        std::string resolved_addr = test_msg.empty() ? host : "[" + boost::nowide::narrow(test_msg) + "]";
+        url = make_url("api/files/local", resolved_addr);
+    }
 
     BOOST_LOG_TRIVIAL(info) << boost::format("%1%: Uploading file %2% at %3%, filename: %4%, path: %5%, print: %6%")
         % name
@@ -186,8 +194,7 @@ std::string OctoPrint::make_url(const std::string& path, const std::string& addr
         else {
             return (boost::format("%1%/%2%") % hst % path).str();
         }
-    }
-    else {
+    } else {
         return (boost::format("http://%1%/%2%") % hst % path).str();
     }
 }
