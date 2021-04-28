@@ -112,9 +112,10 @@ bool OctoPrint::upload(PrintHostUpload upload_data, ProgressFn prorgess_fn, Erro
 
     if (host.find("https://") == 0)
     {
+        // If https is entered we assume signed ceritificate is being used
+        // IP resolving will not happen - it could resolve into address not being specified in cert
         url = make_url("api/files/local");
     } else {
-        // If not https is entered - thus we assume signed ceritificate is being used
         // Curl uses easy_getinfo to get ip address of last successful transaction.
         // If it got the address use it instead of the stored in "host" variable.
         // This new address returns in "test_msg" variable.
