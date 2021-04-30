@@ -107,33 +107,157 @@ public:
 };
 
 /// <summary>
-/// DTO Support point laying on Outline of island
+/// Support point laying on Outline of island
 /// Restriction to move only on outline
 /// </summary>
 class SupportOutlineIslandPoint : public SupportIslandPoint
 {
 public:
-    // index of line form island outline 
-    size_t index;
+    // definition of restriction
+    class Restriction;
+
+    struct Position
+    {
+        // index of line form island outline - index into Restriction
+        // adress line inside inner polygon --> SupportOutline
+        size_t index;
+
+        // define position on line by ratio 
+        // from 0 (line point a) 
+        // to   1 (line point b)
+        float ratio;
+
+        Position(size_t index, float ratio) : index(index), ratio(ratio) {}
+    };    
+    Position position;
+
+
+    // store lines for allowed move - with distance from island source lines
+    std::shared_ptr<Restriction> restriction;
 
 public:
-    SupportOutlineIslandPoint(Slic3r::Point point,
-                              size_t        index,
-                              Type          type = Type::outline)
-        : SupportIslandPoint(point, type), index(index)
-    {}
+    SupportOutlineIslandPoint(Position                     position,
+                              std::shared_ptr<Restriction> restriction,
+                              Type type = Type::outline);
+    // return true
+    bool can_move() const override;
 
-    bool can_move() const override { return true; }
+    /// <summary>
+    /// Move nearest to destination point
+    /// only along restriction lines
+    /// + change current position
+    /// </summary>
+    /// <param name="destination">Wanted support position</param>
+    /// <returns>move distance manhatn</returns>
+    coord_t move(const Point &destination) override;
 
-    coord_t move(const Point &destination) override
-    { 
-        // TODO: For decide of move need information about
-        // + island outlines        \    May be 
-        // + distance from outline  /    offseted outlines
-        // + search distance for allowed move over outlines(count, distance)
-        assert(false); // Not implemented
-        return 0;
-    }
+    /// <summary>
+    /// Calculate 2d point belong to line position
+    /// </summary>
+    /// <param name="position">Define position on line from restriction</param>
+    /// <param name="restriction">Hold lines</param>
+    /// <returns>Position in 2d</returns>
+    static Point calc_point(const Position &   position,
+                            const Restriction &restriction);
+
+    /// <summary>
+    /// Keep data for align support point on bordred of island
+    /// Define possible move of point along outline
+    /// IMPROVE: Should contain list of Points on outline.
+    /// (to keep maximal distance of neighbor points on outline)
+    /// </summary>
+    class Restriction
+    {
+    public:
+        // line restriction
+        // must be connected line.a == prev_line.b && line.b == next_line.a
+        Lines lines;
+
+        // keep stored line lengths
+        // same size as lines
+        std::vector<double> lengths;
+
+        // maximal distance for search nearest line to destination point during aligning
+        coord_t max_align_distance;
+
+        Restriction(Lines               lines,
+                    std::vector<double> lengths,
+                    coord_t             max_align_distance)
+            : lines(lines)
+            , lengths(lengths)
+            , max_align_distance(max_align_distance)
+        {
+            assert(lines.size() == lengths.size());
+        }
+
+        virtual std::optional<size_t> next_index(size_t index) const = 0;
+        virtual std::optional<size_t> prev_index(size_t index) const = 0;
+    };
+    
+    class RestrictionLineSequence: public Restriction
+    {
+    public:
+        // inherit constructors
+        using Restriction::Restriction;
+        
+        virtual std::optional<size_t> next_index(size_t index) const override
+        {
+            assert(index < lines.size());
+            ++index;
+            if (index >= lines.size()) return {}; // index out of range
+            return index;
+        }
+
+        virtual std::optional<size_t> prev_index(size_t index) const override
+        {
+            assert(index < lines.size());
+            if (index >= lines.size()) return {}; // index out of range
+            if (index == 0) return {}; // no prev line
+            return index - 1;
+        }
+    };
+
+    class RestrictionCircleSequence : public Restriction
+    {
+    public:
+        // inherit constructors
+        using Restriction::Restriction;
+
+        virtual std::optional<size_t> next_index(size_t index) const override
+        {
+            assert(index < lines.size());
+            if (index >= lines.size()) return {}; // index out of range
+            ++index;
+            if (index == lines.size()) return 0;
+            return index;
+        }
+
+        virtual std::optional<size_t> prev_index(size_t index) const override
+        {
+            assert(index < lines.size());
+            if (index >= lines.size()) return {}; // index out of range
+            if (index == 0) return lines.size() - 1;
+            return index - 1;
+        }
+    };
+
+private:
+    // DTO for result of move
+    struct MoveResult
+    {
+        // define position on restriction line
+        Position position;
+        // point laying on restricted line
+        Point point;
+        // distance point on restricted line from destination point
+        double distance;
+
+        MoveResult(Position position, Point point, double distance)
+            : position(position), point(point), distance(distance)
+        {}
+    };
+    MoveResult create_result(size_t index, const Point &destination);
+    void update_result(MoveResult& result, size_t index, const Point &destination);
 };
 
 } // namespace Slic3r::sla

@@ -279,7 +279,18 @@ std::optional<Slic3r::Vec2d> LineUtils::intersection(const Line &ray1, const Lin
     return (ray1.a.cast<double>() + t * v1);
 }
 
-LineUtils::LineConnection LineUtils::create_line_connection(const Slic3r::Lines &lines)
+double LineUtils::foot(const Line &line, const Point &point)
+{
+    Vec2d  a   = line.a.cast<double>();
+    Vec2d  vec = point.cast<double>() - a;
+    Vec2d  b   = line.b.cast<double>();
+    Vec2d  dir = b - a;
+    double l2  = dir.squaredNorm();
+    return vec.dot(dir) / l2;
+}
+
+LineUtils::LineConnection LineUtils::create_line_connection(
+    const Slic3r::Lines &lines)
 {
     LineConnection line_connection;
     static const size_t bad_index = -1;

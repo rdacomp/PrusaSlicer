@@ -1209,69 +1209,204 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     return field;
 }
 
+std::pair<Slic3r::ExPolygon, std::map<size_t, size_t>>
+SampleIslandUtils::outline_offset(const Slic3r::ExPolygon &island,
+                                  coord_t                  offset_distance)
+{
+    Polygons polygons = offset(island, -offset_distance, ClipperLib::jtSquare);
+    if (polygons.empty()) return {}; // no place for support point
+    assert(polygons.front().is_counter_clockwise());
+    ExPolygon offseted(polygons.front());
+    for (size_t i = 1; i < polygons.size(); ++i) {
+        Polygon &hole = polygons[i];
+        assert(hole.is_clockwise());
+        offseted.holes.push_back(hole);
+    }
+
+    // TODO: Connect indexes for convert during creation of offset
+    // !! this implementation was fast for develop BUT NOT for running !!
+    Lines island_lines = to_lines(island);
+    Lines offset_lines = to_lines(offseted);
+    // Convert index map from island index to offseted index
+    std::map<size_t, size_t> converter;
+    for (size_t island_line_index = 0; island_line_index < island_lines.size(); ++island_line_index) {
+        const Line &island_line = island_lines[island_line_index];
+        Vec2f dir1 = LineUtils::direction(island_line).cast<float>();
+        for (size_t offset_line_index = 0; offset_line_index < offset_lines.size(); ++offset_line_index) {
+            const Line &offset_line = offset_lines[offset_line_index];
+            Vec2f dir2 = LineUtils::direction(offset_line).cast<float>();
+            if (fabs(dir1.dot(dir2)) < 1e-4) { // in similar direction
+                Point  middle   = offset_line.a / 2 + offset_line.b / 2;
+                double distance = island_line.perp_distance_to(middle);
+                if (fabs(distance - offset_distance) < 20) { 
+                    // found offseted line
+                    converter[island_line_index] = offset_line_index;
+                    break;
+                }
+            }
+        }
+    }
+
+    return {offseted, converter};
+}
+
 SupportIslandPoints SampleIslandUtils::sample_outline(
     const Field &field, const SampleConfig &config)
 {
-    // TODO: fix it by neighbor line angles
-    // Do not create inner expoly and test all points to lay inside
-    Polygons polygons = offset(field.border,-config.minimal_distance_from_outline + 5, ClipperLib::jtSquare);
-    if (polygons.empty()) return {}; // no place for support point
-    ExPolygon inner(polygons.front());
-    for (size_t i = 1; i < polygons.size(); ++i) {
-        Polygon &hole = polygons[i];
-        inner.holes.push_back(hole);
-    }
-
+    const ExPolygon &border        = field.border;
+    const Polygon &contour = border.contour;
+    assert(field.source_indexes.size() >= contour.size());
+    // convert map from field index to inner(line index)
+    std::map<size_t, size_t> field_2_inner;
+    ExPolygon                inner;
+    std::tie(inner, field_2_inner) = outline_offset(border, config.minimal_distance_from_outline);
+    coord_t max_align_distance = config.max_align_distance;
     coord_t sample_distance = config.outline_sample_distance;
-    coord_t outline_distance = config.minimal_distance_from_outline;
     SupportIslandPoints result;
-    auto add_sample = [&](const Line &line, size_t source_index, coord_t& last_support) {
-        double  line_length_double = line.length();
-        coord_t line_length        = static_cast<coord_t>(line_length_double);
+
+    using RestrictionPtr = std::shared_ptr<SupportOutlineIslandPoint::Restriction>;
+    auto add_sample = [&](size_t index, const RestrictionPtr& restriction, coord_t &last_support) {
+        using Position = SupportOutlineIslandPoint::Position;
+        const Line &  line = restriction->lines[index];
+        const double &line_length_double = restriction->lengths[index];
+        coord_t line_length = static_cast<coord_t>(std::round(line_length_double));
         if (last_support + line_length > sample_distance) {
-            Point  dir               = LineUtils::direction(line);
-            Point  perp              = PointUtils::perp(dir);
-            double size              = perp.cast<double>().norm();
-            Point  move_from_outline = perp * (outline_distance / size);
+            Point direction = LineUtils::direction(line);
             do {
                 double ratio = (sample_distance - last_support) / line_length_double;
-                Point point = line.a + dir * ratio + move_from_outline;
-
-                // TODO: improve prevent sampling out of field near sharp corner
-                // use range for possible ratio
-                if (inner.contains(point))
-                    result.emplace_back(std::make_unique<SupportOutlineIslandPoint>(
-                        point, source_index, SupportIslandPoint::Type::outline));
-
+                result.emplace_back(
+                    std::make_unique<SupportOutlineIslandPoint>(
+                        Position(index, ratio), restriction,
+                        SupportIslandPoint::Type::outline)
+                );
                 last_support -= sample_distance;
             } while (last_support + line_length > sample_distance);
         }
         last_support += line_length;
     };
-    Lines contour_lines = to_lines(field.border.contour);
-    coord_t last_support = sample_distance / 2;
-    for (const Line &line : contour_lines) {
-        size_t index = &line - &contour_lines.front();
-        assert(field.source_indexes.size() > index);
-        size_t source_index = field.source_indexes[index];
-        if (source_index == field.source_indexe_for_change) { 
-            last_support = sample_distance / 2;
-            continue;
+    auto add_circle_sample = [&](const Polygon& polygon) {
+        // IMPROVE: find interesting points to start sampling
+        Lines lines = to_lines(polygon);
+        std::vector<double> lengths;
+        lengths.reserve(lines.size());
+        double sum_lengths = 0;
+        for (const Line &line : lines) {
+            double length = line.length();
+            sum_lengths += length;
+            lengths.push_back(length);
         }
-        add_sample(line, source_index, last_support);
-    }
-    size_t index_offset = contour_lines.size();
-    for (const Polygon &hole : field.border.holes) {
-        Lines hole_lines = to_lines(hole);
-        coord_t last_support = sample_distance / 2;
-        for (const Line &line : hole_lines) {
-            size_t hole_line_index = (&line - &hole_lines.front());
-            size_t index           = index_offset + hole_line_index;
-            assert(field.source_indexes.size() > index);
+        // no samples on this polygon
+
+        using Restriction = SupportOutlineIslandPoint::RestrictionCircleSequence;
+        auto restriction  = std::make_shared<Restriction>(lines, lengths, max_align_distance);
+        coord_t last_support = std::min(static_cast<coord_t>(sum_lengths), sample_distance) / 2;
+        for (size_t index = 0; index < lines.size(); ++index) {
+            add_sample(index, restriction, last_support);
+        }
+    };
+
+    // sample line sequence
+    auto add_lines_samples = [&](const Lines &inner_lines,
+                                 size_t       first_index,
+                                 size_t       last_index) {        
+        Lines lines;
+        // is over start ?
+        if (first_index > last_index) {
+            size_t count = first_index + inner_lines.size() - last_index;
+            lines.reserve(count);
+            std::copy(inner_lines.begin() + last_index,
+                        inner_lines.end(),
+                        std::back_inserter(lines));
+            std::copy(inner_lines.begin(),
+                        inner_lines.begin() + first_index,
+                        std::back_inserter(lines));
+        } else {
+            size_t count = last_index - first_index;
+            lines.reserve(count);
+            std::copy(inner_lines.begin() + first_index,
+                        inner_lines.begin() + last_index,
+                        std::back_inserter(lines));
+        }
+
+        // IMPROVE: find interesting points to start sampling
+        std::vector<double> lengths;
+        lengths.reserve(lines.size());
+        double sum_lengths = 0;
+        for (const Line &line : lines) { 
+            double length = line.length();
+            sum_lengths += length;
+            lengths.push_back(length);
+        }
+        
+        using Restriction = SupportOutlineIslandPoint::RestrictionLineSequence;
+        auto restriction = std::make_shared<Restriction>(lines, lengths, max_align_distance);
+        
+        // CHECK: Is correct to has always one support on outline sequence? 
+        // or no sample small sequence at all?
+        coord_t last_support = std::min(static_cast<coord_t>(sum_lengths), sample_distance) / 2;
+        for (size_t index = 0; index < lines.size(); ++index) { 
+            add_sample(index, restriction, last_support);
+        }
+    };
+
+    const size_t& change_index = field.source_indexe_for_change;
+    auto sample_polygon = [&](const Polygon &polygon,
+                              const Polygon &inner_polygon,
+                              size_t         index_offset) {
+        // contain polygon tiny wide change?
+        size_t first_change_index = polygon.size();
+        for (size_t polygon_index = 0; polygon_index < polygon.size(); ++polygon_index) {
+            size_t index = polygon_index + index_offset;
+            assert(index < field.source_indexes.size());
             size_t source_index = field.source_indexes[index];
-            add_sample(line, source_index, last_support);
+            if (source_index == change_index) {
+                // found change from wide to tiny part
+                first_change_index = polygon_index;
+                break;
+            }
         }
-        index_offset += hole_lines.size();
+
+        // is polygon without change
+        if (first_change_index == polygon.size()) {
+            add_circle_sample(inner_polygon);
+        } else { // exist change create line sequences
+            // initialize with non valid values
+            Lines  inner_lines   = to_lines(inner_polygon);
+            size_t inner_invalid = inner_lines.size();
+            // first and last index to inner lines
+            size_t inner_first = inner_invalid;
+            size_t inner_last  = inner_invalid;
+            for (size_t polygon_index = first_change_index + 1;
+                 polygon_index != first_change_index; ++polygon_index) {
+                if (polygon_index == polygon.size()) polygon_index = 0;
+                size_t index = polygon_index + index_offset;
+                assert(index < field.source_indexes.size());
+                size_t source_index = field.source_indexes[index];
+                if (source_index == change_index) {
+                    if (inner_first == inner_invalid) continue;
+                    // create Restriction object
+                    add_lines_samples(inner_lines, inner_first, inner_last);
+                    inner_first = inner_invalid;
+                    inner_last  = inner_invalid;
+                    continue;
+                }
+                auto convert_index_item = field_2_inner.find(polygon_index);
+                // check if exist inner line
+                if (convert_index_item == field_2_inner.end()) continue;
+                inner_last = convert_index_item->second - index_offset;
+                // initialize first index
+                if (inner_first == inner_invalid) inner_first = inner_last;
+            }
+        }
+    };
+
+    size_t index_offset = 0;
+    sample_polygon(contour, inner.contour, index_offset);
+    index_offset = contour.size();    
+    for (size_t hole_index = 0; hole_index < border.holes.size(); ++hole_index) {
+        const Polygon &hole = border.holes[hole_index];
+        sample_polygon(hole, inner.holes[hole_index], index_offset);
+        index_offset += hole.size();
     }
     return result;
 }

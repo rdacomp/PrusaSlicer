@@ -119,6 +119,15 @@ public:
     /// <returns>line direction</returns>
     static Point direction(const Line &line) { return line.b - line.a; }
 
+    /// <summary>
+    /// Calculate foot point in maner of Geometry::foot_pt
+    /// - without unnecessary conversion
+    /// </summary>
+    /// <param name="line">input line</param>
+    /// <param name="point">point to search foot on line</param>
+    /// <returns>ration betwen point line.a and line.b (in range from 0. to 1.)</returns>
+    static double foot(const Line &line, const Point& point);
+
     //                          line index, <a connection, b connection>
     using LineConnection = std::map<size_t, std::pair<size_t, size_t>>;
     /// <summary>
