@@ -110,6 +110,16 @@ RammingPanel::RammingPanel(wxWindow* parent, const std::string& parameters)
 	sizer->SetSizeHints(this);
 	SetSizer(sizer);
 
+
+    if (wxLocale::GetInfo(wxLOCALE_THOUSANDS_SEP, wxLOCALE_CAT_NUMBER).IsSameAs(".")) {
+        // ysFIXME: next workaround to increase max value, because of 1.00 is equal to 100, when wxLOCALE_THOUSANDS_SEP == "."
+        m_widget_time->GetText()->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& evt) { 
+            evt.Skip();
+            // to avoid update wxTextCtrl value to normalized value (when for example Thousand separator is "."), set value from SpinBtn
+            m_widget_time->SetValue(m_widget_time->GetValue());
+        });
+    }
+
     m_widget_time->Bind(wxEVT_TEXT,[this](wxCommandEvent&) {m_chart->set_xy_range(m_widget_time->GetValue(),-1);});
     m_widget_time->Bind(wxEVT_CHAR,[](wxKeyEvent&){});      // do nothing - prevents the user to change the value
     m_widget_volume->Bind(wxEVT_CHAR,[](wxKeyEvent&){});    // do nothing - prevents the user to change the value   

@@ -1361,6 +1361,53 @@ void PageBedShape::apply_custom_config(DynamicPrintConfig &config)
     config.set_key_value("bed_custom_model", new ConfigOptionString(custom_model));
 }
 
+void event_text(wxCommandEvent& evt, wxSpinCtrlDouble* spin)
+{    
+    wxString str = evt.GetString();
+    if (str.IsEmpty())
+        return;
+
+    if (str.Last() == ',') {
+        spin->SetDigits(1);
+        spin->SetValue(wxAtof(str.BeforeFirst(',')));
+        str = wxString::Format(wxT("%.1f"), spin->GetValue());
+        spin->SetSelection(str.Len() - 1, str.Len());
+    }
+    else {
+        int point_pos = str.First('.');
+        if (point_pos == wxNOT_FOUND)
+            spin->SetDigits(0);
+        else {
+            int digits_cnt = str.Len()-1 - point_pos;
+            if (digits_cnt > 2) {
+                str.RemoveLast();
+                digits_cnt = 2;
+            }
+            spin->SetDigits(digits_cnt);
+        }
+        
+        spin->SetValue(str);
+        spin->GetText()->SetInsertionPointEnd();
+    }
+}
+
+void event_kill_focus(wxFocusEvent& evt, wxSpinCtrlDouble* spin)
+{
+    evt.Skip();
+    if (spin->GetDigits() != 2)
+        spin->SetDigits(2);
+
+    // to avoid update wxTextCtrl value to normalized value (when for example Thousand separator is "."), set value from SpinBtn
+    spin->SetValue(spin->GetValue());
+}
+
+void event_spin(wxSpinDoubleEvent& evt, wxSpinCtrlDouble* spin)
+{
+    if (spin->GetDigits() != 2)
+        spin->SetDigits(2);
+    evt.Skip();
+}
+
 PageDiameters::PageDiameters(ConfigWizard *parent)
     : ConfigWizardPage(parent, _L("Filament and Nozzle Diameters"), _L("Print Diameters"), 1)
     , spin_nozzle(new wxSpinCtrlDouble(this, wxID_ANY))
@@ -1375,6 +1422,22 @@ PageDiameters::PageDiameters(ConfigWizard *parent)
     spin_filam->SetIncrement(0.25);
     auto *default_filam = print_config_def.get("filament_diameter")->get_default_value<ConfigOptionFloats>();
     spin_filam->SetValue(default_filam != nullptr && default_filam->size() > 0 ? default_filam->get_at(0) : 3.0);
+
+    if (wxLocale::GetInfo(wxLOCALE_DECIMAL_POINT, wxLOCALE_CAT_NUMBER).IsSameAs(",")) {
+        // ysFIXME: temporary workaround till we use C numeric locale // wxSetlocale(LC_NUMERIC, "C");
+        spin_nozzle->GetText()->Bind(wxEVT_TEXT, [this](wxCommandEvent& evt) { event_text(evt, spin_nozzle); });
+        spin_filam ->GetText()->Bind(wxEVT_TEXT, [this](wxCommandEvent& evt) { event_text(evt, spin_filam);  });
+        spin_nozzle->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxSpinDoubleEvent& evt) { event_spin(evt, spin_nozzle); });
+        spin_filam ->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxSpinDoubleEvent& evt) { event_spin(evt, spin_filam);  });
+    }
+    if (wxLocale::GetInfo(wxLOCALE_THOUSANDS_SEP, wxLOCALE_CAT_NUMBER).IsSameAs(".")) {
+        // ysFIXME: next workaround to increase max value, because of 1.00 is equal to 100, when wxLOCALE_THOUSANDS_SEP == "."
+        spin_nozzle->SetRange(0.0, 10000.0);
+        spin_filam->SetRange(0.0, 10000.0);
+
+        spin_nozzle->GetText()->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& evt) { event_kill_focus(evt, spin_nozzle); });
+        spin_filam ->GetText()->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& evt) { event_kill_focus(evt, spin_filam); });
+    }
 
     append_text(_L("Enter the diameter of your printer's hot end nozzle."));
 
