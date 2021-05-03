@@ -145,10 +145,11 @@ SupportOutlineIslandPoint::MoveResult SupportOutlineIslandPoint::create_result(
     const Line &line       = restriction->lines[index];
     double      line_ratio_full = LineUtils::foot(line, destination);
     double      line_ratio      = std::clamp(line_ratio_full, 0., 1.);
-    Position    new_position(index, line_ratio);
-    Point       new_point = calc_point(new_position, *restriction);
-    double point_distance = (new_point - destination).cast<double>().norm();
-    return MoveResult(new_position, new_point, point_distance);
+    Position    position(index, line_ratio);
+    Point       point = calc_point(position, *restriction);
+    double distance_double = (point - destination).cast<double>().norm();
+    coord_t     distance        = static_cast<coord_t>(distance_double);
+    return MoveResult(position, point, distance);
 }
 
 void SupportOutlineIslandPoint::update_result(MoveResult & result,
@@ -158,15 +159,61 @@ void SupportOutlineIslandPoint::update_result(MoveResult & result,
     const Line &line       = restriction->lines[index];
     double      line_ratio_full = LineUtils::foot(line, destination);
     double      line_ratio = std::clamp(line_ratio_full, 0., 1.);
-    Position    new_position(index, line_ratio);
-    Point       new_point = calc_point(new_position, *restriction);
-    Point       diff      = new_point - destination;
+    Position    position(index, line_ratio);
+    Point       point = calc_point(position, *restriction);
+    Point       diff      = point - destination;
     if (abs(diff.x()) > result.distance) return;
     if (abs(diff.y()) > result.distance) return;
-    double point_distance = diff.cast<double>().norm();
-    if (result.distance > point_distance) {
-        result.distance = point_distance;
-        result.position = new_position;
-        result.point    = new_point;
+    double distance_double = diff.cast<double>().norm();
+    coord_t distance = static_cast<coord_t>(distance_double);
+    if (result.distance > distance) {
+        result.distance = distance;
+        result.position = position;
+        result.point    = point;
     }
+}
+
+////////////////////
+/// Inner Point
+/////////////////////// 
+
+SupportIslandInnerPoint::SupportIslandInnerPoint(
+    Point point, std::shared_ptr<ExPolygon> inner, Type type)
+    : SupportIslandPoint(point, type), inner(std::move(inner))
+{}
+
+coord_t SupportIslandInnerPoint::move(const Point &destination) {
+
+    // IMPROVE: Do not move over island hole if there is no connected island. 
+    // Can cause bad supported area in very special case.
+
+    if (inner->contains(destination))
+        return SupportIslandPoint::move(destination);
+
+    // find closest line cross area border
+    Vec2d v1 = (destination-point).cast<double>();
+    double closest_ratio = 1.;
+    Lines lines = to_lines(*inner);
+    for (const Line &line : lines) {
+        // line intersection       
+        const Vec2d v2 = LineUtils::direction(line).cast<double>();
+        double denom = cross2(v1, v2);
+        // is line parallel
+        if (fabs(denom) < std::numeric_limits<float>::epsilon()) continue;
+
+        const Vec2d v12  = (point - line.a).cast<double>();
+        double      nume1 = cross2(v2, v12);
+        double      t1    = nume1 / denom;
+        if (t1 < 0. || t1 > closest_ratio) continue; // out of line
+
+        double nume2 = cross2(v1, v12);
+        double t2     = nume2 / denom;
+        if (t2 < 0. || t2 > 1.0) continue; // out of contour
+
+        closest_ratio = t1;
+    }
+    // no correct closest point --> almost parallel cross
+    if (closest_ratio >= 1.) return 0;
+    Point new_point = point + (closest_ratio * v1).cast<coord_t>();
+    return SupportIslandPoint::move(new_point);
 }

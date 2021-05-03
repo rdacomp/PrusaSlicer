@@ -257,8 +257,8 @@ double LineUtils::perp_distance(const Linef &line, Vec2d p)
 
 bool LineUtils::is_parallel(const Line &first, const Line &second) 
 {
-    Point dir1 = first.b - first.a;
-    Point dir2 = second.b - second.a;
+    Point   dir1 = direction(first);
+    Point   dir2 = direction(second);
     coord_t cross(
         static_cast<int64_t>(dir1.x()) * dir2.y() - 
         static_cast<int64_t>(dir2.x()) * dir1.y()

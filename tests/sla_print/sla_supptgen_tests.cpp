@@ -15,7 +15,7 @@
 using namespace Slic3r;
 using namespace Slic3r::sla;
 
-//#define STORE_SAMPLE_INTO_SVG_FILES
+#define STORE_SAMPLE_INTO_SVG_FILES
 
 TEST_CASE("Overhanging point should be supported", "[SupGen]") {
 
@@ -284,17 +284,40 @@ ExPolygon create_tiny_wide_test_2(double wide, double tiny)
     return result;
 }
 
+ExPolygon create_tiny_between_holes(double wide, double tiny)
+{
+    double hole_size = wide;
+    double width     = 2 * wide + 2*hole_size + tiny;
+    double height    = 2 * wide + hole_size;
+    auto   outline   = PolygonUtils::create_rect(width, height);
+    auto   holeL      = PolygonUtils::create_rect(hole_size, hole_size);
+    holeL.reverse();
+    auto holeR       = holeL;
+    int hole_move_x = (hole_size + tiny)/2;
+    holeL.translate(-hole_move_x, 0);
+    holeR.translate(hole_move_x, 0);
+
+    ExPolygon result(outline);
+    result.holes = {holeL, holeR};
+    return result;
+}
+
+// stress test for longest path
+// needs reshape
+ExPolygon create_mountains(double size) {
+    return ExPolygon({{0., 0.},
+                      {size, 0.},
+                      {5 * size / 6, size},
+                      {4 * size / 6, size / 6},
+                      {3 * size / 7, 2 * size},
+                      {2 * size / 7, size / 6},
+                      {size / 7, size}});
+}
+
 ExPolygons createTestIslands(double size)
 {
     bool      useFrogLeg = false;    
     // need post reorganization of longest path
-    ExPolygon mountains({{0., 0.},
-                         {size, 0.},
-                         {5 * size / 6, size},
-                         {4 * size / 6, size / 6},
-                         {3 * size / 7, 2 * size},
-                         {2 * size / 7, size / 6},
-                         {size / 7, size}});
     ExPolygons result = {
         // one support point
         ExPolygon(PolygonUtils::create_equilateral_triangle(size)), 
@@ -322,13 +345,14 @@ ExPolygons createTestIslands(double size)
         ExPolygon(PolygonUtils::create_isosceles_triangle(5. * size, 40. * size)),
         create_tiny_wide_test_1(3 * size, 2 / 3. * size),
         create_tiny_wide_test_2(3 * size, 2 / 3. * size),
+        create_tiny_between_holes(3 * size, 2 / 3. * size),
 
         // still problem
         // three support points
         ExPolygon(PolygonUtils::create_equilateral_triangle(3 * size)), 
         ExPolygon(PolygonUtils::create_circle(size, 20)),
 
-        mountains, 
+        create_mountains(size),
         create_trinagle_with_hole(size),
         create_square_with_hole(size, size / 2),
         create_square_with_hole(size, size / 3)
@@ -672,7 +696,7 @@ TEST_CASE("Compare sampling test", "[hide]")
     enum class Sampling {
         old,
         filip 
-    } sample_type = Sampling::filip;
+    } sample_type = Sampling::old;
     
     std::function<std::vector<Vec2f>(const ExPolygon &)> sample =
         (sample_type == Sampling::old)   ? sample_old :
@@ -700,7 +724,7 @@ TEST_CASE("Compare sampling test", "[hide]")
 }
 
 #include <libslic3r/SLA/SupportIslands/VectorUtils.hpp>
-TEST_CASE("Reorder destructive", "[hide]"){
+TEST_CASE("Reorder destructive", "[Utils]"){
     std::vector<int> data {0, 1, 3, 2, 4, 7, 6, 5, 8};
     std::vector<int> order{0, 1, 3, 2, 4, 7, 6, 5, 8};
 
@@ -708,6 +732,50 @@ TEST_CASE("Reorder destructive", "[hide]"){
     for (size_t i = 0; i < data.size() - 1;++i) { 
         CHECK(data[i] < data[i + 1]);
     }
+}
+
+#include <libslic3r/SLA/SupportIslands/LineUtils.hpp>
+TEST_CASE("Intersection point", "[Utils]")
+{
+    Point a1(0, 0);
+    Point b1(3, 6);
+    Line  l1(a1, b1);
+    auto intersection = LineUtils::intersection(l1, Line(Point(0, 4), Point(5, 4)));
+    CHECK(intersection.has_value());
+    Point i_point = intersection->cast<coord_t>();
+    CHECK(PointUtils::is_equal(i_point, Point(2, 4)));
+
+    // same line
+    auto bad_intersection = LineUtils::intersection(l1, l1);
+    CHECK(!bad_intersection.has_value());
+
+    // oposit direction
+    bad_intersection = LineUtils::intersection(l1, Line(b1,a1));
+    CHECK(!bad_intersection.has_value());
+
+    // parallel line
+    bad_intersection = LineUtils::intersection(l1, Line(a1 + Point(0, 1),
+                                               b1 + Point(0, 1)));
+    CHECK(!bad_intersection.has_value());
+    
+    // out of line segment, but ray has intersection
+    Line l2(Point(0, 8), Point(6, 8));
+    intersection = LineUtils::intersection(l1, l2);
+    auto intersection2 = LineUtils::intersection(l2, l1);
+    CHECK(intersection.has_value());
+    CHECK(intersection2.has_value());
+    i_point = intersection->cast<coord_t>();
+    CHECK(PointUtils::is_equal(i_point, Point(4, 8)));
+    CHECK(PointUtils::is_equal(i_point, intersection2->cast<coord_t>()));
+
+    Line l3(Point(-2, -2), Point(1, -2));
+    intersection = LineUtils::intersection(l1, l3);
+    intersection2 = LineUtils::intersection(l3, l1);
+    CHECK(intersection.has_value());
+    CHECK(intersection2.has_value());
+    i_point = intersection->cast<coord_t>();
+    CHECK(PointUtils::is_equal(i_point, Point(-1, -2)));
+    CHECK(PointUtils::is_equal(i_point, intersection2->cast<coord_t>()));
 }
 
 TEST_CASE("Disable visualization", "[hide]") 

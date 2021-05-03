@@ -84,6 +84,30 @@ using SupportIslandPointPtr = std::unique_ptr<SupportIslandPoint>;
 using SupportIslandPoints = std::vector<SupportIslandPointPtr>;
 
 /// <summary>
+/// Support point with no move during aligning
+/// </summary>
+class SupportIslandNoMovePoint : public SupportIslandPoint
+{
+public:
+    //constructor
+    using SupportIslandPoint::SupportIslandPoint;
+
+    /// <summary>
+    /// Can move?
+    /// </summary>
+    /// <returns>FALSE</returns>
+    virtual bool can_move() const override { return false; }
+
+    /// <summary>
+    /// No move!
+    /// Should not be call.
+    /// </summary>
+    /// <param name="destination">Wanted position</param>
+    /// <returns>No move means zero distance</returns>
+    virtual coord_t move(const Point &destination) { return 0; }
+};
+
+/// <summary>
 /// DTO Support point laying on voronoi graph edge
 /// Restriction to move only on Voronoi graph
 /// </summary>
@@ -250,14 +274,39 @@ private:
         // point laying on restricted line
         Point point;
         // distance point on restricted line from destination point
-        double distance;
+        coord_t distance;
 
-        MoveResult(Position position, Point point, double distance)
+        MoveResult(Position position, Point point, coord_t distance)
             : position(position), point(point), distance(distance)
         {}
     };
     MoveResult create_result(size_t index, const Point &destination);
     void update_result(MoveResult& result, size_t index, const Point &destination);
+};
+
+/// <summary>
+/// Store pointer to inner ExPolygon for allowed move across island area
+/// Give an option to move with point
+/// </summary>
+class SupportIslandInnerPoint: public SupportIslandPoint
+{    
+    // define inner area of island where inner point could move during aligning
+    std::shared_ptr<ExPolygon> inner;
+public:
+    SupportIslandInnerPoint(Point     point,
+                            std::shared_ptr<ExPolygon> inner,
+                            Type      type = Type::inner);
+    
+    bool can_move() const override { return true; };
+
+    /// <summary>
+    /// Move nearest to destination point
+    /// only inside inner area
+    /// + change current position
+    /// </summary>
+    /// <param name="destination">Wanted support position</param>
+    /// <returns>move distance euclidean</returns>
+    coord_t move(const Point &destination) override;
 };
 
 } // namespace Slic3r::sla

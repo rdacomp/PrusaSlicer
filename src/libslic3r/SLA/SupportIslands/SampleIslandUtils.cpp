@@ -853,16 +853,18 @@ void SampleIslandUtils::sample_field(VoronoiGraph::Position &field_start,
     Polygons polygons = offset(field.border, -2.f * config.minimal_distance_from_outline,
                                ClipperLib::jtSquare);
     if (polygons.empty()) return;
-    ExPolygon inner(polygons.front());
+
+    auto inner = std::make_shared<ExPolygon>(polygons.front());
     for (size_t i = 1; i < polygons.size(); ++i) {
         Polygon &hole = polygons[i];
-        inner.holes.push_back(hole);
+        inner->holes.push_back(hole);
     }
-    Points inner_points = sample_expolygon(inner, config.max_distance);    
+
+    Points inner_points = sample_expolygon(*inner, config.max_distance);    
     std::transform(inner_points.begin(), inner_points.end(), std::back_inserter(points), 
-        [](const Point &point) { 
-            return std::make_unique<SupportIslandPoint>(
-                           point, SupportIslandPoint::Type::inner);
+        [&](const Point &point) { 
+            return std::make_unique<SupportIslandInnerPoint>(
+                           point, inner, SupportIslandPoint::Type::inner);
         });
 }
 
@@ -1231,11 +1233,14 @@ SampleIslandUtils::outline_offset(const Slic3r::ExPolygon &island,
     std::map<size_t, size_t> converter;
     for (size_t island_line_index = 0; island_line_index < island_lines.size(); ++island_line_index) {
         const Line &island_line = island_lines[island_line_index];
-        Vec2f dir1 = LineUtils::direction(island_line).cast<float>();
+        Vec2d dir1 = LineUtils::direction(island_line).cast<double>();
+        dir1.normalize();
         for (size_t offset_line_index = 0; offset_line_index < offset_lines.size(); ++offset_line_index) {
             const Line &offset_line = offset_lines[offset_line_index];
-            Vec2f dir2 = LineUtils::direction(offset_line).cast<float>();
-            if (fabs(dir1.dot(dir2)) < 1e-4) { // in similar direction
+            Vec2d dir2 = LineUtils::direction(offset_line).cast<double>();
+            dir2.normalize();
+            double  angle    = acos(dir1.dot(dir2));
+            if (fabs(angle) < 1e-4) { // in similar direction
                 Point  middle   = offset_line.a / 2 + offset_line.b / 2;
                 double distance = island_line.perp_distance_to(middle);
                 if (fabs(distance - offset_distance) < 20) { 
@@ -1308,24 +1313,25 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
     // sample line sequence
     auto add_lines_samples = [&](const Lines &inner_lines,
                                  size_t       first_index,
-                                 size_t       last_index) {        
+                                 size_t       last_index) {
+        ++last_index; // index after last item
         Lines lines;
         // is over start ?
         if (first_index > last_index) {
-            size_t count = first_index + inner_lines.size() - last_index;
+            size_t count = last_index + (inner_lines.size() - first_index);
             lines.reserve(count);
-            std::copy(inner_lines.begin() + last_index,
+            std::copy(inner_lines.begin() + first_index,
                         inner_lines.end(),
                         std::back_inserter(lines));
             std::copy(inner_lines.begin(),
-                        inner_lines.begin() + first_index,
+                      inner_lines.begin() + last_index,
                         std::back_inserter(lines));
         } else {
             size_t count = last_index - first_index;
             lines.reserve(count);
             std::copy(inner_lines.begin() + first_index,
-                        inner_lines.begin() + last_index,
-                        std::back_inserter(lines));
+                      inner_lines.begin() + last_index,
+                      std::back_inserter(lines));
         }
 
         // IMPROVE: find interesting points to start sampling
@@ -1376,8 +1382,11 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
             // first and last index to inner lines
             size_t inner_first = inner_invalid;
             size_t inner_last  = inner_invalid;
+            size_t stop_index  = first_change_index;
+            if (stop_index == 0)
+                stop_index = polygon.size();
             for (size_t polygon_index = first_change_index + 1;
-                 polygon_index != first_change_index; ++polygon_index) {
+                 polygon_index != stop_index; ++polygon_index) {
                 if (polygon_index == polygon.size()) polygon_index = 0;
                 size_t index = polygon_index + index_offset;
                 assert(index < field.source_indexes.size());
@@ -1390,7 +1399,7 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
                     inner_last  = inner_invalid;
                     continue;
                 }
-                auto convert_index_item = field_2_inner.find(polygon_index);
+                auto convert_index_item = field_2_inner.find(index);
                 // check if exist inner line
                 if (convert_index_item == field_2_inner.end()) continue;
                 inner_last = convert_index_item->second - index_offset;
