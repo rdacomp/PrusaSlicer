@@ -27,7 +27,9 @@ public:
         result.max_distance                  = max_distance / sample_multiplicator;
         result.half_distance                 = result.max_distance / 2;
         result.head_radius                   = head_diameter / 2;
-        result.minimal_distance_from_outline = head_diameter / 2.;
+        result.minimal_distance_from_outline = result.head_radius;
+        result.maximal_distance_from_outline = result.half_distance;
+        assert(result.minimal_distance_from_outline < result.maximal_distance_from_outline);
         result.minimal_support_distance = result.minimal_distance_from_outline +
                                           result.half_distance;
 
@@ -76,7 +78,7 @@ public:
 
         // Align support points
         // TODO: propagate print resolution
-        result.minimal_move = 1000; // [in nanometers], devide from print resolution to quater pixel
+        result.minimal_move = 10000.;// [in nanometers --> 0.01mm ], devide from print resolution to quater pixel
         result.count_iteration = 100; // speed VS precission
         result.max_align_distance = result.max_distance / 2;
 

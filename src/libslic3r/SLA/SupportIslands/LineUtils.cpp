@@ -279,6 +279,30 @@ std::optional<Slic3r::Vec2d> LineUtils::intersection(const Line &ray1, const Lin
     return (ray1.a.cast<double>() + t * v1);
 }
 
+bool LineUtils::belongs(const Line &line, const Point &point, double benevolence)
+{
+    const Point &a = line.a;
+    const Point &b = line.b;
+    auto is_in_interval = [](coord_t value, coord_t from, coord_t to) -> bool 
+    { 
+        if (from > to) {
+            if (from > value || to < value) return false;
+        } else {
+            if (from < value || to > value) return false;
+        }
+        return true;
+    };
+                              
+    if (!is_in_interval(point.x(), a.x(), b.x()) ||
+        !is_in_interval(point.y(), a.y(), b.y()) )
+    { // out of interval
+        return false;
+    }
+    double distance = line.perp_distance_to(point);
+    if (distance < benevolence) return true;
+    return false;
+}
+
 double LineUtils::foot(const Line &line, const Point &point)
 {
     Vec2d  a   = line.a.cast<double>();

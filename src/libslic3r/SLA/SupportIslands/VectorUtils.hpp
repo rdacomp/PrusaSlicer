@@ -27,6 +27,8 @@ public:
     static void sort_by(std::vector<T1> &data, std::function<T2(const T1 &)> &calc)
     {
         assert(!data.empty());
+        if (data.size() <= 1) return;
+
         // initialize original index locations
         std::vector<size_t> idx(data.size());
         iota(idx.begin(), idx.end(), 0);

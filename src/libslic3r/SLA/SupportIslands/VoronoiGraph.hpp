@@ -196,6 +196,15 @@ struct VoronoiGraph::Position
     {}
 
     Position(): neighbor(nullptr), ratio(0.) {}
+
+    coord_t calc_distance() const {
+        return static_cast<coord_t>(neighbor->length() * ratio);
+    }
+
+    coord_t calc_rest_distance() const
+    {
+        return static_cast<coord_t>(neighbor->length() * (1. - ratio));
+    }
 };
 
 } // namespace Slic3r::sla

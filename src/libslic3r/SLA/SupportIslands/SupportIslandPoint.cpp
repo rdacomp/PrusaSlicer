@@ -45,7 +45,8 @@ coord_t SupportIslandPoint::move(const Point &destination)
 
 std::string SupportIslandPoint::to_string(const Type &type)
 {
-    static std::map<Type, std::string> type_to_tring=
+    static const std::string undefined = "UNDEFINED";
+    static std::map<Type, std::string> type_to_string=
         {{Type::one_center_point, "one_center_point"},
          {Type::two_points,"two_points"},
          {Type::center_line, "center_line"},
@@ -59,8 +60,8 @@ std::string SupportIslandPoint::to_string(const Type &type)
          {Type::outline, "outline"},
          {Type::inner, "inner"},
          {Type::undefined, "undefined"}};
-    auto it = type_to_tring.find(type);
-    if (it == type_to_tring.end()) return "UNDEFINED";
+    auto it = type_to_string.find(type);
+    if (it == type_to_string.end()) return undefined;
     return it->second;
 }
 

@@ -24,6 +24,11 @@ struct SampleConfig
     // zero when head should be on outline
     coord_t minimal_distance_from_outline = 0; // [nano meter]
 
+    // Measured as sum of VD edge length from outline
+    // Used only when there is no space for outline offset on first/last point
+    // Must be bigger than minimal_distance_from_outline
+    coord_t maximal_distance_from_outline = 1.;// [nano meter]
+
     // Distinguish when to add support point on VD outline point(center line sample)
     // MUST be bigger than minimal_distance_from_outline
     coord_t minimal_support_distance = 0;
@@ -46,6 +51,7 @@ struct SampleConfig
     // Minimal width to be supported by outline
     // Must be smaller or equal to max_width_for_center_support_line
     coord_t min_width_for_outline_support = 1.;
+
 
     // Term criteria for end of alignment
     // Minimal change in manhatn move of support position before termination

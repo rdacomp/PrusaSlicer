@@ -47,10 +47,20 @@ public:
     /// <param name="ratio">Source distance ratio for position on edge</param>
     /// <param name="type">Type of point</param>
     /// <returns>created support island point</returns>
-    static SupportIslandPointPtr create_point(
+    static SupportIslandPointPtr create_no_move_point(
         const VoronoiGraph::Node::Neighbor *neighbor,
         double                              ratio,
         SupportIslandPoint::Type type = SupportIslandPoint::Type::undefined);
+
+    /// <summary>
+    /// Create unique static support point 
+    /// </summary>
+    /// <param name="position">Define position on VD</param>
+    /// <param name="type">Type of support point</param>
+    /// <returns>new created support point</returns>
+    static SupportIslandPointPtr create_no_move_point(
+        const VoronoiGraph::Position &position,
+        SupportIslandPoint::Type type);
 
     /// <summary>
     /// Find point lay on path with distance from first point on path
@@ -63,7 +73,33 @@ public:
         const VoronoiGraph::Nodes &path,
         double                     distance);
 
-    static SupportIslandPointPtr create_point_on_path(
+    /// <summary>
+    /// Find first point lay on sequence of node 
+    /// where widht are equal second params OR
+    /// distance from first node is exactly max distance
+    /// Depends which occure first
+    /// </summary>
+    /// <param name="path">Sequence of nodes, should be longer than max distance</param>
+    /// <param name="lines">Source lines for VG --> params for parabola.</param>
+    /// <param name="width">Width of island(2x distance to outline)</param>
+    /// <param name="max_distance">Maximal distance from first node on path. 
+    /// At end is set to actual distance from first node.</param>
+    /// <returns>Position when exists</returns>
+    static std::optional<VoronoiGraph::Position> create_position_on_path(
+        const VoronoiGraph::Nodes &path,
+        const Lines &              lines,
+        coord_t                    width,
+        coord_t &                  max_distance);
+
+    /// <summary>
+    /// Create SupportCenterIslandPoint laying on Voronoi Graph
+    /// </summary>
+    /// <param name="path">VD path</param>
+    /// <param name="distance">Distance on path</param>
+    /// <param name="config">Configuration</param>
+    /// <param name="type">Type of point</param>
+    /// <returns>Support island point</returns>
+    static SupportIslandPointPtr create_center_island_point(
         const VoronoiGraph::Nodes &path,
         double                     distance,
         const SampleConfig &       config,
@@ -81,8 +117,19 @@ public:
         const VoronoiGraph::Path &path,
         SupportIslandPoint::Type  type = SupportIslandPoint::Type::undefined);    
 
-    // create 2 points on both ends of path with side distance from border
-    static SupportIslandPoints create_side_points(const VoronoiGraph::Nodes &path, double side_distance);
+    /// <summary>
+    /// create points on both ends of path with side distance from border
+    /// </summary>
+    /// <param name="path">Longest path over island.</param>
+    /// <param name="lines">Source lines for VG --> outline of island.</param>
+    /// <param name="width">Wanted width on position</param>
+    /// <param name="max_side_distance">Maximal distance from side</param>
+    /// <returns>2x Static Support point(lay os sides of path)</returns>
+    static SupportIslandPoints create_side_points(
+        const VoronoiGraph::Nodes &     path,
+        const Lines &                   lines,
+        coord_t                         width,
+        coord_t max_side_distance);
 
     // DTO with data for sampling line in center
     struct CenterLineConfiguration
@@ -180,6 +227,7 @@ public:
     /// <param name="config"> Sampling configuration
     /// Maximal distance between neighbor points + 
     /// Term criteria for align: Minimal sample move and Maximal count of iteration</param>
+    /// <returns>Maximal distance of move during aligning.</returns>
     static coord_t align_once(SupportIslandPoints &samples,
                               const ExPolygon &    island,
                               const SampleConfig & config);
@@ -192,7 +240,7 @@ public:
     /// <param name="max_distance">Maximal search distance on VD for closest point</param>
     /// <returns>Distance move of original point</returns>
     static coord_t align_support(SupportIslandPoint &support, const Point &wanted, double max_distance);
-
+        
     /// <summary>
     /// DTO hold information for start sampling VD in center
     /// </summary>
@@ -212,28 +260,44 @@ public:
             : neighbor(neighbor), support_in(support_in), path(path)
         {}
     };
-    using CenterStarts = std::queue<CenterStart>;
+    using CenterStarts = std::vector<CenterStart>;
 
     /// <summary>
     /// Sample VG in center --> sample tiny part of island
-    /// Detection of wide neighbor which start field
-    /// Creating of new starts (from VG cross -> multi neighbors)
+    /// Sample until starts are empty or find new field(wide neighbor).
+    /// Creating of new starts (by VG cross -> multi neighbors)
     /// </summary>
     /// <param name="start">Start to sample</param>
-    /// <param name="config">Parameters for sampling</param>
-    /// <param name="done">Already done nodes</param>
+    /// <param name="done">Already done(processed) nodes</param>
     /// <param name="results">Result of sampling</param>
-    /// <param name="liness">Source line for VD. To decide position of change from tiny to wide part</param>
-    /// <param name="field_start">Output: Wide neighbor, start of field</param>
-    /// <returns>New start of sampling</returns>
-    static std::vector<CenterStart> sample_center(
-        const CenterStart &                   start,
-        const SampleConfig &                  config,
+    /// <param name="lines">Source line for VD. To decide position of change from tiny to wide part</param>
+    /// <param name="config">Parameters for sampling</param>
+    /// <returns>Wide neighbor, start of field when exists</returns>
+    static std::optional<VoronoiGraph::Position> sample_center(
+        CenterStarts &                        new_starts,
         std::set<const VoronoiGraph::Node *> &done,
         SupportIslandPoints &                 results,
-        const Lines &lines,
-        std::optional<VoronoiGraph::Position> &field_start);
+        const Lines &                         lines,
+        const SampleConfig &                  config);
 
+private:
+    /// <summary>
+    /// Check near supports if no exists there add to results
+    /// </summary>
+    /// <param name="position">Potentional new static point position</param>
+    /// <param name="results">Results to check near and optionaly append newone</param>
+    /// <param name="new_starts">When append new support point 
+    /// than fix value of support_in for near new_start</param>
+    /// <param name="config">Parameters for sampling, 
+    /// minimal_support_distance - search distance in VD
+    /// max_distance - for fix new_start</param>
+    static void create_sample_center_end(
+        const VoronoiGraph::Position &position,
+        SupportIslandPoints &         results,
+        CenterStarts &                new_starts,
+        const SampleConfig &          config); 
+
+public :
     /// <summary>
     /// DTO represents Wide parts of island to sample
     /// extend polygon with information about source lines
@@ -304,6 +368,7 @@ private:
 
     // debug draw functions
 public :
+    static bool is_visualization_disabled();
     static void draw(SVG &        svg,
                      const Field &field,
                      bool         draw_border_line_indexes  = false,

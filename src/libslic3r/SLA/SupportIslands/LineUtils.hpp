@@ -112,6 +112,17 @@ public:
     static std::optional<Vec2d> intersection(const Line &ray1, const Line &ray2);
 
     /// <summary>
+    /// Check when point lays on line and belongs line range(from point a to point b)
+    /// </summary>
+    /// <param name="line">source line</param>
+    /// <param name="point">point to check</param>
+    /// <param name="point">maximal distance from line to belongs line</param>
+    /// <returns>True when points lay between line.a and line.b</returns>
+    static bool belongs(const Line & line,
+                        const Point &point,
+                        double       benevolence = 1.);
+
+    /// <summary>
     /// Create direction from point a to point b
     /// Direction vector is represented as point
     /// </summary>

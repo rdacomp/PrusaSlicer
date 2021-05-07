@@ -378,8 +378,8 @@ void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure 
     if (s.islands_below.empty()) {
         // completely new island - needs support no doubt
         // deficit is full, there is nothing below that would hold this island
-        uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
-        //grid3d.insert(uniform_cover_island(*s.polygon), &s);
+        //uniformly_cover({ *s.polygon }, s, s.area * tp, grid3d, IslandCoverageFlags(icfIsNew | icfWithBoundary) );
+        grid3d.insert(uniform_cover_island(*s.polygon), &s);
         return;
     }
 
@@ -648,7 +648,7 @@ void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure
 //    float min_spacing			= poisson_radius / 3.f;
     float min_spacing			= poisson_radius;
     std::vector<Vec2f> raw_samples = 
-    //    flags & icfIsNew ? uniform_cover_island(*structure.polygon):
+        flags & icfIsNew ? uniform_cover_island(*structure.polygon):
         flags & icfWithBoundary ? sample_expolygon_with_boundary(
             islands, samples_per_mm2, 5.f / poisson_radius, m_rng) :
             sample_expolygon(islands, samples_per_mm2, m_rng);

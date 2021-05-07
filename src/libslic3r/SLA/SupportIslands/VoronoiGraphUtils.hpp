@@ -98,7 +98,7 @@ public:
     static bool is_point_in_limits(const VD::vertex_type *vertex,
                                    const Point &          source,
                                    double                 max_distance);
-
+private:
     /// <summary>
     /// PRIVATE: function to help convert edge without vertex to line
     /// </summary>
@@ -109,13 +109,14 @@ public:
     static Line create_line_between_source_points(
         const Point &point1, const Point &point2, double maximal_distance);
 
+public:
     /// <summary>
     /// Convert edge to line
     /// only for line edge
     /// crop infinite edge by maximal distance from source point
     /// inspiration in VoronoiVisualUtils::clip_infinite_edge
     /// </summary>
-    /// <param name="edge"></param>
+    /// <param name="edge">VD edge</param>
     /// <param name="points">Source point for voronoi diagram</param>
     /// <param name="maximal_distance">Maximal distance from source point</param>
     /// <returns>Croped line, when all line segment is out of max distance return empty optional</returns>
@@ -358,14 +359,14 @@ public:
     /// </summary>
     /// <param name="neighbor">neighbor</param>
     /// <returns>Twin neighbor</returns>
-    static const VoronoiGraph::Node::Neighbor *get_twin(const VoronoiGraph::Node::Neighbor *neighbor);
+    static const VoronoiGraph::Node::Neighbor *get_twin(const VoronoiGraph::Node::Neighbor& neighbor);
 
     /// <summary>
     /// Find source node of neighbor
     /// </summary>
     /// <param name="neighbor">neighbor</param>
     /// <returns>start node</returns>
-    static const VoronoiGraph::Node *get_twin_node(const VoronoiGraph::Node::Neighbor *neighbor);
+    static const VoronoiGraph::Node *get_twin_node(const VoronoiGraph::Node::Neighbor& neighbor);
 
     /// <summary>
     /// Check if neighbor is in opposit direction to line direction
@@ -391,7 +392,7 @@ public:
     /// <param name="width">Specify place on edge</param>
     /// <param name="lines">Source lines for voronoi diagram</param>
     /// <returns>Position on given edge</returns>
-    static VoronoiGraph::Position get_position_with_distance(
+    static VoronoiGraph::Position get_position_with_width(
         const VoronoiGraph::Node::Neighbor *neighbor,
         coord_t              width,
         const Lines &        lines);
@@ -452,6 +453,17 @@ public:
     /// <param name="neighbor">Neighbor to test</param>
     /// <returns>True when neighbor node has only one neighbor</returns>
     static bool is_last_neighbor(const VoronoiGraph::Node::Neighbor *neighbor);
+
+    /// <summary>
+    /// Loop over neighbor in max distance from position
+    /// </summary>
+    /// <param name="position">Start of loop</param>
+    /// <param name="max_distance">Termination of loop</param>
+    /// <param name="fnc">function to process neighbor with actual distance</param>
+    static void for_neighbor_at_distance(
+        const VoronoiGraph::Position &position,
+        coord_t                       max_distance,
+        std::function<void(const VoronoiGraph::Node::Neighbor &, coord_t)> fnc);
 
 public: // draw function for debug
     static void draw(SVG &               svg,

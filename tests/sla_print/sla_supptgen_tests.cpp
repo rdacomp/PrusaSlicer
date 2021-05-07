@@ -471,7 +471,8 @@ SampleConfig create_sample_config(double size) {
     cfg.max_distance = 3 * size + 0.1;
     cfg.half_distance = cfg.max_distance/2;
     cfg.head_radius = size / 4;
-    cfg.minimal_distance_from_outline = cfg.head_radius + size/10;
+    cfg.minimal_distance_from_outline = cfg.head_radius;
+    cfg.maximal_distance_from_outline = cfg.half_distance;
     cfg.min_side_branch_length = 2 * cfg.minimal_distance_from_outline;
     cfg.minimal_support_distance = cfg.minimal_distance_from_outline + cfg.half_distance;
     cfg.max_length_for_one_support_point = 2*size;
@@ -480,7 +481,7 @@ SampleConfig create_sample_config(double size) {
     cfg.min_width_for_outline_support = cfg.max_width_for_center_support_line;
     cfg.outline_sample_distance       = cfg.max_distance;
 
-    cfg.minimal_move = std::max(1000., size/1000);
+    cfg.minimal_move = std::max(10000., size/40);
     cfg.count_iteration = 100; 
     cfg.max_align_distance = 0;
     return cfg;
@@ -598,12 +599,7 @@ TEST_CASE("Small islands should be supported in center", "[SupGen], [VoronoiSkel
     SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
 
-    // TODO: remove next 4 lines, debug sharp triangle
-    /*auto triangle = PolygonUtils::create_isosceles_triangle(8. * size, 40. * size);
-    islands = {ExPolygon(triangle)};
-    auto test_island = create_tiny_wide_test_2(3 * size, 2 / 3. * size);
-    islands          = {test_island};*/
-
+    islands = {islands[16]};
     for (ExPolygon &island : islands) {
         // information for debug which island cause problem
         [[maybe_unused]] size_t debug_index = &island - &islands.front(); 
@@ -723,6 +719,43 @@ TEST_CASE("Compare sampling test", "[hide]")
     }
 }
 
+// source: https://en.wikipedia.org/wiki/Centroid
+Slic3r::Point centroid(const Slic3r::Polygon &polygon) {
+    double sum_x = 0.;
+    double sum_y = 0.;
+    double signed_area = 0.;
+    auto   add    = [&](const Point &p1, const Point &p2) {
+        Vec2d p1d = p1.cast<double>();
+        double area = p1d.x() * p2.y() - p1d.y() * p2.x();
+        sum_x += (p1d.x() + p2.x()) * area;
+        sum_y += (p1d.y() + p2.y()) * area;
+        signed_area += area;
+    };
+    const Points &points = polygon.points;
+    for (size_t i = 1; i < points.size(); i++) { 
+        add(points[i - 1], points[i]);
+    }
+    add(points.back(), points.front());
+    double area6 = signed_area * 3;
+    return Point(sum_x / area6, sum_y / area6);
+}
+
+TEST_CASE("Trapezoid centroid should be inside of trapezoid", "[Utils]")
+{
+    Slic3r::Polygon polygon({
+        Point(4702134, 1124765853),
+        Point(-4702134, 1124765853), 
+        Point(-9404268, 1049531706),
+        Point(9404268, 1049531706)
+        });
+
+    Point my_centroid = centroid(polygon);
+    CHECK(polygon.contains(my_centroid));
+
+    Point centroid = polygon.centroid();
+    CHECK(polygon.contains(centroid));
+}
+
 #include <libslic3r/SLA/SupportIslands/VectorUtils.hpp>
 TEST_CASE("Reorder destructive", "[Utils]"){
     std::vector<int> data {0, 1, 3, 2, 4, 7, 6, 5, 8};
@@ -784,5 +817,6 @@ TEST_CASE("Disable visualization", "[hide]")
 #ifdef STORE_SAMPLE_INTO_SVG_FILES
     CHECK(false);
 #endif // STORE_SAMPLE_INTO_SVG_FILES
+    CHECK(SampleIslandUtils::is_visualization_disabled());
 }
 
