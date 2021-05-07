@@ -976,7 +976,6 @@ void Sidebar::sys_color_changed()
     for (PlaterPresetComboBox* combo : p->combos_filament)
         combo->msw_rescale();
 
-    p->frequently_changed_parameters->msw_rescale();
     p->object_list->msw_rescale();
     p->object_list->sys_color_changed();
     p->object_manipulation->sys_color_changed();
@@ -1589,8 +1588,8 @@ struct Plater::priv
     void redo();
     void undo_redo_to(size_t time_to_load);
 
-    void suppress_snapshots()   { this->m_prevent_snapshots++; }
-    void allow_snapshots()      { this->m_prevent_snapshots--; }
+    void suppress_snapshots()   { m_prevent_snapshots++; }
+    void allow_snapshots()      { m_prevent_snapshots--; }
 
     void process_validation_warning(const std::string& warning) const;
 
@@ -1685,7 +1684,7 @@ struct Plater::priv
     bool can_split(bool to_objects) const;
 
     void generate_thumbnail(ThumbnailData& data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
-    void generate_thumbnails(ThumbnailsList& thumbnails, const Vec2ds& sizes, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    ThumbnailsList generate_thumbnails(const ThumbnailsParams& params);
 
     void bring_instance_forward() const;
 
@@ -1761,15 +1760,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
     background_process.set_fff_print(&fff_print);
     background_process.set_sla_print(&sla_print);
     background_process.set_gcode_result(&gcode_result);
-    background_process.set_thumbnail_cb([this](ThumbnailsList& thumbnails, const Vec2ds& sizes, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
-        {
-            std::packaged_task<void(ThumbnailsList&, const Vec2ds&, bool, bool, bool, bool)> task([this](ThumbnailsList& thumbnails, const Vec2ds& sizes, bool printable_only, bool parts_only, bool show_bed, bool transparent_background) {
-                generate_thumbnails(thumbnails, sizes, printable_only, parts_only, show_bed, transparent_background);
-                });
-            std::future<void> result = task.get_future();
-            wxTheApp->CallAfter([&]() { task(thumbnails, sizes, printable_only, parts_only, show_bed, transparent_background); });
-            result.wait();
-        });
+    background_process.set_thumbnail_cb([this](const ThumbnailsParams& params) { return this->generate_thumbnails(params); });
     background_process.set_slicing_completed_event(EVT_SLICING_COMPLETED);
     background_process.set_finished_event(EVT_PROCESS_COMPLETED);
 	background_process.set_export_began_event(EVT_EXPORT_BEGAN);
@@ -3813,17 +3804,17 @@ void Plater::priv::generate_thumbnail(ThumbnailData& data, unsigned int w, unsig
     view3D->get_canvas3d()->render_thumbnail(data, w, h, printable_only, parts_only, show_bed, transparent_background);
 }
 
-void Plater::priv::generate_thumbnails(ThumbnailsList& thumbnails, const Vec2ds& sizes, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+ThumbnailsList Plater::priv::generate_thumbnails(const ThumbnailsParams& params)
 {
-    thumbnails.clear();
-    for (const Vec2d& size : sizes)
-    {
+    ThumbnailsList thumbnails;
+    for (const Vec2d& size : params.sizes) {
         thumbnails.push_back(ThumbnailData());
         Point isize(size); // round to ints
-        generate_thumbnail(thumbnails.back(), isize.x(), isize.y(), printable_only, parts_only, show_bed, transparent_background);
+        generate_thumbnail(thumbnails.back(), isize.x(), isize.y(), params.printable_only, params.parts_only, params.show_bed, params.transparent_background);
         if (!thumbnails.back().is_valid())
             thumbnails.pop_back();
     }
+    return thumbnails;
 }
 
 wxString Plater::priv::get_project_filename(const wxString& extension) const
@@ -4207,9 +4198,9 @@ int Plater::priv::get_active_snapshot_index()
 
 void Plater::priv::take_snapshot(const std::string& snapshot_name)
 {
-    if (this->m_prevent_snapshots > 0)
+    if (m_prevent_snapshots > 0)
         return;
-    assert(this->m_prevent_snapshots >= 0);
+    assert(m_prevent_snapshots >= 0);
     UndoRedo::SnapshotData snapshot_data;
     snapshot_data.printer_technology = this->printer_technology;
     if (this->view3D->is_layers_editing_enabled())
@@ -5085,6 +5076,30 @@ void Plater::export_stl(bool extended, bool selection_only)
     if (selection_only && (obj_idx == -1 || selection.is_wipe_tower()))
         return;
 
+    // Following lambda generates a combined mesh for export with normals pointing outwards.
+    auto mesh_to_export = [](const ModelObject* mo, bool instances) -> TriangleMesh {
+        TriangleMesh mesh;
+        for (const ModelVolume *v : mo->volumes)
+            if (v->is_model_part()) {
+                TriangleMesh vol_mesh(v->mesh());
+                vol_mesh.repair();
+                vol_mesh.transform(v->get_matrix(), true);
+                mesh.merge(vol_mesh);
+            }
+        mesh.repair();
+        if (instances) {
+            TriangleMesh vols_mesh(mesh);
+            mesh = TriangleMesh();
+            for (const ModelInstance *i : mo->instances) {
+                TriangleMesh m = vols_mesh;
+                m.transform(i->get_matrix(), true);
+                mesh.merge(m);
+            }
+        }
+        mesh.repair();
+        return mesh;
+    };
+
     TriangleMesh mesh;
     if (p->printer_technology == ptFFF) {
         if (selection_only) {
@@ -5092,20 +5107,21 @@ void Plater::export_stl(bool extended, bool selection_only)
             if (selection.get_mode() == Selection::Instance)
             {
                 if (selection.is_single_full_object())
-                    mesh = model_object->mesh();
+                    mesh = mesh_to_export(model_object, true);
                 else
-                    mesh = model_object->full_raw_mesh();
+                    mesh = mesh_to_export(model_object, false);
             }
             else
             {
                 const GLVolume* volume = selection.get_volume(*selection.get_volume_idxs().begin());
                 mesh = model_object->volumes[volume->volume_idx()]->mesh();
-                mesh.transform(volume->get_volume_transformation().get_matrix());
+                mesh.transform(volume->get_volume_transformation().get_matrix(), true);
                 mesh.translate(-model_object->origin_translation.cast<float>());
             }
         }
         else {
-            mesh = p->model.mesh();
+            for (const ModelObject *o : p->model.objects)
+                mesh.merge(mesh_to_export(o, true));
         }
     }
     else
@@ -5706,7 +5722,7 @@ wxString Plater::get_project_filename(const wxString& extension) const
 
 void Plater::set_project_filename(const wxString& filename)
 {
-    return p->set_project_filename(filename);
+    p->set_project_filename(filename);
 }
 
 bool Plater::is_export_gcode_scheduled() const

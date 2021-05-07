@@ -500,9 +500,9 @@ WipeTower::ToolChangeResult WipeTower::construct_tcr(WipeTowerWriter& writer,
     ToolChangeResult result;
     result.priming      = priming;
     result.initial_tool = int(old_tool);
-    result.new_tool     = int(this->m_current_tool);
-    result.print_z      = this->m_z_pos;
-    result.layer_height = this->m_layer_height;
+    result.new_tool     = int(m_current_tool);
+    result.print_z      = m_z_pos;
+    result.layer_height = m_layer_height;
     result.elapsed_time = writer.elapsed_time();
     result.start_pos    = writer.start_pos_rotated();
     result.end_pos      = priming ? writer.pos() : writer.pos_rotated();
@@ -630,7 +630,7 @@ std::vector<WipeTower::ToolChangeResult> WipeTower::prime(
     bool 						/*last_wipe_inside_wipe_tower*/)
 {
 	this->set_layer(first_layer_height, first_layer_height, tools.size(), true, false);
-	this->m_current_tool 		= tools.front();
+	m_current_tool 		= tools.front();
     
     // The Prusa i3 MK2 has a working space of [0, -2.2] to [250, 210].
     // Due to the XYZ calibration, this working space may shrink slightly from all directions,
@@ -639,9 +639,11 @@ std::vector<WipeTower::ToolChangeResult> WipeTower::prime(
 
     float prime_section_width = std::min(0.9f * m_bed_width / tools.size(), 60.f);
     box_coordinates cleaning_box(Vec2f(0.02f * m_bed_width, 0.01f + m_perimeter_width/2.f), prime_section_width, 100.f);
-    // In case of a circular bed, place it so it goes across the diameter and hope it will fit
-    if (m_bed_shape == CircularBed)
-        cleaning_box.translate(-m_bed_width/2 + m_bed_width * 0.03f, -m_bed_width * 0.12f);
+    if (m_bed_shape == CircularBed) {
+        cleaning_box = box_coordinates(Vec2f(0.f, 0.f), prime_section_width, 100.f);
+        float total_width_half = tools.size() * prime_section_width / 2.f;
+        cleaning_box.translate(-total_width_half, -std::sqrt(std::max(0.f, std::pow(m_bed_width/2, 2.f) - std::pow(1.05f * total_width_half, 2.f))));
+    }
     else
         cleaning_box.translate(m_bed_bottom_left);
 
