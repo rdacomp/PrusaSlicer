@@ -20,10 +20,11 @@
 // comment definition of NDEBUG to enable assert()
 //#define NDEBUG
 
-#define SLA_SAMPLE_ISLAND_UTILS_STORE_VORONOI_GRAPH_TO_SVG
-#define SLA_SAMPLE_ISLAND_UTILS_STORE_INITIAL_SAMPLE_POSITION_TO_SVG
-#define SLA_SAMPLE_ISLAND_UTILS_STORE_FIELD_TO_SVG
+//#define SLA_SAMPLE_ISLAND_UTILS_STORE_VORONOI_GRAPH_TO_SVG
+//#define SLA_SAMPLE_ISLAND_UTILS_STORE_INITIAL_SAMPLE_POSITION_TO_SVG
+//#define SLA_SAMPLE_ISLAND_UTILS_STORE_FIELD_TO_SVG
 //#define SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG
+//#define SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNED_TO_SVG
 
 #include <cassert>
 
@@ -410,8 +411,18 @@ void SampleIslandUtils::align_samples(SupportIslandPoints &samples,
         max_move = align_once(samples, island, config);        
         if (max_move < config.minimal_move) break;
     }
-    //std::cout << "Align use " << config.count_iteration - count_iteration
-    //          << " iteration and finish with precision " << max_move << "nano meters" << std::endl;
+
+#ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNED_TO_SVG
+    static int  counter = 0;
+    SVG svg(("aligned_" + std::to_string(counter++) + ".svg").c_str(),BoundingBox(island));
+    svg.draw(island);
+    draw(svg, samples, config.head_radius);
+    svg.Close();
+    std::cout << "Align use " << config.count_iteration - count_iteration
+            << " iteration and finish with precision " << unscale(max_move,0)[0] <<
+            " mm" << std::endl;
+#endif
+    
 }
 
 bool is_points_in_distance(const Slic3r::Point & p,
@@ -472,7 +483,10 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
             }
         }
         assert(island_cell != nullptr);
+
+        
         Point center = island_cell->centroid();
+        /*
         {
             SVG cell_svg("island_cell.svg", island_cell->points);
             cell_svg.draw(cell_polygon, "lightgray");
@@ -480,7 +494,7 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
             cell_svg.draw(*island_cell, "gray");
             cell_svg.draw(sample->point, "green", config.head_radius);
             cell_svg.draw(center, "black", config.head_radius);
-        }
+        }*/
         assert(is_points_in_distance(center, island_cell->points, config.max_distance));
 #ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG
         svg.draw(cell_polygon, color_point_cell);
@@ -1115,7 +1129,7 @@ void SampleIslandUtils::create_sample_center_end(
             Line edge(VoronoiGraphUtils::to_point(neighbor.edge->vertex0()),
                       VoronoiGraphUtils::to_point(neighbor.edge->vertex1()));
             for (const auto &support_point : near_no_move) {
-                if (LineUtils::belongs(edge, support_point->point)) {
+                if (LineUtils::belongs(edge, support_point->point, 10000)) {
                     exist_no_move = true;
                     break;
                 }
@@ -1680,6 +1694,9 @@ bool SampleIslandUtils::is_visualization_disabled()
     return false;
 #endif
 #ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG
+    return false;
+#endif
+#ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNED_TO_SVG
     return false;
 #endif
     return true;

@@ -28,7 +28,7 @@ public:
         result.half_distance                 = result.max_distance / 2;
         result.head_radius                   = head_diameter / 2;
         result.minimal_distance_from_outline = result.head_radius;
-        result.maximal_distance_from_outline = result.half_distance;
+        result.maximal_distance_from_outline = result.max_distance/4;
         assert(result.minimal_distance_from_outline < result.maximal_distance_from_outline);
         result.minimal_support_distance = result.minimal_distance_from_outline +
                                           result.half_distance;

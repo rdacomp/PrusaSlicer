@@ -467,12 +467,15 @@ SupportIslandPoints test_island_sampling(const ExPolygon &   island,
 }
 
 SampleConfig create_sample_config(double size) {
+    //SupportPointGenerator::Config spg_config;
+    //return SampleConfigFactory::create(spg_config);
+
     SampleConfig cfg;
     cfg.max_distance = 3 * size + 0.1;
     cfg.half_distance = cfg.max_distance/2;
     cfg.head_radius = size / 4;
     cfg.minimal_distance_from_outline = cfg.head_radius;
-    cfg.maximal_distance_from_outline = cfg.half_distance;
+    cfg.maximal_distance_from_outline = cfg.max_distance/4;
     cfg.min_side_branch_length = 2 * cfg.minimal_distance_from_outline;
     cfg.minimal_support_distance = cfg.minimal_distance_from_outline + cfg.half_distance;
     cfg.max_length_for_one_support_point = 2*size;
@@ -482,7 +485,7 @@ SampleConfig create_sample_config(double size) {
     cfg.outline_sample_distance       = cfg.max_distance;
 
     cfg.minimal_move = std::max(10000., size/40);
-    cfg.count_iteration = 100; 
+    cfg.count_iteration = 50; 
     cfg.max_align_distance = 0;
     return cfg;
 }
@@ -598,8 +601,7 @@ TEST_CASE("Small islands should be supported in center", "[SupGen], [VoronoiSkel
     double       size    = 3e7;
     SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
-
-    islands = {islands[16]};
+    islands = {  create_disc(3 * size, 2*size , 20)};
     for (ExPolygon &island : islands) {
         // information for debug which island cause problem
         [[maybe_unused]] size_t debug_index = &island - &islands.front(); 
@@ -717,98 +719,6 @@ TEST_CASE("Compare sampling test", "[hide]")
         store_sample(samples, island);
 #endif // STORE_SAMPLE_INTO_SVG_FILES
     }
-}
-
-// source: https://en.wikipedia.org/wiki/Centroid
-Slic3r::Point centroid(const Slic3r::Polygon &polygon) {
-    double sum_x = 0.;
-    double sum_y = 0.;
-    double signed_area = 0.;
-    auto   add    = [&](const Point &p1, const Point &p2) {
-        Vec2d p1d = p1.cast<double>();
-        double area = p1d.x() * p2.y() - p1d.y() * p2.x();
-        sum_x += (p1d.x() + p2.x()) * area;
-        sum_y += (p1d.y() + p2.y()) * area;
-        signed_area += area;
-    };
-    const Points &points = polygon.points;
-    for (size_t i = 1; i < points.size(); i++) { 
-        add(points[i - 1], points[i]);
-    }
-    add(points.back(), points.front());
-    double area6 = signed_area * 3;
-    return Point(sum_x / area6, sum_y / area6);
-}
-
-TEST_CASE("Trapezoid centroid should be inside of trapezoid", "[Utils]")
-{
-    Slic3r::Polygon polygon({
-        Point(4702134, 1124765853),
-        Point(-4702134, 1124765853), 
-        Point(-9404268, 1049531706),
-        Point(9404268, 1049531706)
-        });
-
-    Point my_centroid = centroid(polygon);
-    CHECK(polygon.contains(my_centroid));
-
-    Point centroid = polygon.centroid();
-    CHECK(polygon.contains(centroid));
-}
-
-#include <libslic3r/SLA/SupportIslands/VectorUtils.hpp>
-TEST_CASE("Reorder destructive", "[Utils]"){
-    std::vector<int> data {0, 1, 3, 2, 4, 7, 6, 5, 8};
-    std::vector<int> order{0, 1, 3, 2, 4, 7, 6, 5, 8};
-
-    VectorUtils::reorder_destructive(order.begin(), order.end(), data.begin());
-    for (size_t i = 0; i < data.size() - 1;++i) { 
-        CHECK(data[i] < data[i + 1]);
-    }
-}
-
-#include <libslic3r/SLA/SupportIslands/LineUtils.hpp>
-TEST_CASE("Intersection point", "[Utils]")
-{
-    Point a1(0, 0);
-    Point b1(3, 6);
-    Line  l1(a1, b1);
-    auto intersection = LineUtils::intersection(l1, Line(Point(0, 4), Point(5, 4)));
-    CHECK(intersection.has_value());
-    Point i_point = intersection->cast<coord_t>();
-    CHECK(PointUtils::is_equal(i_point, Point(2, 4)));
-
-    // same line
-    auto bad_intersection = LineUtils::intersection(l1, l1);
-    CHECK(!bad_intersection.has_value());
-
-    // oposit direction
-    bad_intersection = LineUtils::intersection(l1, Line(b1,a1));
-    CHECK(!bad_intersection.has_value());
-
-    // parallel line
-    bad_intersection = LineUtils::intersection(l1, Line(a1 + Point(0, 1),
-                                               b1 + Point(0, 1)));
-    CHECK(!bad_intersection.has_value());
-    
-    // out of line segment, but ray has intersection
-    Line l2(Point(0, 8), Point(6, 8));
-    intersection = LineUtils::intersection(l1, l2);
-    auto intersection2 = LineUtils::intersection(l2, l1);
-    CHECK(intersection.has_value());
-    CHECK(intersection2.has_value());
-    i_point = intersection->cast<coord_t>();
-    CHECK(PointUtils::is_equal(i_point, Point(4, 8)));
-    CHECK(PointUtils::is_equal(i_point, intersection2->cast<coord_t>()));
-
-    Line l3(Point(-2, -2), Point(1, -2));
-    intersection = LineUtils::intersection(l1, l3);
-    intersection2 = LineUtils::intersection(l3, l1);
-    CHECK(intersection.has_value());
-    CHECK(intersection2.has_value());
-    i_point = intersection->cast<coord_t>();
-    CHECK(PointUtils::is_equal(i_point, Point(-1, -2)));
-    CHECK(PointUtils::is_equal(i_point, intersection2->cast<coord_t>()));
 }
 
 TEST_CASE("Disable visualization", "[hide]") 

@@ -87,7 +87,7 @@ public:
                 --remaining;
                 value_t temp = v[s];
                 while (d = order_begin[d], d != s) {
-                    swap(temp, v[d]);
+                    std::swap(temp, v[d]);
                     --remaining;
                 }
                 v[s] = temp;

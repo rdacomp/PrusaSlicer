@@ -128,9 +128,8 @@ coord_t SupportOutlineIslandPoint::move(const Point &destination)
     }
 
     // apply closest result of move
-    this->point = closest.point;
     this->position = closest.position;
-    return closest.distance;
+    return SupportIslandPoint::move(closest.point);
 }
 
 Slic3r::Point SupportOutlineIslandPoint::calc_point(const Position &position, const Restriction &restriction)

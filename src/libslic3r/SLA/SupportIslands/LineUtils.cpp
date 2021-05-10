@@ -285,9 +285,11 @@ bool LineUtils::belongs(const Line &line, const Point &point, double benevolence
     const Point &b = line.b;
     auto is_in_interval = [](coord_t value, coord_t from, coord_t to) -> bool 
     { 
-        if (from > to) {
+        if (from < to) {
+            // from < value < to
             if (from > value || to < value) return false;
         } else {
+            // to < value < from
             if (from < value || to > value) return false;
         }
         return true;
