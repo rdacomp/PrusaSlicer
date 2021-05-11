@@ -29,6 +29,11 @@ struct SampleConfig
     // Must be bigger than minimal_distance_from_outline
     coord_t maximal_distance_from_outline = 1.;// [nano meter]
 
+    // When angle on outline is smaller than max_interesting_angle
+    // than create unmovable support point.
+    // Should be in range from Pi/2 to Pi
+    double max_interesting_angle = 2. / 3. * M_PI; // [radians]
+
     // Distinguish when to add support point on VD outline point(center line sample)
     // MUST be bigger than minimal_distance_from_outline
     coord_t minimal_support_distance = 0;

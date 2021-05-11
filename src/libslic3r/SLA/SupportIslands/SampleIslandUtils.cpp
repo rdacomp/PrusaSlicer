@@ -23,6 +23,7 @@
 //#define SLA_SAMPLE_ISLAND_UTILS_STORE_VORONOI_GRAPH_TO_SVG
 //#define SLA_SAMPLE_ISLAND_UTILS_STORE_INITIAL_SAMPLE_POSITION_TO_SVG
 //#define SLA_SAMPLE_ISLAND_UTILS_STORE_FIELD_TO_SVG
+//#define SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNE_VD_TO_SVG
 //#define SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG
 //#define SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNED_TO_SVG
 
@@ -404,7 +405,15 @@ void SampleIslandUtils::align_samples(SupportIslandPoints &samples,
                                       const ExPolygon &    island,
                                       const SampleConfig & config)
 {
-    assert(samples.size() > 2);
+    bool exist_moveable = false;
+    for (const auto &sample : samples) {
+        if (sample->can_move()) {
+            exist_moveable = true;
+            break;
+        }
+    }
+    if (!exist_moveable) return;
+
     size_t count_iteration = config.count_iteration; // copy
     coord_t max_move        = 0;
     while (--count_iteration > 1) {
@@ -440,7 +449,6 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
                                       const ExPolygon &    island,
                                       const SampleConfig & config)
 {
-    assert(samples.size() > 2);
     using VD = Slic3r::Geometry::VoronoiDiagram;
     VD             vd;
     Slic3r::Points points = SampleIslandUtils::to_points(samples);
@@ -463,6 +471,28 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
 
     // create voronoi diagram with points
     construct_voronoi(points.begin(), points.end(), &vd);
+#ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNE_VD_TO_SVG
+    static int vd_counter = 0;
+    BoundingBox bbox(island);
+    std::string name = "align_VD_" + std::to_string(vd_counter++) + ".svg";
+    SVG svg(name.c_str(), bbox);
+    svg.draw(island);
+    for (const Point &point : points) {
+        size_t index = &point - &points.front();
+        svg.draw(point, "black", config.head_radius);
+        svg.draw_text(point + Point(config.head_radius,0), std::to_string(index).c_str(), "black");
+    }
+    Lines island_lines = to_lines(island);
+    svg.draw(island_lines, "blue");
+    for (const auto &edge: vd.edges()) {
+        std::optional<Line> line =
+            VoronoiGraphUtils::to_line(edge, points, config.max_distance);
+        if (!line.has_value()) continue;
+        svg.draw(*line, "green", 1e6);
+    }
+    svg.Close();
+#endif // SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNE_VD_TO_SVG
+    size_t max_move_index = -1;
     for (const VD::cell_type &cell : vd.cells()) {
         SupportIslandPointPtr &sample = samples[cell.source_index()];
 
@@ -482,12 +512,9 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
                 break;
             }
         }
-        assert(island_cell != nullptr);
-
-        
-        Point center = island_cell->centroid();
-        /*
-        {
+        assert(island_cell != nullptr);        
+        Point center = island_cell->centroid();        
+        /*{
             SVG cell_svg("island_cell.svg", island_cell->points);
             cell_svg.draw(cell_polygon, "lightgray");
             cell_svg.draw(points, "darkgray", config.head_radius);
@@ -504,7 +531,10 @@ coord_t SampleIslandUtils::align_once(SupportIslandPoints &samples,
         svg.draw(center, color_wanted_point, config.head_radius); // wanted position
 #endif // SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG
         coord_t act_move = sample->move(center);
-        if (max_move < act_move) max_move = act_move;
+        if (max_move < act_move) {
+            max_move = act_move; 
+            max_move_index = cell.source_index();
+        }
 #ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGN_ONCE_TO_SVG
         svg.draw(sample->point, color_new_point, config.head_radius);        
         svg.draw_text(sample->point+Point(config.head_radius,0), SupportIslandPoint::to_string(sample->type).c_str(), color_new_point.c_str());
@@ -930,6 +960,7 @@ SupportIslandPoints SampleIslandUtils::sample_expath(
         if (position.has_value()) {
             points.push_back(create_no_move_point(
                 *position, SupportIslandPoint::Type::center_line_start));
+            // move nodes to done set 
             VoronoiGraph::Nodes start_path;
             for (const auto &node : path.nodes) {
                 if (node == position->neighbor->node) break;
@@ -978,16 +1009,11 @@ void SampleIslandUtils::sample_field(VoronoiGraph::Position &field_start,
 
     // Erode island to not sampled island around border,
     // minimal value must be -config.minimal_distance_from_outline
-    Polygons polygons = offset(field.border, -2.f * config.minimal_distance_from_outline,
+    Polygons polygons = offset(field.border,
+                               -2.f * config.minimal_distance_from_outline,
                                ClipperLib::jtSquare);
     if (polygons.empty()) return;
-
-    auto inner = std::make_shared<ExPolygon>(polygons.front());
-    for (size_t i = 1; i < polygons.size(); ++i) {
-        Polygon &hole = polygons[i];
-        inner->holes.push_back(hole);
-    }
-
+    auto inner = std::make_shared<ExPolygon>(field.inner);    
     Points inner_points = sample_expolygon(*inner, config.max_distance);    
     std::transform(inner_points.begin(), inner_points.end(), std::back_inserter(points), 
         [&](const Point &point) { 
@@ -1008,6 +1034,7 @@ std::optional<VoronoiGraph::Position> SampleIslandUtils::sample_center(
     coord_t                             support_in;
     bool use_new_start = true;
     bool is_continous = false;
+
     while (use_new_start || neighbor->max_width() <= config.max_width_for_center_support_line) {
         // !! do not check max width for new start, it could be wide to tiny change
         if (use_new_start) { 
@@ -1033,7 +1060,7 @@ std::optional<VoronoiGraph::Position> SampleIslandUtils::sample_center(
             double ratio = support_in / neighbor->length();
             VoronoiGraph::Position position(neighbor, ratio);
             results.push_back(std::make_unique<SupportCenterIslandPoint>(
-                position, &config, SupportIslandPoint::Type::center_line));
+                position, &config, SupportIslandPoint::Type::center_line1));
             support_in += config.max_distance;
             is_continous = true;
         }
@@ -1051,24 +1078,24 @@ std::optional<VoronoiGraph::Position> SampleIslandUtils::sample_center(
                 next_neighbor = &node_neighbor;
                 continue;
             }
-            coord_t next_support_in = (support_in >= config.half_distance) ?
-                                          support_in : (config.max_distance - support_in);
-            new_starts.emplace_back(&node_neighbor, next_support_in, path); // search in side branch
+            new_starts.emplace_back(&node_neighbor, support_in, path); // search in side branch
         }
+
         if (next_neighbor == nullptr) {
-            // no neighbor to continue
-            VoronoiGraph::Nodes path_reverse = path; // copy
-            std::reverse(path_reverse.begin(), path_reverse.end());
-            coord_t width = 2 * config.minimal_distance_from_outline;
-            coord_t distance = config.maximal_distance_from_outline;
-            auto position_opt = create_position_on_path(path_reverse, lines, width, distance);
-            if (position_opt.has_value()) {
-                if (is_continous && config.max_distance < (support_in+distance) ) {
-                    // one support point should be enough 
-                    // when max_distance > maximal_distance_from_outline
-                    results.pop_back(); // remove support point
+            if (neighbor->min_width() != 0) {
+                std::reverse(path.begin(), path.end());
+                auto position_opt = create_position_on_path(path, support_in / 2);
+                if (position_opt.has_value()) {
+                    results.push_back(
+                        std::make_unique<SupportCenterIslandPoint>(
+                            *position_opt, &config,
+                            SupportIslandPoint::Type::center_line3));                    
                 }
-                create_sample_center_end(*position_opt, results, new_starts, config);
+            } else {
+                // no neighbor to continue
+                create_sample_center_end(*neighbor, is_continous, path,
+                                         support_in, lines, results,
+                                         new_starts, config);
             }
             use_new_start = true;
         } else {
@@ -1087,10 +1114,45 @@ std::optional<VoronoiGraph::Position> SampleIslandUtils::sample_center(
         double ratio = support_in / edge_length;
         VoronoiGraph::Position position(neighbor, ratio);
         results.push_back(std::make_unique<SupportCenterIslandPoint>(
-                position, &config,SupportIslandPoint::Type::center_line));
+            position, &config, SupportIslandPoint::Type::center_line2));
         support_in += config.max_distance;
     }
     return result;
+}
+
+void SampleIslandUtils::create_sample_center_end(
+    const VoronoiGraph::Node::Neighbor &neighbor,
+    bool                                is_continous,
+    const VoronoiGraph::Nodes &         path,
+    coord_t                             support_in,
+    const Lines &                       lines,
+    SupportIslandPoints &               results,
+    CenterStarts &                      new_starts,
+    const SampleConfig &                config)
+{
+    // last neighbor?
+    if (neighbor.min_width() != 0) return;
+
+    // sharp corner?
+    double angle = VoronoiGraphUtils::outline_angle(neighbor, lines);
+    if (angle > config.max_interesting_angle) return;
+
+    // exist place for support?
+    VoronoiGraph::Nodes path_reverse = path; // copy
+    std::reverse(path_reverse.begin(), path_reverse.end());
+    coord_t width        = 2 * config.minimal_distance_from_outline;
+    coord_t distance     = config.maximal_distance_from_outline;
+    auto    position_opt = create_position_on_path(path_reverse, lines, width, distance);
+    if (!position_opt.has_value()) return;
+    
+    // check if exist popable result
+    if (is_continous && config.max_distance < (support_in + distance)) {
+        // one support point should be enough
+        // when max_distance > maximal_distance_from_outline
+        results.pop_back(); // remove support point
+    }
+
+    create_sample_center_end(*position_opt, results, new_starts, config);
 }
 
 void SampleIslandUtils::create_sample_center_end(
@@ -1110,8 +1172,8 @@ void SampleIslandUtils::create_sample_center_end(
         Point diff = point - res->point;
         if (abs(diff.x()) > minimal_support_distance) continue;
         if (abs(diff.y()) > minimal_support_distance) continue;
-        near_no_move.push_back(
-            &*res); // create raw pointer, used only in function scope
+        // create raw pointer, used only in function scope
+        near_no_move.push_back(&*res); 
     }
 
     std::map<const VoronoiGraph::Node::Neighbor *, coord_t> distances;
@@ -1412,6 +1474,8 @@ SampleIslandUtils::Field SampleIslandUtils::create_field(
     }
     field.source_indexe_for_change = source_indexe_for_change;
     field.source_indexes = std::move(source_indexes);
+    std::tie(field.inner, field.field_2_inner) =
+        outline_offset(field.border, config.minimal_distance_from_outline);
 
 #ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_FIELD_TO_SVG
     {
@@ -1446,6 +1510,8 @@ SampleIslandUtils::outline_offset(const Slic3r::ExPolygon &island,
 
     // TODO: Connect indexes for convert during creation of offset
     // !! this implementation was fast for develop BUT NOT for running !!
+    const double angle_tolerace = 1e-4;
+    const double distance_tolerance = 20.;
     Lines island_lines = to_lines(island);
     Lines offset_lines = to_lines(offseted);
     // Convert index map from island index to offseted index
@@ -1459,15 +1525,23 @@ SampleIslandUtils::outline_offset(const Slic3r::ExPolygon &island,
             Vec2d dir2 = LineUtils::direction(offset_line).cast<double>();
             dir2.normalize();
             double  angle    = acos(dir1.dot(dir2));
-            if (fabs(angle) < 1e-4) { // in similar direction
-                Point  middle   = offset_line.a / 2 + offset_line.b / 2;
-                double distance = island_line.perp_distance_to(middle);
-                if (fabs(distance - offset_distance) < 20) { 
-                    // found offseted line
-                    converter[island_line_index] = offset_line_index;
-                    break;
-                }
-            }
+            // not similar direction
+            
+            if (fabs(angle) > angle_tolerace) continue;
+
+            Point offset_middle = LineUtils::middle(offset_line);
+            Point island_middle = LineUtils::middle(island_line);
+            Point diff_middle   = offset_middle - island_middle;
+            if (fabs(diff_middle.x()) > 2 * offset_distance ||
+                fabs(diff_middle.y()) > 2 * offset_distance) continue;
+
+            double distance = island_line.perp_distance_to(offset_middle);
+            if (fabs(distance - offset_distance) > distance_tolerance)
+                continue;
+
+            // found offseted line
+            converter[island_line_index] = offset_line_index;
+            break;            
         }
     }
 
@@ -1480,10 +1554,6 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
     const ExPolygon &border        = field.border;
     const Polygon &contour = border.contour;
     assert(field.source_indexes.size() >= contour.size());
-    // convert map from field index to inner(line index)
-    std::map<size_t, size_t> field_2_inner;
-    ExPolygon                inner;
-    std::tie(inner, field_2_inner) = outline_offset(border, config.minimal_distance_from_outline);
     coord_t max_align_distance = config.max_align_distance;
     coord_t sample_distance = config.outline_sample_distance;
     SupportIslandPoints result;
@@ -1574,6 +1644,9 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
         }
     };
 
+    
+    // convert map from field index to inner(line index)
+    const std::map<size_t, size_t>& field_2_inner = field.field_2_inner;
     const size_t& change_index = field.source_indexe_for_change;
     auto sample_polygon = [&](const Polygon &polygon,
                               const Polygon &inner_polygon,
@@ -1630,11 +1703,11 @@ SupportIslandPoints SampleIslandUtils::sample_outline(
     };
 
     size_t index_offset = 0;
-    sample_polygon(contour, inner.contour, index_offset);
+    sample_polygon(contour, field.inner.contour, index_offset);
     index_offset = contour.size();    
     for (size_t hole_index = 0; hole_index < border.holes.size(); ++hole_index) {
         const Polygon &hole = border.holes[hole_index];
-        sample_polygon(hole, inner.holes[hole_index], index_offset);
+        sample_polygon(hole, field.inner.holes[hole_index], index_offset);
         index_offset += hole.size();
     }
     return result;
@@ -1646,7 +1719,8 @@ void SampleIslandUtils::draw(SVG &        svg,
                              bool         draw_field_source_indexes)
 {
     const char *field_color               = "red";
-    const char *border_line_color         = "blue";
+    const char *border_line_color       = "blue";
+    const char *inner_line_color        = "green";
     const char *source_index_text_color   = "blue";
     svg.draw(field.border, field_color);
     Lines border_lines = to_lines(field.border);
@@ -1657,10 +1731,27 @@ void SampleIslandUtils::draw(SVG &        svg,
             size_t index = &line - &border_lines.front();
             // start of holes
             if (index >= field.source_indexes.size()) break;
-            Point       middle_point = (line.a + line.b) / 2;
+            Point       middle_point = LineUtils::middle(line);
             std::string text = std::to_string(field.source_indexes[index]);
+            auto        item = field.field_2_inner.find(index);
+            if (item != field.field_2_inner.end()) {
+                text += " inner " + std::to_string(item->second);
+            }
             svg.draw_text(middle_point, text.c_str(), source_index_text_color);
         }
+
+    // draw inner
+    Lines inner_lines = to_lines(field.inner);
+    LineUtils::draw(svg, inner_lines, inner_line_color, 0.,
+                    draw_border_line_indexes);
+    if (draw_field_source_indexes)
+        for (auto &line : inner_lines) {
+            size_t index = &line - &inner_lines.front();
+            Point       middle_point = LineUtils::middle(line);
+            std::string text = std::to_string(index);
+            svg.draw_text(middle_point, text.c_str(), inner_line_color);
+        }
+
 }
 
 void SampleIslandUtils::draw(SVG &                      svg,
@@ -1688,6 +1779,9 @@ bool SampleIslandUtils::is_visualization_disabled()
     return false;
 #endif
 #ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_INITIAL_SAMPLE_POSITION_TO_SVG
+    return false;
+#endif
+#ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_ALIGNE_VD_TO_SVG
     return false;
 #endif
 #ifdef SLA_SAMPLE_ISLAND_UTILS_STORE_FIELD_TO_SVG

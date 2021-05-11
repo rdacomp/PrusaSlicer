@@ -282,6 +282,19 @@ public:
 
 private:
     /// <summary>
+    /// 
+    /// </summary>
+    static void create_sample_center_end(
+        const VoronoiGraph::Node::Neighbor &neighbor,
+        bool                                is_continous,
+        const VoronoiGraph::Nodes &         path,
+        coord_t                             support_in,
+        const Lines &                       lines,
+        SupportIslandPoints &               results,
+        CenterStarts &                      new_starts,
+        const SampleConfig &                config);
+
+    /// <summary>
     /// Check near supports if no exists there add to results
     /// </summary>
     /// <param name="position">Potentional new static point position</param>
@@ -313,6 +326,11 @@ public :
         std::vector<size_t> source_indexes;
         // value for source index of change from wide to tiny part of island
         size_t              source_indexe_for_change;
+
+        // inner part of field
+        ExPolygon                inner;
+        // map to convert field index to inner index
+        std::map<size_t, size_t> field_2_inner;
     };
 
     /// <summary>

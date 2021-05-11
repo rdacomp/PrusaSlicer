@@ -127,8 +127,15 @@ public:
     /// Direction vector is represented as point
     /// </summary>
     /// <param name="line">input line</param>
-    /// <returns>line direction</returns>
-    static Point direction(const Line &line) { return line.b - line.a; }
+    /// <returns>line direction | b - a </returns>
+    static Point direction(const Line &line);
+
+    /// <summary>
+    /// middle point, center of line
+    /// </summary>
+    /// <param name="line"></param>
+    /// <returns>ceneter of line | a+b / 2 </returns>
+    static Point middle(const Line &line);
 
     /// <summary>
     /// Calculate foot point in maner of Geometry::foot_pt

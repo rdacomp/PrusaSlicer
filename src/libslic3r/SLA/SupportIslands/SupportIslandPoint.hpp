@@ -19,6 +19,9 @@ public:
         one_center_point,
         two_points,
         center_line,
+        center_line1, // sample line in center
+        center_line2, // rest of neighbor edge before position of Field start
+        center_line3, // end of loop, next neighbors are already sampled
         center_line_end,  // end of branch
         center_line_end2, // start of main path(only one per VD)
         center_line_end3, // end in continous sampling

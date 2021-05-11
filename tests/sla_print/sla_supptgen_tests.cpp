@@ -339,6 +339,7 @@ ExPolygons createTestIslands(double size)
         ExPolygon(create_V_shape(size*4, size / 3)),
         ExPolygon(create_cross_roads(size, size / 3)),
         create_disc(3*size, size / 4, 30),
+        create_disc(2*size, size, 12), // 3 points
         create_square_with_4holes(5 * size, 5 * size / 2 - size / 3),
 
         // Tiny and wide part together with holes
@@ -484,8 +485,8 @@ SampleConfig create_sample_config(double size) {
     cfg.min_width_for_outline_support = cfg.max_width_for_center_support_line;
     cfg.outline_sample_distance       = cfg.max_distance;
 
-    cfg.minimal_move = std::max(10000., size/40);
-    cfg.count_iteration = 50; 
+    cfg.minimal_move       = static_cast<coord_t>(size/30);
+    cfg.count_iteration = 100; 
     cfg.max_align_distance = 0;
     return cfg;
 }
@@ -601,7 +602,6 @@ TEST_CASE("Small islands should be supported in center", "[SupGen], [VoronoiSkel
     double       size    = 3e7;
     SampleConfig cfg  = create_sample_config(size);
     ExPolygons islands = createTestIslands(size);
-    islands = {  create_disc(3 * size, 2*size , 20)};
     for (ExPolygon &island : islands) {
         // information for debug which island cause problem
         [[maybe_unused]] size_t debug_index = &island - &islands.front(); 

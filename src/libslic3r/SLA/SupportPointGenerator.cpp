@@ -344,8 +344,7 @@ SupportIslandPoints SupportPointGenerator::uniform_cover_island(
             skeleton, lines, config, longest_path);
 
     // allign samples
-    if (samples.size() > 2)
-        SampleIslandUtils::align_samples(samples, island, config);
+    SampleIslandUtils::align_samples(samples, island, config);
 
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
     const char* support_point_color = "lightgreen";

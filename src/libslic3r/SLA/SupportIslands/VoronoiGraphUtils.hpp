@@ -455,6 +455,15 @@ public:
     static bool is_last_neighbor(const VoronoiGraph::Node::Neighbor *neighbor);
 
     /// <summary>
+    /// only line created VG
+    /// only last neighbor
+    /// Calculate angle of outline(source lines) at end of voronoi diagram
+    /// </summary>
+    /// <param name="neighbor">Neighbor to calculate angle</param>
+    /// <returns>Angle of source lines in radians</returns>
+    static double outline_angle(const VoronoiGraph::Node::Neighbor &neighbor, const Lines& lines);
+
+    /// <summary>
     /// Loop over neighbor in max distance from position
     /// </summary>
     /// <param name="position">Start of loop</param>

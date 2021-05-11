@@ -306,6 +306,16 @@ bool LineUtils::belongs(const Line &line, const Point &point, double benevolence
     return false;
 }
 
+Slic3r::Point LineUtils::direction(const Line &line)
+{
+    return line.b - line.a;
+}
+
+Slic3r::Point LineUtils::middle(const Line &line) {
+    // division before adding to prevent data type overflow
+    return line.a / 2 + line.b / 2;
+}
+
 double LineUtils::foot(const Line &line, const Point &point)
 {
     Vec2d  a   = line.a.cast<double>();

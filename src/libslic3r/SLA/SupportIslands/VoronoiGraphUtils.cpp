@@ -226,13 +226,15 @@ Slic3r::Polygon VoronoiGraphUtils::to_polygon(const Lines &lines,
         points.push_back(p2);
     }
     Polygon polygon(points);
-    //if (!polygon.contains(center)) draw(polygon, lines, center);
+    if (!polygon.contains(center)) { 
+        draw(polygon, lines, center); 
+    }
     assert(polygon.is_valid());
     assert(polygon.contains(center));
     assert(PolygonUtils::is_not_self_intersect(polygon, center));
     return polygon;
 }
-
+    
 Slic3r::Polygon VoronoiGraphUtils::to_polygon(const VD::cell_type & cell,
                                               const Slic3r::Points &points,
                                               double maximal_distance)
@@ -1162,6 +1164,77 @@ coord_t VoronoiGraphUtils::get_max_width(const VoronoiGraph::Node *node)
     return max;
 }
 
+bool VoronoiGraphUtils::is_last_neighbor(
+    const VoronoiGraph::Node::Neighbor *neighbor)
+{
+    return (neighbor->node->neighbors.size() == 1);
+}
+
+void VoronoiGraphUtils::for_neighbor_at_distance(
+    const VoronoiGraph::Position &position,
+    coord_t                       max_distance,
+    std::function<void(const VoronoiGraph::Node::Neighbor &, coord_t)> fnc)
+{
+    coord_t                   act_distance = position.calc_distance();
+    const VoronoiGraph::Node *act_node     = position.neighbor->node;
+    const VoronoiGraph::Node *twin_node = get_twin_node(*position.neighbor);
+    std::set<const VoronoiGraph::Node *> done;
+    done.insert(twin_node);
+    done.insert(act_node);
+    std::queue<std::pair<const VoronoiGraph::Node *, coord_t>> process;
+    coord_t distance = position.calc_rest_distance();
+    if (distance < max_distance) process.push({twin_node, distance});
+
+    while (true) {
+        const VoronoiGraph::Node *next_node     = nullptr;
+        coord_t                   next_distance = 0;
+        for (const auto &neighbor : act_node->neighbors) {
+            if (done.find(neighbor.node) != done.end())
+                continue; // already checked
+            done.insert(neighbor.node);
+
+            fnc(neighbor, act_distance);
+
+            coord_t length   = static_cast<coord_t>(neighbor.length());
+            coord_t distance = act_distance + length;
+            if (distance >= max_distance) continue;
+            if (next_node == nullptr) {
+                next_node     = neighbor.node;
+                next_distance = distance;
+            } else {
+                process.push({neighbor.node, distance});
+            }
+        }
+        if (next_node != nullptr) { // exist next node
+            act_node     = next_node;
+            act_distance = next_distance;
+        } else if (!process.empty()) { // exist next process
+            act_node     = process.front().first;
+            act_distance = process.front().second;
+            process.pop();
+        } else { // no next node neither process
+            break;
+        }
+    }
+}
+
+double VoronoiGraphUtils::outline_angle(const VoronoiGraph::Node::Neighbor &neighbor, const Lines& lines)
+{
+    assert(neighbor.edge->is_linear());
+    assert(neighbor.min_width() == 0);
+    const VD::cell_type *c1 = neighbor.edge->cell();
+    const VD::cell_type *c2 = neighbor.edge->twin()->cell();
+
+    const Line &l1 = lines[c1->source_index()];
+    const Line &l2 = lines[c2->source_index()];
+
+    Vec2d d1 = LineUtils::direction(l1).cast<double>();
+    Vec2d d2 = LineUtils::direction(l2).cast<double>();
+
+    double dot = d1.dot(-d2);
+    return std::acos(dot/d1.norm() / d2.norm());
+}
+
 void VoronoiGraphUtils::draw(SVG &               svg,
                              const VoronoiGraph &graph,
                              const Lines &       lines,
@@ -1198,56 +1271,6 @@ void VoronoiGraphUtils::draw(SVG &               svg,
             draw(svg, *n.edge, lines, "gray", width);
         }
     }
-}
-
-void VoronoiGraphUtils::for_neighbor_at_distance(
-    const VoronoiGraph::Position &                            position,
-    coord_t                                                   max_distance,
-    std::function<void(const VoronoiGraph::Node::Neighbor &, coord_t)> fnc)
-{
-    coord_t                   act_distance = position.calc_distance();
-    const VoronoiGraph::Node *act_node     = position.neighbor->node;
-    const VoronoiGraph::Node *twin_node = get_twin_node(*position.neighbor);
-    std::set<const VoronoiGraph::Node *> done;
-    done.insert(twin_node);
-    done.insert(act_node);
-    std::queue<std::pair<const VoronoiGraph::Node *, coord_t>> process;
-    coord_t distance = position.calc_rest_distance();
-    if (distance < max_distance)
-        process.push({twin_node, distance});
-
-    while (true) {
-        const VoronoiGraph::Node *next_node     = nullptr;
-        coord_t                   next_distance = 0;
-        for (const auto &neighbor : act_node->neighbors) {
-            if (done.find(neighbor.node) != done.end())
-                continue; // already checked
-            done.insert(neighbor.node);
-
-            fnc(neighbor, act_distance);
-
-            coord_t length   = static_cast<coord_t>(neighbor.length());
-            coord_t distance = act_distance + length;                               
-            if (distance >= max_distance) continue;
-            if (next_node == nullptr) {
-                next_node     = neighbor.node;
-                next_distance = distance;
-            } else {
-                process.push({neighbor.node, distance});
-            }
-        }
-        if (next_node != nullptr) { // exist next node
-            act_node     = next_node;
-            act_distance = next_distance;
-        } else if (!process.empty()) { // exist next process
-            act_node     = process.front().first;
-            act_distance = process.front().second;
-            process.pop();
-        } else { // no next node neither process
-            break;
-        }
-    }
-
 }
 
 void VoronoiGraphUtils::draw(SVG &                svg,
@@ -1328,11 +1351,6 @@ void VoronoiGraphUtils::draw(SVG &                       svg,
     }
 
     draw(svg, path.nodes, width, mainPathColor);
-}
-
-bool VoronoiGraphUtils::is_last_neighbor(const VoronoiGraph::Node::Neighbor *neighbor)
-{
-    return (neighbor->node->neighbors.size() == 1);
 }
 
 void VoronoiGraphUtils::draw(const Polygon &polygon,
