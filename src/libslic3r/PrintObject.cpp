@@ -1628,9 +1628,15 @@ PrintRegionConfig PrintObject::region_config_from_model_volume(const PrintRegion
 
 void PrintObject::update_slicing_parameters()
 {
+#if ENABLE_ALLOW_NEGATIVE_Z
+    if (!m_slicing_params.valid)
+        m_slicing_params = SlicingParameters::create_from_config(
+            this->print()->config(), m_config, this->model_object()->bounding_box().max.z(), this->object_extruders());
+#else
     if (! m_slicing_params.valid)
         m_slicing_params = SlicingParameters::create_from_config(
             this->print()->config(), m_config, unscale<double>(this->height()), this->object_extruders());
+#endif // ENABLE_ALLOW_NEGATIVE_Z
 }
 
 SlicingParameters PrintObject::slicing_parameters(const DynamicPrintConfig& full_config, const ModelObject& model_object, float object_max_z)
@@ -1692,6 +1698,15 @@ bool PrintObject::update_layer_height_profile(const ModelObject &model_object, c
         updated = true;
     }
 
+#if ENABLE_ALLOW_NEGATIVE_Z
+    // Verify the layer_height_profile.
+    if (!layer_height_profile.empty() &&
+        // Must not be of even length.
+        ((layer_height_profile.size() & 1) != 0 ||
+            // Last entry must be at the top of the object.
+            std::abs(layer_height_profile[layer_height_profile.size() - 2] - slicing_parameters.object_print_z_max) > 1e-3))
+        layer_height_profile.clear();
+#else
     // Verify the layer_height_profile.
     if (! layer_height_profile.empty() && 
             // Must not be of even length.
@@ -1699,6 +1714,7 @@ bool PrintObject::update_layer_height_profile(const ModelObject &model_object, c
             // Last entry must be at the top of the object.
              std::abs(layer_height_profile[layer_height_profile.size() - 2] - slicing_parameters.object_print_z_height()) > 1e-3))
         layer_height_profile.clear();
+#endif // ENABLE_ALLOW_NEGATIVE_Z
 
     if (layer_height_profile.empty()) {
         //layer_height_profile = layer_height_profile_adaptive(slicing_parameters, model_object.layer_config_ranges, model_object.volumes);
@@ -1745,7 +1761,7 @@ void PrintObject::_slice(const std::vector<coordf_t> &layer_height_profile)
             }
             // Make sure all layers contain layer region objects for all regions.
             for (size_t region_id = 0; region_id < m_region_volumes.size(); ++ region_id)
-                layer->add_region(&this->print()->get_print_region(region_id));
+                layer->add_region(&this->printing_region(region_id));
             prev = layer;
         }
     }
@@ -1793,7 +1809,7 @@ void PrintObject::_slice(const std::vector<coordf_t> &layer_height_profile)
             if (spiral_vase) {
                 // Slice the bottom layers with SlicingMode::Regular.
                 // This needs to be in sync with LayerRegion::make_perimeters() spiral_vase!
-                const PrintRegionConfig &config = this->print()->get_print_region(region_id).config();
+                const PrintRegionConfig &config = this->printing_region(region_id).config();
                 slicing_mode_normal_below_layer = size_t(config.bottom_solid_layers.value);
                 for (; slicing_mode_normal_below_layer < slice_zs.size() && slice_zs[slicing_mode_normal_below_layer] < config.bottom_solid_min_thickness - EPSILON;
                     ++ slicing_mode_normal_below_layer);
