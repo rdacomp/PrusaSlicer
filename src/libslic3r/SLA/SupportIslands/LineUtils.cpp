@@ -36,11 +36,12 @@ std::optional<Slic3r::Line> LineUtils::crop_ray(const Line & ray,
         coord_t abs_diff = abs(diff);
         if (abs_diff > radius) return {};
         // create cross points
-        double  move_y = sqrt(radius * radius - (double) x * x);
-        coord_t y      = std::round(move_y);
-        Point first(x, y);
-        Point second(x,-y);
-        return Line(first + center, second + center);
+        double  move_y = sqrt(radius * radius - static_cast<double>(x) * x);
+        coord_t y = static_cast<coord_t>(std::round(move_y));
+        coord_t cy = center.y();
+        Point first(x, cy + y);
+        Point second(x,cy - y);
+        return Line(first, second);
     } else {
         Line   moved_line(ray.a - center, ray.b - center);
         double a, b, c;
@@ -87,7 +88,7 @@ std::optional<Slic3r::Line> LineUtils::crop_half_ray(const Line & half_ray,
 {
     std::optional<Line> segment = crop_ray(half_ray, center, radius);
     if (!segment.has_value()) return {};
-    Point dir = half_ray.b - half_ray.a;
+    Point dir = LineUtils::direction(half_ray);
     using fnc = std::function<bool(const Point &)>;
     fnc use_point_x = [&half_ray, &dir](const Point &p) -> bool {
         return (p.x() > half_ray.a.x()) == (dir.x() > 0);
