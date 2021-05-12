@@ -484,6 +484,18 @@ void Tab::OnActivate()
     // create controls on active page
     activate_selected_page([](){});
     m_hsizer->Layout();
+
+    // Workaroud for Menu instead of NoteBook
+    if (wxSize sz = m_presets_choice->GetSize(); sz.x <= sz.y) {
+        sz = m_presets_choice->GetBestSize();
+        sz.x = 35 * m_em_unit;
+
+        m_presets_choice->SetMinSize(sz);
+        m_presets_choice->SetSize(sz);
+        GetSizer()->GetItem(size_t(0))->GetSizer()->Layout();
+        m_presets_choice->update();
+    }
+
     Refresh();
 }
 
@@ -3049,8 +3061,12 @@ void Tab::load_current_preset()
                 Page* tmp_page = m_active_page;
                 m_active_page = nullptr;
                 for (auto tab : wxGetApp().tabs_list) {
-                    if (tab->type() == Preset::TYPE_PRINTER) // Printer tab is shown every time
+                    if (tab->type() == Preset::TYPE_PRINTER) { // Printer tab is shown every time
+                        int cur_selection = wxGetApp().tab_panel()->GetSelection();
+                        if (cur_selection != 0)
+                            wxGetApp().tab_panel()->SetSelection(wxGetApp().tab_panel()->GetPageCount() - 1);
                         continue;
+                    }
                     if (tab->supports_printer_technology(printer_technology))
                     {
                         wxGetApp().tab_panel()->InsertPage(wxGetApp().tab_panel()->FindPage(this), tab, tab->title());
@@ -3326,7 +3342,7 @@ void Tab::select_preset(std::string preset_name, bool delete_current /*=false*/,
     }
 
     if (technology_changed)
-        wxGetApp().mainframe->diff_dialog.update_presets();
+        wxGetApp().mainframe->technology_changed();
 }
 
 // If the current preset is dirty, the user is asked whether the changes may be discarded.

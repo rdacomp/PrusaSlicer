@@ -3,6 +3,7 @@
 #include <wx/panel.h>
 #include <wx/notebook.h>
 #include <wx/listbook.h>
+#include <wx/simplebook.h>
 #include <wx/icon.h>
 #include <wx/sizer.h>
 #include <wx/menu.h>
@@ -541,9 +542,11 @@ void MainFrame::init_tabpanel()
     // wxNB_NOPAGETHEME: Disable Windows Vista theme for the Notebook background. The theme performance is terrible on Windows 10
     // with multiple high resolution displays connected.
 #ifdef __WXMSW__
-    m_tabpanel = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
+    m_tabpanel = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
     wxGetApp().UpdateDarkUI(m_tabpanel);
-    wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
+    //m_tabpanel = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
+    //wxGetApp().UpdateDarkUI(m_tabpanel);
+    //wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
 #else
     m_tabpanel = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
     if (wxSystemSettings::GetAppearance().IsDark())
@@ -562,7 +565,7 @@ void MainFrame::init_tabpanel()
     m_settings_dialog.set_tabpanel(m_tabpanel);
 
 #ifdef __WXMSW__
-    m_tabpanel->Bind(wxEVT_LISTBOOK_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
+    m_tabpanel->Bind(/*wxEVT_LISTBOOK_PAGE_CHANGED*/wxEVT_BOOKCTRL_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
 #else
     m_tabpanel->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
 #endif
@@ -912,7 +915,7 @@ void MainFrame::on_sys_color_changed()
     wxGetApp().init_label_colours();
 #ifdef __WXMSW__
     wxGetApp().UpdateDarkUI(m_tabpanel);
-    wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
+//    wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
     m_statusbar->update_dark_ui();
 #endif
 
@@ -1001,6 +1004,34 @@ static void add_common_view_menu_items(wxMenu* view_menu, MainFrame* mainFrame, 
         "", nullptr, [can_change_view]() { return can_change_view(); }, mainFrame);
     append_menu_item(view_menu, wxID_ANY, _L("Right") + sep + "&6", _L("Right View"), [mainFrame](wxCommandEvent&) { mainFrame->select_view("right"); },
         "", nullptr, [can_change_view]() { return can_change_view(); }, mainFrame);
+}
+
+static void add_tabs_as_menu(wxMenuBar* bar, MainFrame* main_frame) 
+{
+    PrinterTechnology pt = main_frame->plater()->printer_technology();
+    for (const wxString& title : { _L("Plater"), 
+                                   _L("Print Settings"), 
+                                   pt == ptSLA ? _L("Material Settings") : _L("Filament Settings"), 
+                                   _L("Printer Settings") })
+        bar->Append(new wxMenu(), title);
+
+    main_frame->Bind(wxEVT_MENU_OPEN, [main_frame](wxMenuEvent& event) {
+        wxMenu* const menu = event.GetMenu();
+        if (!menu || menu->GetMenuItemCount() > 0)
+            return;
+
+        const wxString& title = menu->GetTitle();
+        if (title == _L("Plater"))
+            main_frame->select_tab(size_t(0));
+        else if (title == _L("Print Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(main_frame->plater()->printer_technology()==ptFFF ? Preset::TYPE_PRINT : Preset::TYPE_SLA_PRINT));
+        else if (title == _L("Filament Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_FILAMENT));
+        else if (title == _L("Material Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_SLA_MATERIAL));
+        else if (title == _L("Printer Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_PRINTER));
+    });
 }
 
 void MainFrame::init_menubar_as_editor()
@@ -1322,7 +1353,12 @@ void MainFrame::init_menubar_as_editor()
     // Add additional menus from C++
     wxGetApp().add_config_menu(m_menubar);
     m_menubar->Append(helpMenu, _L("&Help"));
+    // Add separator 
+    m_menubar->Append(new wxMenu(), "       ");
+    add_tabs_as_menu(m_menubar, this);
     SetMenuBar(m_menubar);
+
+    m_menubar->EnableTop(6, false);
 
 #ifdef __APPLE__
     // This fixes a bug on Mac OS where the quit command doesn't emit window close events
@@ -1760,6 +1796,8 @@ void MainFrame::select_tab(size_t tab/* = size_t(-1)*/)
 
         if (m_tabpanel->GetSelection() != (int)new_selection)
             m_tabpanel->SetSelection(new_selection);
+        if (tab == 0 && m_layout == ESettingsLayout::Old)
+            m_plater->canvas3D()->render();
         else if (was_hidden) {
             Tab* cur_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(new_selection));
             if (cur_tab)
@@ -1899,6 +1937,21 @@ void MainFrame::add_to_recent_projects(const wxString& filename)
         wxGetApp().app_config->set_recent_projects(recent_projects);
         wxGetApp().app_config->save();
     }
+}
+
+void MainFrame::technology_changed()
+{
+    // upadte DiffDlg
+    diff_dialog.update_presets();
+
+    // update menu titles
+    PrinterTechnology pt = plater()->printer_technology();
+    if (int id = m_menubar->FindMenu(pt == ptFFF ? _L("Material Settings") : _L("Filament Settings")); id != wxNOT_FOUND)
+        m_menubar->SetMenuLabel(id , pt == ptSLA ? _L("Material Settings") : _L("Filament Settings"));
+
+    //if (wxGetApp().tab_panel()->GetSelection() != wxGetApp().tab_panel()->GetPageCount() - 1)
+    //    wxGetApp().tab_panel()->SetSelection(wxGetApp().tab_panel()->GetPageCount() - 1);
+
 }
 
 //

@@ -195,6 +195,7 @@ public:
 #endif // ENABLE_PROJECT_DIRTY_STATE
 
     void        add_to_recent_projects(const wxString& filename);
+    void        technology_changed();
 
     PrintHostQueueDialog* printhost_queue_dlg() { return m_printhost_queue_dlg; }
 

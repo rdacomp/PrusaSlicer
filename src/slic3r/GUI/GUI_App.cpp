@@ -1113,13 +1113,15 @@ void GUI_App::UpdateDlgDarkUI(wxDialog* dlg)
 void GUI_App::UpdateDVCDarkUI(wxDataViewCtrl* dvc, bool highlited/* = false*/)
 {
 #ifdef _WIN32
-    UpdateDarkUI(dvc, highlited);
-    wxItemAttr attr(m_color_highlight_default,//m_color_label_default,
-                    m_color_window_default,
-                    m_normal_font);
-    dvc->SetHeaderAttr(attr);
-    if (dvc->HasFlag(wxDV_ROW_LINES))
-        dvc->SetAlternateRowColour(m_color_highlight_default);
+    if (dark_mode()) {
+        UpdateDarkUI(dvc, highlited);
+        wxItemAttr attr(m_color_highlight_default,//m_color_label_default,
+            m_color_window_default,
+            m_normal_font);
+        dvc->SetHeaderAttr(attr);
+        if (dvc->HasFlag(wxDV_ROW_LINES))
+            dvc->SetAlternateRowColour(m_color_highlight_default);
+    }
 #endif
 }
 
