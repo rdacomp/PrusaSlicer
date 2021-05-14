@@ -13,6 +13,7 @@
 #include "Selection.hpp"
 #include "Plater.hpp"
 #include "MainFrame.hpp"
+#include "MsgDialog.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include "slic3r/Utils/FixModelByWin10.hpp"
@@ -957,7 +958,8 @@ void ObjectManipulation::set_uniform_scaling(const bool new_value)
         // Is the angle close to a multiple of 90 degrees?
 		if (! Geometry::is_rotation_ninety_degrees(volume->get_instance_rotation())) {
             // Cannot apply scaling in the world coordinate system.
-			wxMessageDialog dlg(GUI::wxGetApp().mainframe,
+			//wxMessageDialog dlg(GUI::wxGetApp().mainframe,
+			MessageDialog dlg(GUI::wxGetApp().mainframe,
                 _L("The currently manipulated object is tilted (rotation angles are not multiples of 90°).\n"
                     "Non-uniform scaling of tilted objects is only possible in the World coordinate system,\n"
                     "once the rotation is embedded into the object coordinates.") + "\n" +

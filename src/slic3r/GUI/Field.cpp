@@ -1315,6 +1315,8 @@ void ColourPicker::BUILD()
     temp->SetFont(Slic3r::GUI::wxGetApp().normal_font());
     if (!wxOSX) temp->SetBackgroundStyle(wxBG_STYLE_PAINT);
 
+	wxGetApp().UpdateDarkUI(temp->GetPickerCtrl());
+
 	// 	// recast as a wxWindow to fit the calling convention
 	window = dynamic_cast<wxWindow*>(temp);
 

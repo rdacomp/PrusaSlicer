@@ -5,6 +5,7 @@
 #include "GUI.hpp"
 #include "I18N.hpp"
 #include "GUI_App.hpp"
+#include "MsgDialog.hpp"
 
 #include <wx/sizer.h>
 
@@ -49,12 +50,12 @@ RammingDialog::RammingDialog(wxWindow* parent,const std::string& parameters)
         EndModal(wxID_OK);
         },wxID_OK);
     this->Show();
-    wxMessageDialog dlg(this, _(L("Ramming denotes the rapid extrusion just before a tool change in a single-extruder MM printer. Its purpose is to "
+//    wxMessageDialog dlg(this, _(L("Ramming denotes the rapid extrusion just before a tool change in a single-extruder MM printer. Its purpose is to "
+    Slic3r::GUI::MessageDialog dlg(this, _(L("Ramming denotes the rapid extrusion just before a tool change in a single-extruder MM printer. Its purpose is to "
         "properly shape the end of the unloaded filament so it does not prevent insertion of the new filament and can itself "
         "be reinserted later. This phase is important and different materials can require different extrusion speeds to get "
         "the good shape. For this reason, the extrusion rates during ramming are adjustable.\n\nThis is an expert-level "
         "setting, incorrect adjustment will likely lead to jams, extruder wheel grinding into filament etc.")), _(L("Warning")), wxOK | wxICON_EXCLAMATION);// .ShowModal();
-    Slic3r::GUI::wxGetApp().UpdateDlgDarkUI(&dlg);
     dlg.ShowModal();
 }
 
@@ -435,8 +436,9 @@ bool WipingPanel::advanced_matches_simple() {
 // Switches the dialog from simple to advanced mode and vice versa
 void WipingPanel::toggle_advanced(bool user_action) {
     if (m_advanced && !advanced_matches_simple() && user_action) {
-        if (wxMessageDialog(this,wxString(_(L("Switching to simple settings will discard changes done in the advanced mode!\n\nDo you want to proceed?"))),
-                            wxString(_(L("Warning"))),wxYES_NO|wxICON_EXCLAMATION).ShowModal() != wxID_YES)
+//        if (wxMessageDialog(this,wxString(_(L("Switching to simple settings will discard changes done in the advanced mode!\n\nDo you want to proceed?"))),
+        if (Slic3r::GUI::MessageDialog(this, _L("Switching to simple settings will discard changes done in the advanced mode!\n\nDo you want to proceed?"),
+                            _L("Warning"),wxYES_NO|wxICON_EXCLAMATION).ShowModal() != wxID_YES)
             return;
     }
     if (user_action)

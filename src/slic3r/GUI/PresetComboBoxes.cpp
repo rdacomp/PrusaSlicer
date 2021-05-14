@@ -38,6 +38,7 @@
 #include "BitmapCache.hpp"
 #include "PhysicalPrinterDialog.hpp"
 #include "SavePresetDialog.hpp"
+#include "MsgDialog.hpp"
 
 // A workaround for a set of issues related to text fitting into gtk widgets:
 // See e.g.: https://github.com/prusa3d/PrusaSlicer/issues/4584
@@ -335,7 +336,8 @@ bool PresetComboBox::del_physical_printer(const wxString& note_string/* = wxEmpt
         msg += note_string + "\n";
     msg += format_wxstr(_L("Are you sure you want to delete \"%1%\" printer?"), printer_name);
 
-    if (wxMessageDialog(this, msg, _L("Delete Physical Printer"), wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION).ShowModal() != wxID_YES)
+    //if (wxMessageDialog(this, msg, _L("Delete Physical Printer"), wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION).ShowModal() != wxID_YES)
+    if (MessageDialog(this, msg, _L("Delete Physical Printer"), wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION).ShowModal() != wxID_YES)
         return false;
 
     m_preset_bundle->physical_printers.delete_selected_printer();

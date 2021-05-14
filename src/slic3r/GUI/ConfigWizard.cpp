@@ -39,6 +39,7 @@
 #include "slic3r/Config/Snapshot.hpp"
 #include "slic3r/Utils/PresetUpdater.hpp"
 #include "format.hpp"
+#include "MsgDialog.hpp"
 
 #if defined(__linux__) && defined(__WXGTK3__)
 #define wxLinux_gtk3 true
@@ -1428,10 +1429,26 @@ static void focus_event(wxFocusEvent& e, wxTextCtrl* ctrl, double def_value)
         ctrl->SetValue(double_to_string(val));
 }
 
+class DiamTextCtrl : public wxTextCtrl
+{
+public:
+    DiamTextCtrl(wxWindow* parent)
+    {
+#ifdef _WIN32
+        long style = wxBORDER_SIMPLE;
+#else
+        long style = 0;
+#endif
+        Create(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(Field::def_width_thinner() * wxGetApp().em_unit(), wxDefaultCoord), style);
+        wxGetApp().UpdateDarkUI(this);
+    }
+    ~DiamTextCtrl() {}
+};
+
 PageDiameters::PageDiameters(ConfigWizard *parent)
     : ConfigWizardPage(parent, _L("Filament and Nozzle Diameters"), _L("Print Diameters"), 1)
-    , diam_nozzle(new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(Field::def_width_thinner() * wxGetApp().em_unit(), wxDefaultCoord)))
-    , diam_filam (new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(Field::def_width_thinner() * wxGetApp().em_unit(), wxDefaultCoord)))
+    , diam_nozzle(new DiamTextCtrl(this))
+    , diam_filam (new DiamTextCtrl(this))
 {
     auto *default_nozzle = print_config_def.get("nozzle_diameter")->get_default_value<ConfigOptionFloats>();
     wxString value = double_to_string(default_nozzle != nullptr && default_nozzle->size() > 0 ? default_nozzle->get_at(0) : 0.5);
@@ -1499,10 +1516,27 @@ void PageDiameters::apply_custom_config(DynamicPrintConfig &config)
     set_extrusion_width("solid_infill_extrusion_width",       0.45);
 }
 
+class SpinCtrlDouble: public wxSpinCtrlDouble
+{
+public:
+    SpinCtrlDouble(wxWindow* parent)
+    {
+#ifdef _WIN32
+        long style = wxSP_ARROW_KEYS | wxBORDER_SIMPLE;
+#else
+        long style = wxSP_ARROW_KEYS;
+#endif
+        Create(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, style);
+        wxGetApp().UpdateDarkUI(this->GetText());
+        this->Refresh();
+    }
+    ~SpinCtrlDouble() {}
+};
+
 PageTemperatures::PageTemperatures(ConfigWizard *parent)
     : ConfigWizardPage(parent, _L("Nozzle and Bed Temperatures"), _L("Temperatures"), 1)
-    , spin_extr(SpinCtrlDouble(this))
-    , spin_bed (SpinCtrlDouble(this))
+    , spin_extr(new SpinCtrlDouble(this))
+    , spin_bed (new SpinCtrlDouble(this))
 {
     spin_extr->SetIncrement(5.0);
     const auto &def_extr = *print_config_def.get("temperature");
@@ -2364,7 +2398,8 @@ bool ConfigWizard::priv::check_and_install_missing_materials(Technology technolo
 
     const auto ask_and_select_default_materials = [this](const wxString &message, const std::set<const VendorProfile::PrinterModel*> &printer_models, Technology technology)
     {
-        wxMessageDialog msg(q, message, _L("Notice"), wxYES_NO);
+        //wxMessageDialog msg(q, message, _L("Notice"), wxYES_NO);
+        MessageDialog msg(q, message, _L("Notice"), wxYES_NO);
         if (msg.ShowModal() == wxID_YES)
             select_default_materials_for_printer_models(technology, printer_models);
     };

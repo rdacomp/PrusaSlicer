@@ -19,6 +19,7 @@
 #include "wxExtensions.hpp"
 #include "SavePresetDialog.hpp"
 #include "MainFrame.hpp"
+#include "MsgDialog.hpp"
 
 //#define FTS_FUZZY_MATCH_IMPLEMENTATION
 //#include "fts_fuzzy_match.h"
@@ -868,7 +869,8 @@ void UnsavedChangesDialog::build(Preset::Type type, PresetCollection* dependent_
                 _L("You will not be asked about the unsaved changes the next time you switch a preset.")) + "\n\n" +
                 format_wxstr(_L("Visit \"Preferences\" and check \"%1%\"\nto be asked about unsaved changes again."), preferences_item);
     
-        wxMessageDialog dialog(nullptr, msg, _L("PrusaSlicer: Don't ask me again"), wxOK | wxCANCEL | wxICON_INFORMATION);
+        //wxMessageDialog dialog(nullptr, msg, _L("PrusaSlicer: Don't ask me again"), wxOK | wxCANCEL | wxICON_INFORMATION);
+        MessageDialog dialog(nullptr, msg, _L("PrusaSlicer: Don't ask me again"), wxOK | wxCANCEL | wxICON_INFORMATION);
         if (dialog.ShowModal() == wxID_CANCEL)
             m_remember_choice->SetValue(false);
     });

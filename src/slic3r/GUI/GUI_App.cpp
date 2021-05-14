@@ -1072,6 +1072,10 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
             highlited = true;
         }
     }
+    else if (wxTextCtrl* text = dynamic_cast<wxTextCtrl*>(window)) {
+        if (text->GetBorder() != wxBORDER_SIMPLE)
+            text->SetWindowStyle(text->GetWindowStyle() | wxBORDER_SIMPLE);
+    }
     else if (wxCheckListBox* list = dynamic_cast<wxCheckListBox*>(window)) {
         list->SetWindowStyle(list->GetWindowStyle() | wxBORDER_SIMPLE);
         list->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
@@ -1121,6 +1125,8 @@ void GUI_App::UpdateDVCDarkUI(wxDataViewCtrl* dvc, bool highlited/* = false*/)
         dvc->SetHeaderAttr(attr);
         if (dvc->HasFlag(wxDV_ROW_LINES))
             dvc->SetAlternateRowColour(m_color_highlight_default);
+        if (dvc->GetBorder() != wxBORDER_SIMPLE)
+            dvc->SetWindowStyle(dvc->GetWindowStyle() | wxBORDER_SIMPLE);
     }
 #endif
 }
@@ -1240,7 +1246,8 @@ void GUI_App::check_printer_presets()
                          _L("By default new Printer devices will be named as \"Printer N\" during its creation.\n"
                             "Note: This name can be changed later from the physical printers settings");
 
-    wxMessageDialog(nullptr, msg_text, _L("Information"), wxOK | wxICON_INFORMATION).ShowModal();
+    //wxMessageDialog(nullptr, msg_text, _L("Information"), wxOK | wxICON_INFORMATION).ShowModal();
+    MessageDialog(nullptr, msg_text, _L("Information"), wxOK | wxICON_INFORMATION).ShowModal();
 
     preset_bundle->physical_printers.load_printers_from_presets(preset_bundle->printers);
 }
@@ -1787,6 +1794,7 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
             if (check_unsaved_changes()) {
 #endif // ENABLE_PROJECT_DIRTY_STATE
                 wxTextEntryDialog dlg(nullptr, _L("Taking configuration snapshot"), _L("Snapshot name"));
+                UpdateDlgDarkUI(&dlg);
                 
                 // set current normal font for dialog children, 
                 // because of just dlg.SetFont(normal_font()) has no result;
@@ -1872,7 +1880,8 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                 // so we put it into an inner scope
                 wxString title = is_editor() ? wxString(SLIC3R_APP_NAME) : wxString(GCODEVIEWER_APP_NAME);
                 title += " - " + _L("Language selection");
-                wxMessageDialog dialog(nullptr,
+                //wxMessageDialog dialog(nullptr,
+                MessageDialog dialog(nullptr,
                     _L("Switching the language will trigger application restart.\n"
                         "You will lose content of the plater.") + "\n\n" +
                     _L("Do you want to proceed?"),
@@ -2005,7 +2014,8 @@ bool GUI_App::check_print_host_queue()
     }
     wxString message;
     message += _(L("The uploads are still ongoing")) + ":\n\n" + job_string +"\n" + _(L("Stop them and continue anyway?"));
-    wxMessageDialog dialog(mainframe,
+    //wxMessageDialog dialog(mainframe,
+    MessageDialog dialog(mainframe,
         message,
         wxString(SLIC3R_APP_NAME) + " - " + _(L("Ongoing uploads")),
         wxICON_QUESTION | wxYES_NO | wxNO_DEFAULT);
