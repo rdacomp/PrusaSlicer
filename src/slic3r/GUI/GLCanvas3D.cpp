@@ -4819,6 +4819,11 @@ void GLCanvas3D::_render_objects() const
 {
     if (m_volumes.empty())
         return;
+    
+    if (sdf.is_enabled()) {
+        sdf.draw();
+        return;
+    }
 
     glsafe(::glEnable(GL_DEPTH_TEST));
 

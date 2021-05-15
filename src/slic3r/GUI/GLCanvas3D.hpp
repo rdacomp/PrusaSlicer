@@ -15,6 +15,7 @@
 #include "MeshUtils.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
 #include "GCodeViewer.hpp"
+#include "ShapeDiameterFunction.hpp"
 
 #include "libslic3r/Slicing.hpp"
 
@@ -845,6 +846,8 @@ private:
 public:
     const Print* fff_print() const;
     const SLAPrint* sla_print() const;
+
+    ShapeDiameterFunction sdf;
 };
 
 } // namespace GUI

@@ -140,11 +140,16 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     ImGui::SameLine(autoset_slider_left);
     ImGui::PushItemWidth(window_width - autoset_slider_left);
 
-    static ShapeDiameterFunction sdf; // TODO: selecet correct place
-    if (m_imgui->button("activate_SDF", 0.f, 0.f)) {
-        sdf.set_enabled(!sdf.is_enabled());
+    ShapeDiameterFunction& sdf = m_parent.sdf;
+    //static ShapeDiameterFunction sdf; sdf.draw();
+    if (sdf.is_enabled()) {
+        if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {
+            sdf.set_enabled(false);
+        }
+    }else if (m_imgui->button("Activate_SDF", 0.f, 0.f)) {
+        sdf.initialize(m_c->selection_info()->model_object());
+        sdf.set_enabled(true);
     }
-    sdf.draw(m_c->selection_info()->model_object());
     
 
     if (m_imgui->button("gray black", buttons_width, 0.f)) {

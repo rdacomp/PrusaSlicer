@@ -8,20 +8,21 @@ namespace Slic3r::GUI {
 
 class ShapeDiameterFunction
 {
-    bool is_calculated = false;
-    bool enabled = false;
-    unsigned int m_vbo_id=0;
+    bool         is_calculated = false;
+    bool         enabled       = false;
+    bool         initialized   = false;
+    unsigned int m_vbo_id      = 0;
 public:
     ShapeDiameterFunction() = default;
 
     void set_enabled(bool enable);
     bool is_enabled() const { return enabled; };
     
-    void draw(const ModelObject *mo);
+    void draw() const;
 
+    // create_buffer
+    bool initialize(const ModelObject *mo);
 private:
-    void create_buffer(const ModelObject *mo);
-
     struct Vertex
     {
         Vec3f position;

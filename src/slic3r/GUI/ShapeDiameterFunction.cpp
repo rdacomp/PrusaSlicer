@@ -12,30 +12,29 @@ void ShapeDiameterFunction::set_enabled(bool enable){
 	enabled = enable;
 }
 
-void ShapeDiameterFunction::draw(const ModelObject *mo) {
-    if (!is_enabled()) return;
-
-    if (m_buffer.empty()) create_buffer(mo);
+void ShapeDiameterFunction::draw() const {
+    if (!enabled) return;
+    if (!initialized) return;
 
     // create vertex buffer with width
     GLShaderProgram *shader = wxGetApp().get_shader("sdf");
     assert(shader != nullptr);
 
-    shader->start_using();
-    //shader->set_uniform("width_range", range);
-
     unsigned int stride = Vertex::size();
-    // sizeof(Vertex);
-
     if (m_vbo_id == 0) {
-        // first initialization
-        glsafe(::glGenBuffers(1, &m_vbo_id));
+        // first initialization        
+        // TODO: remove const cast
+        unsigned int *vbo_id = const_cast<unsigned int *>(&m_vbo_id);
+        glsafe(::glGenBuffers(1, vbo_id));
         glsafe(::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id));
         GLsizeiptr    size = m_buffer.size() * stride;
         const GLvoid *data = m_buffer.data();
         glsafe(::glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW));
         glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
     }
+
+    shader->start_using();
+    //shader->set_uniform("width_range", range);
 
     glsafe(::glEnable(GL_DEPTH_TEST));
     glsafe(::glDepthMask(GL_FALSE));
@@ -83,8 +82,11 @@ void ShapeDiameterFunction::draw(const ModelObject *mo) {
     shader->stop_using();    
 }
 
-void ShapeDiameterFunction::create_buffer(const ModelObject *mo)
+bool ShapeDiameterFunction::initialize(const ModelObject *mo)
 {
+    initialized = false;
+    if (mo == nullptr) return false;
+
     indexed_triangle_set its = mo->raw_indexed_triangle_set(); // create new
     const std::vector<Vec3f> &vertices = its.vertices;
     const Points3             indices  = its.indices;
@@ -128,7 +130,9 @@ void ShapeDiameterFunction::create_buffer(const ModelObject *mo)
                                                                      ray_dir,
                                                                      hit);
         float width      = (intersected) ? hit.t : no_width;
-        m_buffer.emplace_back(vertex, normal.cast<float>(),
-                              width);
+        m_buffer.emplace_back(vertex, normal.cast<float>(), width);
     }
+
+    initialized = true;
+    return true;
 }
