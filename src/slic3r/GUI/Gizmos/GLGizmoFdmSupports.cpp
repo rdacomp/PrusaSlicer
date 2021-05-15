@@ -8,7 +8,7 @@
 #include "slic3r/GUI/ImGuiWrapper.hpp"
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/GUI_ObjectList.hpp"
-
+#include "slic3r/GUI/ShapeDiameterFunction.hpp"
 
 #include <GL/glew.h>
 
@@ -128,6 +128,37 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
 
     for (const std::string& t : {"enforce", "block", "remove"})
         draw_text_with_caption(m_desc.at(t + "_caption"), m_desc.at(t));
+
+    
+    m_imgui->text("");
+    ImGui::Separator();
+    m_imgui->text("highlight thin parts: ");
+    ImGui::AlignTextToFramePadding();
+    std::string description =
+        std::string("%.f") +
+        I18N::translate_utf8("mm", "Minimal threshold for width to be highlighted");
+    ImGui::SameLine(autoset_slider_left);
+    ImGui::PushItemWidth(window_width - autoset_slider_left);
+
+    static ShapeDiameterFunction sdf; // TODO: selecet correct place
+    if (m_imgui->button("activate_SDF", 0.f, 0.f)) {
+        sdf.set_enabled(!sdf.is_enabled());
+    }
+    sdf.draw(m_c->selection_info()->model_object());
+    
+
+    if (m_imgui->button("gray black", buttons_width, 0.f)) {
+        // button event
+        auto& volumes = m_parent.get_volumes().volumes;
+        if (!volumes.empty()) { 
+            auto &volume_ptr = volumes.front();
+            volume_ptr->render_color[0] = 1.f;
+            volume_ptr->render_color[1] = 0.5f;
+            volume_ptr->render_color[2] = 0.5f;
+            volume_ptr->render_color[3] = 1.f;
+        }
+        m_parent.set_as_dirty();
+    }
 
     m_imgui->text("");
     ImGui::Separator();

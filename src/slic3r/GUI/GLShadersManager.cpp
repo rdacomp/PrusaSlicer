@@ -48,6 +48,8 @@ std::pair<bool, std::string> GLShadersManager::init()
         , { "ENABLE_ENVIRONMENT_MAP"sv }
 #endif
         );
+    // used to visualize width - shape diameter function
+    valid &= append_shader("sdf", { "sdf.vs", "sdf.fs" });
     // used to render variable layers heights in 3d editor
     valid &= append_shader("variable_layer_height", { "variable_layer_height.vs", "variable_layer_height.fs" });
 
