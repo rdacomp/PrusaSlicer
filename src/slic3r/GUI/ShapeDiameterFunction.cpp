@@ -6,13 +6,15 @@
 
 #include <GL/glew.h>
 
+using namespace Slic3r;
 using namespace Slic3r::GUI;
 
 void ShapeDiameterFunction::set_enabled(bool enable){
 	enabled = enable;
 }
 
-void ShapeDiameterFunction::draw() const {
+void ShapeDiameterFunction::draw() const
+{
     if (!enabled) return;
     if (!initialized) return;
 
@@ -20,13 +22,10 @@ void ShapeDiameterFunction::draw() const {
     GLShaderProgram *shader = wxGetApp().get_shader("sdf");
     assert(shader != nullptr);
     shader->start_using();
-    //shader->set_uniform("width_range", range);
-
-    glsafe(::glEnable(GL_DEPTH_TEST));
-    glsafe(::glDepthMask(GL_FALSE));
-
-    glsafe(::glEnable(GL_BLEND));
-    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+    shader->set_uniform("model_matrix", tr_mat);
+    shader->set_uniform("min_width", min_value);
+    shader->set_uniform("width_range", fabs(max_value - min_value));
+    shader->set_uniform("draw_normals", draw_normals);
 
     unsigned int stride = Vertex::size();
     GLint position_id = shader->get_attrib_location("v_position");
@@ -51,7 +50,7 @@ void ShapeDiameterFunction::draw() const {
     }
 
     glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,m_vbo_indices_id));
-    glsafe(::glDrawElements(GL_TRIANGLES, (GLsizei)triangle_count, GL_UNSIGNED_INT, nullptr));
+    glsafe(::glDrawElements(GL_TRIANGLES, (GLsizei)indices_count, GL_UNSIGNED_INT, nullptr));
     glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 
     // clear 
@@ -60,10 +59,50 @@ void ShapeDiameterFunction::draw() const {
     if (width_id != -1) glsafe(::glDisableVertexAttribArray(width_id));
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
 
-    glsafe(::glDisable(GL_BLEND));
-    glsafe(::glDepthMask(GL_TRUE));
-
     shader->stop_using();    
+}
+
+// create points on unit sphere surface
+
+std::vector<Slic3r::Vec3d> create_fibonacci_sphere_samples(double angle, size_t count_samples)
+{
+    assert(angle < 180);
+    assert(angle > 1);
+    double last_z = sin(angle / 2. * M_PI/180.);
+    assert(last_z > 0);
+
+    std::vector<Slic3r::Vec3d> points; 
+    points.reserve(count_samples);
+    double phi = M_PI * (3. - sqrt(5.)); // golden angle in radians
+    for (size_t i = 0; i < count_samples; ++i) {
+        double z = 1. - (i / double(count_samples - 1));
+        if (z < last_z) break;
+        double radius = sqrt(1. - z * z);  // radius at z
+        double theta = phi * i; // golden angle increment
+        double x = cos(theta) * radius;
+        double y = sin(theta) * radius;
+        points.emplace_back(x, y, z);
+    }
+    return points;
+}
+// calculate normals by averaging normals of neghbor triangles
+std::vector<Vec3d> create_normals(const Points3 &               indices,
+                                  const std::vector<stl_facet> &facets,
+                                  size_t count_vertices)
+{
+    assert(indices.size() == facets.size());
+    std::vector<Vec3d> normals(count_vertices, Vec3d(.0, .0, .0));
+    for (const Vec3crd &indice : indices) {
+        size_t           index = &indice - &indices.front();
+        const stl_facet &facet = facets[index];
+        Vec3d n = facet.normal.cast<double>(); // should be normalized
+        normals[indice.x()] += n;
+        normals[indice.y()] += n;
+        normals[indice.z()] += n;
+    }
+    // Improve: remember count and for normalization divide by count
+    for (auto &normal : normals) normal.normalize();
+    return normals;
 }
 
 bool ShapeDiameterFunction::initialize(const ModelObject *mo)
@@ -77,36 +116,23 @@ bool ShapeDiameterFunction::initialize(const ModelObject *mo)
     // dig normals
     TriangleMesh                  tmesh  = mo->mesh(); // create new
     const stl_file &              stl    = tmesh.stl;
-    const std::vector<stl_facet> &facets = stl.facet_start;
-
-    // calculate average normals for vertex
-    std::vector<Vec3d> normals(vertices.size(), Vec3d(.0, .0, .0));
-    assert(indices.size() == facets.size());
-    
-    for (const Vec3crd &indice : indices) {
-        size_t           index = &indice - &indices.front();
-        const stl_facet &facet = facets[index];
-        Vec3d n = facet.normal.cast<double>(); // should be normalized
-        normals[indice.x()] += n;
-        normals[indice.y()] += n;
-        normals[indice.z()] += n;
-    }
-    // Improve: remember count and for normalization divide by count
-    for (auto &normal : normals) normal.normalize();
+    normals = create_normals(indices, stl.facet_start, vertices.size());
+    //unit_z_rays = create_fibonacci_sphere_samples(angle, count_samples);
 
     auto tree =
         AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(vertices,
                                                                     indices);
 
     float no_width = -1.;
-    m_buffer.reserve(vertices.size());
+    std::vector<Vertex> buffer = {};
+    buffer.reserve(vertices.size());
     for (const Vec3f &vertex : vertices) {
         size_t       index  = &vertex - &vertices.front();
         const Vec3d &normal = normals[index];
 
         // SDF calculation of width
-        Vec3d        ray_point = vertex.cast<double>();
         const Vec3d &ray_dir   = -normal;
+        Vec3d        ray_point = vertex.cast<double>() + ray_dir * safe_move;
         igl::Hit     hit;
         bool intersected = AABBTreeIndirect::intersect_ray_first_hit(vertices,
                                                                      indices,
@@ -115,31 +141,28 @@ bool ShapeDiameterFunction::initialize(const ModelObject *mo)
                                                                      ray_dir,
                                                                      hit);
         float width      = (intersected) ? hit.t : no_width;
-        m_buffer.emplace_back(vertex, normal.cast<float>(), width);
+        buffer.emplace_back(vertex, normal.cast<float>(), width);
     }
-
-    // TODO: clean
-    // if (m_vbo_id != 0) 
     
     // initialize triangle vertex data
+    if (m_vbo_id != 0) glsafe(::glDeleteBuffers(1, &m_vbo_id));
     glsafe(::glGenBuffers(1, &m_vbo_id));
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, m_vbo_id));
-    GLsizeiptr    size = m_buffer.size() * Vertex::size();
-    const GLvoid *data = m_buffer.data();
+    GLsizeiptr    size = buffer.size() * Vertex::size();
+    const GLvoid *data = buffer.data();
     glsafe(::glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW));
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
 
-    // TODO: clean
-    //if (m_vbo_indices_id != 0) {
-
+    if (m_vbo_indices_id != 0) glsafe(::glDeleteBuffers(1, &m_vbo_indices_id));
     glsafe(::glGenBuffers(1, &m_vbo_indices_id));
     glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_vbo_indices_id));
     GLsizeiptr    indices_size = indices.size() * sizeof(Vec3crd);
     const GLvoid *indices_data = indices.data();
     glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_size, indices_data, GL_STATIC_DRAW));
     glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-    triangle_count = indices.size();
 
+    tr_mat = mo->instances.front()->get_matrix();
+    indices_count = indices.size() * 3;
     initialized = true;
     return true;
 }

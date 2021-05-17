@@ -149,11 +149,17 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {
             sdf.set_enabled(false);
         }
+        if (m_imgui->button("Re-Calc", 0.f, 0.f)) {
+            sdf.initialize(m_c->selection_info()->model_object());
+        }
+        m_imgui->checkbox("normal", sdf.draw_normals);
     }else if (m_imgui->button("Activate_SDF", 0.f, 0.f)) {
         sdf.initialize(m_c->selection_info()->model_object());
         sdf.set_enabled(true);
     }
-    
+    m_imgui->slider_float("min_val", &sdf.min_value, 0.001f, 100.f);
+    m_imgui->slider_float("max_val", &sdf.max_value, 0.001f, 100.f);
+
 
     if (m_imgui->button("gray black", buttons_width, 0.f)) {
         // button event

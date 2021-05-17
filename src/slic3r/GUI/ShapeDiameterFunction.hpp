@@ -13,7 +13,15 @@ class ShapeDiameterFunction
     bool         initialized   = false;
     unsigned int m_vbo_id      = 0;
     unsigned int m_vbo_indices_id = 0;
+
 public:
+    float min_value = 0.1f;
+    float max_value = 10.f;
+    bool draw_normals = false;
+    double safe_move = 1e-5; // safe against ray intersection with origin trinagle made by source vertex
+    double angle = 120; // [in deg] in range from 1 to 179
+    size_t count_samples = 30; // count samples on half sphere
+
     ShapeDiameterFunction() = default;
 
     void set_enabled(bool enable);
@@ -39,13 +47,20 @@ private:
                     sizeof(float);      // object width
         }
 
-        static size_t position_offset() { return 0; }
-        static size_t normal_offset() { return (size_t)(3 * sizeof(float)); }
-        static size_t width_offset() { return (size_t)(4 * sizeof(float)); }
+        static size_t position_offset() {return size_t{0}; }
+        static size_t normal_offset() { return (size_t)(sizeof(Vec3f)); }
+        static size_t width_offset() { return (size_t)(2 * sizeof(Vec3f)); }
     };
-    using Buffer = std::vector<Vertex>;
-    Buffer m_buffer = {};
-    size_t triangle_count;
+
+    // draw information
+    size_t indices_count;
+    Transform3d tr_mat;
+
+    // rays into z direction
+    // for calculation SDF function
+    std::vector<Slic3r::Vec3d> unit_z_rays;
+    // normals for each vertex of mesh
+    std::vector<Vec3d> normals;
 };
 
 } // namespace Slic3r::GUI

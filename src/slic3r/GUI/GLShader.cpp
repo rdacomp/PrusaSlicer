@@ -145,7 +145,8 @@ bool GLShaderProgram::init_from_texts(const std::string& name, const ShaderSourc
                 glsafe(::glGetShaderiv(id, GL_INFO_LOG_LENGTH, &params));
                 std::vector<char> msg(params);
                 glsafe(::glGetShaderInfoLog(id, params, &params, msg.data()));
-                BOOST_LOG_TRIVIAL(error) << "Unable to compile " << shader_type_as_string(type) << " shader of shader program '" << name << "':\n" << msg.data();
+                std::string message = msg.data();
+                BOOST_LOG_TRIVIAL(error) << "Unable to compile " << shader_type_as_string(type) << " shader of shader program '" << name << "':\n" << message;
 
                 // release shaders
                 release_shaders(shader_ids);
