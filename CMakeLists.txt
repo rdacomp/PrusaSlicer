@@ -251,7 +251,7 @@ if (SLIC3R_ASAN)
         set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fsanitize=address")
     endif ()
 
-    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR ${IS_CROSS_COMPILE})
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lasan")
     endif ()
 endif ()
