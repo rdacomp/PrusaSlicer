@@ -2222,7 +2222,7 @@ std::vector<ExPolygons> PrintObject::slice_volumes(
             auto callback = TriangleMeshSlicer::throw_on_cancel_callback_type([print](){print->throw_if_canceled();});
             // TriangleMeshSlicer needs shared vertices, also this calls the repair() function.
             mesh.require_shared_vertices();
-            MeshSlicingParamsExtended params { mode, slicing_mode_normal_below_layer, mode_below, float(m_config.slice_closing_radius.value) };
+            MeshSlicingParamsExtended params { { mode, slicing_mode_normal_below_layer, mode_below }, float(m_config.slice_closing_radius.value) };
 			slice_mesh(mesh, z, params, layers, callback);
             m_print->throw_if_canceled();
         }

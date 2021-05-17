@@ -961,12 +961,14 @@ static void make_expolygons(const Polygons &loops, const float closing_radius, c
         union_ex(loops));
 }
 
+/*
 static void make_expolygons(std::vector<IntersectionLine> &lines, const float closing_radius, ExPolygons* slices)
 {
     Polygons pp;
     make_loops(lines, &pp);
     Slic3r::make_expolygons(pp, closing_radius, 0.f, slices);
 }
+*/
 
 void TriangleMeshSlicer::init(const TriangleMesh *mesh, throw_on_cancel_callback_type throw_on_cancel)
 {
@@ -1054,7 +1056,7 @@ void TriangleMeshSlicer::slice(
     layers->resize(z.size());
     tbb::parallel_for(
         tbb::blocked_range<size_t>(0, z.size()),
-        [&lines, &layers, &params, throw_on_cancel, this](const tbb::blocked_range<size_t>& range) {
+        [&lines, &layers, &params, throw_on_cancel](const tbb::blocked_range<size_t>& range) {
             for (size_t line_idx = range.begin(); line_idx < range.end(); ++ line_idx) {
                 if ((line_idx & 0x0ffff) == 0)
                     throw_on_cancel();
@@ -1147,7 +1149,7 @@ void TriangleMeshSlicer::slice(
     layers->resize(z.size());
     tbb::parallel_for(
         tbb::blocked_range<size_t>(0, z.size()),
-        [&layers_p, &params, layers, throw_on_cancel, this]
+        [&layers_p, &params, layers, throw_on_cancel]
         (const tbb::blocked_range<size_t>& range) {
             for (size_t layer_id = range.begin(); layer_id < range.end(); ++ layer_id) {
 #ifdef SLIC3R_TRIANGLEMESH_DEBUG
