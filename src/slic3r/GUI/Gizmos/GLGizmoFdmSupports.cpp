@@ -140,7 +140,10 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     ImGui::SameLine(autoset_slider_left);
     ImGui::PushItemWidth(window_width - autoset_slider_left);
 
-    ShapeDiameterFunction& sdf = m_parent.sdf;
+    if (m_parent.sdf == nullptr) {
+        m_parent.sdf = std::make_unique<ShapeDiameterFunction>();
+    }
+    ShapeDiameterFunction& sdf = *m_parent.sdf;
     //static ShapeDiameterFunction sdf; sdf.draw();
     if (sdf.is_enabled()) {
         if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {

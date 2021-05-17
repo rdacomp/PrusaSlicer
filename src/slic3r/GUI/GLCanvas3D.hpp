@@ -15,7 +15,6 @@
 #include "MeshUtils.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
 #include "GCodeViewer.hpp"
-#include "ShapeDiameterFunction.hpp"
 
 #include "libslic3r/Slicing.hpp"
 
@@ -53,6 +52,8 @@ namespace GUI {
 #if ENABLE_RETINA_GL
 class RetinaHelper;
 #endif
+
+class ShapeDiameterFunction;
 
 class Size
 {
@@ -847,7 +848,7 @@ public:
     const Print* fff_print() const;
     const SLAPrint* sla_print() const;
 
-    ShapeDiameterFunction sdf;
+    std::unique_ptr<ShapeDiameterFunction> sdf = nullptr;
 };
 
 } // namespace GUI

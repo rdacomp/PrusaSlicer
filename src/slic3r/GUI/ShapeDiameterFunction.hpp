@@ -12,6 +12,7 @@ class ShapeDiameterFunction
     bool         enabled       = false;
     bool         initialized   = false;
     unsigned int m_vbo_id      = 0;
+    unsigned int m_vbo_indices_id = 0;
 public:
     ShapeDiameterFunction() = default;
 
@@ -44,6 +45,7 @@ private:
     };
     using Buffer = std::vector<Vertex>;
     Buffer m_buffer = {};
+    size_t triangle_count;
 };
 
 } // namespace Slic3r::GUI

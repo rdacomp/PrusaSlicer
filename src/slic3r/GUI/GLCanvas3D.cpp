@@ -35,6 +35,8 @@
 #include "slic3r/Utils/RetinaHelper.hpp"
 #endif
 
+#include "ShapeDiameterFunction.hpp"
+
 #include <GL/glew.h>
 
 #include <wx/glcanvas.h>
@@ -4820,8 +4822,8 @@ void GLCanvas3D::_render_objects() const
     if (m_volumes.empty())
         return;
     
-    if (sdf.is_enabled()) {
-        sdf.draw();
+    if (sdf != nullptr && sdf->is_enabled()) {
+        sdf->draw();
         return;
     }
 
