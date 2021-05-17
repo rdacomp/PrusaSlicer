@@ -122,17 +122,18 @@ static FacetSliceType slice_facet(
     // Reorder vertices so that the first one is the one with lowest Z.
     // This is needed to get all intersection lines in a consistent order
     // (external on the right of the line)
-    for (int j = idx_vertex_lowest; j - idx_vertex_lowest < 3; ++ j) {  // loop through facet edges
-        int edge_id  = edge_neighbor[j % 3];
+    for (int j = 0; j < 3; ++ j) {  // loop through facet edges
+        int               edge_id;
         const stl_vertex *a, *b;
-        int a_id, b_id;
+        int               a_id, b_id;
         {
-            int k = j % 3;
-            int l = (j + 1) % 3;
-            a_id = indices[k];
-            a    = vertices + k;
-            b_id = indices[l];
-            b    = vertices + l;
+            int   k = (idx_vertex_lowest + j) % 3;
+            int   l = (k + 1) % 3;
+            edge_id = edge_neighbor[k];
+            a_id    = indices[k];
+            a       = vertices + k;
+            b_id    = indices[l];
+            b       = vertices + l;
         }
 
         // Is edge or face aligned with the cutting plane?
@@ -275,9 +276,9 @@ static void slice_facet_at_zs(
     const Eigen::Quaternion<float, Eigen::DontAlign> *quaternion,
     std::vector<IntersectionLines>                   *lines,
     boost::mutex                                     *lines_mutex,
-    const std::vector<float>                         &z)
+    const std::vector<float>                         &scaled_zs)
 {
-    stl_vertex                         vertices[3] { v_scaled_shared[indices[0]], v_scaled_shared[indices[1]], v_scaled_shared[indices[2]] };
+    stl_vertex                         vertices[3] { v_scaled_shared[indices(0)], v_scaled_shared[indices(1)], v_scaled_shared[indices(2)] };
     if (quaternion)
         for (int i = 0; i < 3; ++ i)
             vertices[i] = *quaternion * vertices[i];
@@ -287,20 +288,17 @@ static void slice_facet_at_zs(
     const float max_z = fmaxf(vertices[0].z(), fmaxf(vertices[1].z(), vertices[2].z()));
     
     // find layer extents
-    std::vector<float>::const_iterator min_layer, max_layer;
-    min_layer = std::lower_bound(z.begin(), z.end(), unscaled<float>(min_z) - SCALED_EPSILON); // first layer whose slice_z is >= min_z
-    max_layer = std::upper_bound(min_layer, z.end(), unscaled<float>(max_z) + SCALED_EPSILON); // first layer whose slice_z is > max_z
+    auto min_layer = std::lower_bound(scaled_zs.begin(), scaled_zs.end(), min_z); // first layer whose slice_z is >= min_z
+    auto max_layer = std::upper_bound(min_layer, scaled_zs.end(), max_z); // first layer whose slice_z is > max_z
     
-    std::vector<float>::const_iterator it = min_layer;
-    for (; it != max_layer && *it < min_z; ++ it) ;
-    for (; it != max_layer && *it <= max_z; ++ it) {
+    for (auto it = min_layer; it != max_layer; ++ it) {
         IntersectionLine il;
         int idx_vertex_lowest = (vertices[1].z() == min_z) ? 1 : ((vertices[2].z() == min_z) ? 2 : 0);
-        if (slice_facet(scaled<float>(*it), vertices, indices, facet_neighbors, idx_vertex_lowest, min_z == max_z, &il) == FacetSliceType::Slicing &&
+        if (slice_facet(*it, vertices, indices, facet_neighbors, idx_vertex_lowest, min_z == max_z, &il) == FacetSliceType::Slicing &&
             il.edge_type != IntersectionLine::FacetEdgeType::Horizontal) {
             // Ignore horizontal triangles. Any valid horizontal triangle must have a vertical triangle connected, otherwise the part has zero volume.
             boost::lock_guard<boost::mutex> l(*lines_mutex);
-            (*lines)[it - z.begin()].emplace_back(il);
+            (*lines)[it - scaled_zs.begin()].emplace_back(il);
         }
     }
 }
@@ -1031,15 +1029,18 @@ void TriangleMeshSlicer::slice(
     BOOST_LOG_TRIVIAL(debug) << "TriangleMeshSlicer::slice_facet_at_zs";
     std::vector<IntersectionLines> lines(z.size());
     {
+        std::vector<float> scaled_z(z);
+        for (float &z : scaled_z)
+            z = scaled<float>(z);
         boost::mutex lines_mutex;
         tbb::parallel_for(
             tbb::blocked_range<int>(0, int(m_its->indices.size())),
-            [&lines, &lines_mutex, &z, throw_on_cancel, this](const tbb::blocked_range<int>& range) {
+            [&lines, &lines_mutex, &scaled_z, throw_on_cancel, this](const tbb::blocked_range<int>& range) {
                 const Eigen::Quaternion<float, Eigen::DontAlign> *rotation = m_use_quaternion ? &m_quaternion : nullptr;
                 for (int facet_idx = range.begin(); facet_idx < range.end(); ++ facet_idx) {
                     if ((facet_idx & 0x0ffff) == 0)
                         throw_on_cancel();
-                    slice_facet_at_zs(m_its->indices[facet_idx], this->v_scaled_shared, this->facets_edges.data() + facet_idx * 3, rotation, &lines, &lines_mutex, z);
+                    slice_facet_at_zs(m_its->indices[facet_idx], this->v_scaled_shared, this->facets_edges.data() + facet_idx * 3, rotation, &lines, &lines_mutex, scaled_z);
                 }
             }
         );
