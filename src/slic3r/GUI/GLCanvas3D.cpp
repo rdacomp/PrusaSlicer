@@ -789,8 +789,6 @@ void GLCanvas3D::Tooltip::render(const Vec2d& mouse_position, GLCanvas3D& canvas
     ImGui::PopStyleVar(2);
 }
 
-float GLCanvas3D::Slope::s_window_width;
-
 wxDEFINE_EVENT(EVT_GLCANVAS_SCHEDULE_BACKGROUND_PROCESS, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_OBJECT_SELECT, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_RIGHT_CLICK, RBtnEvent);
@@ -4530,14 +4528,6 @@ void GLCanvas3D::_resize(unsigned int w, unsigned int h)
 {
     if (m_canvas == nullptr && m_context == nullptr)
         return;
-
-#if ENABLE_SCROLLABLE_LEGEND
-    const std::array<unsigned int, 2> new_size = { w, h };
-    if (m_old_size == new_size)
-        return;
-
-    m_old_size = new_size;
-#endif // ENABLE_SCROLLABLE_LEGEND
 
     auto *imgui = wxGetApp().imgui();
     imgui->set_display_size(static_cast<float>(w), static_cast<float>(h));
