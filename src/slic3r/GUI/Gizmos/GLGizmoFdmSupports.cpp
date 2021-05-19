@@ -8,7 +8,7 @@
 #include "slic3r/GUI/ImGuiWrapper.hpp"
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/GUI_ObjectList.hpp"
-#include "slic3r/GUI/ShapeDiameterFunction.hpp"
+#include "slic3r/GUI/GLShapeDiameterFunction.hpp"
 
 #include <GL/glew.h>
 
@@ -140,7 +140,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     ImGui::SameLine(autoset_slider_left);
     ImGui::PushItemWidth(window_width - autoset_slider_left);
 
-    ShapeDiameterFunction& sdf = *m_parent.sdf;
+    GLShapeDiameterFunction& sdf = *m_parent.sdf;
     if (m_parent.sdf != nullptr && sdf.is_enabled()) {
         if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {
             sdf.set_enabled(false);
@@ -166,7 +166,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
     }else if (m_imgui->button("Activate_SDF", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
-            m_parent.sdf = std::make_unique<ShapeDiameterFunction>();
+            m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();
         }
         m_parent.sdf->initialize_model(m_c->selection_info()->model_object());
         m_parent.sdf->set_enabled(true);

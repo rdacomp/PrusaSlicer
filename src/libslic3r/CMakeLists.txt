@@ -173,6 +173,8 @@ add_library(libslic3r STATIC
     PNGReadWrite.hpp
     PNGReadWrite.cpp
     Semver.cpp
+    ShapeDiameterFunction.cpp
+    ShapeDiameterFunction.hpp
     ShortestPath.cpp
     ShortestPath.hpp
     SLAPrint.cpp

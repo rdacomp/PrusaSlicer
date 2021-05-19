@@ -1,22 +1,22 @@
-#ifndef slic3r_ShapeDiameterFunction_hpp_
-#define slic3r_ShapeDiameterFunction_hpp_
+#ifndef slic3r_GLShapeDiameterFunction_hpp_
+#define slic3r_GLShapeDiameterFunction_hpp_
 
 #include <libslic3r/Model.hpp>
 #include <libslic3r/Point.hpp>
 #include <libslic3r/AABBTreeIndirect.hpp>
+#include <libslic3r/ShapeDiameterFunction.hpp>
 
 namespace Slic3r::GUI {
 // Shapira, Lior, Ariel Shamir, and Daniel Cohen-Or. 
 // "Consistent mesh partitioning and skeletonisation using the shape diameter function." 
 // The Visual Computer 24.4 (2008): 249-259.
-class ShapeDiameterFunction
+class GLShapeDiameterFunction
 {
     bool         is_calculated = false;
     bool         enabled       = false;
     bool         initialized   = false;
     unsigned int m_vbo_id      = 0;
     unsigned int m_vbo_indices_id = 0;
-
 public:
     float min_value = 0.1f;
     float max_value = 10.f;
@@ -24,7 +24,9 @@ public:
     float angle = 120; // [in deg] in range from 1 to 179
     size_t count_samples = 1; // count samples on half sphere
 
-    ShapeDiameterFunction() = default;
+    GLShapeDiameterFunction() = default; // set default values
+    ~GLShapeDiameterFunction() = default; // needed by PIMPL in GLCanvas3D.hpp
+
     void set_enabled(bool enable) { enabled = enable; };
     bool is_enabled() const { return enabled; };
     size_t get_ray_count() const { return unit_z_rays.size(); }
@@ -36,8 +38,7 @@ public:
     // calculate width(tree and normals are already calculated)
     bool initialize_width();
 private:
-    // core function calculate width for point on surface of model
-    float calc_width(const Vec3f& point, const Vec3f& normal);
+    bool initialize_indices();
 
     // structure uploaded to GPU
     struct Vertex
@@ -59,30 +60,14 @@ private:
     size_t indices_count = 0;
     Transform3d tr_mat;
 
-    // rays into z direction
-    // for calculation SDF function with multi rays
-    // weighted directions
-    struct Direction
-    {
-        Vec3f dir;
-        float weight;
-    };
-    using Directions = std::vector<Direction>;
-    Directions unit_z_rays;
+    ShapeDiameterFunction::Directions unit_z_rays;
     // normals for each vertex of mesh
     indexed_triangle_set its;
-    std::vector<Vec3f> normals;
-    AABBTreeIndirect::Tree3f tree;
-    
-    // Create points on unit sphere surface.
-    static Directions create_fibonacci_sphere_samples(double angle, size_t count_samples);
+    // same count as its::vertices - should be inside of index triangle set
+    std::vector<Vec3f> normals; 
 
-    // Create normals for each vertex by averaging neighbor triangles normal 
-    static std::vector<Vec3f> create_normals(const indexed_triangle_set &its);
-
-    // for debug purpose store direction to STL file
-    static bool store(const Directions &unit_z_rays);
+    AABBTreeIndirect::Tree3f tree;    
 };
 
 } // namespace Slic3r::GUI
-#endif // slic3r_ShapeDiameterFunction_hpp_
+#endif // slic3r_GLShapeDiameterFunction_hpp_

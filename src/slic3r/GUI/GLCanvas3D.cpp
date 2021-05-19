@@ -14,6 +14,7 @@
 #include "slic3r/GUI/3DScene.hpp"
 #include "slic3r/GUI/BackgroundSlicingProcess.hpp"
 #include "slic3r/GUI/GLShader.hpp"
+#include "slic3r/GUI/GLShapeDiameterFunction.hpp"
 #include "slic3r/GUI/GUI.hpp"
 #include "slic3r/GUI/Tab.hpp"
 #include "slic3r/GUI/GUI_Preview.hpp"
@@ -35,7 +36,6 @@
 #include "slic3r/Utils/RetinaHelper.hpp"
 #endif
 
-#include "ShapeDiameterFunction.hpp"
 
 #include <GL/glew.h>
 
