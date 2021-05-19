@@ -61,6 +61,7 @@ private:
 
     // rays into z direction
     // for calculation SDF function with multi rays
+    // weighted directions
     struct Direction
     {
         Vec3f dir;

@@ -27,12 +27,12 @@ set(SLIC3R_GUI_SOURCES
     GUI/GLShader.hpp    
     GUI/GLCanvas3D.hpp
     GUI/GLCanvas3D.cpp
+    GUI/GLShapeDiameterFunction.cpp
+    GUI/GLShapeDiameterFunction.hpp
     GUI/OpenGLManager.hpp
     GUI/OpenGLManager.cpp
     GUI/Selection.hpp
-    GUI/Selection.cpp
-    GUI/ShapeDiameterFunction.cpp
-    GUI/ShapeDiameterFunction.hpp    
+    GUI/Selection.cpp    
     GUI/Gizmos/GLGizmosManager.cpp
     GUI/Gizmos/GLGizmosManager.hpp
     GUI/Gizmos/GLGizmosCommon.cpp
