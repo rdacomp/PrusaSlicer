@@ -72,12 +72,16 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
 bool GLShapeDiameterFunction::initialize_width() {
     const std::vector<Vec3f> &vertices = its.vertices;
     unit_z_rays = ShapeDiameterFunction::create_fibonacci_sphere_samples(angle, count_samples);
+    std::vector<float> widths = ShapeDiameterFunction::calc_widths(
+        unit_z_rays, its, normals, tree);
+
+    // merge vertices normal and width together for GPU
     std::vector<Vertex> buffer = {};
     buffer.reserve(vertices.size());
     for (const Vec3f &vertex : vertices) {
         size_t       index  = &vertex - &vertices.front();
         const Vec3f &normal = normals[index];
-        float width = ShapeDiameterFunction::calc_width(vertex, normal, unit_z_rays, its, tree);
+        float        width  = widths[index];
         buffer.emplace_back(vertex, normal, width);
     }
 

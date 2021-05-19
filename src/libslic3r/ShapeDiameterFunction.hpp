@@ -42,6 +42,19 @@ public:
                             const indexed_triangle_set &    its,
                             const AABBTreeIndirect::Tree3f &tree);
 
+    /// <summary>
+    /// Concurrent calculation of width for each vertex
+    /// </summary>
+    /// <param name="dirs">Direction to cast rays</param>
+    /// <param name="its">Needed by tree function</param>
+    /// <param name="normals">Normal direction in vertex - same size as its vertices</param>
+    /// <param name="tree">AABB tree to fast detect first intersection</param>
+    /// <returns></returns>
+    static std::vector<float> calc_widths(
+                            const Directions &              dirs,
+                            const indexed_triangle_set &    its,
+                            const std::vector<Vec3f>& normals,
+                            const AABBTreeIndirect::Tree3f &tree);
 
     /// <summary>
     /// Create normal for triangle defined by indices from vertices

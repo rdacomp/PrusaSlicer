@@ -1,4 +1,5 @@
 #include "ShapeDiameterFunction.hpp"
+#include <tbb/parallel_for.h>
 
 using namespace Slic3r;
 
@@ -40,6 +41,26 @@ float ShapeDiameterFunction::calc_width(const Vec3f &               point,
     return sum_width / sum_weight + safe_move;
 }
 
+std::vector<float> ShapeDiameterFunction::calc_widths(
+    const Directions &              dirs,
+    const indexed_triangle_set &    its,
+    const std::vector<Vec3f> &      normals,
+    const AABBTreeIndirect::Tree3f &tree)
+{
+    static constexpr size_t granularity = 64;
+    size_t size = its.vertices.size();
+    std::vector<float>      widths(size);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, size),
+    [&](const tbb::blocked_range<size_t> &range) {
+        for (size_t index = range.begin(); index < range.end(); ++index) {
+            const Vec3f &vertex = its.vertices[index];
+            const Vec3f &normal = normals[index];
+            widths[index]       = calc_width(vertex, normal, dirs, its, tree);
+        }
+    });
+    return widths;
+}
+
 Vec3f ShapeDiameterFunction::create_triangle_normal(
     const stl_triangle_vertex_indices &indices,
     const std::vector<stl_vertex> &    vertices)
@@ -72,8 +93,7 @@ std::vector<Vec3f> ShapeDiameterFunction::create_normals(
     std::vector<Vec3f>         normals(count_vertices, Vec3f(.0, .0, .0));
     std::vector<unsigned char> count(count_vertices, 0);
     for (const Vec3crd &indice : its.indices) {
-        size_t index  = &indice - &its.indices.front();
-        Vec3f  normal = create_triangle_normal(indice, its.vertices);
+        Vec3f normal = create_triangle_normal(indice, its.vertices);
         for (int i = 0; i < 3; ++i) {
             normals[indice[i]] += normal;
             ++count[indice[i]];
@@ -90,7 +110,7 @@ std::vector<Vec3f> ShapeDiameterFunction::create_normals(
 // create points on unit sphere surface
 ShapeDiameterFunction::Directions
 ShapeDiameterFunction::create_fibonacci_sphere_samples(double angle,
-                                                         size_t count_samples)
+                                                       size_t count_samples)
 {
     if (count_samples <= 1) {
         Direction d;
