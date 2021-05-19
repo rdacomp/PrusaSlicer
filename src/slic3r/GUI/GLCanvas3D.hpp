@@ -842,7 +842,7 @@ public:
     const Print* fff_print() const;
     const SLAPrint* sla_print() const;
 
-    std::unique_ptr<GLShapeDiameterFunction> sdf = nullptr;
+    std::unique_ptr<GLShapeDiameterFunction> sdf;
 };
 
 } // namespace GUI

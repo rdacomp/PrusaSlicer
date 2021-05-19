@@ -56,7 +56,6 @@ void GLShapeDiameterFunction::draw() const
     shader->stop_using();    
 }
 
-
 bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
 {
     initialized = false;
@@ -94,7 +93,6 @@ bool GLShapeDiameterFunction::initialize_width() {
     initialized = true;
     return true;
 }
-
 
 bool GLShapeDiameterFunction::initialize_indices()
 {

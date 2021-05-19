@@ -901,6 +901,7 @@ GLCanvas3D::GLCanvas3D(wxGLCanvas* canvas)
     , m_render_sla_auxiliaries(true)
     , m_labels(*this)
     , m_slope(m_volumes)
+    , sdf(nullptr)
 {
     if (m_canvas != nullptr) {
         m_timer.SetOwner(m_canvas);
