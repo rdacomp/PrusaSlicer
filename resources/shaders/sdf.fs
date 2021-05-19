@@ -13,6 +13,9 @@ const vec3 c2 = vec3(1.0, 0.5, 0.0);
 const vec3 c1 = vec3(1.0, 0.0, 0.0);
 const vec3 c0 = vec3(0.5, 0.0, 0.0);
 
+// color for place without calculated width
+const vec3 no_width = vec3(1.0, 1.0, 1.0);
+
 uniform float min_width;
 uniform float width_range;
 uniform bool draw_normals;
@@ -38,6 +41,7 @@ vec3 get_color(int index){
 }
 
 vec3 width_to_color3(float width){
+    if(width < 0.) return no_width;
     float index_val = color_index(width); 
     if(index_val <= 0.) return get_color(0);
     if(index_val >= 8.) return get_color(8);

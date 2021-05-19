@@ -140,38 +140,36 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     ImGui::SameLine(autoset_slider_left);
     ImGui::PushItemWidth(window_width - autoset_slider_left);
 
-    if (m_parent.sdf == nullptr) {
-        m_parent.sdf = std::make_unique<ShapeDiameterFunction>();
-    }
     ShapeDiameterFunction& sdf = *m_parent.sdf;
-    //static ShapeDiameterFunction sdf; sdf.draw();
-    if (sdf.is_enabled()) {
+    if (m_parent.sdf != nullptr && sdf.is_enabled()) {
         if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {
             sdf.set_enabled(false);
         }
         if (m_imgui->button("Re-Calc", 0.f, 0.f)) {
-            sdf.initialize(m_c->selection_info()->model_object());
+            sdf.initialize_model(m_c->selection_info()->model_object());
         }
-        m_imgui->checkbox("normal", sdf.draw_normals);
+        m_imgui->checkbox("Normals", sdf.draw_normals);
+
+        m_imgui->text("color mapping:");
+        m_imgui->slider_float("min_val", &sdf.min_value, 0.001f, 100.f);
+        m_imgui->slider_float("max_val", &sdf.max_value, 0.001f, 100.f);
+        m_imgui->text("rays:");
+        int count = sdf.count_samples;
+        if (ImGui::SliderInt("count", &count, 1, 100)) {
+            sdf.count_samples = count;
+            sdf.initialize_width();
+        }
+        ImGui::SameLine();
+        m_imgui->text(("=" + std::to_string(sdf.get_ray_count())));
+        if (m_imgui->slider_float("angle", &sdf.angle, 1.f, 179.f)) {
+            sdf.initialize_width();            
+        }
     }else if (m_imgui->button("Activate_SDF", 0.f, 0.f)) {
-        sdf.initialize(m_c->selection_info()->model_object());
-        sdf.set_enabled(true);
-    }
-    m_imgui->slider_float("min_val", &sdf.min_value, 0.001f, 100.f);
-    m_imgui->slider_float("max_val", &sdf.max_value, 0.001f, 100.f);
-
-
-    if (m_imgui->button("gray black", buttons_width, 0.f)) {
-        // button event
-        auto& volumes = m_parent.get_volumes().volumes;
-        if (!volumes.empty()) { 
-            auto &volume_ptr = volumes.front();
-            volume_ptr->render_color[0] = 1.f;
-            volume_ptr->render_color[1] = 0.5f;
-            volume_ptr->render_color[2] = 0.5f;
-            volume_ptr->render_color[3] = 1.f;
+        if (m_parent.sdf == nullptr) {
+            m_parent.sdf = std::make_unique<ShapeDiameterFunction>();
         }
-        m_parent.set_as_dirty();
+        m_parent.sdf->initialize_model(m_c->selection_info()->model_object());
+        m_parent.sdf->set_enabled(true);
     }
 
     m_imgui->text("");

@@ -3,9 +3,12 @@
 
 #include <libslic3r/Model.hpp>
 #include <libslic3r/Point.hpp>
+#include <libslic3r/AABBTreeIndirect.hpp>
 
 namespace Slic3r::GUI {
-
+// Shapira, Lior, Ariel Shamir, and Daniel Cohen-Or. 
+// "Consistent mesh partitioning and skeletonisation using the shape diameter function." 
+// The Visual Computer 24.4 (2008): 249-259.
 class ShapeDiameterFunction
 {
     bool         is_calculated = false;
@@ -18,20 +21,25 @@ public:
     float min_value = 0.1f;
     float max_value = 10.f;
     bool draw_normals = false;
-    double safe_move = 1e-5; // safe against ray intersection with origin trinagle made by source vertex
-    double angle = 120; // [in deg] in range from 1 to 179
-    size_t count_samples = 30; // count samples on half sphere
+    float angle = 120; // [in deg] in range from 1 to 179
+    size_t count_samples = 1; // count samples on half sphere
 
     ShapeDiameterFunction() = default;
-
-    void set_enabled(bool enable);
+    void set_enabled(bool enable) { enabled = enable; };
     bool is_enabled() const { return enabled; };
+    size_t get_ray_count() const { return unit_z_rays.size(); }
     
     void draw() const;
 
-    // create_buffer
-    bool initialize(const ModelObject *mo);
+    // create vertex shader data for draw
+    bool initialize_model(const ModelObject *mo);
+    // calculate width(tree and normals are already calculated)
+    bool initialize_width();
 private:
+    // core function calculate width for point on surface of model
+    float calc_width(const Vec3f& point, const Vec3f& normal);
+
+    // structure uploaded to GPU
     struct Vertex
     {
         Vec3f position;
@@ -41,26 +49,38 @@ private:
             : position(position), normal(normal), width(width)
         {}
 
-        static unsigned int size(){ // sizeof(Vertex)
-            return  3 * sizeof(float) +     // vertex coordinate
-                    3 * sizeof(float) + // normal coordinate
-                    sizeof(float);      // object width
-        }
-
+        static unsigned int size(){ return sizeof(Vertex);}
         static size_t position_offset() {return size_t{0}; }
         static size_t normal_offset() { return (size_t)(sizeof(Vec3f)); }
         static size_t width_offset() { return (size_t)(2 * sizeof(Vec3f)); }
     };
 
     // draw information
-    size_t indices_count;
+    size_t indices_count = 0;
     Transform3d tr_mat;
 
     // rays into z direction
-    // for calculation SDF function
-    std::vector<Slic3r::Vec3d> unit_z_rays;
+    // for calculation SDF function with multi rays
+    struct Direction
+    {
+        Vec3f dir;
+        float weight;
+    };
+    using Directions = std::vector<Direction>;
+    Directions unit_z_rays;
     // normals for each vertex of mesh
-    std::vector<Vec3d> normals;
+    indexed_triangle_set its;
+    std::vector<Vec3f> normals;
+    AABBTreeIndirect::Tree3f tree;
+    
+    // Create points on unit sphere surface.
+    static Directions create_fibonacci_sphere_samples(double angle, size_t count_samples);
+
+    // Create normals for each vertex by averaging neighbor triangles normal 
+    static std::vector<Vec3f> create_normals(const indexed_triangle_set &its);
+
+    // for debug purpose store direction to STL file
+    static bool store(const Directions &unit_z_rays);
 };
 
 } // namespace Slic3r::GUI
