@@ -6358,8 +6358,7 @@ void Plater::sys_color_changed()
     p->preview->sys_color_changed();
     p->sidebar->sys_color_changed();
 
-    // msw_rescale_menu updates just icons, so use it
-    p->menus.msw_rescale();
+    p->menus.sys_color_changed();
 
     Layout();
     GetParent()->Layout();

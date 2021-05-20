@@ -421,6 +421,7 @@ public:
 	boost::any&		get_value() override;
 
     void            msw_rescale() override;
+	void            sys_color_changed() override;
 
 	void			enable() override {
 		x_textctrl->Enable();

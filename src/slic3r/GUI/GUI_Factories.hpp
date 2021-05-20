@@ -42,6 +42,7 @@ public:
     void    init(wxWindow* parent);
     void    update_object_menu();
     void    msw_rescale();
+    void    sys_color_changed();
 
     wxMenu* default_menu();
     wxMenu* object_menu();

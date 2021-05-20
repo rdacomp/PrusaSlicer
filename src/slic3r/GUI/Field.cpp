@@ -1476,6 +1476,15 @@ void PointCtrl::msw_rescale()
     }
 }
 
+void PointCtrl::sys_color_changed()
+{
+#ifdef _WIN32
+    for (wxSizerItem* item: sizer->GetChildren())
+        if (item->IsWindow())
+            wxGetApp().UpdateDarkUI(item->GetWindow());
+#endif
+}
+
 bool PointCtrl::value_was_changed(wxTextCtrl* win)
 {
 	if (m_value.empty())

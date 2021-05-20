@@ -572,7 +572,7 @@ void MainFrame::init_tabpanel()
 #endif
 #if ENABLE_VALIDATE_CUSTOM_GCODE
         if (int old_selection = e.GetOldSelection();
-            old_selection != wxNOT_FOUND && old_selection < static_cast<int>(m_tabpanel->GetPageCount())) {
+            old_selection != wxNOT_FOUND && old_selection < m_tabpanel->GetPageCount()) {
             Tab* old_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(old_selection));
             if (old_tab)
                 old_tab->validate_custom_gcodes();
@@ -1011,17 +1011,22 @@ static void add_common_view_menu_items(wxMenu* view_menu, MainFrame* mainFrame, 
 
 static void add_tabs_as_menu(wxMenuBar* bar, MainFrame* main_frame) 
 {
-    PrinterTechnology pt = main_frame->plater()->printer_technology();
-    for (const wxString& title : { _L("Plater"), 
+    const wxString pref = " [ ";
+    const wxString suff = " ] ";
+
+    PrinterTechnology pt = main_frame->plater() ? main_frame->plater()->printer_technology() : ptFFF;
+    for (const wxString& title : {pref + _L("Plater") + suff, 
                                    _L("Print Settings"), 
                                    pt == ptSLA ? _L("Material Settings") : _L("Filament Settings"), 
                                    _L("Printer Settings") })
         bar->Append(new wxMenu(), title);
 
-    main_frame->Bind(wxEVT_MENU_OPEN, [main_frame](wxMenuEvent& event) {
+    main_frame->Bind(wxEVT_MENU_OPEN, [main_frame, bar, pref, suff](wxMenuEvent& event) {
         wxMenu* const menu = event.GetMenu();
         if (!menu || menu->GetMenuItemCount() > 0)
             return;
+
+        // update tab selection
 
         const wxString& title = menu->GetTitle();
         if (title == _L("Plater"))
@@ -1034,6 +1039,21 @@ static void add_tabs_as_menu(wxMenuBar* bar, MainFrame* main_frame)
             main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_SLA_MATERIAL));
         else if (title == _L("Printer Settings"))
             main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_PRINTER));
+
+        // update markers for selected/unselected menu items
+
+        size_t items_cnt = bar->GetMenuCount();
+        for (size_t id = items_cnt - 4; id < items_cnt; id++) {
+            wxString label = bar->GetMenuLabel(id);
+            if (label.First(pref) == 0) {
+                label.Remove(size_t(0), pref.Len());
+                label.RemoveLast(suff.Len());
+                bar->SetMenuLabel(id, label);
+                break;
+            }
+        }
+        if (int id = bar->FindMenu(title); id != wxNOT_FOUND)
+            bar->SetMenuLabel(id, pref + title + suff);
     });
 }
 

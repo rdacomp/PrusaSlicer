@@ -1077,5 +1077,43 @@ void MenuFactory::msw_rescale()
         msw_rescale_menu(dynamic_cast<wxMenu*>(menu));
 }
 
+#ifdef _WIN32
+// For this class is used code from stackoverflow:
+// https://stackoverflow.com/questions/257288/is-it-possible-to-write-a-template-to-check-for-a-functions-existence
+// Using this code we can to inspect of an existence of IsWheelInverted() function in class T
+template <typename T>
+class menu_has_update_def_colors
+{
+    typedef char one;
+    struct two { char x[2]; };
+
+    template <typename C> static one test(decltype(&C::UpdateDefColors));
+    template <typename C> static two test(...);
+
+public:
+    static constexpr bool value = sizeof(test<T>(0)) == sizeof(char);
+};
+
+template<typename T>
+static void update_menu_item_def_colors(T* item)
+{
+    if constexpr (menu_has_update_def_colors<wxMenuItem>::value) {
+        item->UpdateDefColors();
+    }
+}
+#endif
+
+void MenuFactory::sys_color_changed()
+{
+    for (MenuWithSeparators* menu : { &m_object_menu, &m_sla_object_menu, &m_part_menu, &m_default_menu }) {
+        msw_rescale_menu(dynamic_cast<wxMenu*>(menu));// msw_rescale_menu updates just icons, so use it
+#ifdef _WIN32 
+        // but under MSW we have to update item's bachground color
+        for (wxMenuItem* item : menu->GetMenuItems())
+            update_menu_item_def_colors(item);
+#endif
+    }
+}
+
 } //namespace GUI
 } //namespace Slic3r 
