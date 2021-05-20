@@ -57,31 +57,6 @@ public:
                             const AABBTreeIndirect::Tree3f &tree);
 
     /// <summary>
-    /// Create normal for triangle defined by indices from vertices
-    /// </summary>
-    /// <param name="indices">index into vertices</param>
-    /// <param name="vertices">vector of vertices</param>
-    /// <returns>normal to triangle(normalized to size 1)</returns>
-    static Vec3f create_triangle_normal(
-        const stl_triangle_vertex_indices &indices,
-        const std::vector<stl_vertex> &    vertices);
-
-    /// <summary>
-    /// Create normals for each vertices
-    /// </summary>
-    /// <param name="its">indices and vertices</param>
-    /// <returns>Vector of normals</returns>
-    static std::vector<Vec3f> create_triangle_normals(
-        const indexed_triangle_set &its);
-
-    /// <summary>
-    /// Create normals for each vertex by averaging neighbor triangles normal 
-    /// </summary>
-    /// <param name="its"></param>
-    /// <returns></returns>
-    static std::vector<Vec3f> create_normals(const indexed_triangle_set &its);
-
-    /// <summary>
     /// Create points on unit sphere surface. with weight by z value
     /// </summary>
     /// <param name="angle"></param>

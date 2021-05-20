@@ -61,52 +61,6 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     return widths;
 }
 
-Vec3f ShapeDiameterFunction::create_triangle_normal(
-    const stl_triangle_vertex_indices &indices,
-    const std::vector<stl_vertex> &    vertices)
-{
-    const stl_vertex &v0        = vertices[indices[0]];
-    const stl_vertex &v1        = vertices[indices[1]];
-    const stl_vertex &v2        = vertices[indices[2]];
-    Vec3f             direction = (v1 - v0).cross(v2 - v0);
-    direction.normalize();
-    return direction;
-}
-
-std::vector<Vec3f> ShapeDiameterFunction::create_triangle_normals(
-    const indexed_triangle_set &its)
-{
-    std::vector<Vec3f> normals;
-    normals.reserve(its.indices.size());
-    for (const Vec3crd &index : its.indices) {
-        normals.push_back(create_triangle_normal(index, its.vertices));
-    }
-    return normals;
-}
-
-// calculate normals by averaging normals of neghbor triangles
-std::vector<Vec3f> ShapeDiameterFunction::create_normals(
-    const indexed_triangle_set &its)
-{
-    size_t count_vertices = its.vertices.size();
-    assert(its.indices.size() == triangle_normals.size());
-    std::vector<Vec3f>         normals(count_vertices, Vec3f(.0, .0, .0));
-    std::vector<unsigned char> count(count_vertices, 0);
-    for (const Vec3crd &indice : its.indices) {
-        Vec3f normal = create_triangle_normal(indice, its.vertices);
-        for (int i = 0; i < 3; ++i) {
-            normals[indice[i]] += normal;
-            ++count[indice[i]];
-        }
-    }
-    // normalize to size 1
-    for (auto &normal : normals) {
-        size_t index = &normal - &normals.front();
-        normal /= static_cast<float>(count[index]);
-    }
-    return normals;
-}
-
 // create points on unit sphere surface
 ShapeDiameterFunction::Directions
 ShapeDiameterFunction::create_fibonacci_sphere_samples(double angle,

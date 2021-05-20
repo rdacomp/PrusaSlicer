@@ -150,6 +150,20 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
         m_imgui->checkbox("Normals", sdf.draw_normals);
 
+        m_imgui->text("Normal Type:");
+        // using enum NormalUtils::VertexNormalType; since C++20
+        NormalUtils::VertexNormalType &type = sdf.normal_type;
+        auto set_type = [&](NormalUtils::VertexNormalType &new_type) {
+            type = new_type;
+            sdf.initialize_normals();
+        };
+        NormalUtils::VertexNormalType new_type = NormalUtils::VertexNormalType::AngleWeighted;
+        if (ImGui::RadioButton("AngleWeighted", type == new_type)) { set_type(new_type); } ImGui::SameLine();
+        new_type = NormalUtils::VertexNormalType::AverageNeighbor;
+        if (ImGui::RadioButton("AverageNeighbor", type == new_type)) { set_type(new_type); } ImGui::SameLine();
+        new_type = NormalUtils::VertexNormalType::NelsonMaxWeighted;
+        if (ImGui::RadioButton("NelsonMaxWeighted", type == new_type)) { set_type(new_type); } 
+
         m_imgui->text("color mapping:");
         m_imgui->slider_float("min_val", &sdf.min_value, 0.001f, 100.f);
         m_imgui->slider_float("max_val", &sdf.max_value, 0.001f, 100.f);

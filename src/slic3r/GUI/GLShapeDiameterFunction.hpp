@@ -5,6 +5,7 @@
 #include <libslic3r/Point.hpp>
 #include <libslic3r/AABBTreeIndirect.hpp>
 #include <libslic3r/ShapeDiameterFunction.hpp>
+#include <libslic3r/NormalUtils.hpp>
 
 namespace Slic3r::GUI {
 // Shapira, Lior, Ariel Shamir, and Daniel Cohen-Or. 
@@ -18,6 +19,8 @@ class GLShapeDiameterFunction
     unsigned int m_vbo_id      = 0;
     unsigned int m_vbo_indices_id = 0;
 public:
+    NormalUtils::VertexNormalType normal_type =
+        NormalUtils::VertexNormalType::NelsonMaxWeighted;
     float min_value = 0.1f;
     float max_value = 10.f;
     bool draw_normals = false;
@@ -36,6 +39,7 @@ public:
     // create vertex shader data for draw
     bool initialize_model(const ModelObject *mo);
     // calculate width(tree and normals are already calculated)
+    bool initialize_normals();
     bool initialize_width();
 private:
     bool initialize_indices();

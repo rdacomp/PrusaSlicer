@@ -151,6 +151,8 @@ add_library(libslic3r STATIC
     Polygon.hpp
     MutablePolygon.cpp
     MutablePolygon.hpp
+    NormalUtils.cpp
+    NormalUtils.hpp
     PolygonTrimmer.cpp
     PolygonTrimmer.hpp
     Polyline.cpp

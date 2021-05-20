@@ -62,10 +62,18 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
     if (mo == nullptr) return false;
     its = mo->raw_indexed_triangle_set(); // create new
     if(!initialize_indices()) return false;
-    tr_mat = mo->instances.front()->get_matrix();
-    normals = ShapeDiameterFunction::create_normals(its);
+
+    tr_mat = mo->instances.front()->get_matrix(); 
+    //for (auto &vertex : its.vertices) {}
+
     tree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(
         its.vertices, its.indices);
+    return initialize_normals();
+}
+
+bool GLShapeDiameterFunction::initialize_normals()
+{ 
+    normals = NormalUtils::create_normals(its, normal_type);
     return initialize_width();
 }
 
