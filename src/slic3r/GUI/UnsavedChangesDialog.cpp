@@ -1681,6 +1681,17 @@ void DiffPresetDialog::on_dpi_changed(const wxRect&)
 
 void DiffPresetDialog::on_sys_color_changed()
 {
+#ifdef _WIN32
+    wxGetApp().UpdateAllStaticTextDarkUI(this);
+    wxGetApp().UpdateDarkUI(m_show_all_presets);
+    wxGetApp().UpdateDVCDarkUI(m_tree);
+#endif
+
+    for (auto preset_combos : m_preset_combos) {
+        preset_combos.presets_left->msw_rescale();
+        preset_combos.equal_bmp->msw_rescale();
+        preset_combos.presets_right->msw_rescale();
+    }
     // msw_rescale updates just icons, so use it
     m_tree->Rescale();
     Refresh();

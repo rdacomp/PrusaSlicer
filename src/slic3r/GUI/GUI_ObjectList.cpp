@@ -3792,12 +3792,9 @@ void ObjectList::msw_rescale()
 
 void ObjectList::sys_color_changed()
 {
-    wxGetApp().UpdateDVCDarkUI(this);
+    wxGetApp().UpdateDVCDarkUI(this, true);
 
-    // update existing items with bitmaps
-    m_objects_model->Rescale();
-
-    Layout();
+    msw_rescale();
 }
 
 void ObjectList::ItemValueChanged(wxDataViewEvent &event)

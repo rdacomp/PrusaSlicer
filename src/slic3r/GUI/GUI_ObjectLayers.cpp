@@ -276,15 +276,12 @@ void ObjectLayers::sys_color_changed()
     m_bmp_delete.msw_rescale();
     m_bmp_add.msw_rescale();
 
-    m_grid_sizer->SetHGap(wxGetApp().em_unit());
-
     // rescale edit-boxes
     const int cells_cnt = m_grid_sizer->GetCols() * m_grid_sizer->GetEffectiveRowsCount();
     for (int i = 0; i < cells_cnt; ++i) {
         const wxSizerItem* item = m_grid_sizer->GetItem(i);
         if (item->IsSizer()) {// case when we have editor with buttons
-            const std::vector<size_t> btns = {2, 3};  // del_btn, add_btn
-            for (auto btn : btns) {
+            for (size_t btn : {2, 3}) { // del_btn, add_btn
                 wxSizerItem* b_item = item->GetSizer()->GetItem(btn);
                 if (b_item->IsWindow()) {
                     auto button = dynamic_cast<PlusMinusButton*>(b_item->GetWindow());
@@ -294,7 +291,24 @@ void ObjectLayers::sys_color_changed()
             }
         }
     }
-    m_grid_sizer->Layout();
+
+#ifdef _WIN32
+    m_og->sys_color_changed();
+    for (int i = 0; i < cells_cnt; ++i) {
+        const wxSizerItem* item = m_grid_sizer->GetItem(i);
+        if (item->IsWindow()) {
+            if (LayerRangeEditor* editor = dynamic_cast<LayerRangeEditor*>(item->GetWindow()))
+                wxGetApp().UpdateDarkUI(editor);
+        }
+        else if (item->IsSizer()) {// case when we have editor with buttons
+            if (wxSizerItem* e_item = item->GetSizer()->GetItem(size_t(0)); e_item->IsWindow()) {
+                if (LayerRangeEditor* editor = dynamic_cast<LayerRangeEditor*>(e_item->GetWindow()))
+                    wxGetApp().UpdateDarkUI(editor);
+            }
+        }
+    }
+#endif
+
 }
 
 void ObjectLayers::reset_selection()

@@ -176,9 +176,14 @@ public:
     void            init_label_colours();
     void            update_label_colours_from_appconfig();
     void            update_label_colours();
+    // update color mode for window
     void            UpdateDarkUI(wxWindow *window, bool highlited = false, bool just_font = false);
-    void            UpdateDlgDarkUI(wxDialog* window);
-    void            UpdateDVCDarkUI(wxDataViewCtrl* window, bool highlited = false);
+    // update color mode for whole dialog including all children
+    void            UpdateDlgDarkUI(wxDialog* dlg);
+    // update color mode for DataViewControl
+    void            UpdateDVCDarkUI(wxDataViewCtrl* dvc, bool highlited = false);
+    // update color mode for panel including all static texts controls
+    void            UpdateAllStaticTextDarkUI(wxWindow* parent);
     void            init_fonts();
 	void            update_fonts(const MainFrame *main_frame = nullptr);
     void            set_label_clr_modified(const wxColour& clr);

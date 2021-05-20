@@ -402,6 +402,15 @@ void Preview::msw_rescale()
 
 void Preview::sys_color_changed()
 {
+#ifdef _WIN32
+    wxWindowUpdateLocker noUpdates(this);
+
+    wxGetApp().UpdateAllStaticTextDarkUI(m_bottom_toolbar_panel);
+    wxGetApp().UpdateDarkUI(m_choice_view_type);
+    wxGetApp().UpdateDarkUI(static_cast<wxCheckListBoxComboPopup*>(m_combochecklist_features->GetPopupControl()));
+    wxGetApp().UpdateDarkUI(static_cast<wxCheckListBoxComboPopup*>(m_combochecklist_options->GetPopupControl()));
+#endif
+
     if (m_layers_slider != nullptr)
         m_layers_slider->sys_color_changed();
 }

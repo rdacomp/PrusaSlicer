@@ -1025,6 +1025,14 @@ void ObjectManipulation::msw_rescale()
 
 void ObjectManipulation::sys_color_changed()
 {
+#ifdef _WIN32
+    get_og()->sys_color_changed();
+    wxGetApp().UpdateDarkUI(m_word_local_combo);
+    wxGetApp().UpdateDarkUI(m_check_inch);
+
+    for (ManipulationEditor* editor : m_editors)
+        editor->sys_color_changed(this);
+#endif
     // btn...->msw_rescale() updates icon on button, so use it
     m_mirror_bitmap_on.msw_rescale();
     m_mirror_bitmap_off.msw_rescale();
@@ -1036,10 +1044,6 @@ void ObjectManipulation::sys_color_changed()
 
     for (int id = 0; id < 3; ++id)
         m_mirror_buttons[id].first->msw_rescale();
-
-    wxGetApp().UpdateDarkUI(m_word_local_combo);
-
-    get_og()->sys_color_changed();
 }
 
 static const char axes[] = { 'x', 'y', 'z' };
@@ -1109,6 +1113,12 @@ void ManipulationEditor::msw_rescale()
 {
     const int em = wxGetApp().em_unit();
     SetMinSize(wxSize(5 * em, wxDefaultCoord));
+}
+
+void ManipulationEditor::sys_color_changed(ObjectManipulation* parent)
+{
+    if (!parent->use_colors())
+        wxGetApp().UpdateDarkUI(this);
 }
 
 double ManipulationEditor::get_value()

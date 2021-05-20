@@ -931,6 +931,8 @@ void MainFrame::on_sys_color_changed()
     wxMenuBar* menu_bar = this->GetMenuBar();
     for (size_t id = 0; id < menu_bar->GetMenuCount(); id++)
         msw_rescale_menu(menu_bar->GetMenu(id));
+
+    this->Refresh();
 }
 
 #ifdef _MSC_VER

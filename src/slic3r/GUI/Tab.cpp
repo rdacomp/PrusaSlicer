@@ -1000,7 +1000,6 @@ void Tab::msw_rescale()
 
 void Tab::sys_color_changed()
 {
-    update_tab_ui();
     m_presets_choice->msw_rescale();
 
     // update buttons and cached bitmaps
@@ -1008,6 +1007,8 @@ void Tab::sys_color_changed()
         btn->msw_rescale();
     for (const auto bmp : m_scaled_bitmaps)
         bmp->msw_rescale();
+    if (m_detach_preset_btn)
+        m_detach_preset_btn->msw_rescale();
 
     // update icons for tree_ctrl
     for (ScalableBitmap& bmp : m_scaled_icons_list)
@@ -1018,7 +1019,11 @@ void Tab::sys_color_changed()
     for (ScalableBitmap& bmp : m_scaled_icons_list)
         m_icons->Add(bmp.bmp());
     m_treectrl->AssignImageList(m_icons);
-#ifdef __WXMSW__
+
+#ifdef _WIN32
+    wxWindowUpdateLocker noUpdates(this);
+    m_mode_sizer->msw_rescale();
+    wxGetApp().UpdateDarkUI(this);
     wxGetApp().UpdateDarkUI(m_treectrl);
 #endif
     // Colors for ui "decoration"
@@ -1026,7 +1031,7 @@ void Tab::sys_color_changed()
 
     // update options_groups
     if (m_active_page)
-        m_active_page->msw_rescale();
+        m_active_page->sys_color_changed();
 
     Layout();
 }

@@ -52,6 +52,7 @@ public:
     ~ManipulationEditor() {}
 
     void                msw_rescale();
+    void                sys_color_changed(ObjectManipulation* parent);
     void                set_value(const wxString& new_value);
     void                kill_focus(ObjectManipulation *parent);
 

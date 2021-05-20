@@ -1079,7 +1079,7 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
     else if (wxCheckListBox* list = dynamic_cast<wxCheckListBox*>(window)) {
         list->SetWindowStyle(list->GetWindowStyle() | wxBORDER_SIMPLE);
         list->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
-        for (int i = 0; i < list->GetCount(); i++)
+        for (size_t i = 0; i < list->GetCount(); i++)
             if (wxOwnerDrawn* item = list->GetItem(i)) {
                 item->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
                 item->SetTextColour(m_color_label_default);
@@ -1117,16 +1117,27 @@ void GUI_App::UpdateDlgDarkUI(wxDialog* dlg)
 void GUI_App::UpdateDVCDarkUI(wxDataViewCtrl* dvc, bool highlited/* = false*/)
 {
 #ifdef _WIN32
-    if (dark_mode()) {
-        UpdateDarkUI(dvc, highlited);
-        wxItemAttr attr(m_color_highlight_default,//m_color_label_default,
-            m_color_window_default,
-            m_normal_font);
-        dvc->SetHeaderAttr(attr);
-        if (dvc->HasFlag(wxDV_ROW_LINES))
-            dvc->SetAlternateRowColour(m_color_highlight_default);
-        if (dvc->GetBorder() != wxBORDER_SIMPLE)
-            dvc->SetWindowStyle(dvc->GetWindowStyle() | wxBORDER_SIMPLE);
+    UpdateDarkUI(dvc, highlited);
+    wxItemAttr attr(dark_mode() ? m_color_highlight_default : m_color_label_default,
+        m_color_window_default,
+        m_normal_font);
+    dvc->SetHeaderAttr(attr);
+    if (dvc->HasFlag(wxDV_ROW_LINES))
+        dvc->SetAlternateRowColour(m_color_highlight_default);
+    if (dvc->GetBorder() != wxBORDER_SIMPLE)
+        dvc->SetWindowStyle(dvc->GetWindowStyle() | wxBORDER_SIMPLE);
+#endif
+}
+
+void GUI_App::UpdateAllStaticTextDarkUI(wxWindow* parent)
+{
+#ifdef _WIN32
+    wxGetApp().UpdateDarkUI(parent);
+
+    auto children = parent->GetChildren();
+    for (auto child : children) {
+        if (dynamic_cast<wxStaticText*>(child))
+            child->SetForegroundColour(m_color_label_default);
     }
 #endif
 }

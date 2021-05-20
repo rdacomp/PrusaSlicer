@@ -663,6 +663,13 @@ void SearchDialog::on_dpi_changed(const wxRect& suggested_rect)
 
 void SearchDialog::on_sys_color_changed()
 {
+#ifdef _WIN32
+    GUI::wxGetApp().UpdateAllStaticTextDarkUI(this);
+    GUI::wxGetApp().UpdateDarkUI(static_cast<wxButton*>(this->FindWindowById(wxID_CANCEL, this)), true);
+    for (wxWindow* win : std::vector<wxWindow*> {search_line, search_list, check_category, check_english})
+        if (win) GUI::wxGetApp().UpdateDarkUI(win);
+#endif
+
     // msw_rescale updates just icons, so use it
     search_list_model->msw_rescale();
 

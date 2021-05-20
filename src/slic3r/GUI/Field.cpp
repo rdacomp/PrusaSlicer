@@ -413,6 +413,10 @@ void Field::msw_rescale()
 
 void Field::sys_color_changed()
 {
+#ifdef _WIN32
+	if (wxWindow* win = this->getWindow())
+		wxGetApp().UpdateDarkUI(win);
+#endif
 }
 
 template<class T>
@@ -1388,6 +1392,15 @@ void ColourPicker::msw_rescale()
 
     if (field->GetColour() == wxTransparentColour)
         set_undef_value(field);
+}
+
+void ColourPicker::sys_color_changed()
+{
+#ifdef _WIN32
+	if (wxWindow* win = this->getWindow())
+		if (wxColourPickerCtrl* picker = dynamic_cast<wxColourPickerCtrl*>(win))
+			wxGetApp().UpdateDarkUI(picker->GetPickerCtrl(), true);
+#endif
 }
 
 void PointCtrl::BUILD()

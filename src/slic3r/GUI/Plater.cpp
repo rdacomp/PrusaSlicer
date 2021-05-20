@@ -286,6 +286,7 @@ public:
     void            Show(const bool is_fff) override;
 
     void            msw_rescale();
+    void            sys_color_changed();
 };
 
 void FreqChangedParams::msw_rescale()
@@ -295,6 +296,17 @@ void FreqChangedParams::msw_rescale()
 
     for (auto btn: m_empty_buttons)
         btn->msw_rescale();
+}
+
+void FreqChangedParams::sys_color_changed()
+{
+    m_og->sys_color_changed();
+    m_og_sla->sys_color_changed();
+
+    for (auto btn: m_empty_buttons)
+        btn->msw_rescale();
+
+    wxGetApp().UpdateDarkUI(m_wiping_dialog_button, true);
 }
 
 FreqChangedParams::FreqChangedParams(wxWindow* parent) :
@@ -979,8 +991,19 @@ void Sidebar::msw_rescale()
 
 void Sidebar::sys_color_changed()
 {
-#ifdef __WXMSW__
-    wxGetApp().UpdateDarkUI(this);
+#ifdef _WIN32
+    wxWindowUpdateLocker noUpdates(this);
+
+    for (wxWindow* win : std::vector<wxWindow*>{ this, p->sliced_info->GetStaticBox(), p->object_info->GetStaticBox(), p->btn_reslice, p->btn_export_gcode })
+        wxGetApp().UpdateDarkUI(win);
+    for (wxWindow* win : std::vector<wxWindow*>{ p->scrolled, p->presets_panel })
+        wxGetApp().UpdateAllStaticTextDarkUI(win);
+    for (wxWindow* btn : std::vector<wxWindow*>{ p->btn_reslice, p->btn_export_gcode })
+        wxGetApp().UpdateDarkUI(btn, true);
+
+    p->mode_sizer->msw_rescale();
+    p->frequently_changed_parameters->sys_color_changed();
+    p->object_settings->sys_color_changed();
 #endif
 
     for (PlaterPresetComboBox* combo : std::vector<PlaterPresetComboBox*>{  p->combo_print,
@@ -991,7 +1014,6 @@ void Sidebar::sys_color_changed()
     for (PlaterPresetComboBox* combo : p->combos_filament)
         combo->msw_rescale();
 
-    p->object_list->msw_rescale();
     p->object_list->sys_color_changed();
     p->object_manipulation->sys_color_changed();
     p->object_layers->sys_color_changed();

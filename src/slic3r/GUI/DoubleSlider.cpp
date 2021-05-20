@@ -165,6 +165,8 @@ void Control::msw_rescale()
 
 void Control::sys_color_changed()
 {
+    GUI::wxGetApp().UpdateDarkUI(GetParent());
+
     m_bmp_add_tick_on .msw_rescale();
     m_bmp_add_tick_off.msw_rescale();
     m_bmp_del_tick_on .msw_rescale();
