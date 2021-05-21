@@ -16,7 +16,6 @@ void GLShapeDiameterFunction::draw() const
     GLShaderProgram *shader = wxGetApp().get_shader("sdf");
     assert(shader != nullptr);
     shader->start_using();
-    shader->set_uniform("model_matrix", tr_mat);
     shader->set_uniform("min_width", min_value);
     shader->set_uniform("width_range", fabs(max_value - min_value));
     shader->set_uniform("draw_normals", draw_normals);
@@ -62,9 +61,12 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
     if (mo == nullptr) return false;
     its = mo->raw_indexed_triangle_set(); // create new
     if(!initialize_indices()) return false;
-
-    tr_mat = mo->instances.front()->get_matrix(); 
-    //for (auto &vertex : its.vertices) {}
+    
+    // Transform mesh - scale and scew could change width on model
+    Transform3d tr_mat = mo->instances.front()->get_matrix();
+    for (auto &vertex : its.vertices) {
+        vertex = (tr_mat*vertex.cast<double>()).cast<float>();
+    }
 
     tree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(
         its.vertices, its.indices);
@@ -118,4 +120,8 @@ bool GLShapeDiameterFunction::initialize_indices()
     glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     indices_count = indices.size() * 3;
     return true;
+}
+
+void GLShapeDiameterFunction::render_normals() {
+
 }

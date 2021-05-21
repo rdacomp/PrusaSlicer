@@ -44,6 +44,8 @@ public:
 private:
     bool initialize_indices();
 
+    void render_normals();
+
     // structure uploaded to GPU
     struct Vertex
     {
@@ -62,7 +64,6 @@ private:
 
     // draw information
     size_t indices_count = 0;
-    Transform3d tr_mat;
 
     ShapeDiameterFunction::Directions unit_z_rays;
     // normals for each vertex of mesh

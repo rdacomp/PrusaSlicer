@@ -20,8 +20,6 @@ attribute vec4 v_position;
 attribute vec3 v_normal;
 attribute float v_width;
 
-uniform mat4 model_matrix;
-
 varying vec3 normal;
 varying float width;
 
@@ -31,12 +29,12 @@ varying vec2 intensity;
 
 void main()
 {
-    gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * model_matrix * v_position;   
+    gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * v_position;   
     width = v_width;
     normal = v_normal;
         
     // First transform the normal into camera space and normalize the result.
-    vec4 model_normal = model_matrix * vec4(v_normal.xyz, 0.);    
+    vec4 model_normal = vec4(v_normal.xyz, 0.);    
     vec3 eye_normal = normalize(gl_NormalMatrix * gl_Normal * model_normal.xyz);
     
     // Compute the cos of the angle between the normal and lights direction. The light is directional so the direction is constant for every vertex.
@@ -44,7 +42,7 @@ void main()
     float NdotL = max(dot(eye_normal, LIGHT_TOP_DIR), 0.0);
 
     intensity.x = INTENSITY_AMBIENT + NdotL * LIGHT_TOP_DIFFUSE;
-    vec3 position = (gl_ModelViewMatrix * model_matrix * v_position).xyz;
+    vec3 position = (gl_ModelViewMatrix * v_position).xyz;
     intensity.y = LIGHT_TOP_SPECULAR * pow(max(dot(-normalize(position), reflect(-LIGHT_TOP_DIR, eye_normal)), 0.0), LIGHT_TOP_SHININESS);
 
     // Perform the same lighting calculation for the 2nd light source (no specular applied).
