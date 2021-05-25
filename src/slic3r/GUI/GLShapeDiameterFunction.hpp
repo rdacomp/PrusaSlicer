@@ -1,6 +1,8 @@
 #ifndef slic3r_GLShapeDiameterFunction_hpp_
 #define slic3r_GLShapeDiameterFunction_hpp_
 
+#include <memory>
+
 #include <libslic3r/Model.hpp>
 #include <libslic3r/Point.hpp>
 #include <libslic3r/AABBTreeIndirect.hpp>
@@ -27,12 +29,17 @@ public:
     float angle = 120; // [in deg] in range from 1 to 179
     size_t count_samples = 1; // count samples on half sphere
 
+    float normal_width = 0.1f;
+    float normal_length = .5f;
+
+public:
     GLShapeDiameterFunction() = default; // set default values
     ~GLShapeDiameterFunction() = default; // needed by PIMPL in GLCanvas3D.hpp
 
     void set_enabled(bool enable) { enabled = enable; };
     bool is_enabled() const { return enabled; };
     size_t get_ray_count() const { return unit_z_rays.size(); }
+    const indexed_triangle_set &get_triangle_set() const { return tree.vertices_indices; }
     
     void draw() const;
 
@@ -44,7 +51,8 @@ public:
 private:
     bool initialize_indices();
 
-    void render_normals();
+    void render_normals() const;
+    void render_rays() const;
 
     // structure uploaded to GPU
     struct Vertex
@@ -67,11 +75,10 @@ private:
 
     ShapeDiameterFunction::Directions unit_z_rays;
     // normals for each vertex of mesh
-    indexed_triangle_set its;
-    // same count as its::vertices - should be inside of index triangle set
-    std::vector<Vec3f> normals; 
+    ShapeDiameterFunction::IndexTriangleNormals triangles;
 
-    AABBTreeIndirect::Tree3f tree;    
+    // tree for ray cast
+    ShapeDiameterFunction::AABBTree tree;
 };
 
 } // namespace Slic3r::GUI

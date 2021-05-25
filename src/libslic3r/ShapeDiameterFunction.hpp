@@ -23,9 +23,39 @@ public:
     using Directions = std::vector<Direction>;
 
     /// <summary>
+    /// DTO extends indexed_triangle_set with normals of triangles
+    /// </summary>
+    struct IndexTriangleNormals : public indexed_triangle_set
+    {
+        std::vector<Vec3f> triangle_normals; // same count as indexed_triangle_set.indices
+        std::vector<Vec3f> vertex_normals;  // same count as indexed_triangle_set.vertuces     
+    };
+
+    struct AABBTree
+    {
+        AABBTreeIndirect::Tree3f tree;
+
+        // for measure ray and surface angle
+        // condition of 90 deg from oposit direction of normal
+        std::vector<Vec3f> triangle_normals; 
+
+        // needed by function AABBTreeIndirect::intersect_ray_first_hit
+        indexed_triangle_set vertices_indices;
+    };
+
+    /// <summary>
     /// Only static functions
     /// </summary>
     ShapeDiameterFunction() = delete;
+
+    /// <summary>
+    /// Divide every triangle with longer side than max_length
+    /// </summary>
+    /// <param name="its">Input triangles</param>
+    /// <param name="max_length">Maximal length</param>
+    /// <returns>Divided triangle set</returns>
+    indexed_triangle_set subdivide(const indexed_triangle_set &its,
+                                   float                       max_length);
 
     /// <summary>
     /// Calculate width in point given by weighted average width
@@ -36,25 +66,22 @@ public:
     /// <param name="its">Needed by tree function</param>
     /// <param name="tree">AABB tree to fast detect first intersection</param>
     /// <returns>Width of model for surface point</returns>
-    static float calc_width(const Vec3f &                   point,
-                            const Vec3f &                   normal,
-                            const Directions &              dirs,
-                            const indexed_triangle_set &    its,
-                            const AABBTreeIndirect::Tree3f &tree);
+    static float calc_width(const Vec3f &     point,
+                            const Vec3f &     normal,
+                            const Directions &dirs,
+                            const AABBTree &  tree);
 
     /// <summary>
     /// Concurrent calculation of width for each vertex
     /// </summary>
+    /// <param name="triangles">Vertices, indices and normals</param>
     /// <param name="dirs">Direction to cast rays</param>
-    /// <param name="its">Needed by tree function</param>
-    /// <param name="normals">Normal direction in vertex - same size as its vertices</param>
     /// <param name="tree">AABB tree to fast detect first intersection</param>
-    /// <returns></returns>
-    static std::vector<float> calc_widths(
-                            const Directions &              dirs,
-                            const indexed_triangle_set &    its,
-                            const std::vector<Vec3f>& normals,
-                            const AABBTreeIndirect::Tree3f &tree);
+    /// <returns>Width for each vertex</returns>
+    static std::vector<float> calc_widths(const std::vector<Vec3f> &points,
+                                          const std::vector<Vec3f> &normals,
+                                          const Directions &        dirs,
+                                          const AABBTree &tree);
 
     /// <summary>
     /// Create points on unit sphere surface. with weight by z value
@@ -63,6 +90,43 @@ public:
     /// <param name="count_samples"></param>
     /// <returns></returns>
     static Directions create_fibonacci_sphere_samples(double angle, size_t count_samples);
+
+    /// <summary>
+    /// Find shortest edge in index triangle set
+    /// TODO: move to its utils
+    /// </summary>
+    /// <param name="its">input definition of triangle --> every triangle has 3 edges to explore</param>
+    /// <returns>Length of shortest edge</returns>
+    static float min_triangle_side_length(const indexed_triangle_set &its);
+
+    /// <summary>
+    /// Find shortest edge in index triangle set
+    /// TODO: move to triangle utils
+    /// </summary>
+    /// <param name="v0">Triangle vertex</param>
+    /// <param name="v1">Triangle vertex</param>
+    /// <param name="v2">Triangle vertex</param> 
+    /// <returns>Area of triangle</returns>
+    static float triangle_area(const Vec3f &v0,
+                               const Vec3f &v1,
+                               const Vec3f &v2);
+
+    /// <summary>
+    /// Calculate area
+    /// TODO: move to its utils
+    /// </summary>
+    /// <param name="inices">Triangle indices - index to vertices</param>
+    /// <param name="vertices">Mesh vertices</param>
+    /// <returns>Area of triangles</returns>
+    static float triangle_area(const Vec3crd &inices, const std::vector<Vec3f> &vertices);
+
+    /// <summary>
+    /// Calculate surface area of all triangles defined by indices.
+    /// TODO: move to its utils
+    /// </summary>
+    /// <param name="its">Indices and Vertices</param>
+    /// <returns>Surface area as sum of triangle areas</returns>
+    static float area(const indexed_triangle_set &its);
 
 private:
     // for debug purpose
