@@ -3,16 +3,6 @@
 
 using namespace Slic3r;
 
-indexed_triangle_set ShapeDiameterFunction::subdivide(
-    const indexed_triangle_set &its, float max_length)
-{
-    indexed_triangle_set result;
-    result.vertices = its.vertices;
-    for (const Vec3crd &index : its.indices) {
-        
-    }
-}
-
 float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                         const Vec3f &     normal,
                                         const Directions &dirs,
@@ -143,6 +133,126 @@ ShapeDiameterFunction::create_fibonacci_sphere_samples(double angle,
     // store(points);
     return points;
 }
+
+indexed_triangle_set ShapeDiameterFunction::subdivide(
+    const indexed_triangle_set &its, float max_length)
+{
+    struct TriangleLengths
+    {
+        Vec3crd indices;
+        Vec3f l; // lengths
+        TriangleLengths(const Vec3crd &           indices,
+                        const std::vector<Vec3f> &vertices): indices(indices)
+        {
+            const Vec3f &v0 = vertices[indices[0]];
+            const Vec3f &v1 = vertices[indices[1]];
+            const Vec3f &v2 = vertices[indices[2]];
+            Vec3f e0 = v0 - v1;
+            Vec3f e1 = v1 - v2;
+            Vec3f e2 = v2 - v0;
+
+            l[0] = e0.norm();
+            l[1] = e1.norm();
+            l[2] = e2.norm();
+        }
+
+        TriangleLengths(const Vec3crd &indices, const Vec3f &lengths)
+            : indices(indices), l(lengths)
+        {}
+
+        int get_divide_index(float max_length) {
+            if (l[0] > l[1] && l[0] > l[2]) {
+                if (l[0] > max_length) return 0;
+            } else if (l[1] > l[2]) {
+                if (l[1] > max_length) return 1;
+            } else {
+                if (l[2] > max_length) return 2;
+            }
+            return -1;
+        }
+
+        float calc_divide_ratio(int divide_index, float max_length)
+        {
+            float  length = l[divide_index];
+            int    count  = static_cast<int>(floor(length / max_length));
+            if (count % 2 != 0) {
+                return .5f;
+            }
+
+            float divider = static_cast<float>(count + 1);
+            int half_count = count / 2;
+            if (l[(divide_index + 1) % 3] > l[(divide_index + 2) % 3]) {
+                return half_count / divider;
+            } else {
+                return (half_count + 1) / divider;
+            }
+        }
+
+        // divide triangle add new vertex to vertices
+        std::pair<TriangleLengths, TriangleLengths> divide(
+            int divide_index, float max_length, std::vector<Vec3f> &vertices)
+        {
+            float ratio = calc_divide_ratio(divide_index, max_length);
+
+            // index to lengths and indices
+            size_t i0 = divide_index;
+            size_t i1 = (divide_index + 1) % 3;
+            size_t i2 = (divide_index + 2) % 3;
+
+            size_t vi0   = indices[i0];
+            size_t vi1   = indices[i1];
+            size_t vi2   = indices[i2];
+
+            const Vec3f &v0 = vertices[vi0];
+            const Vec3f &v1 = vertices[vi1];
+
+            Vec3f   dir        = v1 - v0;
+            Vec3f   new_vertex = v0 + dir * ratio;
+            coord_t new_index  = vertices.size();
+            vertices.push_back(new_vertex);
+
+            const Vec3f &v2 = vertices[vi2];
+            Vec3f        new_edge = v2 - new_vertex;
+            float        new_len  = new_edge.norm();
+            float len1 = l[i0] * ratio;
+            float len2 = l[i0] - len1;
+
+            Vec3crd indices1(vi0, new_index, vi2);
+            Vec3f lengths1(len1, new_len, l[i2]);
+            
+            Vec3crd indices2(new_index, vi1, vi2);
+            Vec3f lengths2(len2, l[i1], new_len);
+
+            return {TriangleLengths(indices1, lengths1),
+                    TriangleLengths(indices2, lengths2)};
+        }
+    };
+    indexed_triangle_set result;
+    result.indices.reserve(its.indices.size());
+    const std::vector<Vec3f> &vertices = its.vertices;
+    result.vertices = vertices; // copy
+    std::queue<TriangleLengths> tls;
+    for (const Vec3crd &indices : its.indices) {
+        TriangleLengths tl(indices, vertices);
+        do {
+            int divide_index = tl.get_divide_index(max_length);
+            if (divide_index < 0) {
+                // no dividing
+                result.indices.push_back(tl.indices);
+                if (tls.empty()) break;
+                tl = tls.front(); // copy
+                tls.pop();
+            } else {
+                auto [tl1, tl2] = tl.divide(divide_index, max_length,
+                                            result.vertices);
+                tl = tl1;
+                tls.push(tl2);                
+            }
+        } while (true);
+    }
+    return result;
+}
+
 
 float ShapeDiameterFunction::min_triangle_side_length(
     const indexed_triangle_set &its)

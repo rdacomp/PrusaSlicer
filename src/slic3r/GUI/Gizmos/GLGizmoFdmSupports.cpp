@@ -145,18 +145,18 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {
             sdf.set_enabled(false);
         }
-        if (m_imgui->button("Re-Calc", 0.f, 0.f)) {
+        ImGui::SameLine();
+        if (m_imgui->button("Re-Init", 0.f, 0.f)) {
             sdf.initialize_model(m_c->selection_info()->model_object());
         }
-        m_imgui->checkbox("Normals", sdf.draw_normals);
-        if (sdf.draw_normals) { 
+        m_imgui->checkbox("Normals", sdf.allow_render_normals);
+        if (sdf.allow_render_normals) { 
             ImGui::SameLine();
             m_imgui->slider_float("width", &sdf.normal_width, 1e-3f, 1.f);
             ImGui::SameLine();
             m_imgui->slider_float("len", &sdf.normal_length, 1e-3f, 10.f);
         }
 
-        m_imgui->text("Normal Type:");
         // using enum NormalUtils::VertexNormalType; since C++20
         NormalUtils::VertexNormalType &type = sdf.normal_type;
         auto set_type = [&](NormalUtils::VertexNormalType &new_type) {
@@ -184,17 +184,13 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         if (m_imgui->slider_float("angle", &sdf.angle, 1.f, 179.f)) {
             sdf.initialize_width();            
         }
-
-        float triangle_size = ShapeDiameterFunction::min_triangle_side_length(sdf.get_triangle_set());            
-        if (ImGui::InputFloat("max_triangle_size", &triangle_size, 1e-3f, 1e-1f, 3)) {
-            
-        }
-        // triangle area
+        m_imgui->checkbox("Vertices", sdf.allow_render_vertices); 
+        if (m_imgui->checkbox("divide", sdf.allow_divide_triangle))
+            sdf.divide();
         ImGui::SameLine();
-        static float area = ShapeDiameterFunction::area(sdf.get_triangle_set());
-        float triangle_area = triangle_size * triangle_size * sqrt(3) / 4.f;
-        size_t aprox_count   = area / triangle_area;
-        m_imgui->text(("area is " + std::to_string(area) + " aprox count " + std::to_string(aprox_count) + "("+ std::to_string(sdf.get_triangle_set().indices.size())+")").c_str());
+        if (m_imgui->slider_float("max_triangle_size", &sdf.max_triangle_size, 2e-2f, 100.f)) {
+            sdf.divide();
+        }
     }else if (m_imgui->button("Activate_SDF", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
             m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();

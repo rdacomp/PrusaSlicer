@@ -35,7 +35,7 @@ public:
     {
         AABBTreeIndirect::Tree3f tree;
 
-        // for measure ray and surface angle
+        // for measure angle between ray and hit surface normal
         // condition of 90 deg from oposit direction of normal
         std::vector<Vec3f> triangle_normals; 
 
@@ -47,15 +47,6 @@ public:
     /// Only static functions
     /// </summary>
     ShapeDiameterFunction() = delete;
-
-    /// <summary>
-    /// Divide every triangle with longer side than max_length
-    /// </summary>
-    /// <param name="its">Input triangles</param>
-    /// <param name="max_length">Maximal length</param>
-    /// <returns>Divided triangle set</returns>
-    indexed_triangle_set subdivide(const indexed_triangle_set &its,
-                                   float                       max_length);
 
     /// <summary>
     /// Calculate width in point given by weighted average width
@@ -90,6 +81,23 @@ public:
     /// <param name="count_samples"></param>
     /// <returns></returns>
     static Directions create_fibonacci_sphere_samples(double angle, size_t count_samples);
+
+    /// <summary>
+    /// divide each triangle with biger side length than max_length
+    /// </summary>
+    /// <param name="its"></param>
+    /// <param name="max_length"></param>
+    /// <returns>new triangle_set</returns>
+    static indexed_triangle_set subdivide(const indexed_triangle_set &its, float max_length);
+
+
+    struct SurfacePoint
+    {
+        Vec3f position;
+        size_t source_index;
+    };
+    static std::vector<SurfacePoint> uniform_surface_samples(
+        const indexed_triangle_set &its, float maximal_distance);
 
     /// <summary>
     /// Find shortest edge in index triangle set

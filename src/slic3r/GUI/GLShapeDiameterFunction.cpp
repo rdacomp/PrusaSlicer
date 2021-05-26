@@ -17,7 +17,7 @@ void GLShapeDiameterFunction::draw() const
     shader->start_using();
     shader->set_uniform("min_width", min_value);
     shader->set_uniform("width_range", fabs(max_value - min_value));
-    shader->set_uniform("draw_normals", draw_normals);
+    shader->set_uniform("draw_normals", allow_render_normals);
 
     unsigned int stride = Vertex::size();
     GLint position_id = shader->get_attrib_location("v_position");
@@ -52,7 +52,8 @@ void GLShapeDiameterFunction::draw() const
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
 
     shader->stop_using();   
-    if (draw_normals) render_normals();
+    if (allow_render_normals) render_normals();
+    if (allow_render_vertices) render_vertices();
     render_rays();
 }
 
@@ -68,15 +69,26 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
         vertex = (tr_mat*vertex.cast<double>()).cast<float>();
     }    
 
-    triangles.indices = its.indices; // copy
-    triangles.vertices = its.vertices; // copy
-    if(!initialize_indices()) return false;
-
     // create tree
-    tree.vertices_indices = its;
+    tree.vertices_indices = its; // copy
     tree.triangle_normals = NormalUtils::create_triangle_normals(its);
     tree.tree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(
         its.vertices, its.indices);
+    return divide();
+}
+
+bool GLShapeDiameterFunction::divide() {
+    const indexed_triangle_set& its = tree.vertices_indices;
+    if (!allow_divide_triangle) {
+        triangles.indices  = its.indices;  // copy
+        triangles.vertices = its.vertices; // copy
+    } else {
+        indexed_triangle_set divided =
+            ShapeDiameterFunction::subdivide(its, max_triangle_size);
+        triangles.indices  = divided.indices;  // copy
+        triangles.vertices = divided.vertices; // copy
+    }
+    if(!initialize_indices()) return false;
     return initialize_normals();
 }
 
@@ -181,6 +193,56 @@ void GLShapeDiameterFunction::render_normals() const {
             Eigen::AngleAxis<float>(angle, axis)
         );
         render_normal(tr);
+    }
+    shader->stop_using();
+}
+
+GLModel create_tetrahedron(float size) {
+    indexed_triangle_set its;
+    float s_2 = size / 2.f;
+    its.vertices = {
+        Vec3f(0.f, 0.f, size), 
+        Vec3f(-s_2, -s_2, 0.f), 
+        Vec3f(s_2, -s_2, 0.f),
+        Vec3f(0.f, s_2, 0.f)
+    };
+    its.indices = {
+        Vec3crd(0, 1, 2), 
+        Vec3crd(0, 2, 3), 
+        Vec3crd(0, 3, 1),
+        Vec3crd(1, 2, 3)
+    };
+    TriangleMesh tm(its);
+    GLModel      model;
+    model.init_from(tm);
+    return model;
+}
+
+void GLShapeDiameterFunction::render_vertices() const
+{
+    GLModel tetrahedron = create_tetrahedron(1.f);
+    auto    render_model = [&](const Transform3f &transform) {
+        glsafe(::glPushMatrix());
+        glsafe(::glMultMatrixf(transform.data()));
+        tetrahedron.render();
+        glsafe(::glPopMatrix());
+    };
+
+    GLShaderProgram *shader = wxGetApp().get_shader("gouraud_light");
+    if (shader == nullptr) return;
+    // normal color
+    std::array<float, 4> color = {.2f, .2f, .8f, 1.f};
+    shader->start_using();
+    shader->set_uniform("uniform_color", color);
+    Vec3f z_one(0.f, 0.f, 1.f);
+    for (size_t index = 0; index < triangles.vertices.size(); ++index) {
+        const Vec3f &vertex = triangles.vertices[index];
+        const Vec3f &normal = triangles.vertex_normals[index];
+        Vec3f       axis  = z_one.cross(normal);
+        float       angle = acos(z_one.dot(normal));
+        Transform3f tr(Eigen::Translation<float, 3>(vertex) *
+                       Eigen::AngleAxis<float>(angle, axis));
+        render_model(tr);
     }
     shader->stop_using();
 }

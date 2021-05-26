@@ -25,12 +25,16 @@ public:
         NormalUtils::VertexNormalType::NelsonMaxWeighted;
     float min_value = 0.1f;
     float max_value = 10.f;
-    bool draw_normals = false;
+    bool allow_render_normals = false;
     float angle = 120; // [in deg] in range from 1 to 179
     size_t count_samples = 1; // count samples on half sphere
 
     float normal_width = 0.1f;
     float normal_length = .5f;
+
+    bool allow_divide_triangle = false;
+    bool  allow_render_vertices = false;
+    float max_triangle_size = 5.f;
 
 public:
     GLShapeDiameterFunction() = default; // set default values
@@ -45,12 +49,15 @@ public:
 
     // create vertex shader data for draw
     bool initialize_model(const ModelObject *mo);
-    // calculate width(tree and normals are already calculated)
+    // call after change max_triangle_size
+    bool divide(); // subdivide triangles
+    // call when change source for normals
     bool initialize_normals();
+    // calculate width(tree and normals are already calculated)
     bool initialize_width();
 private:
     bool initialize_indices();
-
+    void render_vertices() const;
     void render_normals() const;
     void render_rays() const;
 
