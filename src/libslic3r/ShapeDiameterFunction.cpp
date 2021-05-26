@@ -6,7 +6,9 @@ using namespace Slic3r;
 float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                         const Vec3f &     normal,
                                         const Directions &dirs,
-                                        const AABBTree &  tree)
+                                        const AABBTree &  tree,
+                                        float             allowed_deviation,
+                                        float             allowed_angle)
 {
     // safe against ray intersection with origin trinagle made by source vertex
     const double safe_move = 1e-5;
@@ -42,9 +44,12 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
 
         // check angle of hitted traingle
         Vec3f hit_normal = tree.triangle_normals[hit.id];
-        float angle      = std::acos(normal.dot(hit_normal));
+        float dot        = normal.dot(hit_normal);
+        if (dot < -1.f) dot = -1.f;
+        if (dot > 1.f) dot = 1.f;
+        float angle = std::acos(dot);
         // IMPROVE: Test correct border angle It could be bigger than 90 DEG
-        if (angle < M_PI_2) continue;  
+        if (angle < allowed_angle) continue;  
 
         float width = hit.t;
         widths.push_back(width);
@@ -52,21 +57,24 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
         sum_width += width;
         sq_sum_width += width * width;
     }
-    // statistics of widths - meand and standart deviation
-    float mean = sum_width / widths.size();
-    float stdev = std::sqrt(sq_sum_width / widths.size() - mean * mean);
+    if (widths.empty()) return no_width;
+    if (widths.size() == 1) return widths.front();
 
+    // statistics of widths - mean and standart deviation
+    float mean = sum_width / widths.size();
+    float standard_deviation = std::sqrt(sq_sum_width / widths.size() - mean * mean);
+    float threshold_deviation = standard_deviation * allowed_deviation;
     sum_width = 0.f;
     float sum_weight = 0.f;
     for (size_t i = 0; i < widths.size(); i++) {
         const float &width = widths[i];
         // skip values out of standart deviation
-        if (fabs(width - mean) > stdev) continue;
+        if (fabs(width - mean) > threshold_deviation) continue;
         const float &weight = weights[i];
         sum_width += width * weight;
         sum_weight += weight;
     }
-    if (sum_weight <= 0.) return no_width;
+    if (sum_weight <= 0.) return mean;
     return sum_width / sum_weight + safe_move;
 }
 
@@ -74,7 +82,9 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     const std::vector<Vec3f> &points,
     const std::vector<Vec3f> &normals,
     const Directions &        dirs,
-    const AABBTree &          tree)
+    const AABBTree &          tree,
+    float                     allowed_deviation,
+    float                     allowed_angle)
 {
     // check input
     assert(!points.empty());
@@ -87,14 +97,15 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     size_t                  size        = points.size();
     std::vector<float>      widths(size);
     tbb::parallel_for(tbb::blocked_range<size_t>(0, size),
-                      [&](const tbb::blocked_range<size_t> &range) {
-                          for (size_t index = range.begin();
-                               index < range.end(); ++index) {
-                              const Vec3f &vertex = points[index];
-                              const Vec3f &normal = normals[index];
-                              widths[index] = calc_width(vertex, normal, dirs, tree);
-                          }
-                      });
+        [&](const tbb::blocked_range<size_t> &range) {
+            for (size_t index = range.begin();
+            index < range.end(); ++index) {
+            const Vec3f &vertex = points[index];
+            const Vec3f &normal = normals[index];
+            widths[index] = calc_width(vertex, normal, dirs, tree,
+                                        allowed_deviation, allowed_angle);
+        }
+    });
     return widths;
 }
 

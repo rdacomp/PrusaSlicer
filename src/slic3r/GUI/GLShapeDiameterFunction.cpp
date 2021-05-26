@@ -62,9 +62,9 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
     initialized = false;
     if (mo == nullptr) return false;
     indexed_triangle_set its = mo->raw_indexed_triangle_set(); // create new
-        
-    // Transform mesh - scale and scew could change width on model
+    
     Transform3d tr_mat = mo->instances.front()->get_matrix();
+    // Transform mesh - scale and scew could change width on model
     for (auto &vertex : its.vertices) {
         vertex = (tr_mat*vertex.cast<double>()).cast<float>();
     }    
@@ -103,7 +103,8 @@ bool GLShapeDiameterFunction::initialize_width() {
     std::vector<float> widths =
         ShapeDiameterFunction::calc_widths(triangles.vertices,
                                            triangles.vertex_normals,
-                                           unit_z_rays, tree);
+                                           unit_z_rays, tree,
+                                           allowed_deviation, allowed_angle);
 
     // merge vertices normal and width together for GPU
     std::vector<Vertex> buffer = {};

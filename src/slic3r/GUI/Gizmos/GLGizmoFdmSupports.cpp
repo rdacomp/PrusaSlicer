@@ -132,17 +132,12 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     
     m_imgui->text("");
     ImGui::Separator();
-    m_imgui->text("highlight thin parts: ");
-    ImGui::AlignTextToFramePadding();
-    std::string description =
-        std::string("%.f") +
-        I18N::translate_utf8("mm", "Minimal threshold for width to be highlighted");
-    ImGui::SameLine(autoset_slider_left);
-    ImGui::PushItemWidth(window_width - autoset_slider_left);
+    m_imgui->text("SDF: ");
+    ImGui::SameLine();
 
     GLShapeDiameterFunction& sdf = *m_parent.sdf;
     if (m_parent.sdf != nullptr && sdf.is_enabled()) {
-        if (m_imgui->button("Deactivate_SDF", 0.f, 0.f)) {
+        if (m_imgui->button("Deactivate", 0.f, 0.f)) {
             sdf.set_enabled(false);
         }
         ImGui::SameLine();
@@ -170,10 +165,14 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         new_type = NormalUtils::VertexNormalType::NelsonMaxWeighted;
         if (ImGui::RadioButton("NelsonMaxWeighted", type == new_type)) { set_type(new_type); } 
 
-        m_imgui->text("color mapping:");
-        m_imgui->slider_float("min_val", &sdf.min_value, 0.001f, 100.f);
-        m_imgui->slider_float("max_val", &sdf.max_value, 0.001f, 100.f);
+        m_imgui->text("color range:");
+        ImGui::SameLine();
+        m_imgui->slider_float("min", &sdf.min_value, 0.001f, 100.f);
+        ImGui::SameLine();
+        m_imgui->slider_float("max", &sdf.max_value, 0.001f, 100.f);
+
         m_imgui->text("rays:");
+        ImGui::SameLine();
         int count = sdf.count_samples;
         if (ImGui::SliderInt("count", &count, 1, 100)) {
             sdf.count_samples = count;
@@ -181,9 +180,47 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
         ImGui::SameLine();
         m_imgui->text(("=" + std::to_string(sdf.get_ray_count())));
+        ImGui::SameLine();
         if (m_imgui->slider_float("angle", &sdf.angle, 1.f, 179.f)) {
             sdf.initialize_width();            
         }
+
+        m_imgui->text("filter:");
+        ImGui::SameLine();
+        bool allowed_angle = sdf.allowed_angle > 0.f;
+        if (m_imgui->checkbox("angl", allowed_angle)) { 
+            if (allowed_angle) { 
+                sdf.allowed_angle = M_PI_2;
+            } else {
+                sdf.allowed_angle = -1.f;
+            }
+            sdf.initialize_width();
+        }
+        if (allowed_angle) {
+            ImGui::SameLine();
+            if (m_imgui->slider_float("#angle", &sdf.allowed_angle, 0.f,
+                                      (float) M_PI)) {
+                sdf.initialize_width();
+            }
+        }
+
+        ImGui::SameLine();
+        bool allowed_deviation = sdf.allowed_deviation > 0.f;
+        if (m_imgui->checkbox("dev", allowed_deviation)) {
+            if (allowed_deviation) {
+                sdf.allowed_deviation = 1.f;
+            } else {
+                sdf.allowed_deviation = -1.f;
+            }
+            sdf.initialize_width();
+        }
+        if (allowed_deviation) {
+            ImGui::SameLine();
+            if (m_imgui->slider_float("#deviation", &sdf.allowed_deviation, 0.5f, 2.f)) {
+                sdf.initialize_width();
+            }
+        }
+
         m_imgui->checkbox("Vertices", sdf.allow_render_vertices); 
         if (m_imgui->checkbox("divide", sdf.allow_divide_triangle))
             sdf.divide();
@@ -191,7 +228,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         if (m_imgui->slider_float("max_triangle_size", &sdf.max_triangle_size, 2e-2f, 100.f)) {
             sdf.divide();
         }
-    }else if (m_imgui->button("Activate_SDF", 0.f, 0.f)) {
+    }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
             m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();
         }
@@ -199,7 +236,6 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         m_parent.sdf->set_enabled(true);
     }
 
-    m_imgui->text("");
     ImGui::Separator();
 
     m_imgui->text(m_desc["highlight_by_angle"] + ":");

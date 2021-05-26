@@ -56,11 +56,18 @@ public:
     /// <param name="dirs">Direction to cast rays</param>
     /// <param name="its">Needed by tree function</param>
     /// <param name="tree">AABB tree to fast detect first intersection</param>
+    /// <param name="allowed_deviation">Multiplicator of standart deviation to be result of ray counted,
+    /// negative number means no filtration by deviation, 
+    /// be carefull with value 1. std_dev and means are calculated with float precision</param>
+    /// <param name="allowed_angle">Maximal angle between normal and hitted triangle normal [in Radians]
+    /// negative number means no filtration by angle</param>
     /// <returns>Width of model for surface point</returns>
     static float calc_width(const Vec3f &     point,
                             const Vec3f &     normal,
                             const Directions &dirs,
-                            const AABBTree &  tree);
+                            const AABBTree &  tree,
+                            float             allowed_deviation,
+                            float             allowed_angle);
 
     /// <summary>
     /// Concurrent calculation of width for each vertex
@@ -68,11 +75,18 @@ public:
     /// <param name="triangles">Vertices, indices and normals</param>
     /// <param name="dirs">Direction to cast rays</param>
     /// <param name="tree">AABB tree to fast detect first intersection</param>
+    /// <param name="allowed_deviation">Multiplicator of standart deviation to be result of ray counted,
+    /// negative number means no filtration by deviation, 
+    /// be carefull with value 1. std_dev and means are calculated with float precision</param>
+    /// <param name="allowed_angle">Maximal angle between normal and hitted triangle normal [in Radians]
+    /// negative number means no filtration by angle</param>
     /// <returns>Width for each vertex</returns>
     static std::vector<float> calc_widths(const std::vector<Vec3f> &points,
                                           const std::vector<Vec3f> &normals,
                                           const Directions &        dirs,
-                                          const AABBTree &tree);
+                                          const AABBTree &          tree,
+                                          float allowed_deviation = 1.5f,
+                                          float allowed_angle     = M_PI_2);
 
     /// <summary>
     /// Create points on unit sphere surface. with weight by z value

@@ -32,6 +32,10 @@ public:
     float normal_width = 0.1f;
     float normal_length = .5f;
 
+    // filtration of rays
+    float allowed_angle     = M_PI_2;
+    float allowed_deviation = 1.5f;
+
     bool allow_divide_triangle = false;
     bool  allow_render_vertices = false;
     float max_triangle_size = 5.f;
