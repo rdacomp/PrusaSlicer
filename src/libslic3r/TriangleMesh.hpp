@@ -113,7 +113,7 @@ int its_compactify_vertices(indexed_triangle_set &its, bool shrink_to_fit = true
 using FaceNeighborIndex = std::vector< std::array<size_t, 3> >;
 
 // Create index that gives neighbor faces for each face. Ignores face orientations.
-FaceNeighborIndex its_create_neighbors_index(const indexed_triangle_set &its);
+std::vector<Vec3i> its_create_neighbors_index(const indexed_triangle_set &its);
 
 std::vector<indexed_triangle_set> its_split(const indexed_triangle_set &its);
 

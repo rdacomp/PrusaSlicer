@@ -2,6 +2,7 @@
 #define MESHSPLITIMPL_HPP
 
 #include "TriangleMesh.hpp"
+#include "libnest2d/tools/benchmark.h"
 
 namespace Slic3r {
 
@@ -15,7 +16,7 @@ template<class Its, class Enable = void> struct ItsWithNeighborsIndex_ {
 
 // Define a default neighbors index for indexed_triangle_set
 template<> struct ItsWithNeighborsIndex_<indexed_triangle_set> {
-    using Index = FaceNeighborIndex;
+    using Index = std::vector<Vec3i>;
     static const indexed_triangle_set &get_its(const indexed_triangle_set &its) noexcept { return its; }
     static Index get_index(const indexed_triangle_set &its) noexcept
     {
@@ -156,9 +157,6 @@ template<class Its> bool its_is_splittable(const Its &m)
 
     return it != visited.end();
 }
-
-std::vector<Vec3i> its_create_neighbors_index_2(const indexed_triangle_set &its);
-FaceNeighborIndex its_create_neighbors_index_3(const indexed_triangle_set &its);
 
 } // namespace Slic3r
 
