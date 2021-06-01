@@ -202,6 +202,7 @@ add_library(libslic3r STATIC
     TriangleMesh.hpp
     TriangleMeshSlicer.cpp
     TriangleMeshSlicer.hpp
+    MeshSplitImpl.hpp
     TriangulateWall.hpp
     TriangulateWall.cpp
     utils.cpp

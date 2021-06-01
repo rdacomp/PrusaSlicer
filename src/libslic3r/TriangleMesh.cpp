@@ -1,8 +1,10 @@
 #include "Exception.hpp"
 #include "TriangleMesh.hpp"
 #include "TriangleMeshSlicer.hpp"
+#include "MeshSplitImpl.hpp"
 #include "ClipperUtils.hpp"
 #include "Geometry.hpp"
+#include "Point.hpp"
 
 #include <libqhullcpp/Qhull.h>
 #include <libqhullcpp/QhullFacetList.h>
@@ -1152,67 +1154,21 @@ float its_volume(const indexed_triangle_set &its)
     return volume;
 }
 
-std::vector<size_t> its_find_unvisited_neighbors(
-    const indexed_triangle_set &its,
-    const FaceNeighborIndex &   neighbor_index,
-    std::vector<bool> &         visited)
+std::vector<indexed_triangle_set> its_split(const indexed_triangle_set &its)
 {
-    using stack_el = size_t;
-
-    auto facestack = reserve_vector<stack_el>(its.indices.size());
-    auto push = [&facestack] (const stack_el &s) { facestack.emplace_back(s); };
-    auto pop  = [&facestack] () -> stack_el {
-        stack_el ret = facestack.back();
-        facestack.pop_back();
-        return ret;
-    };
-
-    // find the next unvisited facet and push the index
-    auto facet = std::find(visited.begin(), visited.end(), false);
-    std::vector<size_t> ret;
-
-    if (facet != visited.end()) {
-        ret.reserve(its.indices.size());
-        auto idx = size_t(facet - visited.begin());
-        push(idx);
-        ret.emplace_back(idx);
-        visited[idx] = true;
-    }
-
-    while (!facestack.empty()) {
-        size_t facet_idx = pop();
-        const auto &neighbors = neighbor_index[facet_idx];
-        for (size_t neighbor_idx : neighbors) {
-            if (!visited[neighbor_idx]) {
-                visited[neighbor_idx] = true;
-                push(neighbor_idx);
-                ret.emplace_back(neighbor_idx);
-            }
-        }
-    }
-
-    return ret;
+    return its_split<>(its);
 }
 
-bool its_is_splittable(const indexed_triangle_set &its,
-                       const FaceNeighborIndex &  neighbor_index)
+bool its_is_splittable(const indexed_triangle_set &its)
 {
-    std::vector<bool> visited(its.indices.size(), false);
-    its_find_unvisited_neighbors(its, neighbor_index, visited);
-
-    // Try finding an unvisited facet. If there are none, the mesh is not splittable.
-    auto it = std::find(visited.begin(), visited.end(), false);
-    return it != visited.end();
+    return its_is_splittable<>(its);
 }
 
-std::vector<indexed_triangle_set> its_split(
-    const indexed_triangle_set &its, const FaceNeighborIndex &neighbor_index)
-{
-    auto ret = reserve_vector<indexed_triangle_set>(3);
-    its_split(its, std::back_inserter(ret), neighbor_index);
+} // namespace Slic3r
 
-    return ret;
-}
+#include "libnest2d/tools/benchmark.h"
+
+namespace Slic3r {
 
 FaceNeighborIndex its_create_neighbors_index(const indexed_triangle_set &its)
 {
@@ -1232,6 +1188,9 @@ FaceNeighborIndex its_create_neighbors_index(const indexed_triangle_set &its)
             first == UNASSIGNED ? first = fid : second = fid;
         }
     };
+
+    Benchmark bm;
+    bm.start();
 
     // All vertex IDs will fit into this number of bits. (Used for hashing)
     const int max_vertex_id_bits = std::ceil(std::log2(its.vertices.size()));
@@ -1276,6 +1235,177 @@ FaceNeighborIndex its_create_neighbors_index(const indexed_triangle_set &its)
         neighs[1] = neighs2.first == face_id ? neighs2.second : neighs2.first;
         neighs[2] = neighs3.first == face_id ? neighs3.second : neighs3.first;
     }
+
+    bm.stop();
+
+    std::cout << "Creating neighbor index took: " << bm.getElapsedSec() << " seconds." << std::endl;
+
+    return index;
+}
+
+std::vector<Vec3i> its_create_neighbors_index_2(const indexed_triangle_set &its)
+{
+    std::vector<Vec3i> out(its.indices.size(), Vec3i(-1, -1, -1));
+
+    // Create a mapping from triangle edge into face.
+    struct EdgeToFace {
+        // Index of the 1st vertex of the triangle edge. vertex_low <= vertex_high.
+        int  vertex_low;
+        // Index of the 2nd vertex of the triangle edge.
+        int  vertex_high;
+        // Index of a triangular face.
+        int  face;
+        // Index of edge in the face, starting with 1. Negative indices if the edge was stored reverse in (vertex_low, vertex_high).
+        int  face_edge;
+        bool operator==(const EdgeToFace &other) const { return vertex_low == other.vertex_low && vertex_high == other.vertex_high; }
+        bool operator<(const EdgeToFace &other) const { return vertex_low < other.vertex_low || (vertex_low == other.vertex_low && vertex_high < other.vertex_high); }
+    };
+    std::vector<EdgeToFace> edges_map;
+    edges_map.assign(its.indices.size() * 3, EdgeToFace());
+    for (uint32_t facet_idx = 0; facet_idx < its.indices.size(); ++ facet_idx)
+        for (int i = 0; i < 3; ++ i) {
+            EdgeToFace &e2f = edges_map[facet_idx * 3 + i];
+            e2f.vertex_low  = its.indices[facet_idx][i];
+            e2f.vertex_high = its.indices[facet_idx][(i + 1) % 3];
+            e2f.face        = facet_idx;
+            // 1 based indexing, to be always strictly positive.
+            e2f.face_edge   = i + 1;
+            if (e2f.vertex_low > e2f.vertex_high) {
+                // Sort the vertices
+                std::swap(e2f.vertex_low, e2f.vertex_high);
+                // and make the face_edge negative to indicate a flipped edge.
+                e2f.face_edge = - e2f.face_edge;
+            }
+        }
+    std::sort(edges_map.begin(), edges_map.end());
+
+    // Assign a unique common edge id to touching triangle edges.
+    int num_edges = 0;
+    for (size_t i = 0; i < edges_map.size(); ++ i) {
+        EdgeToFace &edge_i = edges_map[i];
+        if (edge_i.face == -1)
+            // This edge has been connected to some neighbor already.
+            continue;
+        // Unconnected edge. Find its neighbor with the correct orientation.
+        size_t j;
+        bool found = false;
+        for (j = i + 1; j < edges_map.size() && edge_i == edges_map[j]; ++ j)
+            if (edge_i.face_edge * edges_map[j].face_edge < 0 && edges_map[j].face != -1) {
+                // Faces touching with opposite oriented edges and none of the edges is connected yet.
+                found = true;
+                break;
+            }
+        if (! found) {
+            //FIXME Vojtech: Trying to find an edge with equal orientation. This smells.
+            // admesh can assign the same edge ID to more than two facets (which is
+        // still topologically correct), so we have to search for a duplicate of
+        // this edge too in case it was already seen in this orientation
+            for (j = i + 1; j < edges_map.size() && edge_i == edges_map[j]; ++ j)
+                if (edges_map[j].face != -1) {
+                    // Faces touching with equally oriented edges and none of the edges is connected yet.
+                    found = true;
+                    break;
+                }
+        }
+        // Assign an edge index to the 1st face.
+//        out[edge_i.face](std::abs(edge_i.face_edge) - 1) = num_edges;
+        if (found) {
+            EdgeToFace &edge_j = edges_map[j];
+            out[edge_i.face](std::abs(edge_i.face_edge) - 1) = edge_j.face;
+            out[edge_j.face](std::abs(edge_j.face_edge) - 1) = edge_i.face;
+            // Mark the edge as connected.
+            edge_j.face = -1;
+        }
+        ++ num_edges;
+    }
+
+    return out;
+
+}
+
+FaceNeighborIndex its_create_neighbors_index_3(const indexed_triangle_set &its)
+{
+    // Just to be clear what type of object are we referencing
+    using FaceID = size_t;
+    using VertexID = uint64_t;
+    using EdgeID = uint64_t;
+
+    constexpr auto UNASSIGNED = std::numeric_limits<FaceID>::max();
+
+    struct Edge // Will contain IDs of the two facets touching this edge
+    {
+        FaceID first, second;
+        Edge() : first{UNASSIGNED}, second{UNASSIGNED} {}
+        void   assign(FaceID fid)
+        {
+            first == UNASSIGNED ? first = fid : second = fid;
+        }
+    };
+
+    Benchmark bm;
+    bm.start();
+
+    // All vertex IDs will fit into this number of bits. (Used for hashing)
+//    const int max_vertex_id_bits = std::ceil(std::log2(its.vertices.size()));
+//    assert(max_vertex_id_bits <= 32);
+
+    const uint64_t Vn  = its.vertices.size();
+//    const uint64_t Fn  = 3 * its.indices.size();
+//    double MaxQ = double(Vn) * (Vn + 1) / Fn;
+//    const uint64_t Nq = MaxQ < 0 ? 0 : std::ceil(std::log2(MaxQ));
+//    const uint64_t Nr = std::ceil(std::log2(std::min(Vn * (Vn + 1), Fn)));
+//    const uint64_t Nfn = std::ceil(std::log2(Fn));
+
+////    const uint64_t max_edge_ids = (uint64_t(1) << (Nq + Nr));
+//    const uint64_t max_edge_ids = MaxQ * Fn + (std::min(Vn * (Vn + 1), Fn)); //(uint64_t(1) << Nfn);
+    const uint64_t Fn  = 3 * its.indices.size();
+    std::vector< Edge > edge_index(3 * Fn);
+
+    // Edge id is constructed by concatenating two vertex ids, starting with
+    // the lowest in MSB
+    auto hash = [Vn, Fn /*, Nr*/] (VertexID a, VertexID b) {
+        if (a > b) std::swap(a, b);
+
+        uint64_t C = Vn * a + b;
+        uint64_t Q = C / Fn, R = C % Fn;
+
+        return Q * Fn + R;
+    };
+
+    // Go through all edges of all facets and mark the facets touching each edge
+    for (size_t face_id = 0; face_id < its.indices.size(); ++face_id) {
+        const Vec3i &face = its.indices[face_id];
+
+        EdgeID e1 = hash(face(0), face(1)), e2 = hash(face(1), face(2)),
+               e3 = hash(face(2), face(0));
+
+        edge_index[e1].assign(face_id);
+        edge_index[e2].assign(face_id);
+        edge_index[e3].assign(face_id);
+    }
+
+    FaceNeighborIndex index(its.indices.size());
+
+    // Now collect the neighbors for each facet into the final index
+    for (size_t face_id = 0; face_id < its.indices.size(); ++face_id) {
+        const Vec3i &face = its.indices[face_id];
+
+        EdgeID e1 = hash(face(0), face(1)), e2 = hash(face(1), face(2)),
+               e3 = hash(face(2), face(0));
+
+        const Edge &neighs1 = edge_index[e1];
+        const Edge &neighs2 = edge_index[e2];
+        const Edge &neighs3 = edge_index[e3];
+
+        std::array<size_t, 3> &neighs = index[face_id];
+        neighs[0] = neighs1.first == face_id ? neighs1.second : neighs1.first;
+        neighs[1] = neighs2.first == face_id ? neighs2.second : neighs2.first;
+        neighs[2] = neighs3.first == face_id ? neighs3.second : neighs3.first;
+    }
+
+    bm.stop();
+
+    std::cout << "Creating neighbor index took: " << bm.getElapsedSec() << " seconds." << std::endl;
 
     return index;
 }
