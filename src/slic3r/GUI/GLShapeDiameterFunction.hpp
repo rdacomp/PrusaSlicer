@@ -59,6 +59,8 @@ public:
     bool initialize_normals();
     // calculate width(tree and normals are already calculated)
     bool initialize_width();
+
+    void surface_points();
 private:
     bool initialize_indices();
     void render_vertices() const;
@@ -81,6 +83,7 @@ private:
         static size_t width_offset() { return (size_t)(2 * sizeof(Vec3f)); }
     };
 
+public: 
     // draw information
     size_t indices_count = 0;
 
@@ -90,6 +93,8 @@ private:
 
     // tree for ray cast
     ShapeDiameterFunction::AABBTree tree;
+
+    ShapeDiameterFunction::SurfacePoints points;
 };
 
 } // namespace Slic3r::GUI

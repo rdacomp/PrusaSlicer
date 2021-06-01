@@ -91,6 +91,7 @@ private:
 // Create an index of faces belonging to each vertex. The returned vector can
 // be indexed with vertex indices and contains a list of face indices for each
 // vertex.
+std::vector<std::vector<size_t>> create_vertex_faces_index(const std::vector<stl_triangle_vertex_indices> &indices, size_t count_vertices);
 std::vector<std::vector<size_t>> create_vertex_faces_index(const indexed_triangle_set &its);
 
 // Map from a face edge to a unique edge identifier or -1 if no neighbor exists.

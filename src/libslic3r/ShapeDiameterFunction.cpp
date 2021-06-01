@@ -1,5 +1,7 @@
 #include "ShapeDiameterFunction.hpp"
+#include <random>
 #include <tbb/parallel_for.h>
+#include "TriangleMesh.hpp"
 
 using namespace Slic3r;
 
@@ -109,6 +111,155 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     return widths;
 }
 
+ShapeDiameterFunction::SurfacePoints ShapeDiameterFunction::sample(
+    const indexed_triangle_set &its, float distance)
+{
+    // count samples per area of distance
+    int   random_count = 10; 
+    // random generator
+    std::mt19937 m_rng;
+    std::random_device rd;
+    m_rng.seed(rd());
+    std::uniform_real_distribution<float> xDist(0.f, 1.f);
+    std::uniform_real_distribution<float> yDist(0.f, 1.f);
+    std::uniform_real_distribution<float> generate_point(0.f, 1.f);
+    float sample_area  = distance * distance / random_count;
+    // random sample triangle
+    float sum_areas = 0;
+    SurfacePoints sPts;
+    for (const Vec3crd &triangle_indices : its.indices) {
+        size_t       index = &triangle_indices - &its.indices.front();
+        float area = triangle_area(triangle_indices, its.vertices);
+        float        countf = area / sample_area;
+        int count = static_cast<int>(std::floor(area / sample_area));
+        float generate = generate_point(m_rng);
+        if (generate < (countf-count)) ++count;
+        if (count == 0) continue;
+
+        const Vec3f &v0 = its.vertices[triangle_indices[0]];
+        const Vec3f &v1 = its.vertices[triangle_indices[1]];
+        const Vec3f &v2 = its.vertices[triangle_indices[2]];
+        for (int c = 0; c < count; c++) {
+            // barycentric coordinate
+            Vec3f b;
+            b[0] = xDist(m_rng);
+            b[1] = yDist(m_rng);
+            if ((b[0] + b[1]) > 1.f) {
+                b[0] = 1.f - b[0];
+                b[1] = 1.f - b[1];
+            }
+            b[2] = 1.f - b[0] - b[1];
+            Vec3f pos;
+            for (int i = 0; i < 3; i++) {
+                pos[i] = b[0] * v0[i] + b[1] * v1[i] + b[2] * v2[i];
+            }
+            sPts.emplace_back(pos, index);
+        }
+    }
+    return sPts;
+}
+
+Vec2crd get_edge_indices(int edge_index, const stl_triangle_vertex_indices &triangle_indices)
+{
+    int next_edge_index = (edge_index == 2) ? 0 : edge_index + 1;
+    coord_t vi0             = triangle_indices[edge_index];
+    coord_t vi1             = triangle_indices[next_edge_index];
+    return Vec2crd(vi0, vi1);
+}
+
+int get_vertex_index(size_t vertex_index, const stl_triangle_vertex_indices &triangle_indices) {
+    if (vertex_index == triangle_indices[0]) return 0;
+    if (vertex_index == triangle_indices[1]) return 1;
+    if (vertex_index == triangle_indices[2]) return 2;
+    return -1;
+}
+
+/*
+std::vector<Vec3crd> ShapeDiameterFunction::create_neighbor(
+    const std::vector<stl_triangle_vertex_indices> &indices, size_t vertices_size)
+{
+    if (indices.empty() || vertices_size == 0) return {};
+    std::vector<std::vector<size_t>> vertex_triangles = create_vertex_faces_index(indices, vertices_size);
+    // IMPROVE1: sort index of faces for faster search
+    coord_t              no_value = -1;
+    std::vector<Vec3crd> neighbors(indices.size(), Vec3crd(no_value, no_value, no_value));    
+
+    for (const stl_triangle_vertex_indices& triangle_indices : indices) {
+        coord_t index = &triangle_indices - &indices.front();
+        Vec3crd& neighbor = neighbors[index];
+        for (int edge_index = 0; edge_index < 3; ++edge_index) {            
+            // check if done
+            coord_t& neighbor_edge = neighbor[edge_index];
+            if (neighbor_edge != no_value) continue;
+            Vec2crd edge_indices = get_edge_indices(edge_index, triangle_indices);
+            // IMPROVE: use same vector for 2 sides of triangle
+            const std::vector<size_t> &faces = vertex_triangles[edge_indices[0]];
+            for (const size_t &face : faces) {
+                if (face <= index) continue;
+                const stl_triangle_vertex_indices &face_indices = indices[face];                
+                int vertex_index = get_vertex_index(edge_indices[1], face_indices);
+                // NOT Contain second vertex?
+                if (vertex_index < 0) continue;
+                // Has NOT oposit direction?
+                if (edge_indices[0] != face_indices[(vertex_index + 1) % 3]) continue;
+
+                neighbor_edge = face;
+                neighbors[face][vertex_index] = index;
+                break;
+            }
+            // must be paired
+            assert(neighbor_edge != no_value);
+        }
+    }
+    return neighbors;
+}*/
+
+std::vector<Vec3crd> ShapeDiameterFunction::create_neighbor(
+    const std::vector<stl_triangle_vertex_indices> &indices,
+    size_t                                          vertices_size)
+{
+    if (indices.empty() || vertices_size == 0) return {};
+    std::vector<std::vector<size_t>> vertex_triangles =
+        create_vertex_faces_index(indices, vertices_size);
+    // IMPROVE1: sort index of faces for faster search
+    coord_t              no_value = -1;
+    std::vector<Vec3crd> neighbors(indices.size(),
+                                   Vec3crd(no_value, no_value, no_value));
+
+    for (const stl_triangle_vertex_indices &triangle_indices : indices) {
+        coord_t  index    = &triangle_indices - &indices.front();
+        Vec3crd &neighbor = neighbors[index];
+        for (int edge_index = 0; edge_index < 3; ++edge_index) {
+            // check if done
+            coord_t &neighbor_edge = neighbor[edge_index];
+            if (neighbor_edge != no_value) continue;
+            Vec2crd edge_indices = get_edge_indices(edge_index,
+                                                    triangle_indices);
+            // IMPROVE: use same vector for 2 sides of triangle
+            const std::vector<size_t> &faces =
+                vertex_triangles[edge_indices[0]];
+            for (const size_t &face : faces) {
+                if (face <= index) continue;
+                const stl_triangle_vertex_indices &face_indices = indices[face];
+                int vertex_index = get_vertex_index(edge_indices[1],
+                                                    face_indices);
+                // NOT Contain second vertex?
+                if (vertex_index < 0) continue;
+                // Has NOT oposit direction?
+                if (edge_indices[0] != face_indices[(vertex_index + 1) % 3])
+                    continue;
+
+                neighbor_edge                 = face;
+                neighbors[face][vertex_index] = index;
+                break;
+            }
+            // must be paired
+            assert(neighbor_edge != no_value);
+        }
+    }
+    return neighbors;
+}
+
 // create points on unit sphere surface
 ShapeDiameterFunction::Directions
 ShapeDiameterFunction::create_fibonacci_sphere_samples(double angle,
@@ -145,9 +296,23 @@ ShapeDiameterFunction::create_fibonacci_sphere_samples(double angle,
     return points;
 }
 
+#include <igl/qslim.h>
 indexed_triangle_set ShapeDiameterFunction::subdivide(
     const indexed_triangle_set &its, float max_length)
-{
+{    
+    using MapMatrixXfUnaligned = Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor | Eigen::DontAlign>>;
+    using MapMatrixXiUnaligned = Eigen::Map<const Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor | Eigen::DontAlign>>;
+    Eigen::MatrixXd vertices = MapMatrixXfUnaligned(its.vertices.front().data(),
+                             Eigen::Index(its.vertices.size()), 3).cast<double>();
+    Eigen::MatrixXi indices = MapMatrixXiUnaligned(its.indices.front().data(),
+                             Eigen::Index(its.indices.size()), 3);
+
+    Eigen::MatrixXd verticesO;
+    Eigen::MatrixXi indicesO;
+    Eigen::VectorXi j, i;
+    bool c = igl::qslim(vertices, indices, 1000, verticesO, indicesO, j,i);
+
+
     struct TriangleLengths
     {
         Vec3crd indices;

@@ -226,8 +226,13 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             sdf.divide();
         ImGui::SameLine();
         if (m_imgui->slider_float("max_triangle_size", &sdf.max_triangle_size, 2e-2f, 100.f)) {
-            sdf.divide();
+            sdf.surface_points();
         }
+        ImGui::SameLine();
+        m_imgui->text(
+            "surface points " + std::to_string(sdf.points.size()) +
+            ", triangle " +
+            std::to_string(sdf.tree.vertices_indices.indices.size()));
     }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
             m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();

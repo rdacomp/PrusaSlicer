@@ -667,22 +667,26 @@ void TriangleMesh::restore_optional()
     }
 }
 
+std::vector<std::vector<size_t>> create_vertex_faces_index(
+    const std::vector<stl_triangle_vertex_indices>& indices, size_t count_vertices)
+{
+    if (count_vertices == 0) return {};
+    
+    std::vector<std::vector<size_t>> index;
+    size_t res = indices.size() / count_vertices;
+    index.assign(count_vertices, reserve_vector<size_t>(res));
+    for (size_t fi = 0; fi < indices.size(); ++fi) {
+        auto &face = indices[fi];
+        index[face(0)].emplace_back(fi);
+        index[face(1)].emplace_back(fi);
+        index[face(2)].emplace_back(fi);
+    }
+    return index;
+}
+
 std::vector<std::vector<size_t>> create_vertex_faces_index(const indexed_triangle_set &its)
 {
-    std::vector<std::vector<size_t>> index;
-
-    if (! its.vertices.empty()) {
-        size_t res = its.indices.size() / its.vertices.size();
-        index.assign(its.vertices.size(), reserve_vector<size_t>(res));
-        for (size_t fi = 0; fi < its.indices.size(); ++fi) {
-            auto &face = its.indices[fi];
-            index[face(0)].emplace_back(fi);
-            index[face(1)].emplace_back(fi);
-            index[face(2)].emplace_back(fi);
-        }
-    }
-
-    return index;
+    return create_vertex_faces_index(its.indices, its.vertices.size());
 }
 
 // Map from a face edge to a unique edge identifier or -1 if no neighbor exists.

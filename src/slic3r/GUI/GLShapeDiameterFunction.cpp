@@ -79,15 +79,15 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
 
 bool GLShapeDiameterFunction::divide() {
     const indexed_triangle_set& its = tree.vertices_indices;
-    if (!allow_divide_triangle) {
+    //if (!allow_divide_triangle) {
         triangles.indices  = its.indices;  // copy
         triangles.vertices = its.vertices; // copy
-    } else {
-        indexed_triangle_set divided =
-            ShapeDiameterFunction::subdivide(its, max_triangle_size);
-        triangles.indices  = divided.indices;  // copy
-        triangles.vertices = divided.vertices; // copy
-    }
+    //} else {
+    //    indexed_triangle_set divided =
+    //        ShapeDiameterFunction::subdivide(its, max_triangle_size);
+    //    triangles.indices  = divided.indices;  // copy
+    //    triangles.vertices = divided.vertices; // copy
+    //}
     if(!initialize_indices()) return false;
     return initialize_normals();
 }
@@ -128,6 +128,11 @@ bool GLShapeDiameterFunction::initialize_width() {
     
     initialized = true;
     return true;
+}
+
+void GLShapeDiameterFunction::surface_points() { 
+    points = ShapeDiameterFunction::sample(tree.vertices_indices,
+                                           max_triangle_size);
 }
 
 bool GLShapeDiameterFunction::initialize_indices()
@@ -211,7 +216,7 @@ GLModel create_tetrahedron(float size) {
         Vec3crd(0, 1, 2), 
         Vec3crd(0, 2, 3), 
         Vec3crd(0, 3, 1),
-        Vec3crd(1, 2, 3)
+        Vec3crd(3, 2, 1)
     };
     TriangleMesh tm(its);
     GLModel      model;
@@ -236,9 +241,9 @@ void GLShapeDiameterFunction::render_vertices() const
     shader->start_using();
     shader->set_uniform("uniform_color", color);
     Vec3f z_one(0.f, 0.f, 1.f);
-    for (size_t index = 0; index < triangles.vertices.size(); ++index) {
-        const Vec3f &vertex = triangles.vertices[index];
-        const Vec3f &normal = triangles.vertex_normals[index];
+    for (const auto& point: points) {
+        const Vec3f &vertex = point.pos;
+        Vec3f        normal(0, 0, 1);
         Vec3f       axis  = z_one.cross(normal);
         float       angle = acos(z_one.dot(normal));
         Transform3f tr(Eigen::Translation<float, 3>(vertex) *
