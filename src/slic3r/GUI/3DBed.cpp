@@ -378,7 +378,7 @@ void Bed3D::render_texture(bool bottom, GLCanvas3D& canvas) const
         else if (boost::algorithm::iends_with(m_texture_filename, ".png")) {
             // generate a temporary lower resolution texture to show while no main texture levels have been compressed
             if (temp_texture->get_id() == 0 || temp_texture->get_source() != m_texture_filename) {
-                if (!temp_texture->load_from_file(m_texture_filename, false, GLTexture::None, false)) {
+                if (!temp_texture->load_from_file(m_texture_filename, false, GLTexture::ECompressionType::None, false)) {
                     render_default(bottom);
                     return;
                 }
@@ -386,7 +386,7 @@ void Bed3D::render_texture(bool bottom, GLCanvas3D& canvas) const
             }
 
             // starts generating the main texture, compression will run asynchronously
-            if (!texture->load_from_file(m_texture_filename, true, GLTexture::MultiThreaded, true)) {
+            if (!texture->load_from_file(m_texture_filename, true, GLTexture::ECompressionType::MultiThreaded, true)) {
                 render_default(bottom);
                 return;
             }

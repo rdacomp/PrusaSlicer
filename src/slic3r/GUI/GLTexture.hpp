@@ -17,13 +17,13 @@ namespace GUI {
         {
             struct Level
             {
-                unsigned int w;
-                unsigned int h;
+                unsigned int w{ 0 };
+                unsigned int h{ 0 };
+                bool sent_to_gpu{ false };
                 std::vector<unsigned char> src_data;
                 std::vector<unsigned char> compressed_data;
-                bool sent_to_gpu;
 
-                Level(unsigned int w, unsigned int h, const std::vector<unsigned char>& data) : w(w), h(h), src_data(data), sent_to_gpu(false) {}
+                Level(unsigned int w, unsigned int h, const std::vector<unsigned char>& data) : w(w), h(h), sent_to_gpu(false), src_data(data) {}
             };
 
             GLTexture& m_texture;
@@ -55,7 +55,7 @@ namespace GUI {
         };
 
     public:
-        enum ECompressionType : unsigned char
+        enum class ECompressionType : unsigned char
         {
             None,
             SingleThreaded,
@@ -64,8 +64,8 @@ namespace GUI {
 
         struct UV
         {
-            float u;
-            float v;
+            float u{ 0 };
+            float v{ 0 };
         };
 
         struct Quad_UVs
@@ -79,15 +79,16 @@ namespace GUI {
         static Quad_UVs FullTextureUVs;
 
     protected:
-        unsigned int m_id;
-        int m_width;
-        int m_height;
+        unsigned int m_id{ 0 };
+        int m_width{ 0 };
+        int m_height{ 0 };
         std::string m_source;
         Compressor m_compressor;
 
     public:
-        GLTexture();
-        virtual ~GLTexture();
+        GLTexture() : m_compressor(*this) {}
+        virtual ~GLTexture() { reset(); }
+
 
         bool load_from_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
         bool load_from_svg_file(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
@@ -118,6 +119,9 @@ namespace GUI {
     private:
         bool load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
         bool load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
+        bool adjust_size_for_compression();
+        void send_to_gpu(std::vector<unsigned char>& data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy,
+            std::function<void(int, int, std::vector<unsigned char>&)> resampler);
 
         friend class Compressor;
     };
