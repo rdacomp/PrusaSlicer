@@ -54,22 +54,32 @@ varying float world_pos_z;
 varying float world_normal_z;
 varying vec3 eye_normal;
 
-void main()
+vec2 calc_intensity(vec3 eye_position, vec3 eye_normal)
 {
-    // First transform the normal into camera space and normalize the result.
-    eye_normal = normalize(gl_NormalMatrix * gl_Normal);
+    vec2 ret = vec2(0.0, 0.0);
     
     // Compute the cos of the angle between the normal and lights direction. The light is directional so the direction is constant for every vertex.
     // Since these two are normalized the cosine is the dot product. We also need to clamp the result to the [0,1] range.
     float NdotL = max(dot(eye_normal, LIGHT_TOP_DIR), 0.0);
 
-    intensity.x = INTENSITY_AMBIENT + NdotL * LIGHT_TOP_DIFFUSE;
-    vec3 position = (gl_ModelViewMatrix * gl_Vertex).xyz;
-    intensity.y = LIGHT_TOP_SPECULAR * pow(max(dot(-normalize(position), reflect(-LIGHT_TOP_DIR, eye_normal)), 0.0), LIGHT_TOP_SHININESS);
+    ret.x = INTENSITY_AMBIENT + NdotL * LIGHT_TOP_DIFFUSE;
+    ret.y = LIGHT_TOP_SPECULAR * pow(max(dot(-normalize(eye_position), reflect(-LIGHT_TOP_DIR, eye_normal)), 0.0), LIGHT_TOP_SHININESS);
 
     // Perform the same lighting calculation for the 2nd light source (no specular applied).
     NdotL = max(dot(eye_normal, LIGHT_FRONT_DIR), 0.0);
-    intensity.x += NdotL * LIGHT_FRONT_DIFFUSE;
+    ret.x += NdotL * LIGHT_FRONT_DIFFUSE;
+    
+    return ret;
+}
+
+void main()
+{
+    // Transform the position into camera space.
+    vec4 eye_position = gl_ModelViewMatrix * gl_Vertex;
+    // Transform the normal into camera space and normalize the result.
+    eye_normal = normalize(gl_NormalMatrix * gl_Normal);
+    
+    intensity = calc_intensity(eye_position.xyz, eye_normal);
 
     model_pos = gl_Vertex;
     // Point in homogenous coordinates.
@@ -77,13 +87,11 @@ void main()
     world_pos_z = world_pos.z;
 
     // compute deltas for out of print volume detection (world coordinates)
-    if (print_box.actived)
-    {
+    if (print_box.actived) {
         delta_box_min = world_pos.xyz - print_box.min;
         delta_box_max = world_pos.xyz - print_box.max;
     }
-    else
-    {
+    else {
         delta_box_min = ZERO;
         delta_box_max = ZERO;
     }
