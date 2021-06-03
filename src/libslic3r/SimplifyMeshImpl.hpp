@@ -305,6 +305,7 @@ template<class Mesh> class SimplifiableMesh {
     // Check if a triangle flips when this edge is removed
     bool flipped(const Vertex &p, size_t i0, size_t i1, VertexInfo &v0, VertexInfo &v1, std::vector<bool> &deleted);
     
+    bool is_small_edge(size_t i0, size_t i1, double edge_length);
 public:
     
     explicit SimplifiableMesh(Mesh *m) : m_mesh{m}
@@ -322,6 +323,9 @@ public:
     
     template<class ProgressFn> void simplify_mesh_lossless(ProgressFn &&fn);
     void simplify_mesh_lossless() { simplify_mesh_lossless([](int){}); }
+
+    void simplify_mesh(int target_count, double agressiveness = 7.);
+    void remove_small_edges(double edge_length, double max_thr);
 };
 
 template<class Mesh> void SimplifiableMesh<Mesh>::compact_faces()
@@ -663,6 +667,196 @@ template<class Fn> void SimplifiableMesh<Mesh>::simplify_mesh_lossless(Fn &&fn)
     
     compact();
 }
+
+template<class Mesh>
+void SimplifiableMesh<Mesh>::simplify_mesh(int target_count, double agressiveness)
+{
+    // init
+    for (FaceInfo &fi : m_faceinfo) fi.deleted = false;
+
+    // main iteration loop
+    int               deleted_triangles = 0;
+    std::vector<bool> deleted0, deleted1;
+    size_t            triangle_count = m_faceinfo.size();
+    for (int iteration = 0; iteration < 99; iteration++)
+    {
+        if (triangle_count - deleted_triangles <= target_count) break;
+
+        // update mesh once in a while
+        update_mesh(iteration);
+
+        // clear dirty flag
+        for (FaceInfo &fi : m_faceinfo) fi.dirty = false;
+
+        //
+        // All triangles with edges below the threshold will be removed
+        //
+        // The following numbers works well for most models.
+        // If it does not, try to adjust the 3 parameters
+        //
+        double threshold = 1e-9 * pow(double(iteration + 3), agressiveness);
+
+        // remove vertices & mark deleted triangles
+        for (FaceInfo &fi : m_faceinfo) {
+            if (fi.err[3] > threshold || fi.deleted || fi.dirty) continue;
+
+            for (size_t j = 0; j < 3; ++j) {
+                if (fi.err[j] > threshold) continue;
+                Index3      t  = read_triangle(fi);
+                size_t      i0 = t[j];
+                VertexInfo &v0 = m_vertexinfo[i0];
+
+                size_t      i1 = t[(j + 1) % 3];
+                VertexInfo &v1 = m_vertexinfo[i1];
+
+                // Border check
+                if (v0.border != v1.border) continue;
+
+
+                // Compute vertex to collapse to
+                Vertex p;
+                calculate_error(i0, i1, p);
+
+                deleted0.resize(v0.tcount); // normals temporarily
+                deleted1.resize(v1.tcount); // normals temporarily
+
+                // don't remove if flipped
+                if (flipped(p, i0, i1, v0, v1, deleted0)) continue;
+                if (flipped(p, i1, i0, v1, v0, deleted1)) continue;
+
+                // not flipped, so remove edge
+                write_vertex(v0, p);
+                v0.q          = v1.q + v0.q;
+                size_t tstart = m_refs.size();
+
+                update_triangles(i0, v0, deleted0, deleted_triangles);
+                update_triangles(i0, v1, deleted1, deleted_triangles);
+
+                assert(m_refs.size() >= tstart);
+
+                size_t tcount = m_refs.size() - tstart;
+
+                if (tcount <= v0.tcount) {
+                    // save ram
+                    if (tcount) {
+                        auto from = m_refs.begin() + tstart,
+                             to   = from + tcount;
+                        std::copy(from, to, m_refs.begin() + v0.tstart);
+                    }
+                } else
+                    // append
+                    v0.tstart = tstart;
+
+                v0.tcount = tcount;
+                break;
+            }
+            if (triangle_count - deleted_triangles <= target_count) break;
+        }
+    }
+    compact();
+}
+
+template<class Mesh>
+bool SimplifiableMesh<Mesh>::is_small_edge(size_t i0, size_t i1, double edge_length) {
+    Vertex p0   = read_vertex(i0);
+    Vertex p1   = read_vertex(i1);
+    Vertex edge = p0 - p1;
+    if (edge.x() >= edge_length || 
+        edge.y() >= edge_length ||
+        edge.z() >= edge_length)
+        return false;
+    double sum  = edge.x() + edge.y() + edge.z();
+    if (sum < edge_length) return true;
+    // IMPROVE: edge_length2 could be precalculated
+    double edge_length2 = edge_length * edge_length;
+    double sum2 = edge.x() * edge.x() + 
+                  edge.y() * edge.y() +
+                  edge.z() * edge.z();
+    return sum2 < edge_length2;
+}
+
+template<class Mesh>
+void SimplifiableMesh<Mesh>::remove_small_edges(double edge_length, double max_thr)
+{
+    // init
+    for (FaceInfo &fi : m_faceinfo) fi.deleted = false;
+
+    // main iteration loop
+    int               deleted_triangles = 0;
+    std::vector<bool> deleted0, deleted1;
+    size_t            triangle_count = m_faceinfo.size();
+
+    // main reduction become on first iteration
+    for (int iteration = 0; iteration < 99; iteration++) {
+        // update mesh once in a while
+        update_mesh(iteration);
+
+        // clear dirty flag
+        for (FaceInfo &fi : m_faceinfo) fi.dirty = false;
+
+        // remove vertices & mark deleted triangles
+        for (FaceInfo &fi : m_faceinfo) {
+            if (fi.err[3] > max_thr || fi.deleted || fi.dirty) continue;
+
+            for (size_t j = 0; j < 3; ++j) {
+                if (fi.err[j] > max_thr) continue;
+                Index3      t  = read_triangle(fi);
+                size_t      i0 = t[j];
+                size_t      i1 = t[(j + 1) % 3];
+
+                if (!is_small_edge(i0, i1, edge_length)) continue;
+
+                VertexInfo &v0 = m_vertexinfo[i0];
+                VertexInfo &v1 = m_vertexinfo[i1];
+
+                // Border check
+                if (v0.border != v1.border) continue;
+
+                // Compute vertex to collapse to
+                Vertex p;
+                calculate_error(i0, i1, p);
+
+                deleted0.resize(v0.tcount); // normals temporarily
+                deleted1.resize(v1.tcount); // normals temporarily
+
+                // don't remove if flipped
+                if (flipped(p, i0, i1, v0, v1, deleted0)) continue;
+                if (flipped(p, i1, i0, v1, v0, deleted1)) continue;
+
+                // not flipped, so remove edge
+                write_vertex(v0, p);
+                v0.q          = v1.q + v0.q;
+                size_t tstart = m_refs.size();
+
+                update_triangles(i0, v0, deleted0, deleted_triangles);
+                update_triangles(i0, v1, deleted1, deleted_triangles);
+
+                assert(m_refs.size() >= tstart);
+
+                size_t tcount = m_refs.size() - tstart;
+
+                if (tcount <= v0.tcount) {
+                    // save ram
+                    if (tcount) {
+                        auto from = m_refs.begin() + tstart,
+                             to   = from + tcount;
+                        std::copy(from, to, m_refs.begin() + v0.tstart);
+                    }
+                } else
+                    // append
+                    v0.tstart = tstart;
+
+                v0.tcount = tcount;
+                break;
+            }
+        }
+        // when no small edge to remove than break
+        if (deleted_triangles <= 0) break;
+        deleted_triangles = 0;
+    }
+    compact();
+}
+
 
 } // namespace implementation
 } // namespace SimplifyMesh

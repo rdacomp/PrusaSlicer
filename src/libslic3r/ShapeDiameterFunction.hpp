@@ -112,6 +112,7 @@ public:
 
     /// <summary>
     /// Create neighbor for each edge of triangle
+    /// DEPRICATED: will be in TriangleMesh
     /// </summary>
     /// <param name="indices">input Triangle indices</param>
     /// <param name="vertices_size">count vertices</param>
@@ -131,10 +132,19 @@ public:
     /// <summary>
     /// divide each triangle with biger side length than max_length
     /// </summary>
-    /// <param name="its"></param>
-    /// <param name="max_length"></param>
+    /// <param name="its">Input vertices and faces</param>
+    /// <param name="max_length">Maximal length</param>
     /// <returns>new triangle_set</returns>
     static indexed_triangle_set subdivide(const indexed_triangle_set &its, float max_length);
+
+    /// <summary>
+    /// Minimal length of triangle side, smaller side will be removed
+    /// </summary>
+    /// <param name="its">Input vertices and faces</param>
+    /// <param name="min_length">Minimal length of triangle side</param>
+    /// <param name="max_error">Maximal error during reduce of triangle side</param>
+    /// <returns>Re-meshed</returns>
+    static void connect_small_triangles(indexed_triangle_set &its, float min_length, float max_error); 
 
     /// <summary>
     /// Find shortest edge in index triangle set

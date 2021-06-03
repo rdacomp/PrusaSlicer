@@ -135,6 +135,10 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
     m_imgui->text("SDF: ");
     ImGui::SameLine();
 
+    auto reInit = [&]() {
+        m_parent.sdf->initialize_model(m_c->selection_info()->model_object());
+    };
+
     GLShapeDiameterFunction& sdf = *m_parent.sdf;
     if (m_parent.sdf != nullptr && sdf.is_enabled()) {
         if (m_imgui->button("Deactivate", 0.f, 0.f)) {
@@ -142,7 +146,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
         ImGui::SameLine();
         if (m_imgui->button("Re-Init", 0.f, 0.f)) {
-            sdf.initialize_model(m_c->selection_info()->model_object());
+            reInit();
         }
         m_imgui->checkbox("Normals", sdf.allow_render_normals);
         if (sdf.allow_render_normals) { 
@@ -221,12 +225,24 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             }
         }
 
-        m_imgui->checkbox("Vertices", sdf.allow_render_vertices); 
+        //m_imgui->checkbox("Vertices", sdf.allow_render_vertices); 
+        //ImGui::SameLine();
+        m_imgui->checkbox("re-Mesh", sdf.allow_remesh);
+        if (sdf.allow_remesh) {
+            ImGui::SameLine();
+            if(m_imgui->slider_float("min_triangle_size", &sdf.min_triangle_size, 5e-1f, 30.f))
+                reInit();
+
+            ImGui::SameLine();
+            if(m_imgui->slider_float("max_thr", &sdf.max_thr, 1e-3f, 15.f))
+                reInit();
+        }
+
         if (m_imgui->checkbox("divide", sdf.allow_divide_triangle))
             sdf.divide();
         ImGui::SameLine();
-        if (m_imgui->slider_float("max_triangle_size", &sdf.max_triangle_size, 2e-2f, 100.f)) {
-            sdf.surface_points();
+        if (m_imgui->slider_float("max_triangle_size", &sdf.max_triangle_size, 5e-1f, 15.f)) {
+            sdf.divide();
         }
         ImGui::SameLine();
         m_imgui->text(
@@ -237,7 +253,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         if (m_parent.sdf == nullptr) {
             m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();
         }
-        m_parent.sdf->initialize_model(m_c->selection_info()->model_object());
+        reInit();
         m_parent.sdf->set_enabled(true);
     }
 

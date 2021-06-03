@@ -67,7 +67,10 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
     // Transform mesh - scale and scew could change width on model
     for (auto &vertex : its.vertices) {
         vertex = (tr_mat*vertex.cast<double>()).cast<float>();
-    }    
+    }
+
+    if (allow_remesh)
+        ShapeDiameterFunction::connect_small_triangles(its, min_triangle_size, max_thr);
 
     // create tree
     tree.vertices_indices = its; // copy
@@ -79,15 +82,15 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
 
 bool GLShapeDiameterFunction::divide() {
     const indexed_triangle_set& its = tree.vertices_indices;
-    //if (!allow_divide_triangle) {
+    if (!allow_divide_triangle) {
         triangles.indices  = its.indices;  // copy
         triangles.vertices = its.vertices; // copy
-    //} else {
-    //    indexed_triangle_set divided =
-    //        ShapeDiameterFunction::subdivide(its, max_triangle_size);
-    //    triangles.indices  = divided.indices;  // copy
-    //    triangles.vertices = divided.vertices; // copy
-    //}
+    } else {
+        indexed_triangle_set divided =
+            ShapeDiameterFunction::subdivide(its, max_triangle_size);
+        triangles.indices  = divided.indices;  // copy
+        triangles.vertices = divided.vertices; // copy
+    }
     if(!initialize_indices()) return false;
     return initialize_normals();
 }

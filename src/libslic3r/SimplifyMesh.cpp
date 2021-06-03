@@ -63,4 +63,20 @@ void simplify_mesh(indexed_triangle_set &m)
     sm.simplify_mesh_lossless();
 }
 
+void simplify_mesh(indexed_triangle_set &its,
+                   int                   target_count,
+                   double                agressiveness)
+{
+    SimplifyMesh::implementation::SimplifiableMesh sm{&its};
+    sm.simplify_mesh(target_count,agressiveness);
+}
+
+void remove_small_edges(indexed_triangle_set &its,
+                        double                edge_length,
+                        double                max_thr)
+{
+    SimplifyMesh::implementation::SimplifiableMesh sm{&its};
+    sm.remove_small_edges(edge_length, max_thr);
+}
+
 }

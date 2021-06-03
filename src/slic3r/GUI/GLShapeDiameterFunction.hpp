@@ -40,6 +40,9 @@ public:
     bool  allow_render_vertices = false;
     float max_triangle_size = 5.f;
 
+    float max_thr      = 1.;
+    float min_triangle_size = 5.;
+    bool allow_remesh = true;
 public:
     GLShapeDiameterFunction() = default; // set default values
     ~GLShapeDiameterFunction() = default; // needed by PIMPL in GLCanvas3D.hpp
