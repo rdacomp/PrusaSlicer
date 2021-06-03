@@ -268,6 +268,80 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_S
     }
 }
 
+static wxString pref() { return " [ "; }
+static wxString suff() { return " ] "; }
+static void append_tab_menu_items_to_menubar(wxMenuBar* bar, PrinterTechnology pt, bool is_mainframe_menu)
+{
+    if (is_mainframe_menu)
+        bar->Append(new wxMenu(), pref() + _L("Plater") + suff());
+    for (const wxString& title : { is_mainframe_menu    ? _L("Print Settings")       : pref() + _L("Print Settings") + suff(),
+                                   pt == ptSLA          ? _L("Material Settings")    : _L("Filament Settings"),
+                                   _L("Printer Settings") })
+        bar->Append(new wxMenu(), title);
+}
+
+// update markers for selected/unselected menu items
+static void update_marker_for_tabs_menu(wxMenuBar* bar, const wxString& title, bool is_mainframe_menu)
+{
+    size_t items_cnt = bar->GetMenuCount();
+    for (size_t id = items_cnt - (is_mainframe_menu ? 4 : 3); id < items_cnt; id++) {
+        wxString label = bar->GetMenuLabel(id);
+        if (label.First(pref()) == 0) {
+            if (label == pref() + title + suff())
+                return;
+            label.Remove(size_t(0), pref().Len());
+            label.RemoveLast(suff().Len());
+            bar->SetMenuLabel(id, label);
+            break;
+        }
+    }
+    if (int id = bar->FindMenu(title); id != wxNOT_FOUND)
+        bar->SetMenuLabel(id, pref() + title + suff());
+}
+
+static void add_tabs_as_menu(wxMenuBar* bar, MainFrame* main_frame, wxWindow* bar_parent)
+{
+    PrinterTechnology pt = main_frame->plater() ? main_frame->plater()->printer_technology() : ptFFF;
+
+    bool is_mainframe_menu = bar_parent == main_frame;
+    if (!is_mainframe_menu)
+        append_tab_menu_items_to_menubar(bar, pt, is_mainframe_menu);
+
+    bar_parent->Bind(wxEVT_MENU_OPEN, [main_frame, bar, is_mainframe_menu](wxMenuEvent& event) {
+        wxMenu* const menu = event.GetMenu();
+        if (!menu || menu->GetMenuItemCount() > 0)
+            return;
+
+        // update tab selection
+
+        const wxString& title = menu->GetTitle();
+        if (title == _L("Plater"))
+            main_frame->select_tab(size_t(0));
+        else if (title == _L("Print Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(main_frame->plater()->printer_technology() == ptFFF ? Preset::TYPE_PRINT : Preset::TYPE_SLA_PRINT));
+        else if (title == _L("Filament Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_FILAMENT));
+        else if (title == _L("Material Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_SLA_MATERIAL));
+        else if (title == _L("Printer Settings"))
+            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_PRINTER));
+
+        // update markers for selected/unselected menu items
+        update_marker_for_tabs_menu(bar, title, is_mainframe_menu);
+    });
+}
+
+void MainFrame::show_tabs_menu(bool show)
+{
+    if (show)
+        append_tab_menu_items_to_menubar(m_menubar, plater() ? plater()->printer_technology() : ptFFF, true);
+    else
+        while (m_menubar->GetMenuCount() >= 8) {
+            if (wxMenu* menu = m_menubar->Remove(7))
+                delete menu;
+        }
+}
+
 void MainFrame::update_layout()
 {
     auto restore_to_creation = [this]() {
@@ -308,7 +382,7 @@ void MainFrame::update_layout()
 
     ESettingsLayout layout = wxGetApp().is_gcode_viewer() ? ESettingsLayout::GCodeViewer :
         (wxGetApp().app_config->get("old_settings_layout_mode") == "1" ? ESettingsLayout::Old :
-            wxGetApp().app_config->get("new_settings_layout_mode") == "1" ? ESettingsLayout::New :
+            wxGetApp().app_config->get("new_settings_layout_mode") == "1" ? ESettingsLayout::Old ://ESettingsLayout::New :
             wxGetApp().app_config->get("dlg_settings_layout_mode") == "1" ? ESettingsLayout::Dlg : ESettingsLayout::Old);
 
     if (m_layout == layout)
@@ -333,6 +407,7 @@ void MainFrame::update_layout()
                                  layout   == ESettingsLayout::Dlg       ? State::toDlg      : State::noUpdate;
 #endif //__WXMSW__
 
+    ESettingsLayout old_layout = m_layout;
     m_layout = layout;
 
     // From the very beginning the Print settings should be selected
@@ -352,6 +427,13 @@ void MainFrame::update_layout()
         m_main_sizer->Add(m_tabpanel, 1, wxEXPAND);
         m_plater->Show();
         m_tabpanel->Show();
+        // update Tabs
+        if (old_layout == ESettingsLayout::Dlg)
+            if (int sel = m_tabpanel->GetSelection(); sel != wxNOT_FOUND)
+                m_tabpanel->SetSelection(sel+1);// call SetSelection to correct layout after switching from Dlg to Old mode
+
+        show_tabs_menu(true);
+
         break;
     }
     case ESettingsLayout::New:
@@ -371,6 +453,8 @@ void MainFrame::update_layout()
         m_settings_dialog.GetSizer()->Add(m_tabpanel, 1, wxEXPAND);
         m_tabpanel->Show();
         m_plater->Show();
+
+        show_tabs_menu(false);
         break;
     }
     case ESettingsLayout::GCodeViewer:
@@ -1009,54 +1093,6 @@ static void add_common_view_menu_items(wxMenu* view_menu, MainFrame* mainFrame, 
         "", nullptr, [can_change_view]() { return can_change_view(); }, mainFrame);
 }
 
-static void add_tabs_as_menu(wxMenuBar* bar, MainFrame* main_frame) 
-{
-    const wxString pref = " [ ";
-    const wxString suff = " ] ";
-
-    PrinterTechnology pt = main_frame->plater() ? main_frame->plater()->printer_technology() : ptFFF;
-    for (const wxString& title : {pref + _L("Plater") + suff, 
-                                   _L("Print Settings"), 
-                                   pt == ptSLA ? _L("Material Settings") : _L("Filament Settings"), 
-                                   _L("Printer Settings") })
-        bar->Append(new wxMenu(), title);
-
-    main_frame->Bind(wxEVT_MENU_OPEN, [main_frame, bar, pref, suff](wxMenuEvent& event) {
-        wxMenu* const menu = event.GetMenu();
-        if (!menu || menu->GetMenuItemCount() > 0)
-            return;
-
-        // update tab selection
-
-        const wxString& title = menu->GetTitle();
-        if (title == _L("Plater"))
-            main_frame->select_tab(size_t(0));
-        else if (title == _L("Print Settings"))
-            main_frame->select_tab(wxGetApp().get_tab(main_frame->plater()->printer_technology()==ptFFF ? Preset::TYPE_PRINT : Preset::TYPE_SLA_PRINT));
-        else if (title == _L("Filament Settings"))
-            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_FILAMENT));
-        else if (title == _L("Material Settings"))
-            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_SLA_MATERIAL));
-        else if (title == _L("Printer Settings"))
-            main_frame->select_tab(wxGetApp().get_tab(Preset::TYPE_PRINTER));
-
-        // update markers for selected/unselected menu items
-
-        size_t items_cnt = bar->GetMenuCount();
-        for (size_t id = items_cnt - 4; id < items_cnt; id++) {
-            wxString label = bar->GetMenuLabel(id);
-            if (label.First(pref) == 0) {
-                label.Remove(size_t(0), pref.Len());
-                label.RemoveLast(suff.Len());
-                bar->SetMenuLabel(id, label);
-                break;
-            }
-        }
-        if (int id = bar->FindMenu(title); id != wxNOT_FOUND)
-            bar->SetMenuLabel(id, pref + title + suff);
-    });
-}
-
 void MainFrame::init_menubar_as_editor()
 {
 #ifdef __APPLE__
@@ -1379,7 +1415,7 @@ void MainFrame::init_menubar_as_editor()
     m_menubar->Append(helpMenu, _L("&Help"));
     // Add separator 
     m_menubar->Append(new wxMenu(), "          ");
-    add_tabs_as_menu(m_menubar, this);
+    add_tabs_as_menu(m_menubar, this, this);
     SetMenuBar(m_menubar);
 
     m_menubar->EnableTop(6, false);
@@ -1823,6 +1859,8 @@ void MainFrame::select_tab(size_t tab/* = size_t(-1)*/)
 
         if (m_tabpanel->GetSelection() != (int)new_selection)
             m_tabpanel->SetSelection(new_selection);
+        if (Tab* cur_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(new_selection)))
+            update_marker_for_tabs_menu((m_layout == ESettingsLayout::Old ? m_menubar : m_settings_dialog.menubar()), cur_tab->title(), m_layout == ESettingsLayout::Old);
         if (tab == 0 && m_layout == ESettingsLayout::Old)
             m_plater->canvas3D()->render();
         else if (was_hidden) {
@@ -1863,6 +1901,8 @@ void MainFrame::select_tab(size_t tab/* = size_t(-1)*/)
             m_settings_dialog.Show();
         }
 #endif
+        if (m_settings_dialog.IsIconized())
+            m_settings_dialog.Iconize(false);
     }
     else if (m_layout == ESettingsLayout::New) {
         m_main_sizer->Show(m_plater, tab == 0);
@@ -2017,8 +2057,9 @@ std::string MainFrame::get_dir_name(const wxString &full_name) const
 // ----------------------------------------------------------------------------
 
 SettingsDialog::SettingsDialog(MainFrame* mainframe)
-: DPIDialog(mainframe, wxID_ANY, wxString(SLIC3R_APP_NAME) + " - " + _L("Settings"), wxDefaultPosition, wxDefaultSize,
-        wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxMINIMIZE_BOX | wxMAXIMIZE_BOX, "settings_dialog"),
+:DPIFrame(NULL, wxID_ANY, wxString(SLIC3R_APP_NAME) + " - " + _L("Settings"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_STYLE, "settings_dialog"),
+//: DPIDialog(mainframe, wxID_ANY, wxString(SLIC3R_APP_NAME) + " - " + _L("Settings"), wxDefaultPosition, wxDefaultSize,
+//        wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxMINIMIZE_BOX | wxMAXIMIZE_BOX, "settings_dialog"),
     m_main_frame(mainframe)
 {
     if (wxGetApp().is_gcode_viewer())
@@ -2074,6 +2115,14 @@ SettingsDialog::SettingsDialog(MainFrame* mainframe)
                 m_tabpanel->Unbind(wxEVT_KEY_UP, key_up_handker);
         }
         });
+
+    //just hide the Frame on closing
+    this->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& evt) { this->Hide(); });
+
+    // menubar
+    m_menubar = new wxMenuBar();
+    add_tabs_as_menu(m_menubar, mainframe, this);
+    this->SetMenuBar(m_menubar);
 
     // initialize layout
     auto sizer = new wxBoxSizer(wxVERTICAL);

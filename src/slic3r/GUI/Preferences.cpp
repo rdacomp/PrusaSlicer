@@ -412,7 +412,7 @@ void PreferencesDialog::accept()
 
 	m_settings_layout_changed = false;
 	for (const std::string& key : { "old_settings_layout_mode",
-								    "new_settings_layout_mode",
+								    //"new_settings_layout_mode",
 								    "dlg_settings_layout_mode" })
 	{
 	    auto it = m_values.find(key);
@@ -530,13 +530,14 @@ void PreferencesDialog::create_icon_size_slider()
 void PreferencesDialog::create_settings_mode_widget()
 {
 	wxString choices[] = { _L("Old regular layout with the tab bar"),
-						   _L("New layout, access via settings button in the top menu"),
+//						   _L("New layout, access via settings button in the top menu"),
 						   _L("Settings in non-modal window") };
 
 	auto app_config = get_app_config();
-	int selection = app_config->get("old_settings_layout_mode") == "1" ? 0 :
-	                app_config->get("new_settings_layout_mode") == "1" ? 1 :
-	                app_config->get("dlg_settings_layout_mode") == "1" ? 2 : 0;
+	int selection = app_config->get("dlg_settings_layout_mode") == "1" ? 1 : 0;
+                    //app_config->get("old_settings_layout_mode") == "1" ? 0 :                    
+	                //app_config->get("new_settings_layout_mode") == "1" ? 1 :
+	                //app_config->get("dlg_settings_layout_mode") == "1" ? 2 : 0;
 
 	wxWindow* parent = m_optgroup_gui->parent();
 	wxGetApp().UpdateDarkUI(parent);
@@ -568,8 +569,8 @@ void PreferencesDialog::create_settings_mode_widget()
 
 		btn->Bind(wxEVT_RADIOBUTTON, [this, id](wxCommandEvent& ) {
 			m_values["old_settings_layout_mode"] = (id == 0) ? "1" : "0";
-			m_values["new_settings_layout_mode"] = (id == 1) ? "1" : "0";
-			m_values["dlg_settings_layout_mode"] = (id == 2) ? "1" : "0";
+//			m_values["new_settings_layout_mode"] = (id == 1) ? "1" : "0";
+			m_values["dlg_settings_layout_mode"] = (id == /*2*/1) ? "1" : "0";
 		});
 		id++;
 	}

@@ -53,14 +53,16 @@ struct PresetTab {
 // SettingsDialog
 // ----------------------------------------------------------------------------
 
-class SettingsDialog : public DPIDialog
+class SettingsDialog : public DPIFrame//DPIDialog
 {
     wxBookCtrlBase* m_tabpanel { nullptr };
-    MainFrame*  m_main_frame { nullptr };
+    MainFrame*      m_main_frame { nullptr };
+    wxMenuBar*      m_menubar{ nullptr };
 public:
     SettingsDialog(MainFrame* mainframe);
     ~SettingsDialog() = default;
     void set_tabpanel(wxBookCtrlBase* tabpanel) { m_tabpanel = tabpanel; }
+    wxMenuBar* menubar() { return m_menubar; }
 
 protected:
     void on_dpi_changed(const wxRect& suggested_rect) override;
@@ -80,8 +82,6 @@ class MainFrame : public DPIFrame
 #endif
     wxMenuItem* m_menu_item_reslice_now { nullptr };
     wxSizer*    m_main_sizer{ nullptr };
-
-    
 
     size_t      m_last_selected_tab;
 
@@ -162,6 +162,7 @@ public:
     void        init_menubar_as_editor();
     void        init_menubar_as_gcodeviewer();
     void        update_menubar();
+    void        show_tabs_menu(bool show);
 
     void        update_ui_from_settings();
     bool        is_loaded() const { return m_loaded; }
