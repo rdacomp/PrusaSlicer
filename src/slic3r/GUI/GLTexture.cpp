@@ -12,6 +12,13 @@
 
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
+#if ENABLE_TEXTURED_VOLUMES
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/beast/core/detail/base64.hpp>
+
+#include <png.h>
+#endif // ENABLE_TEXTURED_VOLUMES
 
 #include <vector>
 #include <algorithm>
@@ -308,6 +315,10 @@ void GLTexture::reset()
     m_height = 0;
     m_source = "";
     m_compressor.reset();
+
+#if ENABLE_TEXTURED_VOLUMES
+    on_reset();
+#endif // ENABLE_TEXTURED_VOLUMES
 }
 
 void GLTexture::render_texture(unsigned int tex_id, float left, float right, float bottom, float top)
@@ -344,9 +355,8 @@ bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECo
 
     // Load a PNG with an alpha channel.
     wxImage image;
-    if (!image.LoadFile(wxString::FromUTF8(filename.c_str()), wxBITMAP_TYPE_PNG)) {
+    if (!image.LoadFile(wxString::FromUTF8(filename.c_str()), wxBITMAP_TYPE_PNG))
         return false;
-    }
 
     m_width = image.GetWidth();
     m_height = image.GetHeight();
@@ -385,8 +395,8 @@ bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECo
     copy_data(image, data, n_pixels);
 
     send_to_gpu(data, use_mipmaps, compression_type, apply_anisotropy, [&image, copy_data](int lod_w, int lod_h, std::vector<unsigned char>& data) {
-        image = image.ResampleBicubic(lod_w, lod_h);
-        copy_data(image, data, lod_w * lod_h);
+        wxImage im = image.ResampleBicubic(lod_w, lod_h);
+        copy_data(im, data, lod_w * lod_h);
         });
 
     m_source = filename;
@@ -397,6 +407,204 @@ bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECo
 
     return true;
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
+{
+    bool compression_enabled = (compression_type != ECompressionType::None) && GLEW_EXT_texture_compression_s3tc;
+
+    // for reference, see: http://pulsarengine.com/2009/01/reading-png-images-from-memory/
+    static const size_t PngSignatureLength = 8;
+
+    // check PNG signature
+    if (png_data.size() < PngSignatureLength) {
+        BOOST_LOG_TRIVIAL(error) << "Found invalid data while loading png from memory";
+        return false;
+    }
+
+    std::array<unsigned char, PngSignatureLength> png_signature;
+    ::memcpy((void*)png_signature.data(), (const void*)png_data.data(), PngSignatureLength);
+
+    if (!png_check_sig(png_signature.data(), PngSignatureLength)) {
+        BOOST_LOG_TRIVIAL(error) << "Found invalid signature while loading png from memory";
+        return false;
+    }
+
+    // create PNG file read struct (memory is allocated by libpng)
+    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    if (png_ptr == nullptr) {
+        BOOST_LOG_TRIVIAL(error) << "Unable to create read struct while loading png from memory";
+        return false;
+    }
+
+    // create PNG image data info struct (memory is allocated by libpng)
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (info_ptr == nullptr) {
+        // libpng must free file info struct memory before we bail
+        png_destroy_read_struct(&png_ptr, nullptr, nullptr);
+        BOOST_LOG_TRIVIAL(error) << "Unable to create info struct while loading png from memory";
+        return false;
+    }
+
+    // helper class to read png data from memory
+    class PngRead
+    {
+        const std::vector<unsigned char>& m_data;
+        size_t m_pos{ PngSignatureLength }; // skip signature
+
+    public:
+        explicit PngRead(const std::vector<unsigned char>& data) : m_data(data) {}
+        void read(void* dest, size_t num_bytes) {
+            ::memcpy(dest, (const void*)&m_data[m_pos], num_bytes);
+            m_pos += num_bytes;
+        }
+    };
+
+    PngRead png_read(png_data);
+
+    // set custom read function
+    png_set_read_fn(png_ptr, (png_voidp)(&png_read), [](png_structp png_ptr, png_bytep out_bytes, png_size_t byte_count_to_read) {
+        png_voidp io_ptr = png_get_io_ptr(png_ptr);
+        assert(io_ptr != nullptr);
+        PngRead* reader = (PngRead*)io_ptr;
+        reader->read(out_bytes, static_cast<size_t>(byte_count_to_read));
+        });
+
+    // tell libpng to skip signature
+    png_set_sig_bytes(png_ptr, PngSignatureLength);
+
+    // read info struct
+    png_read_info(png_ptr, info_ptr);
+
+    // read header
+    png_uint_32 width = 0;
+    png_uint_32 height = 0;
+    int bitDepth = 0;
+    int colorType = -1;
+    png_uint_32 res = png_get_IHDR(png_ptr, info_ptr, &width, &height, &bitDepth, &colorType, nullptr, nullptr, nullptr);
+    if (res != 1) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        BOOST_LOG_TRIVIAL(error) << "Unable to read header while loading png from memory";
+        return false;
+    }
+
+    // check dimensions
+    if (width == 0 || height == 0) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        BOOST_LOG_TRIVIAL(error) << "Found invalid size while loading png from memory";
+        return false;
+    }
+
+    // temporary constrain, see http://www.libpng.org/pub/png/libpng-1.2.5-manual.html to remove
+    if (colorType != PNG_COLOR_TYPE_RGB && colorType != PNG_COLOR_TYPE_RGB_ALPHA) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        BOOST_LOG_TRIVIAL(error) << "Found invalid color type while loading png from memory";
+        return false;
+    }
+
+    // temporary constrain, see http://www.libpng.org/pub/png/libpng-1.2.5-manual.html to remove
+    if (bitDepth != 8) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        BOOST_LOG_TRIVIAL(error) << "Found bit depth while loading png from memory";
+        return false;
+    }
+
+    // read image data
+    std::vector<unsigned char> rgb_data(width * height * 3, 0);
+    std::vector<unsigned char> alpha_data(width * height, 0);
+    const png_uint_32 bytes_per_row = png_get_rowbytes(png_ptr, info_ptr);
+    std::vector<unsigned char> row_data(bytes_per_row, 0);
+
+    for (png_uint_32 row = 0; row < height; ++row) {
+        png_read_row(png_ptr, (png_bytep)row_data.data(), nullptr);
+        for (png_uint_32 col = 0; col < width; ++col) {
+            png_uint_32 alpha_id = row * width + col;
+            png_uint_32 rgb_id = 3 * alpha_id;
+            switch (colorType)
+            {
+            case PNG_COLOR_TYPE_RGB:
+            {
+                png_uint_32 col_id = 3 * col;
+                rgb_data[rgb_id + 0] = row_data[col_id + 0];
+                rgb_data[rgb_id + 1] = row_data[col_id + 1];
+                rgb_data[rgb_id + 2] = row_data[col_id + 2];
+                alpha_data[alpha_id] = 255;
+                break;
+            }
+            case PNG_COLOR_TYPE_RGB_ALPHA:
+            {
+                png_uint_32 col_id = 4 * col;
+                rgb_data[rgb_id + 0] = row_data[col_id + 0];
+                rgb_data[rgb_id + 1] = row_data[col_id + 1];
+                rgb_data[rgb_id + 2] = row_data[col_id + 2];
+                alpha_data[alpha_id] = row_data[col_id + 3];
+                break;
+            }
+            }
+        }
+    }
+
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+
+    m_width = static_cast<int>(width);
+    m_height = static_cast<int>(height);
+
+    const int n_pixels = m_width * m_height;
+    if (n_pixels <= 0) {
+        reset();
+        return false;
+    }
+
+    wxImage image(m_width, m_height);
+    image.InitAlpha();
+    image.SetData(rgb_data.data(), true);
+    image.SetAlpha(alpha_data.data(), true);
+
+    bool requires_rescale = false;
+
+    if (compression_enabled && compression_type == ECompressionType::MultiThreaded)
+        requires_rescale = adjust_size_for_compression();
+
+    if (requires_rescale)
+        image = image.ResampleBicubic(m_width, m_height);
+
+#define DEBUG_OUTPUT 0
+#if DEBUG_OUTPUT
+    wxString out_file = m_source + ".png";
+    image.SaveFile(out_file, wxBITMAP_TYPE_PNG);
+#endif // DEBUG_OUTPUT
+
+    std::vector<unsigned char> data;
+
+    // Get RGB & alpha raw data from wxImage, pack them into an array.
+    auto copy_data = [this](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
+        unsigned char* img_rgb = image.GetData();
+        unsigned char* img_alpha = image.GetAlpha();
+        data.resize(n_pixels * 4);
+        for (int i = 0; i < n_pixels; ++i) {
+            const int data_id = i * 4;
+            const int img_id = i * 3;
+            data[data_id + 0] = img_rgb[img_id + 0];
+            data[data_id + 1] = img_rgb[img_id + 1];
+            data[data_id + 2] = img_rgb[img_id + 2];
+            data[data_id + 3] = (img_alpha != nullptr) ? img_alpha[i] : 255;
+        }
+    };
+
+    copy_data(image, data, n_pixels);
+
+    send_to_gpu(data, use_mipmaps, compression_type, apply_anisotropy, [&image, copy_data](int lod_w, int lod_h, std::vector<unsigned char>& data) {
+        wxImage im = image.ResampleBicubic(lod_w, lod_h);
+        copy_data(im, data, lod_w * lod_h);
+        });
+
+    if (compression_enabled && compression_type == ECompressionType::MultiThreaded)
+        // start asynchronous compression
+        m_compressor.start_compressing();
+
+    return true;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 bool GLTexture::load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px)
 {
@@ -541,6 +749,73 @@ void GLTexture::send_to_gpu(std::vector<unsigned char>& data, bool use_mipmaps, 
 
     glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
+{
+    reset();
+
+    if (!boost::filesystem::exists(filename))
+        return false;
+
+    if (boost::algorithm::iends_with(filename, ".texture")) {
+
+        boost::property_tree::ptree root;
+        boost::property_tree::read_json(filename, root); // << FIXME for utf8 files
+
+        //http://www.cochoy.fr/boost-property-tree/
+        boost::optional<std::string> id = root.get_optional<std::string>("header.texture_id");
+        boost::optional<std::string> name = root.get_optional<std::string>("header.texture_name");
+        boost::optional<std::string> image_data = root.get_optional<std::string>("image_data");
+        boost::optional<std::string> border_color = root.get_optional<std::string>("settings.texture_border_color");
+        boost::optional<float> repeat_x = root.get_optional<float>("settings.texture_repeat_x");
+        boost::optional<float> repeat_y = root.get_optional<float>("settings.texture_repeat_y");
+        boost::optional<float> rotation_z = root.get_optional<float>("settings.texture_rotation_z");
+        boost::optional<float> translation_x = root.get_optional<float>("settings.texture_translation_x");
+        boost::optional<float> translation_y = root.get_optional<float>("settings.texture_translation_y");
+        boost::optional<std::string> wrapping = root.get_optional<std::string>("settings.texture_wrapping");
+        boost::optional<std::string> version = root.get_optional<std::string>("version");
+
+        m_source = filename;
+
+        if (id.has_value())
+            m_imaker_id = id.value();
+        if (border_color.has_value())
+            m_border_color = border_color.value();
+        if (repeat_x.has_value())
+            m_repeat_x = repeat_x.value();
+        if (repeat_y.has_value())
+            m_repeat_y = repeat_y.value();
+        if (rotation_z.has_value())
+            m_rotation_z = rotation_z.value();
+        if (translation_x.has_value())
+            m_translation_x = translation_x.value();
+        if (translation_y.has_value())
+            m_translation_y = translation_y.value();
+        if (wrapping.has_value()) {
+            std::string value = wrapping.value();
+            if (value == "repeat")
+                m_wrapping = EWrapping::Repeat;
+        }
+        if (version.has_value())
+            m_version = version.value();
+
+        if (image_data.has_value()) {
+            const std::string src = image_data.value();
+            std::string decoded;
+            decoded.resize(boost::beast::detail::base64::decoded_size(src.length()));
+            std::pair<std::size_t, std::size_t> res = boost::beast::detail::base64::decode((void*)decoded.data(), src.data(), src.length());
+            std::vector<unsigned char> src_data(decoded.length());
+            ::memcpy((void*)src_data.data(), (const void*)decoded.data(), decoded.length());
+            bool ret = load_from_png_memory(src_data, true, GLTexture::ECompressionType::SingleThreaded, true);
+            if (!ret)
+                reset();
+            return ret;
+        }
+    }
+    return false;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 } // namespace GUI
 } // namespace Slic3r

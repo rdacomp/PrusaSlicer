@@ -89,7 +89,6 @@ namespace GUI {
         GLTexture() : m_compressor(*this) {}
         virtual ~GLTexture() { reset(); }
 
-
         bool load_from_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
         bool load_from_svg_file(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
         // meanings of states: (std::pair<int, bool>)
@@ -101,6 +100,7 @@ namespace GUI {
         // false -> no changes
         // true -> add background color
         bool load_from_svg_files_as_sprites_array(const std::vector<std::string>& filenames, const std::vector<std::pair<int, bool>>& states, unsigned int sprite_size_px, bool compress);
+
         void reset();
 
         unsigned int get_id() const { return m_id; }
@@ -116,15 +116,65 @@ namespace GUI {
         static void render_texture(unsigned int tex_id, float left, float right, float bottom, float top);
         static void render_sub_texture(unsigned int tex_id, float left, float right, float bottom, float top, const Quad_UVs& uvs);
 
+#if ENABLE_TEXTURED_VOLUMES
+    protected:
+#else
     private:
+#endif // ENABLE_TEXTURED_VOLUMES
         bool load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
+#if ENABLE_TEXTURED_VOLUMES
+        bool load_from_png_memory(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
+#endif // ENABLE_TEXTURED_VOLUMES
         bool load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
         bool adjust_size_for_compression();
         void send_to_gpu(std::vector<unsigned char>& data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy,
             std::function<void(int, int, std::vector<unsigned char>&)> resampler);
 
+#if ENABLE_TEXTURED_VOLUMES
+        virtual void on_reset() {}
+#endif // ENABLE_TEXTURED_VOLUMES
+
         friend class Compressor;
     };
+
+#if ENABLE_TEXTURED_VOLUMES
+    class GLIdeaMakerTexture : public GLTexture
+    {
+        enum class EWrapping
+        {
+            Repeat,
+            Mirror,
+            ClampToEdge,
+            ClampToBorder
+        };
+
+        float m_repeat_x{ 1.0f };
+        float m_repeat_y{ 1.0f };
+        float m_rotation_z{ 0.0f };
+        float m_translation_x{ 0.0f };
+        float m_translation_y{ 0.0f };
+        EWrapping m_wrapping{ EWrapping::Repeat };
+        std::string m_imaker_id;
+        std::string m_border_color;
+        std::string m_version;
+
+    public:
+        bool load_from_ideamaker_texture_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
+
+    protected:
+        virtual void on_reset() override {
+            m_repeat_x = 1.0f;
+            m_repeat_y = 1.0f;
+            m_rotation_z = 0.0f;
+            m_translation_x = 0.0f;
+            m_translation_y = 0.0f;
+            m_wrapping = EWrapping::Repeat;
+            m_imaker_id.clear();
+            m_border_color.clear();
+            m_version.clear();
+        }
+    };
+#endif // ENABLE_TEXTURED_VOLUMES
 
 } // namespace GUI
 } // namespace Slic3r
