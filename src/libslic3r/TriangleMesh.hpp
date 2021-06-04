@@ -119,6 +119,11 @@ private:
 std::vector<Vec3i> create_face_neighbors_index(const indexed_triangle_set &its);
 std::vector<Vec3i> create_face_neighbors_index(const indexed_triangle_set &its, std::function<void()> throw_on_cancel_callback);
 
+// Create index that gives neighbor faces for each face. Ignores face orientations.
+// TODO: naming...
+std::vector<Vec3i> its_create_neighbors_index(const indexed_triangle_set &its);
+std::vector<Vec3i> its_create_neighbors_index_par(const indexed_triangle_set &its);
+
 // Merge duplicate vertices, return number of vertices removed.
 // This function will happily create non-manifolds if more than two faces share the same vertex position
 // or more than two faces share the same edge position!
@@ -129,11 +134,6 @@ int its_remove_degenerate_faces(indexed_triangle_set &its, bool shrink_to_fit = 
 
 // Remove vertices, which none of the faces references. Return number of freed vertices.
 int its_compactify_vertices(indexed_triangle_set &its, bool shrink_to_fit = true);
-
-using FaceNeighborIndex = std::vector< std::array<size_t, 3> >;
-
-// Create index that gives neighbor faces for each face. Ignores face orientations.
-std::vector<Vec3i> its_create_neighbors_index(const indexed_triangle_set &its);
 
 std::vector<indexed_triangle_set> its_split(const indexed_triangle_set &its);
 
