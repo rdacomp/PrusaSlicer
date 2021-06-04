@@ -13,6 +13,13 @@
 #include <wx/colordlg.h>
 #include <wx/wupdlock.h>
 #include <wx/menu.h>
+#include <wx/odcombo.h>
+#include <wx/listbook.h>
+
+#ifdef _WIN32
+#include <wx/msw/dcclient.h>
+#include <wx/msw/private.h>
+#endif
 
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/PrintConfig.hpp"
@@ -63,19 +70,12 @@ namespace GUI {
  **/
 
 PresetComboBox::PresetComboBox(wxWindow* parent, Preset::Type preset_type, const wxSize& size, PresetBundle* preset_bundle/* = nullptr*/) :
-    wxBitmapComboBox(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, size, 0, nullptr, wxCB_READONLY),
+    BitmapComboBox(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, size, 0, nullptr, wxCB_READONLY | wxBORDER_SIMPLE),
     m_type(preset_type),
     m_last_selected(wxNOT_FOUND),
     m_em_unit(em_unit(this)),
     m_preset_bundle(preset_bundle ? preset_bundle : wxGetApp().preset_bundle)
 {
-    SetFont(wxGetApp().normal_font());
-#ifdef _WIN32
-    // Workaround for ignoring CBN_EDITCHANGE events, which are processed after the content of the combo box changes, so that
-    // the index of the item inside CBN_EDITCHANGE may no more be valid.
-    EnableTextChangedEvents(false);
-#endif /* _WIN32 */
-
     switch (m_type)
     {
     case Preset::TYPE_PRINT: {
@@ -531,72 +531,6 @@ bool PresetComboBox::selection_is_changed_according_to_physical_printers()
         tab->select_preset(preset_name, false, old_printer_full_name);
     return true;
 }
-
-#ifdef __APPLE__
-bool PresetComboBox::OnAddBitmap(const wxBitmap& bitmap)
-{
-    if (bitmap.IsOk())
-    {
-        // we should use scaled! size values of bitmap
-        int width = (int)bitmap.GetScaledWidth();
-        int height = (int)bitmap.GetScaledHeight();
-
-        if (m_usedImgSize.x < 0)
-        {
-            // If size not yet determined, get it from this image.
-            m_usedImgSize.x = width;
-            m_usedImgSize.y = height;
-
-            // Adjust control size to vertically fit the bitmap
-            wxWindow* ctrl = GetControl();
-            ctrl->InvalidateBestSize();
-            wxSize newSz = ctrl->GetBestSize();
-            wxSize sz = ctrl->GetSize();
-            if (newSz.y > sz.y)
-                ctrl->SetSize(sz.x, newSz.y);
-            else
-                DetermineIndent();
-        }
-
-        wxCHECK_MSG(width == m_usedImgSize.x && height == m_usedImgSize.y,
-            false,
-            "you can only add images of same size");
-
-        return true;
-    }
-
-    return false;
-}
-
-void PresetComboBox::OnDrawItem(wxDC& dc,
-    const wxRect& rect,
-    int item,
-    int flags) const
-{
-    const wxBitmap& bmp = *(static_cast<wxBitmap*>(m_bitmaps[item]));
-    if (bmp.IsOk())
-    {
-        // we should use scaled! size values of bitmap
-        wxCoord w = bmp.GetScaledWidth();
-        wxCoord h = bmp.GetScaledHeight();
-
-        const int imgSpacingLeft = 4;
-
-        // Draw the image centered
-        dc.DrawBitmap(bmp,
-            rect.x + (m_usedImgSize.x - w) / 2 + imgSpacingLeft,
-            rect.y + (rect.height - h) / 2,
-            true);
-    }
-
-    wxString text = GetString(item);
-    if (!text.empty())
-        dc.DrawText(text,
-            rect.x + m_imgAreaWidth + 1,
-            rect.y + (rect.height - dc.GetCharHeight()) / 2);
-}
-#endif
-
 
 // ---------------------------------
 // ***  PlaterPresetComboBox  ***

@@ -27,7 +27,7 @@ ObjectLayers::ObjectLayers(wxWindow* parent) :
 
     // Legend for object layers
     for (const std::string col : { L("Start at height"), L("Stop at height"), L("Layer height") }) {
-        auto temp = new wxStaticText(m_parent, wxID_ANY, _(col), wxDefaultPosition, /*size*/wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+        auto temp = new wxStaticText(m_parent, wxID_ANY, _(col), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
         temp->SetBackgroundStyle(wxBG_STYLE_PAINT);
         temp->SetFont(wxGetApp().bold_font());
 
@@ -313,9 +313,14 @@ LayerRangeEditor::LayerRangeEditor( ObjectLayers* parent,
     m_type(type),
     m_set_focus_data(set_focus_data_fn),
     wxTextCtrl(parent->m_parent, wxID_ANY, value, wxDefaultPosition, 
-               wxSize(8 * em_unit(parent->m_parent), wxDefaultCoord), wxTE_PROCESS_ENTER)
+               wxSize(8 * em_unit(parent->m_parent), wxDefaultCoord), wxTE_PROCESS_ENTER
+#ifdef _WIN32
+        | wxBORDER_SIMPLE
+#endif
+    )
 {
     this->SetFont(wxGetApp().normal_font());
+    wxGetApp().UpdateDarkUI(this);
 
     // Reset m_enter_pressed flag to _false_, when value is editing
     this->Bind(wxEVT_TEXT, [this](wxEvent&) { m_enter_pressed = false; }, this->GetId());

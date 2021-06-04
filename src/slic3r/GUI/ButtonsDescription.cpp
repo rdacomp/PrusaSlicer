@@ -16,6 +16,8 @@ ButtonsDescription::ButtonsDescription(wxWindow* parent, const std::vector<Entry
 	wxDialog(parent, wxID_ANY, _(L("Buttons And Text Colors Description")), wxDefaultPosition, wxDefaultSize),
 	m_entries(entries)
 {
+	wxGetApp().UpdateDarkUI(this);
+
 	auto grid_sizer = new wxFlexGridSizer(3, 20, 20);
 
 	auto main_sizer = new wxBoxSizer(wxVERTICAL);
@@ -67,7 +69,9 @@ ButtonsDescription::ButtonsDescription(wxWindow* parent, const std::vector<Entry
 	main_sizer->Add(buttons, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
 
 	wxButton* btn = static_cast<wxButton*>(FindWindowById(wxID_OK, this));
-	btn->Bind(wxEVT_BUTTON, [sys_colour, mod_colour, this](wxCommandEvent&) { 
+	wxGetApp().UpdateDarkUI(btn);
+	wxGetApp().UpdateDarkUI(static_cast<wxButton*>(this->FindWindowById(wxID_CANCEL, this)));
+	btn->Bind(wxEVT_BUTTON, [sys_colour, mod_colour, this](wxCommandEvent&) {
 		wxGetApp().set_label_clr_sys(sys_colour->GetColour());
 		wxGetApp().set_label_clr_modified(mod_colour->GetColour());
 		EndModal(wxID_OK);

@@ -206,6 +206,34 @@ static void get_full_settings_hierarchy(FullSettingsHierarchy& settings_menu, co
     }
 }
 
+static int GetSelectedChoices(  wxArrayInt& selections,
+                                const wxString& message,
+                                const wxString& caption,
+                                const wxArrayString& choices)
+{
+#ifdef _WIN32
+    wxMultiChoiceDialog dialog(nullptr, message, caption, choices);
+    wxGetApp().UpdateDlgDarkUI(&dialog);
+
+    // call this even if selections array is empty and this then (correctly)
+    // deselects the first item which is selected by default
+    dialog.SetSelections(selections);
+
+    if (dialog.ShowModal() != wxID_OK)
+    {
+        // NB: intentionally do not clear the selections array here, the caller
+        //     might want to preserve its original contents if the dialog was
+        //     cancelled
+        return -1;
+    }
+
+    selections = dialog.GetSelections();
+    return static_cast<int>(selections.GetCount());
+#else
+    wxGetSelectedChoices(selections, message, caption, choices);
+#endif
+}
+
 static wxMenu* create_settings_popupmenu(wxMenu* parent_menu, const bool is_object_settings, wxDataViewItem item/*, ModelConfig& config*/)
 {
     wxMenu* menu = new wxMenu;
@@ -236,7 +264,7 @@ static wxMenu* create_settings_popupmenu(wxMenu* parent_menu, const bool is_obje
         }
 
         if (!category_options.empty() &&
-            wxGetSelectedChoices(selections, _L("Select showing settings"), category_name, names) != -1) {
+            GetSelectedChoices(selections, _L("Select showing settings"), category_name, names) != -1) {
             for (auto sel : selections)
                 category_options[sel].second = true;
         }
@@ -702,7 +730,10 @@ void MenuFactory::append_menu_item_change_extruder(wxMenu* menu)
 
     }
 
-    menu->AppendSubMenu(extruder_selection_menu, name);
+    append_submenu(menu, extruder_selection_menu, wxID_ANY, name, _L("Use another extruder"),
+        "edit_uni"/* : "change_extruder"*/, []() {return true; }, GUI::wxGetApp().plater());
+
+//    menu->AppendSubMenu(extruder_selection_menu, name);
 }
 
 void MenuFactory::append_menu_item_scale_selection_to_fit_print_volume(wxMenu* menu)

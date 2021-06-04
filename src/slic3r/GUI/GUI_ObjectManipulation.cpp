@@ -1,6 +1,7 @@
 #include "GUI_ObjectManipulation.hpp"
 #include "GUI_ObjectList.hpp"
 #include "I18N.hpp"
+#include "BitmapComboBox.hpp"
 
 #include "GLCanvas3D.hpp"
 #include "OptionsGroup.hpp"
@@ -64,7 +65,7 @@ static choice_ctrl* create_word_local_combo(wxWindow *parent)
     temp->SetTextCtrlStyle(wxTE_READONLY);
 	temp->Create(parent, wxID_ANY, wxString(""), wxDefaultPosition, size, 0, nullptr);
 #else
-	temp = new choice_ctrl(parent, wxID_ANY, wxString(""), wxDefaultPosition, size, 0, nullptr, wxCB_READONLY);
+	temp = new choice_ctrl(parent, wxID_ANY, wxString(""), wxDefaultPosition, size, 0, nullptr, wxCB_READONLY | wxBORDER_SIMPLE);
 #endif //__WXOSX__
 
     temp->SetFont(Slic3r::GUI::wxGetApp().normal_font());
@@ -198,7 +199,7 @@ ObjectManipulation::ObjectManipulation(wxWindow* parent) :
     auto add_label = [this, height](wxStaticText** label, const std::string& name, wxSizer* reciver = nullptr)
     {
         *label = new wxStaticText(m_parent, wxID_ANY, _(name) + ":");
-        set_font_and_background_style(m_move_Label, wxGetApp().normal_font());
+        set_font_and_background_style(*label, wxGetApp().normal_font());
 
         wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
         sizer->SetMinSize(wxSize(-1, height));
@@ -513,7 +514,14 @@ void ObjectManipulation::update_ui_from_settings()
         int axis_id = 0;
         for (ManipulationEditor* editor : m_editors) {
 //            editor->SetForegroundColour(m_use_colors ? wxColour(axes_color_text[axis_id]) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
+#ifdef _WIN32
+            if (m_use_colors)
+                editor->SetBackgroundColour(wxColour(axes_color_back[axis_id]));
+            else
+                wxGetApp().UpdateDarkUI(editor);
+#else
             editor->SetBackgroundColour(m_use_colors ? wxColour(axes_color_back[axis_id]) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+#endif /* _WIN32 */
             if (++axis_id == 3)
                 axis_id = 0;
         }
@@ -1027,6 +1035,8 @@ void ObjectManipulation::sys_color_changed()
     for (int id = 0; id < 3; ++id)
         m_mirror_buttons[id].first->msw_rescale();
 
+    wxGetApp().UpdateDarkUI(m_word_local_combo);
+
     get_og()->sys_color_changed();
 }
 
@@ -1035,7 +1045,11 @@ ManipulationEditor::ManipulationEditor(ObjectManipulation* parent,
                                        const std::string& opt_key,
                                        int axis) :
     wxTextCtrl(parent->parent(), wxID_ANY, wxEmptyString, wxDefaultPosition,
-        wxSize((wxOSX ? 5 : 6)*int(wxGetApp().em_unit()), wxDefaultCoord), wxTE_PROCESS_ENTER),
+        wxSize((wxOSX ? 5 : 6)*int(wxGetApp().em_unit()), wxDefaultCoord), wxTE_PROCESS_ENTER
+#ifdef _WIN32
+        | wxBORDER_SIMPLE
+#endif 
+    ),
     m_opt_key(opt_key),
     m_axis(axis)
 {
@@ -1044,8 +1058,9 @@ ManipulationEditor::ManipulationEditor(ObjectManipulation* parent,
     this->OSXDisableAllSmartSubstitutions();
 #endif // __WXOSX__
     if (parent->use_colors()) {
-//        this->SetForegroundColour(wxColour(axes_color_text[axis]));
         this->SetBackgroundColour(wxColour(axes_color_back[axis]));
+    } else {
+        wxGetApp().UpdateDarkUI(this);
     }
 
     // A name used to call handle_sidebar_focus_event()

@@ -411,6 +411,7 @@ bool OptionsGroup::activate(std::function<void()> throw_if_canceled)
 			stb = new wxStaticBox(m_parent, wxID_ANY, _(title));
 			if (!wxOSX) stb->SetBackgroundStyle(wxBG_STYLE_PAINT);
 			stb->SetFont(wxOSX ? wxGetApp().normal_font() : wxGetApp().bold_font());
+			wxGetApp().UpdateDarkUI(stb);
 		}
 		else
 			stb = nullptr;

@@ -55,6 +55,11 @@ int get_dpi_for_window(const wxWindow *window);
 wxFont get_default_font_for_dpi(const wxWindow* window, int dpi);
 inline wxFont get_default_font(const wxWindow* window) { return get_default_font_for_dpi(window, get_dpi_for_window(window)); }
 
+bool check_dark_mode();
+#ifdef _WIN32
+void update_dark_ui(wxWindow* window);
+#endif
+
 #if !wxVERSION_EQUAL_OR_GREATER_THAN(3,1,3)
 struct DpiChangedEvent : public wxEvent {
     int dpi;
@@ -92,6 +97,9 @@ public:
         this->SetFont(m_normal_font);
 #endif
         this->CenterOnParent();
+#ifdef _WIN32
+        update_dark_ui(this);
+#endif
 
         // Linux specific issue : get_dpi_for_window(this) still doesn't responce to the Display's scale in new wxWidgets(3.1.3).
         // So, calculate the m_em_unit value from the font size, as before
@@ -242,6 +250,17 @@ private:
         // reset previous scale factor from current scale factor value
         m_prev_scale_factor = m_scale_factor;
     }
+
+#ifdef _WIN32
+    bool HandleSettingChange(WXWPARAM wParam, WXLPARAM lParam) override
+    {
+        update_dark_ui(this);
+        on_sys_color_changed();
+
+        // let the system handle it
+        return false;
+    }
+#endif
 
 };
 

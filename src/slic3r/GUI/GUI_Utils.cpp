@@ -14,6 +14,7 @@
 #include <wx/dcclient.h>
 #include <wx/font.h>
 #include <wx/fontutil.h>
+#include <wx/msw/registry.h>
 
 #include "libslic3r/Config.hpp"
 
@@ -148,6 +149,30 @@ wxFont get_default_font_for_dpi(const wxWindow *window, int dpi)
 #endif
     return wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
 }
+
+bool check_dark_mode() {
+#ifdef _WIN32
+    wxRegKey rk(wxRegKey::HKCU,
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+    if (rk.Exists() && rk.HasValue("AppsUseLightTheme")) {
+        long value = -1;
+        rk.QueryValue("AppsUseLightTheme", &value);
+        return value <= 0;
+    }
+#endif
+    return wxSystemSettings::GetAppearance().IsDark();
+}
+
+
+#ifdef _WIN32
+void update_dark_ui(wxWindow* window) 
+{
+    bool is_dark = check_dark_mode();
+    window->SetBackgroundColour(is_dark ? wxColour(43,  43,  43)  : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    window->SetForegroundColour(is_dark ? wxColour(250, 250, 250) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
+}
+#endif
+
 
 CheckboxFileDialog::ExtraPanel::ExtraPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY)

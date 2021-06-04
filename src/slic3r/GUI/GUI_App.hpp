@@ -21,6 +21,7 @@ class wxMenuItem;
 class wxMenuBar;
 class wxTopLevelWindow;
 class wxNotebook;
+class wxListbook;
 struct wxLanguageInfo;
 
 namespace Slic3r {
@@ -118,6 +119,11 @@ private:
     wxColour        m_color_label_modified;
     wxColour        m_color_label_sys;
     wxColour        m_color_label_default;
+#ifdef _WIN32
+    wxColour        m_color_highlight_label_default;
+    wxColour        m_color_window_default;
+    wxColour        m_color_highlight_default;
+#endif
 
     wxFont		    m_small_font;
     wxFont		    m_bold_font;
@@ -170,6 +176,9 @@ public:
     void            init_label_colours();
     void            update_label_colours_from_appconfig();
     void            update_label_colours();
+    void            UpdateDarkUI(wxWindow *window, bool highlited = false, bool just_font = false);
+    void            UpdateDlgDarkUI(wxDialog* window);
+    void            UpdateDVCDarkUI(wxDataViewCtrl* window, bool highlited = false);
     void            init_fonts();
 	void            update_fonts(const MainFrame *main_frame = nullptr);
     void            set_label_clr_modified(const wxColour& clr);
@@ -178,6 +187,13 @@ public:
     const wxColour& get_label_clr_modified(){ return m_color_label_modified; }
     const wxColour& get_label_clr_sys()     { return m_color_label_sys; }
     const wxColour& get_label_clr_default() { return m_color_label_default; }
+
+
+#ifdef _WIN32
+    const wxColour& get_label_highlight_clr()   { return m_color_highlight_label_default; }
+    const wxColour& get_window_default_clr()    { return m_color_window_default; }
+    const wxColour& get_highlight_default_clr() { return m_color_highlight_default; }
+#endif
 
     const wxFont&   small_font()            { return m_small_font; }
     const wxFont&   bold_font()             { return m_bold_font; }
@@ -256,7 +272,7 @@ public:
 
 	PresetUpdater* get_preset_updater() { return preset_updater; }
 
-    wxNotebook*     tab_panel() const ;
+    wxBookCtrlBase* tab_panel() const ;
     int             extruders_cnt() const;
     int             extruders_edited_cnt() const;
 

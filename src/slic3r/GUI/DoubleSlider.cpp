@@ -494,7 +494,7 @@ void Control::draw_focus_rect()
 void Control::render()
 {
 #ifdef _WIN32 
-    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    GUI::wxGetApp().UpdateDarkUI(this);
 #else
     SetBackgroundColour(GetParent()->GetBackgroundColour());
 #endif // _WIN32 
@@ -990,11 +990,7 @@ void Control::draw_colored_band(wxDC& dc)
 
     // don't color a band for MultiExtruder mode
     if (m_ticks.empty() || m_mode == MultiExtruder) {
-#ifdef _WIN32 
-        draw_band(dc, wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW), main_band);
-#else
         draw_band(dc, GetParent()->GetBackgroundColour(), main_band);
-#endif // _WIN32 
         return;
     }
 
@@ -1593,12 +1589,9 @@ void Control::append_change_extruder_menu_item(wxMenu* menu, bool switch_current
                                                    (switch_current_code ? _L("Switch code to Change extruder") : _L("Change extruder") ) : 
                                                    _L("Change extruder (N/A)");
 
-        wxMenuItem* change_extruder_menu_item = menu->AppendSubMenu(change_extruder_menu, change_extruder_menu_name, _L("Use another extruder"));
-        change_extruder_menu_item->SetBitmap(create_scaled_bitmap(active_extruders[1] > 0 ? "edit_uni" : "change_extruder"));
-
-        GUI::wxGetApp().plater()->Bind(wxEVT_UPDATE_UI, [this, change_extruder_menu_item](wxUpdateUIEvent& evt) {
-            enable_menu_item(evt, [this]() {return m_mode == MultiAsSingle; }, change_extruder_menu_item, this); },
-            change_extruder_menu_item->GetId());
+        append_submenu(menu, change_extruder_menu, wxID_ANY, change_extruder_menu_name, _L("Use another extruder"),
+            active_extruders[1] > 0 ? "edit_uni" : "change_extruder",
+            [this]() {return m_mode == MultiAsSingle; }, GUI::wxGetApp().plater());
     }
 }
 

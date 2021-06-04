@@ -240,6 +240,7 @@ private:
 
     // bitmap dimensions 
     int             m_px_cnt{ 16 };
+    bool            m_has_border {false};
 };
 
 

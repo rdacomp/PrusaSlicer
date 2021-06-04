@@ -550,9 +550,7 @@ LockButton::LockButton( wxWindow *parent,
     m_bmp_lock_open     = ScalableBitmap(this, "lock_open");
     m_bmp_lock_open_f   = ScalableBitmap(this, "lock_open_f");
 
-#ifdef __WXMSW__
-    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-#endif // __WXMSW__
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this);
     SetBitmap(m_bmp_lock_open.bmp());
     SetBitmapDisabled(m_bmp_lock_open.bmp());
     SetBitmapHover(m_bmp_lock_closed_f.bmp());
@@ -590,9 +588,7 @@ void LockButton::msw_rescale()
 
 void LockButton::update_button_bitmaps()
 {
-#ifdef __WXMSW__
-    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-#endif
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this);
     SetBitmap(m_is_pushed ? m_bmp_lock_closed.bmp() : m_bmp_lock_open.bmp());
     SetBitmapHover(m_is_pushed ? m_bmp_lock_closed_f.bmp() : m_bmp_lock_open_f.bmp());
 
@@ -633,6 +629,7 @@ void ModeButton::Init(const wxString &mode)
     m_tt_selected = Slic3r::GUI::from_u8((boost::format(_utf8(L("Current mode is %s"))) % mode_str).str());
 
     SetBitmapMargins(3, 0);
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this, true);
 
     //button events
     Bind(wxEVT_BUTTON,          &ModeButton::OnButton, this);
@@ -662,6 +659,9 @@ void ModeButton::focus_button(const bool focus)
                              Slic3r::GUI::wxGetApp().normal_font();
 
     SetFont(new_font);
+#ifdef _WIN32
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this, true, true);
+#else
     SetForegroundColour(wxSystemSettings::GetColour(focus ? wxSYS_COLOUR_BTNTEXT : 
 #if defined (__linux__) && defined (__WXGTK3__)
         wxSYS_COLOUR_GRAYTEXT
@@ -671,6 +671,7 @@ void ModeButton::focus_button(const bool focus)
         wxSYS_COLOUR_BTNSHADOW
 #endif    
     ));
+#endif /* _WIN32 */
 
     Refresh();
     Update();
@@ -820,10 +821,13 @@ ScalableButton::ScalableButton( wxWindow *          parent,
     m_parent(parent),
     m_current_icon_name(icon_name),
     m_use_default_disabled_bitmap (use_default_disabled_bitmap),
-    m_px_cnt(bmp_px_cnt)
+    m_px_cnt(bmp_px_cnt),
+    m_has_border(!(style & wxNO_BORDER))
 {
     Create(parent, id, label, pos, size, style);
 #ifdef __WXMSW__
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this/*, m_has_border*/);
+#else
     if (style & wxNO_BORDER)
         SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
 #endif // __WXMSW__
@@ -848,10 +852,13 @@ ScalableButton::ScalableButton( wxWindow *          parent,
                                 long                style /*= wxBU_EXACTFIT | wxNO_BORDER*/) :
     m_parent(parent),
     m_current_icon_name(bitmap.name()),
-    m_px_cnt(bitmap.px_cnt())
+    m_px_cnt(bitmap.px_cnt()),
+    m_has_border(!(style& wxNO_BORDER))
 {
     Create(parent, id, label, wxDefaultPosition, wxDefaultSize, style);
 #ifdef __WXMSW__
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this/*, m_has_border*/);
+#else
     if (style & wxNO_BORDER)
         SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
 #endif // __WXMSW__
@@ -889,6 +896,8 @@ void ScalableButton::UseDefaultBitmapDisabled()
 void ScalableButton::msw_rescale()
 {
 #ifdef __WXMSW__
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this, m_has_border);
+#else
     SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
 #endif
     SetBitmap(create_scaled_bitmap(m_current_icon_name, m_parent, m_px_cnt));

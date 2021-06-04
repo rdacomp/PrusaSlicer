@@ -2,6 +2,7 @@
 
 #include <wx/panel.h>
 #include <wx/notebook.h>
+#include <wx/listbook.h>
 #include <wx/icon.h>
 #include <wx/sizer.h>
 #include <wx/menu.h>
@@ -539,7 +540,17 @@ void MainFrame::init_tabpanel()
 {
     // wxNB_NOPAGETHEME: Disable Windows Vista theme for the Notebook background. The theme performance is terrible on Windows 10
     // with multiple high resolution displays connected.
+#ifdef __WXMSW__
+    m_tabpanel = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
+    wxGetApp().UpdateDarkUI(m_tabpanel);
+    wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
+#else
     m_tabpanel = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
+    if (wxSystemSettings::GetAppearance().IsDark())
+        m_tabpanel->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+#endif
+
+
 #ifndef __WXOSX__ // Don't call SetFont under OSX to avoid name cutting in ObjectList
     m_tabpanel->SetFont(Slic3r::GUI::wxGetApp().normal_font());
 #endif
@@ -550,7 +561,11 @@ void MainFrame::init_tabpanel()
     m_tabpanel->Hide();
     m_settings_dialog.set_tabpanel(m_tabpanel);
 
+#ifdef __WXMSW__
+    m_tabpanel->Bind(wxEVT_LISTBOOK_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
+#else
     m_tabpanel->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
+#endif
 #if ENABLE_VALIDATE_CUSTOM_GCODE
         if (int old_selection = e.GetOldSelection();
             old_selection != wxNOT_FOUND && old_selection < static_cast<int>(m_tabpanel->GetPageCount())) {
@@ -896,7 +911,9 @@ void MainFrame::on_sys_color_changed()
     // update label colors in respect to the system mode
     wxGetApp().init_label_colours();
 #ifdef __WXMSW__
-    m_tabpanel->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    wxGetApp().UpdateDarkUI(m_tabpanel);
+    wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
+    m_statusbar->update_dark_ui();
 #endif
 
     // update Plater

@@ -631,7 +631,12 @@ wxCoord    OG_CustomCtrl::CtrlLine::draw_text(wxDC& dc, wxPoint pos, const wxStr
 #else
             dc.SetFont(old_font.Bold().Underlined());
 #endif            
-        dc.SetTextForeground(color ? *color : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
+        dc.SetTextForeground(color ? *color :
+#ifdef _WIN32
+            wxGetApp().get_label_clr_default());
+#else
+            wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
+#endif /* _WIN32 */
         dc.DrawText(out_text, pos);
         dc.SetTextForeground(old_clr);
         dc.SetFont(old_font);
@@ -703,7 +708,11 @@ bool OG_CustomCtrl::CtrlLine::launch_browser() const
 RememberChoiceDialog::RememberChoiceDialog(wxWindow* parent, const wxString& msg_text, const wxString& caption)
     : wxDialog(parent, wxID_ANY, caption, wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxICON_INFORMATION)
 {
+#ifdef _WIN32
+    wxGetApp().UpdateDarkUI(this);
+#else
     this->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+#endif
     this->SetEscapeId(wxID_CLOSE);
 
     wxBoxSizer* topSizer = new wxBoxSizer(wxVERTICAL);

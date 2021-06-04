@@ -279,6 +279,7 @@ void create_combochecklist(wxComboCtrl* comboCtrl, const std::string& text, cons
 		}
 
 		comboCtrl->SetMinClientSize(wxSize(max_width, -1));
+        wxGetApp().UpdateDarkUI(popup);
 	}
 }
 

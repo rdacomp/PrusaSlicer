@@ -14,6 +14,7 @@
 #include "Plater.hpp"
 #include "MainFrame.hpp"
 
+#include <wx/listbook.h>
 #include <wx/notebook.h>
 #include <wx/glcanvas.h>
 #include <wx/sizer.h>
@@ -186,7 +187,7 @@ bool Preview::init(wxWindow* parent, Model* model)
 
     // to match the background of the sliders
 #ifdef _WIN32 
-    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+    wxGetApp().UpdateDarkUI(this);
 #else
     SetBackgroundColour(GetParent()->GetBackgroundColour());
 #endif // _WIN32 
@@ -206,9 +207,9 @@ bool Preview::init(wxWindow* parent, Model* model)
 
     m_layers_slider_sizer = create_layers_slider_sizer();
 
-    m_bottom_toolbar_panel = new wxPanel(this);
+    wxGetApp().UpdateDarkUI(m_bottom_toolbar_panel = new wxPanel(this));
     m_label_view_type = new wxStaticText(m_bottom_toolbar_panel, wxID_ANY, _L("View"));
-    m_choice_view_type = new wxComboBox(m_bottom_toolbar_panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0, NULL, wxCB_READONLY);
+    wxGetApp().UpdateDarkUI(m_choice_view_type = new wxComboBox(m_bottom_toolbar_panel, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0, NULL, wxCB_READONLY));
     m_choice_view_type->Append(_L("Feature type"));
     m_choice_view_type->Append(_L("Height"));
     m_choice_view_type->Append(_L("Width"));

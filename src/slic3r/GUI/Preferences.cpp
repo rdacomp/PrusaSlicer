@@ -5,6 +5,7 @@
 #include "I18N.hpp"
 #include "libslic3r/AppConfig.hpp"
 #include <wx/notebook.h>
+#include <wx/listbook.h>
 
 namespace Slic3r {
 namespace GUI {
@@ -19,7 +20,7 @@ PreferencesDialog::PreferencesDialog(wxWindow* parent) :
 	build();
 }
 
-static std::shared_ptr<ConfigOptionsGroup>create_options_tab(const wxString& title, wxNotebook* tabs)
+static std::shared_ptr<ConfigOptionsGroup>create_options_tab(const wxString& title, wxBookCtrlBase* tabs)
 {
 	wxPanel* tab = new wxPanel(tabs, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBK_LEFT | wxTAB_TRAVERSAL);
 	tabs->AddPage(tab, title);
@@ -44,15 +45,23 @@ static void activate_options_tab(std::shared_ptr<ConfigOptionsGroup> optgroup)
 
 void PreferencesDialog::build()
 {
+#ifdef _WIN32
+	wxGetApp().UpdateDarkUI(this);
+#else
 	SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+#endif
 	const wxFont& font = wxGetApp().normal_font();
 	SetFont(font);
 
 	auto app_config = get_app_config();
 
-	wxNotebook* tabs = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
 #ifdef __WXMSW__
-    tabs->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+	wxListbook* tabs = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME | wxNO_BORDER);
+	wxGetApp().UpdateDarkUI(tabs);
+	wxGetApp().UpdateDarkUI(tabs->GetListView());
+#else
+    wxNotebook* tabs = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL  |wxNB_NOPAGETHEME | wxNB_DEFAULT );
+	tabs->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
 #endif
 
 	// Add "General" tab
@@ -320,6 +329,16 @@ void PreferencesDialog::build()
 		option = Option(def, "order_volumes");
 		m_optgroup_gui->append_single_option_line(option);
 
+#ifdef _WIN32
+		def.label = L("Use prototype of Dark/Light mode");
+		def.type = coBool;
+		def.tooltip = L("If enabled, UI will be updated in respect to the selected system color (Dark/Light) "
+						"If disabled, old UI will be used.");
+		def.set_default_value(new ConfigOptionBool{ app_config->get("use_system_color_mode") == "1" });
+		option = Option(def, "use_system_color_mode");
+		m_optgroup_gui->append_single_option_line(option);
+#endif
+
 		def.label = L("Use custom size for toolbar icons");
 		def.type = coBool;
 		def.tooltip = L("If enabled, you can change size of toolbar icons manually.");
@@ -363,6 +382,10 @@ void PreferencesDialog::build()
 	auto buttons = CreateStdDialogButtonSizer(wxOK | wxCANCEL);
 	wxButton* btn = static_cast<wxButton*>(FindWindowById(wxID_OK, this));
 	btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { accept(); });
+
+	wxGetApp().UpdateDarkUI(btn);
+	wxGetApp().UpdateDarkUI(static_cast<wxButton*>(this->FindWindowById(wxID_CANCEL, this)));
+
 	sizer->Add(buttons, 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM | wxTOP, 10);
 
 	SetSizer(sizer);
@@ -453,6 +476,7 @@ void PreferencesDialog::create_icon_size_slider()
     m_icon_size_sizer = new wxBoxSizer(wxHORIZONTAL);
 
 	wxWindow* parent = m_optgroup_gui->parent();
+	wxGetApp().UpdateDarkUI(parent);
 
     if (isOSX)
         // For correct rendering of the slider and value label under OSX
@@ -515,7 +539,8 @@ void PreferencesDialog::create_settings_mode_widget()
 	                app_config->get("dlg_settings_layout_mode") == "1" ? 2 : 0;
 
 	wxWindow* parent = m_optgroup_gui->parent();
-
+	wxGetApp().UpdateDarkUI(parent);
+#if 0
 	m_layout_mode_box = new wxRadioBox(parent, wxID_ANY, _L("Layout Options"), wxDefaultPosition, wxDefaultSize,
 		WXSIZEOF(choices), choices, 3, wxRA_SPECIFY_ROWS);
 	m_layout_mode_box->SetFont(wxGetApp().normal_font());
@@ -527,9 +552,30 @@ void PreferencesDialog::create_settings_mode_widget()
 		m_values["new_settings_layout_mode"] = boost::any_cast<bool>(selection == 1) ? "1" : "0";
 		m_values["dlg_settings_layout_mode"] = boost::any_cast<bool>(selection == 2) ? "1" : "0";
 	});
+#else
+	wxStaticBox* stb = new wxStaticBox(parent, wxID_ANY, _L("Layout Options"));
+	wxGetApp().UpdateDarkUI(stb);
+	if (!wxOSX) stb->SetBackgroundStyle(wxBG_STYLE_PAINT);
+	stb->SetFont(wxGetApp().normal_font());
 
+	wxSizer* stb_sizer = new wxStaticBoxSizer(stb, wxVERTICAL);
+
+	int id = 0;
+	for (const wxString& label : choices) {
+		wxRadioButton* btn = new wxRadioButton(parent, wxID_ANY, label, wxDefaultPosition, wxDefaultSize, id==0 ? wxRB_GROUP : 0);
+		stb_sizer->Add(btn);
+		btn->SetValue(id == selection);
+
+		btn->Bind(wxEVT_RADIOBUTTON, [this, id](wxCommandEvent& ) {
+			m_values["old_settings_layout_mode"] = (id == 0) ? "1" : "0";
+			m_values["new_settings_layout_mode"] = (id == 1) ? "1" : "0";
+			m_values["dlg_settings_layout_mode"] = (id == 2) ? "1" : "0";
+		});
+		id++;
+	}
+#endif
 	auto sizer = new wxBoxSizer(wxHORIZONTAL);
-	sizer->Add(m_layout_mode_box, 1, wxALIGN_CENTER_VERTICAL);
+	sizer->Add(/*m_layout_mode_box*/stb_sizer, 1, wxALIGN_CENTER_VERTICAL);
 	m_optgroup_gui->sizer->Add(sizer, 0, wxEXPAND | wxTOP, em_unit());
 }
 
@@ -538,6 +584,7 @@ void PreferencesDialog::create_settings_text_color_widget()
 	wxWindow* parent = m_optgroup_gui->parent();
 
 	wxStaticBox* stb = new wxStaticBox(parent, wxID_ANY, _L("Text color Settings"));
+	wxGetApp().UpdateDarkUI(stb);
 	if (!wxOSX) stb->SetBackgroundStyle(wxBG_STYLE_PAINT);
 
 	wxSizer* sizer = new wxStaticBoxSizer(stb, wxVERTICAL);

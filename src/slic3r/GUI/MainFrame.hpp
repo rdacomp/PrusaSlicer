@@ -19,6 +19,7 @@
 #include "UnsavedChangesDialog.hpp"
 
 class wxNotebook;
+class wxListbook;
 class wxProgressDialog;
 
 namespace Slic3r {
@@ -54,12 +55,12 @@ struct PresetTab {
 
 class SettingsDialog : public DPIDialog
 {
-    wxNotebook* m_tabpanel { nullptr };
+    wxBookCtrlBase* m_tabpanel { nullptr };
     MainFrame*  m_main_frame { nullptr };
 public:
     SettingsDialog(MainFrame* mainframe);
     ~SettingsDialog() = default;
-    void set_tabpanel(wxNotebook* tabpanel) { m_tabpanel = tabpanel; }
+    void set_tabpanel(wxBookCtrlBase* tabpanel) { m_tabpanel = tabpanel; }
 
 protected:
     void on_dpi_changed(const wxRect& suggested_rect) override;
@@ -198,7 +199,7 @@ public:
     PrintHostQueueDialog* printhost_queue_dlg() { return m_printhost_queue_dlg; }
 
     Plater*               m_plater { nullptr };
-    wxNotebook*           m_tabpanel { nullptr };
+    wxBookCtrlBase*       m_tabpanel { nullptr };
     SettingsDialog        m_settings_dialog;
     DiffPresetDialog      diff_dialog;
     wxWindow*             m_plater_page{ nullptr };
