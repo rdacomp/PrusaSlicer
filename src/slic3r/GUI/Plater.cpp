@@ -1362,6 +1362,7 @@ void Sidebar::update_ui_from_settings()
     p->plater->canvas3D()->update_gizmos_on_off_state();
     p->plater->set_current_canvas_as_dirty();
     p->plater->get_current_canvas3D()->request_extra_frame();
+    p->object_list->apply_volumes_order();
 }
 
 std::vector<PlaterPresetComboBox*>& Sidebar::combos_filament()
@@ -2449,6 +2450,7 @@ std::vector<size_t> Plater::priv::load_model_objects(const ModelObjectPtrs &mode
 #endif /* AUTOPLACEMENT_ON_LOAD */
     for (ModelObject *model_object : model_objects) {
         auto *object = model.add_object(*model_object);
+        object->sort_volumes(wxGetApp().app_config->get("order_volumes") == "1");
         std::string object_name = object->name.empty() ? fs::path(object->input_file).filename().string() : object->name;
         obj_idxs.push_back(obj_count++);
 
@@ -3300,12 +3302,14 @@ void Plater::priv::reload_from_disk()
                         new_volume->convert_from_meters();
                     new_volume->supported_facets.assign(old_volume->supported_facets);
                     new_volume->seam_facets.assign(old_volume->seam_facets);
+                    new_volume->mmu_segmentation_facets.assign(old_volume->mmu_segmentation_facets);
                     std::swap(old_model_object->volumes[sel_v.volume_idx], old_model_object->volumes.back());
                     old_model_object->delete_volume(old_model_object->volumes.size() - 1);
 #if ENABLE_ALLOW_NEGATIVE_Z
                     if (!sinking)
 #endif // ENABLE_ALLOW_NEGATIVE_Z
                         old_model_object->ensure_on_bed();
+                    old_model_object->sort_volumes(wxGetApp().app_config->get("order_volumes") == "1");
 
                     sla::reproject_points_and_holes(old_model_object);
                 }
@@ -3372,13 +3376,14 @@ void Plater::priv::fix_through_netfabb(const int obj_idx, const int vol_idx/* = 
 
     ModelObject* mo = model.objects[obj_idx];
 
-    // If there are custom supports/seams, remove them. Fixed mesh
+    // If there are custom supports/seams/mmu segmentation, remove them. Fixed mesh
     // may be different and they would make no sense.
     bool paint_removed = false;
     for (ModelVolume* mv : mo->volumes) {
-        paint_removed |= ! mv->supported_facets.empty() || ! mv->seam_facets.empty();
+        paint_removed |= ! mv->supported_facets.empty() || ! mv->seam_facets.empty() || ! mv->mmu_segmentation_facets.empty();
         mv->supported_facets.clear();
         mv->seam_facets.clear();
+        mv->mmu_segmentation_facets.clear();
     }
     if (paint_removed) {
         // snapshot_time is captured by copy so the lambda knows where to undo/redo to.
