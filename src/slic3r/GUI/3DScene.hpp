@@ -8,6 +8,10 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Geometry.hpp"
 
+#if ENABLE_TEXTURED_VOLUMES
+#include "GLTexture.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
+
 #include <functional>
 
 #define HAS_GLSAFE
@@ -353,6 +357,11 @@ public:
     // Offset into qverts & tverts, or offsets into indices stored into an OpenGL name_index_buffer.
     std::vector<size_t>         offsets;
 
+#if ENABLE_TEXTURED_VOLUMES
+    // Texture ID, index into the textures list contained into GLVolumeCollection textures manager
+    int                         texture_id{ -1 };
+#endif // ENABLE_TEXTURED_VOLUMES
+
     // Bounding box of this volume, in unscaled coordinates.
     const BoundingBoxf3& bounding_box() const { return this->indexed_vertex_array.bounding_box(); }
 
@@ -472,6 +481,18 @@ typedef std::vector<GLVolume*> GLVolumePtrs;
 typedef std::pair<GLVolume*, std::pair<unsigned int, double>> GLVolumeWithIdAndZ;
 typedef std::vector<GLVolumeWithIdAndZ> GLVolumeWithIdAndZList;
 
+#if ENABLE_TEXTURED_VOLUMES
+class TexturesManager
+{
+    std::vector<std::shared_ptr<GUI::GLIdeaMakerTexture>> m_textures;
+
+public:
+    int add_texture(const std::string& filename);
+
+    std::shared_ptr<GUI::GLIdeaMakerTexture> get_texture(int id);
+};
+#endif // ENABLE_TEXTURED_VOLUMES
+
 class GLVolumeCollection
 {
 public:
@@ -501,6 +522,10 @@ private:
     };
 
     Slope m_slope;
+
+#if ENABLE_TEXTURED_VOLUMES
+    mutable TexturesManager m_textures_manager;
+#endif // ENABLE_TEXTURED_VOLUMES
 
 public:
     GLVolumePtrs volumes;
@@ -539,6 +564,10 @@ public:
 
     GLVolume* new_toolpath_volume(const float *rgba, size_t reserve_vbo_floats = 0);
     GLVolume* new_nontoolpath_volume(const float *rgba, size_t reserve_vbo_floats = 0);
+
+#if ENABLE_TEXTURED_VOLUMES
+    int add_volume_texture(const std::string& filename) { return m_textures_manager.add_texture(filename); }
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // Render the volumes by OpenGL.
     void render(ERenderType type, bool disable_cullface, const Transform3d& view_matrix, std::function<bool(const GLVolume&)> filter_func = std::function<bool(const GLVolume&)>()) const;

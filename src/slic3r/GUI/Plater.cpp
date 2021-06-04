@@ -6196,7 +6196,7 @@ Camera& Plater::get_camera()
 void Plater::init_environment_texture()
 {
     if (p->environment_texture.get_id() == 0)
-        p->environment_texture.load_from_file(resources_dir() + "/icons/Pmetal_001.png", false, GLTexture::SingleThreaded, false);
+        p->environment_texture.load_from_file(resources_dir() + "/icons/Pmetal_001.png", false, GLTexture::ECompressionType::SingleThreaded, false);
 }
 
 unsigned int Plater::get_environment_texture_id() const
@@ -6366,6 +6366,18 @@ void Plater::bring_instance_forward()
 {
     p->bring_instance_forward();
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+void Plater::add_textures_to_volumes()
+{
+    wxString file1 = "D:\\prusa\\textures\\6778829284246032384.texture";
+    wxString file2 = "D:\\prusa\\textures\\Vojtěch\\6778829284246032384.texture";
+    std::string filename1 = file1.ToUTF8().data();
+    std::string filename2 = file2.ToUTF8().data();
+
+    int tex_id = canvas3D()->add_object_texture(0, filename1);
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 wxMenu* Plater::object_menu()           { return p->menus.object_menu();            }
 wxMenu* Plater::part_menu()             { return p->menus.part_menu();              }

@@ -540,6 +540,29 @@ bool GLVolume::is_below_printbed() const
 }
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
+#if ENABLE_TEXTURED_VOLUMES
+int TexturesManager::add_texture(const std::string& filename)
+{
+    for (int i = 0; i < static_cast<int>(m_textures.size()); ++i) {
+        if (filename == m_textures[i]->get_source())
+            return i;
+    }
+
+    std::shared_ptr<GUI::GLIdeaMakerTexture> texture = std::make_shared<GUI::GLIdeaMakerTexture>();
+    if (texture->load_from_ideamaker_texture_file(filename, true, GUI::GLTexture::ECompressionType::SingleThreaded, true)) {
+        m_textures.emplace_back(texture);
+        return static_cast<int>(m_textures.size() - 1);
+    }
+
+    return -1;
+}
+
+std::shared_ptr<GUI::GLIdeaMakerTexture> TexturesManager::get_texture(int id)
+{
+    return (id < static_cast<int>(m_textures.size())) ? m_textures[id] : nullptr;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
+
 std::vector<int> GLVolumeCollection::load_object(
     const ModelObject       *model_object,
     int                      obj_idx,
@@ -810,15 +833,37 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
     for (GLVolumeWithIdAndZ& volume : to_render) {
         volume.first->set_render_color();
         shader->set_uniform("uniform_color", volume.first->render_color, 4);
-        shader->set_uniform("print_box.actived", volume.first->shader_outside_printer_detection_enabled);
+        shader->set_uniform("print_box.active", volume.first->shader_outside_printer_detection_enabled);
         shader->set_uniform("print_box.volume_world_matrix", volume.first->world_matrix());
-        shader->set_uniform("slope.actived", m_slope.active && !volume.first->is_modifier && !volume.first->is_wipe_tower);
+        shader->set_uniform("slope.active", m_slope.active && !volume.first->is_modifier && !volume.first->is_wipe_tower);
         shader->set_uniform("slope.volume_world_normal_matrix", static_cast<Matrix3f>(volume.first->world_matrix().matrix().block(0, 0, 3, 3).inverse().transpose().cast<float>()));
 #if ENABLE_ALLOW_NEGATIVE_Z
         shader->set_uniform("sinking", volume.first->is_sinking());
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
+#if ENABLE_TEXTURED_VOLUMES
+        shader->set_uniform("proj_texture.active", volume.first->texture_id >= 0 ? 1 : 0);
+        unsigned int tex_id = 0;
+        if (volume.first->texture_id >= 0) {
+            std::shared_ptr<GUI::GLIdeaMakerTexture> texture = m_textures_manager.get_texture(volume.first->texture_id);
+            if (texture != nullptr) {
+                tex_id = texture->get_id();
+                if (tex_id > 0) {
+                    shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
+                    shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
+                    glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
+                }
+            }
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
+
         volume.first->render();
+
+#if ENABLE_TEXTURED_VOLUMES
+        if (tex_id > 0) {
+            glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
     }
 
 #if ENABLE_ENVIRONMENT_MAP

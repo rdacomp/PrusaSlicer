@@ -356,6 +356,10 @@ public:
 
     void bring_instance_forward();
 
+#if ENABLE_TEXTURED_VOLUMES
+    void add_textures_to_volumes();
+#endif // ENABLE_TEXTURED_VOLUMES
+
     // ROII wrapper for suppressing the Undo / Redo snapshot to be taken.
 	class SuppressSnapshots
 	{

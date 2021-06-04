@@ -10,18 +10,32 @@ const float BANDS_WIDTH = 10.0;
 
 struct SlopeDetection
 {
-    bool actived;
+    bool active;
 	float normal_z;
     mat3 volume_world_normal_matrix;
 };
 
+struct BoundingBox
+{
+    vec3 center;
+    vec3 sizes;
+};
+
+struct ProjectedTexture
+{
+    bool active;
+    BoundingBox box;
+};
+
 uniform vec4 uniform_color;
 uniform SlopeDetection slope;
+uniform ProjectedTexture proj_texture;
+uniform sampler2D projection_tex;
 uniform bool sinking;
 
 #ifdef ENABLE_ENVIRONMENT_MAP
-    uniform sampler2D environment_tex;
     uniform bool use_environment_tex;
+    uniform sampler2D environment_tex;
 #endif // ENABLE_ENVIRONMENT_MAP
 
 varying vec3 clipping_planes_dots;
@@ -37,6 +51,8 @@ varying float world_pos_z;
 varying float world_normal_z;
 varying vec3 eye_normal;
 
+varying vec2 tex_coords;
+
 vec3 sinking_color(vec3 color)
 {
     return (mod(model_pos.x + model_pos.y + model_pos.z, BANDS_WIDTH) < (0.5 * BANDS_WIDTH)) ? mix(color, ZERO, 0.6666) : color;
@@ -48,8 +64,7 @@ void main()
         discard;
     vec3 color = uniform_color.rgb;
     float alpha = uniform_color.a;
-    if (slope.actived && world_normal_z < slope.normal_z - EPSILON)
-    {
+    if (slope.active && world_normal_z < slope.normal_z - EPSILON) {
         color = vec3(0.7, 0.7, 1.0);
         alpha = 1.0;
     }
@@ -58,6 +73,8 @@ void main()
     // if the object is sinking, shade it with inclined bands or white around world z = 0
     if (sinking)
         color = (abs(world_pos_z) < 0.05) ? WHITE : sinking_color(color);
+    if (proj_texture.active)
+        color = mix(color, texture2D(projection_tex, tex_coords).rgb, 0.5);
 #ifdef ENABLE_ENVIRONMENT_MAP
     if (use_environment_tex)
         gl_FragColor = vec4(0.45 * texture2D(environment_tex, normalize(eye_normal).xy * 0.5 + 0.5).xyz + 0.8 * color * intensity.x, alpha);

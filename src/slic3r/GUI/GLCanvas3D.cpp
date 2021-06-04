@@ -3869,6 +3869,38 @@ void GLCanvas3D::update_sequential_clearance()
 }
 #endif // ENABLE_SEQUENTIAL_LIMITS
 
+#if ENABLE_TEXTURED_VOLUMES
+int GLCanvas3D::add_object_texture(int object_id, const std::string& filename)
+{
+    int tex_id = m_volumes.add_volume_texture(filename);
+    for (GLVolume* volume : m_volumes.volumes) {
+        if (volume->object_idx() == object_id) {
+            volume->texture_id = tex_id;
+        }
+    }
+    return tex_id;
+}
+
+int GLCanvas3D::add_volume_texture(int object_id, int volume_id, const std::string& filename)
+{
+    int tex_id = m_volumes.add_volume_texture(filename);
+    for (GLVolume* volume : m_volumes.volumes) {
+        if (volume->object_idx() == object_id && volume->volume_idx() == volume_id) {
+            volume->texture_id = tex_id;
+        }
+    }
+    return tex_id;
+}
+
+int GLCanvas3D::add_volume_texture(GLVolume* volume, const std::string& filename)
+{
+    int tex_id = m_volumes.add_volume_texture(filename);
+    volume->texture_id = tex_id;
+    return tex_id;
+}
+
+#endif // ENABLE_TEXTURED_VOLUMES
+
 bool GLCanvas3D::_is_shown_on_screen() const
 {
     return (m_canvas != nullptr) ? m_canvas->IsShownOnScreen() : false;
@@ -4057,11 +4089,9 @@ static void debug_output_thumbnail(const ThumbnailData& thumbnail_data)
     wxImage image(thumbnail_data.width, thumbnail_data.height);
     image.InitAlpha();
 
-    for (unsigned int r = 0; r < thumbnail_data.height; ++r)
-    {
+    for (unsigned int r = 0; r < thumbnail_data.height; ++r) {
         unsigned int rr = (thumbnail_data.height - 1 - r) * thumbnail_data.width;
-        for (unsigned int c = 0; c < thumbnail_data.width; ++c)
-        {
+        for (unsigned int c = 0; c < thumbnail_data.width; ++c) {
             unsigned char* px = (unsigned char*)thumbnail_data.pixels.data() + 4 * (rr + c);
             image.SetRGB((int)c, (int)r, px[0], px[1], px[2]);
             image.SetAlpha((int)c, (int)r, px[3]);

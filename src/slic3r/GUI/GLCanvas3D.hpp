@@ -792,6 +792,12 @@ public:
     void reset_old_size() { m_old_size = { 0, 0 }; }
 #endif // ENABLE_SCROLLABLE_LEGEND
 
+#if ENABLE_TEXTURED_VOLUMES
+    int add_object_texture(int object_id, const std::string& filename);
+    int add_volume_texture(int object_id, int volume_id, const std::string& filename);
+    int add_volume_texture(GLVolume* volume, const std::string& filename);
+#endif // ENABLE_TEXTURED_VOLUMES
+
 private:
     bool _is_shown_on_screen() const;
 

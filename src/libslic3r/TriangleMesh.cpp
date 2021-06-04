@@ -1060,12 +1060,12 @@ TriangleMesh make_sphere(double radius, double fa)
         double xy = radius * cos(stackAngle);
         double z  = radius * sin(stackAngle);
         if (i == 0 || i == stackCount)
-            vertices.emplace_back(Vec3d(xy, 0., z));
+            vertices.emplace_back(xy, 0.0, z);
         else
             for (int j = 0; j < sectorCount; ++ j) {
                 // from 0 to 2pi
                 double sectorAngle = sectorStep * j;
-                vertices.emplace_back(Vec3d(xy * cos(sectorAngle), xy * sin(sectorAngle), z));
+                vertices.emplace_back(xy * cos(sectorAngle), xy * sin(sectorAngle), z);
             }
     }
 
