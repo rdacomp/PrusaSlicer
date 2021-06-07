@@ -251,8 +251,7 @@ void BitmapComboBox::DrawBackground_(wxDC& dc, const wxRect& rect, int WXUNUSED(
         dc.DrawRectangle(rect);
     }
 }
+#endif
 
 }}
-
-#endif
 

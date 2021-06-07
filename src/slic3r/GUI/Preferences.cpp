@@ -428,8 +428,10 @@ void PreferencesDialog::accept()
 			m_values.erase(it); // we shouldn't change value, if some of those parameters was selected, and then deselected
 	}
 
+#ifdef _WIN32
 	if (m_values.find("always_dark_color_mode") != m_values.end())
 		wxGetApp().force_sys_colors_update();
+#endif
 
 	for (std::map<std::string, std::string>::iterator it = m_values.begin(); it != m_values.end(); ++it)
 		app_config->set(it->first, it->second);

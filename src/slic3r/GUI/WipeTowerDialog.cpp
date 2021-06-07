@@ -63,7 +63,7 @@ RammingDialog::RammingDialog(wxWindow* parent,const std::string& parameters)
 #ifdef _WIN32
 #define style wxSP_ARROW_KEYS | wxBORDER_SIMPLE
 #else 
-#define style wxSP_ARROW_KEYS;
+#define style wxSP_ARROW_KEYS
 #endif
 
 

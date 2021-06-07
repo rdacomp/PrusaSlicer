@@ -629,23 +629,13 @@ void MainFrame::init_tabpanel()
 #ifdef __WXMSW__
     m_tabpanel = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
     wxGetApp().UpdateDarkUI(m_tabpanel);
-    //m_tabpanel = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
-    //wxGetApp().UpdateDarkUI(m_tabpanel);
-    //wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
 #else
     m_tabpanel = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
-    if (wxSystemSettings::GetAppearance().IsDark())
-        m_tabpanel->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
 #endif
-
 
 #ifndef __WXOSX__ // Don't call SetFont under OSX to avoid name cutting in ObjectList
     m_tabpanel->SetFont(Slic3r::GUI::wxGetApp().normal_font());
 #endif
-//#if wxCHECK_VERSION(3,1,3)
-//    if (wxSystemSettings::GetAppearance().IsDark())
-//        m_tabpanel->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-//#endif
     m_tabpanel->Hide();
     m_settings_dialog.set_tabpanel(m_tabpanel);
 
@@ -1413,9 +1403,12 @@ void MainFrame::init_menubar_as_editor()
     // Add additional menus from C++
     wxGetApp().add_config_menu(m_menubar);
     m_menubar->Append(helpMenu, _L("&Help"));
+
+#ifdef _WIN32
     // Add separator 
     m_menubar->Append(new wxMenu(), "          ");
     add_tabs_as_menu(m_menubar, this, this);
+#endif
     SetMenuBar(m_menubar);
 
     m_menubar->EnableTop(6, false);
@@ -2119,10 +2112,12 @@ SettingsDialog::SettingsDialog(MainFrame* mainframe)
     //just hide the Frame on closing
     this->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& evt) { this->Hide(); });
 
+#ifdef _WIN32
     // menubar
     m_menubar = new wxMenuBar();
     add_tabs_as_menu(m_menubar, mainframe, this);
     this->SetMenuBar(m_menubar);
+#endif
 
     // initialize layout
     auto sizer = new wxBoxSizer(wxVERTICAL);

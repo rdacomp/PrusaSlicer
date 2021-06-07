@@ -22,6 +22,8 @@ class wxMenuBar;
 class wxTopLevelWindow;
 class wxNotebook;
 class wxListbook;
+class wxDataViewCtrl;
+class wxBookCtrlBase;
 struct wxLanguageInfo;
 
 namespace Slic3r {
@@ -119,9 +121,9 @@ private:
     wxColour        m_color_label_modified;
     wxColour        m_color_label_sys;
     wxColour        m_color_label_default;
+    wxColour        m_color_window_default;
 #ifdef _WIN32
     wxColour        m_color_highlight_label_default;
-    wxColour        m_color_window_default;
     wxColour        m_color_highlight_default;
     bool            m_force_sys_colors_update { false };
 #endif
@@ -193,11 +195,11 @@ public:
     const wxColour& get_label_clr_modified(){ return m_color_label_modified; }
     const wxColour& get_label_clr_sys()     { return m_color_label_sys; }
     const wxColour& get_label_clr_default() { return m_color_label_default; }
+    const wxColour& get_window_default_clr(){ return m_color_window_default; }
 
 
 #ifdef _WIN32
     const wxColour& get_label_highlight_clr()   { return m_color_highlight_label_default; }
-    const wxColour& get_window_default_clr()    { return m_color_window_default; }
     const wxColour& get_highlight_default_clr() { return m_color_highlight_default; }
     void            force_sys_colors_update()   { m_force_sys_colors_update = true; }
 #endif

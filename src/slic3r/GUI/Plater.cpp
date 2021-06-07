@@ -5218,7 +5218,7 @@ static long GetNumberFromUser(  const wxString& msg,
 
     return -1;
 #else
-    return wxGetNumberFromUser(msg, prompt, title, value, min, max, parent)
+    return wxGetNumberFromUser(msg, prompt, title, value, min, max, parent);
 #endif
 }
 

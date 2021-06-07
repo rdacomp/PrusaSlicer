@@ -837,12 +837,7 @@ ScalableButton::ScalableButton( wxWindow *          parent,
     m_has_border(!(style & wxNO_BORDER))
 {
     Create(parent, id, label, pos, size, style);
-#ifdef __WXMSW__
-    Slic3r::GUI::wxGetApp().UpdateDarkUI(this/*, m_has_border*/);
-#else
-    if (style & wxNO_BORDER)
-        SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-#endif // __WXMSW__
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this);
 
     SetBitmap(create_scaled_bitmap(icon_name, parent, m_px_cnt));
     if (m_use_default_disabled_bitmap)
@@ -868,12 +863,7 @@ ScalableButton::ScalableButton( wxWindow *          parent,
     m_has_border(!(style& wxNO_BORDER))
 {
     Create(parent, id, label, wxDefaultPosition, wxDefaultSize, style);
-#ifdef __WXMSW__
-    Slic3r::GUI::wxGetApp().UpdateDarkUI(this/*, m_has_border*/);
-#else
-    if (style & wxNO_BORDER)
-        SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-#endif // __WXMSW__
+    Slic3r::GUI::wxGetApp().UpdateDarkUI(this);
 
     SetBitmap(bitmap.bmp());
 }
@@ -907,11 +897,8 @@ void ScalableButton::UseDefaultBitmapDisabled()
 
 void ScalableButton::msw_rescale()
 {
-#ifdef __WXMSW__
     Slic3r::GUI::wxGetApp().UpdateDarkUI(this, m_has_border);
-#else
-    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-#endif
+
     SetBitmap(create_scaled_bitmap(m_current_icon_name, m_parent, m_px_cnt));
     if (!m_disabled_icon_name.empty())
         SetBitmapDisabled(create_scaled_bitmap(m_disabled_icon_name, m_parent, m_px_cnt));

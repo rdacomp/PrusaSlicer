@@ -103,7 +103,11 @@ public:
         wxFont      font        = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
         wxFont      monospace   = wxGetApp().code_font();
         wxColour    text_clr    = wxGetApp().get_label_clr_default();
+#ifdef _WIN32
         wxColour    bgr_clr     = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+#else
+        wxColour    bgr_clr     = parent->GetBackgroundColour();
+#endif
         auto        text_clr_str= wxString::Format(wxT("#%02X%02X%02X"), text_clr.Red(), text_clr.Green(), text_clr.Blue());
         auto        bgr_clr_str = wxString::Format(wxT("#%02X%02X%02X"), bgr_clr.Red(), bgr_clr.Green(), bgr_clr.Blue());
         const int   font_size   = font.GetPointSize();
