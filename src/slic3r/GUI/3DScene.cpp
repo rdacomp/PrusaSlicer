@@ -829,8 +829,11 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
     unsigned int environment_texture_id = GUI::wxGetApp().plater()->get_environment_texture_id();
     bool use_environment_texture = environment_texture_id > 0 && GUI::wxGetApp().app_config->get("use_environment_map") == "1";
     shader->set_uniform("use_environment_tex", use_environment_texture);
-    if (use_environment_texture)
+    if (use_environment_texture) {
+        shader->set_uniform("environment_tex", 1);
+        glsafe(::glActiveTexture(GL_TEXTURE0 + 1));
         glsafe(::glBindTexture(GL_TEXTURE_2D, environment_texture_id));
+    }
 #endif // ENABLE_ENVIRONMENT_MAP
     glcheck();
 
@@ -856,6 +859,10 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
                 if (tex_id > 0) {
                     shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
                     shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
+                    shader->set_uniform("projection_tex", 0);
+#if ENABLE_ENVIRONMENT_MAP
+                    glsafe(::glActiveTexture(GL_TEXTURE0));
+#endif // ENABLE_ENVIRONMENT_MAP
                     glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
                 }
             }
@@ -865,15 +872,17 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
         volume.first->render();
 
 #if ENABLE_TEXTURED_VOLUMES
-        if (tex_id > 0) {
+        if (tex_id > 0)
             glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
-        }
 #endif // ENABLE_TEXTURED_VOLUMES
     }
 
 #if ENABLE_ENVIRONMENT_MAP
-    if (use_environment_texture)
+    if (use_environment_texture) {
+        glsafe(::glActiveTexture(GL_TEXTURE0 + 1));
         glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
+        glsafe(::glActiveTexture(GL_TEXTURE0));
+    }
 #endif // ENABLE_ENVIRONMENT_MAP
 
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
