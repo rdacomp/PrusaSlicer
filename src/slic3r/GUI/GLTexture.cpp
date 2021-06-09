@@ -378,7 +378,7 @@ bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECo
     std::vector<unsigned char> data;
 
     // Get RGB & alpha raw data from wxImage, pack them into an array.
-    auto copy_data = [this](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
+    auto copy_data = [](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
         unsigned char* img_rgb = image.GetData();
         unsigned char* img_alpha = image.GetAlpha();
         data.resize(n_pixels * 4);
@@ -577,7 +577,7 @@ bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data,
     std::vector<unsigned char> data;
 
     // Get RGB & alpha raw data from wxImage, pack them into an array.
-    auto copy_data = [this](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
+    auto copy_data = [](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
         unsigned char* img_rgb = image.GetData();
         unsigned char* img_alpha = image.GetAlpha();
         data.resize(n_pixels * 4);
@@ -804,7 +804,7 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
             const std::string src = image_data.value();
             std::string decoded;
             decoded.resize(boost::beast::detail::base64::decoded_size(src.length()));
-            std::pair<std::size_t, std::size_t> res = boost::beast::detail::base64::decode((void*)decoded.data(), src.data(), src.length());
+            decoded.resize(boost::beast::detail::base64::decode((void*)&decoded[0], src.data(), src.length()).first);
             std::vector<unsigned char> src_data(decoded.length());
             ::memcpy((void*)src_data.data(), (const void*)decoded.data(), decoded.length());
             bool ret = load_from_png_memory(src_data, true, GLTexture::ECompressionType::SingleThreaded, true);

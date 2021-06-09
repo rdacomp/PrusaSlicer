@@ -179,11 +179,11 @@ void ObjectTexture::UpdateAndShow(const bool show)
 
 void ObjectTexture::update()
 {
-    const auto& [obj_idx, model_object] = get_model_object();
-    bool has_texture = model_object != nullptr && !model_object->texture.empty();
+    const std::pair<int, ModelObject*>& model_object = get_model_object();
+    bool has_texture = model_object.second != nullptr && !model_object.second->texture.empty();
 
     // update widgets
-    m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object->texture).stem().string()) : wxEmptyString);
+    m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object.second->texture).stem().string()) : "");
     m_tex_remove_btn->Enable(has_texture);
 
     // show/hide icon into object list
