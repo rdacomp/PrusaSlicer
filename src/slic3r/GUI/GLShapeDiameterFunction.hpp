@@ -27,20 +27,20 @@ public:
     float max_value = 10.f;
     bool allow_render_normals = false;
     float angle = 120; // [in deg] in range from 1 to 179
-    size_t count_samples = 1; // count samples on half sphere
+    size_t count_samples = 60; // count samples on half sphere
 
     float normal_width = 0.1f;
     float normal_length = .5f;
 
     // filtration of rays
-    float allowed_angle     = M_PI_2;
+    float allowed_angle = -1.f; //static_cast<float>(M_PI_2) + std::numeric_limits<float>::epsilon();
     float allowed_deviation = 1.5f;
 
     bool allow_divide_triangle = true;
     float max_triangle_size = 1.f;
 
-    float max_thr      = 1.;
-    float min_triangle_size = 5.;
+    float max_thr      = 0.5f;
+    float min_triangle_size = 0.5f;
     bool allow_remesh = true;
 public:
     GLShapeDiameterFunction() = default; // set default values

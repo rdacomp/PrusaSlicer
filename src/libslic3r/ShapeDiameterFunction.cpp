@@ -45,14 +45,20 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                                        ray_point, ray_trd, hit))
             continue;
 
-        // check angle of hitted traingle
-        Vec3f hit_normal = tree.triangle_normals[hit.id];
-        float dot        = normal.dot(hit_normal);
-        if (dot < -1.f) dot = -1.f;
-        if (dot > 1.f) dot = 1.f;
-        float angle = std::acos(dot);
-        // IMPROVE: Test correct border angle It could be bigger than 90 DEG
-        if (angle < allowed_angle) continue;  
+        if (allowed_angle > 0) {
+            // check angle ray of hitted traingle
+            Vec3f hit_normal = tree.triangle_normals[hit.id];
+            float dot        = ray_dir.dot(hit_normal);
+            if (dot < -1.f) dot = -1.f;
+            if (dot > 1.f) dot = 1.f;
+            float angle = std::acos(dot);
+            // when angle between ray direction and hitted triangle normal
+            // is more than 90deg that means the face is hitted from BAD side
+            
+            if (angle > allowed_angle) continue; 
+            // face is propably inside of model or
+            // ray fly throw edge of triangles - numeric issue
+        }
 
         float width = hit.t;
         widths.push_back(width);
