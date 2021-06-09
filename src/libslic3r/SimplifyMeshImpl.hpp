@@ -438,8 +438,10 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
             
             for (size_t fi : t)
                 m_vertexinfo[fi].q += SymMat(x(n), y(n), z(n), -dot(n, p[0]));
-            
-            calculate_error(finf);
+        }
+
+        for (FaceInfo &finf : m_faceinfo) { 
+            calculate_error(finf); 
         }
     }
     
