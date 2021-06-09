@@ -36,9 +36,8 @@ public:
     float allowed_angle     = M_PI_2;
     float allowed_deviation = 1.5f;
 
-    bool allow_divide_triangle = false;
-    bool  allow_render_vertices = false;
-    float max_triangle_size = 5.f;
+    bool allow_divide_triangle = true;
+    float max_triangle_size = 1.f;
 
     float max_thr      = 1.;
     float min_triangle_size = 5.;
@@ -62,11 +61,8 @@ public:
     bool initialize_normals();
     // calculate width(tree and normals are already calculated)
     bool initialize_width();
-
-    void surface_points();
 private:
     bool initialize_indices();
-    void render_vertices() const;
     void render_normals() const;
     void render_rays() const;
 
@@ -96,8 +92,6 @@ public:
 
     // tree for ray cast
     ShapeDiameterFunction::AABBTree tree;
-
-    ShapeDiameterFunction::SurfacePoints points;
 };
 
 } // namespace Slic3r::GUI

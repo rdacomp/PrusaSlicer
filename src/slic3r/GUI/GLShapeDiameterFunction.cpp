@@ -53,7 +53,6 @@ void GLShapeDiameterFunction::draw() const
 
     shader->stop_using();   
     if (allow_render_normals) render_normals();
-    if (allow_render_vertices) render_vertices();
     render_rays();
 }
 
@@ -133,11 +132,6 @@ bool GLShapeDiameterFunction::initialize_width() {
     return true;
 }
 
-void GLShapeDiameterFunction::surface_points() { 
-    points = ShapeDiameterFunction::sample(tree.vertices_indices,
-                                           max_triangle_size);
-}
-
 bool GLShapeDiameterFunction::initialize_indices()
 {
     if (m_vbo_indices_id != 0) glsafe(::glDeleteBuffers(1, &m_vbo_indices_id));
@@ -202,56 +196,6 @@ void GLShapeDiameterFunction::render_normals() const {
             Eigen::AngleAxis<float>(angle, axis)
         );
         render_normal(tr);
-    }
-    shader->stop_using();
-}
-
-GLModel create_tetrahedron(float size) {
-    indexed_triangle_set its;
-    float s_2 = size / 2.f;
-    its.vertices = {
-        Vec3f(0.f, 0.f, size), 
-        Vec3f(-s_2, -s_2, 0.f), 
-        Vec3f(s_2, -s_2, 0.f),
-        Vec3f(0.f, s_2, 0.f)
-    };
-    its.indices = {
-        Vec3crd(0, 1, 2), 
-        Vec3crd(0, 2, 3), 
-        Vec3crd(0, 3, 1),
-        Vec3crd(3, 2, 1)
-    };
-    TriangleMesh tm(its);
-    GLModel      model;
-    model.init_from(tm);
-    return model;
-}
-
-void GLShapeDiameterFunction::render_vertices() const
-{
-    GLModel tetrahedron = create_tetrahedron(1.f);
-    auto    render_model = [&](const Transform3f &transform) {
-        glsafe(::glPushMatrix());
-        glsafe(::glMultMatrixf(transform.data()));
-        tetrahedron.render();
-        glsafe(::glPopMatrix());
-    };
-
-    GLShaderProgram *shader = wxGetApp().get_shader("gouraud_light");
-    if (shader == nullptr) return;
-    // normal color
-    std::array<float, 4> color = {.2f, .2f, .8f, 1.f};
-    shader->start_using();
-    shader->set_uniform("uniform_color", color);
-    Vec3f z_one(0.f, 0.f, 1.f);
-    for (const auto& point: points) {
-        const Vec3f &vertex = point.pos;
-        Vec3f        normal(0, 0, 1);
-        Vec3f       axis  = z_one.cross(normal);
-        float       angle = acos(z_one.dot(normal));
-        Transform3f tr(Eigen::Translation<float, 3>(vertex) *
-                       Eigen::AngleAxis<float>(angle, axis));
-        render_model(tr);
     }
     shader->stop_using();
 }

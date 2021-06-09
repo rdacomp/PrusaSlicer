@@ -87,39 +87,6 @@ public:
                                           const AABBTree &          tree,
                                           float allowed_deviation = 1.5f,
                                           float allowed_angle     = M_PI_2);
-    /// <summary>
-    /// DTO represents point on surface of triangle mesh
-    /// </summary>
-    struct SurfacePoint
-    {
-        // position in space
-        Vec3f pos;
-
-        // triangle index
-        // index to vector indexed_triangle_set::indices
-        size_t ti; 
-        SurfacePoint(Vec3f pos, size_t ti) : pos(pos), ti(ti) {}
-    };
-    using SurfacePoints = std::vector<SurfacePoint>;
-
-    /// <summary>
-    /// Create sample points on surface of model
-    /// </summary>
-    /// <param name="its">triangles</param>
-    /// <param name="distance">maximal distance of samples</param>
-    /// <returns>samples from surfaces</returns>
-    static SurfacePoints sample(const indexed_triangle_set& its, float distance);
-
-    /// <summary>
-    /// Create neighbor for each edge of triangle
-    /// DEPRICATED: will be in TriangleMesh
-    /// </summary>
-    /// <param name="indices">input Triangle indices</param>
-    /// <param name="vertices_size">count vertices</param>
-    /// <returns>vector of indices to trinagle indices, same size as indices(count triangle)</returns>
-    static std::vector<Vec3crd> create_neighbor(
-        const std::vector<stl_triangle_vertex_indices> &indices,
-        size_t                                          vertices_size);
 
     /// <summary>
     /// Create points on unit sphere surface. with weight by z value

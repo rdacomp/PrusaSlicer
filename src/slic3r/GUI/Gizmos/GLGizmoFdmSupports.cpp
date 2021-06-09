@@ -240,15 +240,20 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
 
         if (m_imgui->checkbox("divide", sdf.allow_divide_triangle))
             sdf.divide();
-        ImGui::SameLine();
-        if (m_imgui->slider_float("max_triangle_size", &sdf.max_triangle_size, 5e-1f, 15.f)) {
-            sdf.divide();
+        if (sdf.allow_divide_triangle) {
+            ImGui::SameLine();
+            if (m_imgui->slider_float("max_triangle_size",
+                                      &sdf.max_triangle_size, 5e-1f, 15.f)) {
+                sdf.divide();
+            }
         }
         ImGui::SameLine();
         m_imgui->text(
-            "surface points " + std::to_string(sdf.points.size()) +
-            ", triangle " +
-            std::to_string(sdf.tree.vertices_indices.indices.size()));
+            "trinagles after divide " + std::to_string(sdf.triangles.indices.size()) +
+            "(v=" + std::to_string(sdf.triangles.vertices.size()) + ") " +
+            ", triangles " + std::to_string(sdf.tree.vertices_indices.indices.size()) +
+            "(v=" + std::to_string(sdf.tree.vertices_indices.vertices.size()) + ") "
+        );
     }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
             m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();

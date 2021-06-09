@@ -392,11 +392,22 @@ double SimplifiableMesh<Mesh>::calculate_error(size_t id_v1, size_t id_v2, Verte
         double error1 = vertex_error(q, p1);
         double error2 = vertex_error(q, p2);
         double error3 = vertex_error(q, p3);
-        error         = std::min(error1, std::min(error2, error3));
-
-        if (is_approx(error1, error)) p_result = p1;
-        if (is_approx(error2, error)) p_result = p2;
-        if (is_approx(error3, error)) p_result = p3;
+        // select vertex with smallest error
+        if (error1 < error2) {
+            if (error1 < error3) {
+                error    = error1;
+                p_result = p1;
+            } else {
+                error    = error3;
+                p_result = p3;
+            }
+        } else if (error2 < error3) {
+            error    = error2;
+            p_result = p2;
+        } else {
+            error    = error3;
+            p_result = p3;
+        }
     }
 
     return error;
@@ -761,12 +772,16 @@ bool SimplifiableMesh<Mesh>::is_small_edge(size_t i0, size_t i1, double edge_len
     Vertex p0   = read_vertex(i0);
     Vertex p1   = read_vertex(i1);
     Vertex edge = p0 - p1;
+    // abs edge
+    edge.x()         = fabs(edge.x());
+    edge.y()         = fabs(edge.y());
+    edge.z()         = fabs(edge.z());
     if (edge.x() >= edge_length || 
         edge.y() >= edge_length ||
         edge.z() >= edge_length)
         return false;
-    double sum  = edge.x() + edge.y() + edge.z();
-    if (sum < edge_length) return true;
+    double sumAbs  = edge.x() + edge.y() + edge.z();
+    if (sumAbs < edge_length) return true;
     // IMPROVE: edge_length2 could be precalculated
     double edge_length2 = edge_length * edge_length;
     double sum2 = edge.x() * edge.x() + 
