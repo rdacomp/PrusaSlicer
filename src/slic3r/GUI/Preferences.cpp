@@ -535,31 +535,25 @@ void PreferencesDialog::create_icon_size_slider()
 void PreferencesDialog::create_settings_mode_widget()
 {
 	wxString choices[] = { _L("Old regular layout with the tab bar"),
-//						   _L("New layout, access via settings button in the top menu"),
-						   _L("Settings in non-modal window") };
+#ifndef _WIN32
+                           _L("New layout, access via settings button in the top menu"),
+#endif
+                           _L("Settings in non-modal window") };
 
 	auto app_config = get_app_config();
-	int selection = app_config->get("dlg_settings_layout_mode") == "1" ? 1 : 0;
-                    //app_config->get("old_settings_layout_mode") == "1" ? 0 :                    
-	                //app_config->get("new_settings_layout_mode") == "1" ? 1 :
-	                //app_config->get("dlg_settings_layout_mode") == "1" ? 2 : 0;
+    int selection =
+#ifdef _WIN32
+                    app_config->get("dlg_settings_layout_mode") == "1" ? 1 : 0;
+#else
+                    app_config->get("old_settings_layout_mode") == "1" ? 0 :
+                    app_config->get("new_settings_layout_mode") == "1" ? 1 :
+                    app_config->get("dlg_settings_layout_mode") == "1" ? 2 : 0;
+#endif
 
 	wxWindow* parent = m_optgroup_gui->parent();
 	wxGetApp().UpdateDarkUI(parent);
-#if 0
-	m_layout_mode_box = new wxRadioBox(parent, wxID_ANY, _L("Layout Options"), wxDefaultPosition, wxDefaultSize,
-		WXSIZEOF(choices), choices, 3, wxRA_SPECIFY_ROWS);
-	m_layout_mode_box->SetFont(wxGetApp().normal_font());
-	m_layout_mode_box->SetSelection(selection);
 
-	m_layout_mode_box->Bind(wxEVT_RADIOBOX, [this](wxCommandEvent& e) {
-		int selection = e.GetSelection();
-		m_values["old_settings_layout_mode"] = boost::any_cast<bool>(selection == 0) ? "1" : "0";
-		m_values["new_settings_layout_mode"] = boost::any_cast<bool>(selection == 1) ? "1" : "0";
-		m_values["dlg_settings_layout_mode"] = boost::any_cast<bool>(selection == 2) ? "1" : "0";
-	});
-#else
-	wxStaticBox* stb = new wxStaticBox(parent, wxID_ANY, _L("Layout Options"));
+    wxStaticBox* stb = new wxStaticBox(parent, wxID_ANY, _L("Layout Options"));
 	wxGetApp().UpdateDarkUI(stb);
 	if (!wxOSX) stb->SetBackgroundStyle(wxBG_STYLE_PAINT);
 	stb->SetFont(wxGetApp().normal_font());
@@ -572,14 +566,22 @@ void PreferencesDialog::create_settings_mode_widget()
 		stb_sizer->Add(btn);
 		btn->SetValue(id == selection);
 
-		btn->Bind(wxEVT_RADIOBUTTON, [this, id](wxCommandEvent& ) {
-			m_values["old_settings_layout_mode"] = (id == 0) ? "1" : "0";
-//			m_values["new_settings_layout_mode"] = (id == 1) ? "1" : "0";
-			m_values["dlg_settings_layout_mode"] = (id == /*2*/1) ? "1" : "0";
+#ifdef _WIN32
+        int dlg_id = 1;
+#else
+        int dlg_id = 2;
+#endif
+
+        btn->Bind(wxEVT_RADIOBUTTON, [this, id, dlg_id](wxCommandEvent& ) {
+            m_values["old_settings_layout_mode"] = (id == 0) ? "1" : "0";
+#ifndef _WIN32
+            m_values["new_settings_layout_mode"] = (id == 1) ? "1" : "0";
+#endif
+            m_values["dlg_settings_layout_mode"] = (id == dlg_id) ? "1" : "0";
 		});
 		id++;
 	}
-#endif
+
 	auto sizer = new wxBoxSizer(wxHORIZONTAL);
 	sizer->Add(/*m_layout_mode_box*/stb_sizer, 1, wxALIGN_CENTER_VERTICAL);
 	m_optgroup_gui->sizer->Add(sizer, 0, wxEXPAND | wxTOP, em_unit());
@@ -600,6 +602,7 @@ void PreferencesDialog::create_settings_text_color_widget()
 	auto sys_label = new wxStaticText(parent, wxID_ANY, _L("Value is the same as the system value"));
 	sys_label->SetForegroundColour(wxGetApp().get_label_clr_sys());
 	m_sys_colour = new wxColourPickerCtrl(parent, wxID_ANY, wxGetApp().get_label_clr_sys());
+	wxGetApp().UpdateDarkUI(m_sys_colour->GetPickerCtrl(), true);
 	m_sys_colour->Bind(wxEVT_COLOURPICKER_CHANGED, [this, sys_label](wxCommandEvent&) {
 		sys_label->SetForegroundColour(m_sys_colour->GetColour());
 		sys_label->Refresh();
@@ -611,6 +614,7 @@ void PreferencesDialog::create_settings_text_color_widget()
 	auto mod_label = new wxStaticText(parent, wxID_ANY, _L("Value was changed and is not equal to the system value or the last saved preset"));
 	mod_label->SetForegroundColour(wxGetApp().get_label_clr_modified());
 	m_mod_colour = new wxColourPickerCtrl(parent, wxID_ANY, wxGetApp().get_label_clr_modified());
+	wxGetApp().UpdateDarkUI(m_mod_colour->GetPickerCtrl(), true);
 	m_mod_colour->Bind(wxEVT_COLOURPICKER_CHANGED, [this, mod_label](wxCommandEvent&) {
 		mod_label->SetForegroundColour(m_mod_colour->GetColour());
 		mod_label->Refresh();

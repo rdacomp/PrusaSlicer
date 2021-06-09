@@ -38,6 +38,7 @@ ButtonsDescription::ButtonsDescription(wxWindow* parent, const std::vector<Entry
 	auto sys_label = new wxStaticText(this, wxID_ANY, _(L("Value is the same as the system value")));
 	sys_label->SetForegroundColour(wxGetApp().get_label_clr_sys());
 	auto sys_colour = new wxColourPickerCtrl(this, wxID_ANY, wxGetApp().get_label_clr_sys());
+	wxGetApp().UpdateDarkUI(sys_colour->GetPickerCtrl(), true);
 	sys_colour->Bind(wxEVT_COLOURPICKER_CHANGED, ([sys_colour, sys_label](wxCommandEvent e)
 	{
 		sys_label->SetForegroundColour(sys_colour->GetColour());
@@ -55,6 +56,7 @@ ButtonsDescription::ButtonsDescription(wxWindow* parent, const std::vector<Entry
 	auto mod_label = new wxStaticText(this, wxID_ANY, _(L("Value was changed and is not equal to the system value or the last saved preset")));
 	mod_label->SetForegroundColour(wxGetApp().get_label_clr_modified());
 	auto mod_colour = new wxColourPickerCtrl(this, wxID_ANY, wxGetApp().get_label_clr_modified());
+	wxGetApp().UpdateDarkUI(mod_colour->GetPickerCtrl(), true);
 	mod_colour->Bind(wxEVT_COLOURPICKER_CHANGED, ([mod_colour, mod_label](wxCommandEvent e)
 	{
 		mod_label->SetForegroundColour(mod_colour->GetColour());
