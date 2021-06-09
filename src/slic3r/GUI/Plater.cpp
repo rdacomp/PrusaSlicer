@@ -49,6 +49,9 @@
 #include "GUI_ObjectList.hpp"
 #include "GUI_ObjectManipulation.hpp"
 #include "GUI_ObjectLayers.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "GUI_ObjectTexture.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 #include "GUI_Utils.hpp"
 #include "GUI_Factories.hpp"
 #include "wxExtensions.hpp"
@@ -581,6 +584,9 @@ struct Sidebar::priv
     ObjectManipulation  *object_manipulation{ nullptr };
     ObjectSettings      *object_settings{ nullptr };
     ObjectLayers        *object_layers{ nullptr };
+#if ENABLE_TEXTURED_VOLUMES
+    ObjectTexture       *object_texture{ nullptr };
+#endif // ENABLE_TEXTURED_VOLUMES
     ObjectInfo *object_info;
     SlicedInfo *sliced_info;
 
@@ -605,6 +611,9 @@ Sidebar::priv::~priv()
     delete object_settings;
     delete frequently_changed_parameters;
     delete object_layers;
+#if ENABLE_TEXTURED_VOLUMES
+    delete object_texture;
+#endif // ENABLE_TEXTURED_VOLUMES
 }
 
 void Sidebar::priv::show_preset_comboboxes()
@@ -725,6 +734,13 @@ Sidebar::Sidebar(Plater *parent)
     p->object_layers = new ObjectLayers(p->scrolled);
     p->object_layers->Hide();
     p->sizer_params->Add(p->object_layers->get_sizer(), 0, wxEXPAND | wxTOP, margin_5);
+
+#if ENABLE_TEXTURED_VOLUMES
+    // Object Texture
+    p->object_texture = new ObjectTexture(p->scrolled);
+    p->object_texture->Hide();
+    p->sizer_params->Add(p->object_texture->get_sizer(), 0, wxEXPAND | wxTOP, margin_5);
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // Info boxes
     p->object_info = new ObjectInfo(p->scrolled);
@@ -952,6 +968,9 @@ void Sidebar::msw_rescale()
     p->object_manipulation->msw_rescale();
     p->object_settings->msw_rescale();
     p->object_layers->msw_rescale();
+#if ENABLE_TEXTURED_VOLUMES
+    p->object_texture->msw_rescale();
+#endif // ENABLE_TEXTURED_VOLUMES
 
     p->object_info->msw_rescale();
 
@@ -983,6 +1002,9 @@ void Sidebar::sys_color_changed()
     p->object_list->sys_color_changed();
     p->object_manipulation->sys_color_changed();
     p->object_layers->sys_color_changed();
+#if ENABLE_TEXTURED_VOLUMES
+    p->object_texture->sys_color_changed();
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // btn...->msw_rescale() updates icon on button, so use it
     p->btn_send_gcode->msw_rescale();
@@ -1025,6 +1047,13 @@ ObjectLayers* Sidebar::obj_layers()
 {
     return p->object_layers;
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+ObjectTexture* Sidebar::obj_texture()
+{
+    return p->object_texture;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 wxScrolledWindow* Sidebar::scrolled_panel()
 {
@@ -6373,14 +6402,9 @@ void Plater::bring_instance_forward()
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void Plater::add_textures_to_volumes()
+void Plater::add_textures_to_volumes(int object_id)
 {
-    wxString file1 = "D:\\prusa\\textures\\6778829284246032384.texture";
-    wxString file2 = "D:\\prusa\\textures\\Vojtěch\\6778829284246032384.texture";
-    std::string filename1 = file1.ToUTF8().data();
-    std::string filename2 = file2.ToUTF8().data();
-
-    int tex_id = canvas3D()->add_object_texture(0, filename1);
+    canvas3D()->add_object_texture(object_id);
 }
 #endif // ENABLE_TEXTURED_VOLUMES
 

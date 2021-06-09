@@ -35,6 +35,9 @@ typedef std::vector<ModelVolume*>                   ModelVolumePtrs;
 typedef double                                      coordf_t;
 typedef std::pair<coordf_t, coordf_t>               t_layer_height_range;
 typedef std::map<t_layer_height_range, ModelConfig> t_layer_config_ranges;
+#if ENABLE_TEXTURED_VOLUMES
+typedef std::string                                 t_texture;
+#endif // ENABLE_TEXTURED_VOLUMES
 
 namespace GUI {
 
@@ -252,9 +255,15 @@ public:
     void                split();
     void                merge(bool to_multipart_object);
     void                layers_editing();
+#if ENABLE_TEXTURED_VOLUMES
+    void                texture_editing();
+#endif // ENABLE_TEXTURED_VOLUMES
 
     wxDataViewItem      add_layer_root_item(const wxDataViewItem obj_item);
     wxDataViewItem      add_settings_item(wxDataViewItem parent_item, const DynamicPrintConfig* config);
+#if ENABLE_TEXTURED_VOLUMES
+    wxDataViewItem      add_texture_item(const wxDataViewItem obj_item);
+#endif // ENABLE_TEXTURED_VOLUMES
 
     DynamicPrintConfig  get_default_layer_config(const int obj_idx);
     bool                get_volume_by_item(const wxDataViewItem& item, ModelVolume*& volume);

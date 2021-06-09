@@ -77,21 +77,23 @@ ObjectDataViewModelNode::ObjectDataViewModelNode(ObjectDataViewModelNode* parent
     if (type == itSettings)
         m_name = "Settings to modified";
     else if (type == itInstanceRoot)
-        m_name = _(L("Instances"));
-    else if (type == itInstance)
-    {
+        m_name = _L("Instances");
+    else if (type == itInstance) {
         m_idx = parent->GetChildCount();
-        m_name = wxString::Format(_(L("Instance %d")), m_idx + 1);
+        m_name = wxString::Format(_L("Instance %d"), m_idx + 1);
 
         set_action_and_extruder_icons();
     }
-    else if (type == itLayerRoot)
-    {
+    else if (type == itLayerRoot) {
         m_bmp = create_scaled_bitmap(LayerRootIcon);    // FIXME: pass window ptr
-        m_name = _(L("Layers"));
+        m_name = _L("Layers");
     }
     else if (type == itInfo)
         assert(false);
+#if ENABLE_TEXTURED_VOLUMES
+    else if (type == itTexture)
+        m_name = _L("Texture");
+#endif // ENABLE_TEXTURED_VOLUMES
 
     if (type & (itInstanceRoot | itLayerRoot))
         init_container();
@@ -117,7 +119,7 @@ ObjectDataViewModelNode::ObjectDataViewModelNode(ObjectDataViewModelNode* parent
             parent->GetNthChild(i)->SetIdx(i + 1);
     }
     const std::string label_range = (boost::format(" %.2f-%.2f ") % layer_range.first % layer_range.second).str();
-    m_name = _(L("Range")) + label_range + "(" + _(L("mm")) + ")";
+    m_name = _L("Range") + label_range + "(" + _L("mm") + ")";
     m_bmp = create_scaled_bitmap(LayerIcon);    // FIXME: pass window ptr
 
     set_action_and_extruder_icons();
@@ -575,7 +577,7 @@ wxDataViewItem ObjectDataViewModel::AddLayersChild(const wxDataViewItem &parent_
     ObjectDataViewModelNode *parent_node = static_cast<ObjectDataViewModelNode*>(parent_item.GetID());
     if (!parent_node) return wxDataViewItem(0);
 
-    wxString extruder_str = extruder == 0 ? _(L("default")) : wxString::Format("%d", extruder);
+    wxString extruder_str = extruder == 0 ? _L("default") : wxString::Format("%d", extruder);
 
     // get LayerRoot node
     ObjectDataViewModelNode *layer_root_node;
@@ -605,6 +607,23 @@ wxDataViewItem ObjectDataViewModel::AddLayersChild(const wxDataViewItem &parent_
 
     return layer_item;
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+wxDataViewItem ObjectDataViewModel::AddTextureChild(const wxDataViewItem& parent_item)
+{
+    ObjectDataViewModelNode* root = static_cast<ObjectDataViewModelNode*>(parent_item.GetID());
+    if (root == nullptr)
+        return wxDataViewItem(0);
+
+    const auto node = new ObjectDataViewModelNode(root, itTexture);
+
+    root->Insert(node, 0);
+    // notify control
+    const wxDataViewItem child((void*)node);
+    ItemAdded(parent_item, child);
+    return child;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 wxDataViewItem ObjectDataViewModel::Delete(const wxDataViewItem &item)
 {
@@ -1515,6 +1534,13 @@ wxDataViewItem ObjectDataViewModel::GetLayerRootItem(const wxDataViewItem &item)
 {
     return GetItemByType(item, itLayerRoot);
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+wxDataViewItem ObjectDataViewModel::GetTextureItem(const wxDataViewItem& item) const
+{
+    return GetItemByType(item, itTexture);
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 wxDataViewItem ObjectDataViewModel::GetInfoItemByType(const wxDataViewItem &parent_item, InfoItemType type) const
 {

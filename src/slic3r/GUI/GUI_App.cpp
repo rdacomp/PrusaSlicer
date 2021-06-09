@@ -2049,6 +2049,13 @@ ObjectLayers* GUI_App::obj_layers()
     return sidebar().obj_layers();
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+ObjectTexture* GUI_App::obj_texture()
+{
+    return sidebar().obj_texture();
+}
+#endif // ENABLE_TEXTURED_VOLUMES
+
 Plater* GUI_App::plater()
 {
     return plater_;

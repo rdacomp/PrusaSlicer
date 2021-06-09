@@ -250,6 +250,10 @@ public:
     LayerHeightProfile      layer_height_profile;
     // Whether or not this object is printable
     bool                    printable;
+#if ENABLE_TEXTURED_VOLUMES
+    // Path of texture file
+    std::string             texture;
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // This vector holds position of selected support points for SLA. The data are
     // saved in mesh coordinates to allow using them for several instances.

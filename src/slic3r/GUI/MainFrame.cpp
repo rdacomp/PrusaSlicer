@@ -1222,13 +1222,6 @@ void MainFrame::init_menubar_as_editor()
         append_menu_item(editMenu, wxID_ANY, _L("Searc&h") + "\tCtrl+F",
             _L("Search in settings"), [this](wxCommandEvent&) { m_plater->search(m_plater->IsShown()); },
             "search", nullptr, []() {return true; }, this);
-
-#if ENABLE_TEXTURED_VOLUMES
-        editMenu->AppendSeparator();
-        append_menu_item(editMenu, wxID_ANY, _L("Add texture"),
-            _L("Add texture to volumes"), [this](wxCommandEvent&) { m_plater->add_textures_to_volumes(); },
-            "", nullptr, [this]() { return !m_plater->model().objects.empty(); }, this);
-#endif // ENABLE_TEXTURED_VOLUMES
     }
 
     // Window menu

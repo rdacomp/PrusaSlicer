@@ -27,7 +27,12 @@ enum ItemType {
     itSettings      = 16,
     itLayerRoot     = 32,
     itLayer         = 64,
+#if ENABLE_TEXTURED_VOLUMES
+    itInfo          = 128,
+    itTexture       = 256
+#else
     itInfo          = 128
+#endif // ENABLE_TEXTURED_VOLUMES
 };
 
 enum ColumnNumber
@@ -276,6 +281,9 @@ public:
                                     const t_layer_height_range& layer_range,
                                     const int extruder = 0,
                                     const int index = -1);
+#if ENABLE_TEXTURED_VOLUMES
+    wxDataViewItem AddTextureChild(const wxDataViewItem& parent_item);
+#endif // ENABLE_TEXTURED_VOLUMES
     wxDataViewItem Delete(const wxDataViewItem &item);
     wxDataViewItem DeleteLastInstance(const wxDataViewItem &parent_item, size_t num);
     void DeleteAll();
@@ -350,6 +358,9 @@ public:
     wxDataViewItem  GetSettingsItem(const wxDataViewItem &item) const;
     wxDataViewItem  GetInstanceRootItem(const wxDataViewItem &item) const;
     wxDataViewItem  GetLayerRootItem(const wxDataViewItem &item) const;
+#if ENABLE_TEXTURED_VOLUMES
+    wxDataViewItem  GetTextureItem(const wxDataViewItem& item) const;
+#endif // ENABLE_TEXTURED_VOLUMES
     wxDataViewItem  GetInfoItemByType(const wxDataViewItem &parent_item, InfoItemType type) const;
 
     bool    IsSettingsItem(const wxDataViewItem &item) const;

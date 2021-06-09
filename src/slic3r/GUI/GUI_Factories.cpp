@@ -455,6 +455,15 @@ wxMenuItem* MenuFactory::append_menu_item_layers_editing(wxMenu* menu)
         []() { return obj_list()->is_instance_or_object_selected(); }, m_parent);
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+wxMenuItem* MenuFactory::append_menu_item_texture(wxMenu* menu)
+{
+    return append_menu_item(menu, wxID_ANY, _L("Texture"), "",
+        [](wxCommandEvent&) { obj_list()->texture_editing(); }, "edit_texture", menu,
+        []() { return obj_list()->is_instance_or_object_selected(); }, m_parent);
+}
+#endif // ENABLE_TEXTURED_VOLUMES
+
 wxMenuItem* MenuFactory::append_menu_item_settings(wxMenu* menu_)
 {
     MenuWithSeparators* menu = dynamic_cast<MenuWithSeparators*>(menu_);
@@ -853,6 +862,11 @@ void MenuFactory::create_object_menu()
     // Layers Editing for object
     append_menu_item_layers_editing(&m_object_menu);
     m_object_menu.AppendSeparator();
+
+#if ENABLE_TEXTURED_VOLUMES
+    append_menu_item_texture(&m_object_menu);
+    m_object_menu.AppendSeparator();
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // "Add (volumes)" popupmenu will be added later in append_menu_items_add_volume()
 }

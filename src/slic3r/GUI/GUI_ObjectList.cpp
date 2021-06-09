@@ -4,6 +4,9 @@
 #include "GUI_Factories.hpp"
 #include "GUI_ObjectManipulation.hpp"
 #include "GUI_ObjectLayers.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "GUI_ObjectTexture.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 #include "GUI_App.hpp"
 #include "I18N.hpp"
 #include "Plater.hpp"
@@ -2004,13 +2007,12 @@ void ObjectList::layers_editing()
     wxDataViewItem layers_item = m_objects_model->GetLayerRootItem(obj_item);
 
     // if it doesn't exist now
-    if (!layers_item.IsOk())
-    {
+    if (!layers_item.IsOk()) {
         t_layer_config_ranges& ranges = object(obj_idx)->layer_config_ranges;
 
         // set some default value
         if (ranges.empty()) {
-            take_snapshot(_(L("Add Layers")));
+            take_snapshot(_L("Add Layers"));
             ranges[{ 0.0f, 2.0f }].assign_config(get_default_layer_config(obj_idx));
         }
 
@@ -2024,10 +2026,43 @@ void ObjectList::layers_editing()
     wxGetApp().obj_layers()->reset_selection();
     wxGetApp().plater()->canvas3D()->handle_sidebar_focus_event("", false);
 
-    // select LayerRoor item and expand
+    // select LayerRoot item and expand
     select_item(layers_item);
     Expand(layers_item);
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+void ObjectList::texture_editing()
+{
+    const Selection& selection = scene_selection();
+    const int obj_idx = selection.get_object_idx();
+    wxDataViewItem item = obj_idx >= 0 && GetSelectedItemsCount() > 1 && selection.is_single_full_object() ?
+        m_objects_model->GetItemById(obj_idx) :
+        GetSelection();
+
+    if (!item)
+        return;
+
+    const wxDataViewItem obj_item = m_objects_model->GetTopParent(item);
+    wxDataViewItem texture_item = m_objects_model->GetTextureItem(obj_item);
+
+    // if it doesn't exist now
+    if (!texture_item.IsOk()) {
+        // no texture defined, add it
+        if (object(obj_idx)->texture.empty())
+            take_snapshot(_L("Add texture"));
+
+        // create texture item
+        texture_item = add_texture_item(obj_item);
+    }
+
+    if (!texture_item.IsOk())
+        return;
+
+    // select Texture item and expand
+    select_item(texture_item);
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 wxDataViewItem ObjectList::add_layer_root_item(const wxDataViewItem obj_item)
 {
@@ -2175,6 +2210,9 @@ void ObjectList::part_selection_changed()
     bool update_and_show_manipulations = false;
     bool update_and_show_settings = false;
     bool update_and_show_layers = false;
+#if ENABLE_TEXTURED_VOLUMES
+    bool update_and_show_texture = false;
+#endif // ENABLE_TEXTURED_VOLUMES
 
     const auto item = GetSelection();
 
@@ -2248,6 +2286,12 @@ void ObjectList::part_selection_changed()
                     if (type & itLayer)
                         m_config = &get_item_config(item);
                 }
+#if ENABLE_TEXTURED_VOLUMES
+                else if (type & itTexture) {
+                    og_name = _L("Texture");
+                    update_and_show_texture = true;
+                }
+#endif // ENABLE_TEXTURED_VOLUMES
             }
         }
     }
@@ -2272,6 +2316,11 @@ void ObjectList::part_selection_changed()
     else if (update_and_show_layers)
         wxGetApp().obj_layers()->get_og()->set_name(" " + og_name + " ");
 
+#if ENABLE_TEXTURED_VOLUMES
+    if (update_and_show_texture)
+        wxGetApp().obj_texture()->get_og()->set_name(" " + og_name + " ");
+#endif // ENABLE_TEXTURED_VOLUMES
+
     update_min_height();
 
     Sidebar& panel = wxGetApp().sidebar();
@@ -2281,6 +2330,9 @@ void ObjectList::part_selection_changed()
     wxGetApp().obj_manipul() ->UpdateAndShow(update_and_show_manipulations);
     wxGetApp().obj_settings()->UpdateAndShow(update_and_show_settings);
     wxGetApp().obj_layers()  ->UpdateAndShow(update_and_show_layers);
+#if ENABLE_TEXTURED_VOLUMES
+    wxGetApp().obj_texture()->UpdateAndShow(update_and_show_texture);
+#endif // ENABLE_TEXTURED_VOLUMES
     wxGetApp().sidebar().show_info_sizer();
 
     panel.Layout();
@@ -2324,6 +2376,18 @@ wxDataViewItem ObjectList::add_settings_item(wxDataViewItem parent_item, const D
     return ret;
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+wxDataViewItem ObjectList::add_texture_item(const wxDataViewItem obj_item)
+{
+    const int obj_idx = m_objects_model->GetIdByItem(obj_item);
+    if (obj_idx < 0 || printer_technology() == ptSLA)
+        return wxDataViewItem(nullptr);
+
+    // create Texture item
+    wxDataViewItem texture_item = m_objects_model->AddTextureChild(obj_item);
+    return texture_item;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 void ObjectList::update_info_items(size_t obj_idx)
 {
