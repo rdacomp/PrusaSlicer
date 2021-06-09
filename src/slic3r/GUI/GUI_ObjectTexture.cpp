@@ -10,6 +10,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem.hpp>
 
+#if ENABLE_TEXTURED_VOLUMES
+
 namespace Slic3r {
 namespace GUI {
 
@@ -38,9 +40,10 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
         const auto& [obj_idx, model_object] = get_model_object();
         if (model_object != nullptr)
             model_object->texture = filename;
-        
+
         update();
         wxGetApp().plater()->add_textures_to_volumes(obj_idx);
+//        wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
     m_tex_remove_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
@@ -52,6 +55,7 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
 
             update();
             wxGetApp().plater()->add_textures_to_volumes(obj_idx);
+            wxGetApp().obj_list()->del_texture_item();
         }
         });
 
@@ -176,17 +180,20 @@ void ObjectTexture::UpdateAndShow(const bool show)
 void ObjectTexture::update()
 {
     const auto& [obj_idx, model_object] = get_model_object();
-    if (model_object == nullptr)
-        return;
+    bool has_texture = model_object != nullptr && !model_object->texture.empty();
 
-    if (!model_object->texture.empty()) {
-        m_tex_string->SetValue(boost::filesystem::path(model_object->texture).stem().string());
-        m_tex_remove_btn->Enable(true);
-    }
-    else {
-        m_tex_string->SetValue(wxEmptyString);
-        m_tex_remove_btn->Enable(false);
-    }
+    // update widgets
+    m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object->texture).stem().string()) : wxEmptyString);
+    m_tex_remove_btn->Enable(has_texture);
+
+    // show/hide icon into object list
+    ObjectDataViewModel* objects_model = wxGetApp().obj_list()->GetModel();
+    wxDataViewItem selectable_item = wxGetApp().obj_list()->GetSelection();
+    selectable_item = objects_model->GetParent(selectable_item);
+    wxDataViewItem texture_item = objects_model->GetItemByType(selectable_item, itTexture);
+    ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(texture_item.GetID());
+    node->SetBitmap(has_texture ? create_scaled_bitmap("edit_texture") : wxBitmap());
+    wxGetApp().obj_list()->Refresh();
 }
 
 std::pair<int, ModelObject*> ObjectTexture::get_model_object()
@@ -212,3 +219,5 @@ std::pair<int, ModelObject*> ObjectTexture::get_model_object()
 
 } // namespace GUI
 } // namespace Slic3r
+
+#endif // ENABLE_TEXTURED_VOLUMES

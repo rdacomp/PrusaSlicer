@@ -1606,6 +1606,10 @@ void ObjectList::del_subobject_item(wxDataViewItem& item)
         Unselect(item);
         Select(parent);
     }
+#if ENABLE_TEXTURED_VOLUMES
+    else if (type & itTexture && obj_idx != -1)
+        del_texture_from_object(obj_idx);
+#endif // ENABLE_TEXTURED_VOLUMES
     else if (idx == -1)
         return;
     else if (!del_subobject_from_object(obj_idx, idx, type))
@@ -1668,7 +1672,7 @@ void ObjectList::del_layer_from_object(const int obj_idx, const t_layer_height_r
     if (del_range == object(obj_idx)->layer_config_ranges.end())
         return;
 
-    take_snapshot(_(L("Delete Height Range")));
+    take_snapshot(_L("Delete Height Range"));
         
     object(obj_idx)->layer_config_ranges.erase(del_range);
 
@@ -1681,6 +1685,14 @@ void ObjectList::del_layers_from_object(const int obj_idx)
 
     changed_object(obj_idx);
 }
+
+#if ENABLE_TEXTURED_VOLUMES
+void ObjectList::del_texture_from_object(const int obj_idx)
+{
+    object(obj_idx)->texture.clear();
+    changed_object(obj_idx);
+}
+#endif // ENABLE_TEXTURED_VOLUMES
 
 bool ObjectList::del_subobject_from_object(const int obj_idx, const int idx, const int type)
 {
@@ -2387,6 +2399,20 @@ wxDataViewItem ObjectList::add_texture_item(const wxDataViewItem obj_item)
     wxDataViewItem texture_item = m_objects_model->AddTextureChild(obj_item);
     return texture_item;
 }
+
+void ObjectList::del_texture_item()
+{
+    const int obj_idx = get_selected_obj_idx();
+    if (obj_idx < 0)
+        return;
+
+    wxDataViewItem selectable_item = GetSelection();
+    selectable_item = m_objects_model->GetParent(selectable_item);
+    wxDataViewItem texture_item = m_objects_model->GetItemByType(selectable_item, itTexture);
+    del_subobject_item(texture_item);
+    select_item(selectable_item);
+}
+
 #endif // ENABLE_TEXTURED_VOLUMES
 
 void ObjectList::update_info_items(size_t obj_idx)

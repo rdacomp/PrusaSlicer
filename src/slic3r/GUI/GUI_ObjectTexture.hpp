@@ -1,6 +1,8 @@
 #ifndef slic3r_GUI_ObjectTexture_hpp_
 #define slic3r_GUI_ObjectTexture_hpp_
 
+#if ENABLE_TEXTURED_VOLUMES
+
 #include "GUI_ObjectSettings.hpp"
 
 namespace Slic3r {
@@ -30,5 +32,7 @@ private:
 
 } // namespace GUI
 } // namespace Slic3r
+
+#endif // ENABLE_TEXTURED_VOLUMES
 
 #endif // slic3r_GUI_ObjectTexture_hpp_

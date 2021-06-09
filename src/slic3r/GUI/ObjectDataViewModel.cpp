@@ -112,8 +112,7 @@ ObjectDataViewModelNode::ObjectDataViewModelNode(ObjectDataViewModelNode* parent
     const int children_cnt = parent->GetChildCount();
     if (idx < 0)
         m_idx = children_cnt;
-    else
-    {
+    else {
         // update indexes for another Laeyr Nodes
         for (int i = m_idx; i < children_cnt; i++)
             parent->GetNthChild(i)->SetIdx(i + 1);
@@ -228,7 +227,7 @@ bool ObjectDataViewModelNode::SetValue(const wxVariant& variant, unsigned col)
         DataViewBitmapText data;
         data << variant;
         m_extruder_bmp = data.GetBitmap();
-        m_extruder = data.GetText() == "0" ? _(L("default")) : data.GetText();
+        m_extruder = data.GetText() == "0" ? _L("default") : data.GetText();
         return true; }
     case colEditing:
         m_action_icon << variant;
@@ -322,7 +321,7 @@ wxDataViewItem ObjectDataViewModel::Add(const wxString &name,
                                         const int extruder,
                                         const bool has_errors/* = false*/)
 {
-    const wxString extruder_str = extruder == 0 ? _(L("default")) : wxString::Format("%d", extruder);
+    const wxString extruder_str = extruder == 0 ? _L("default") : wxString::Format("%d", extruder);
 	auto root = new ObjectDataViewModelNode(name, extruder_str);
     // Add error icon if detected auto-repaire
     if (has_errors)
@@ -1147,9 +1146,12 @@ void ObjectDataViewModel::GetItemInfo(const wxDataViewItem& item, ItemType& type
     if (!node || 
         node->GetIdx() <-1 || 
         ( node->GetIdx() == -1 && 
-         !(node->GetType() & (itObject | itSettings | itInstanceRoot | itLayerRoot/* | itLayer*/))
-        )
-       )
+#if ENABLE_TEXTURED_VOLUMES
+            !(node->GetType() & (itObject | itSettings | itInstanceRoot | itLayerRoot | itTexture/* | itLayer*/))
+#else
+            !(node->GetType() & (itObject | itSettings | itInstanceRoot | itLayerRoot/* | itLayer*/))
+#endif // ENABLE_TEXTURED_VOLUMES
+        ))
         return;
 
     idx = node->GetIdx();
@@ -1648,8 +1650,7 @@ void ObjectDataViewModel::Rescale()
     wxDataViewItemArray all_items;
     GetAllChildren(wxDataViewItem(0), all_items);
 
-    for (wxDataViewItem item : all_items)
-    {
+    for (wxDataViewItem item : all_items) {
         if (!item.IsOk())
             continue;
 
@@ -1713,8 +1714,7 @@ void ObjectDataViewModel::DeleteWarningIcon(const wxDataViewItem& item, const bo
     }
 
     node->SetBitmap(wxNullBitmap);
-    if (unmark_object)
-    {
+    if (unmark_object) {
         wxDataViewItemArray children;
         GetChildren(item, children);
         for (const wxDataViewItem& child : children)
