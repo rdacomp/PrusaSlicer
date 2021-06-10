@@ -786,7 +786,11 @@ Sidebar::Sidebar(Plater *parent)
     // regular buttons "Slice now" and "Export G-code" 
 
 //    const int scaled_height = p->btn_eject_device->GetBitmapHeight() + 4;
+#ifdef _WIN32
+    const int scaled_height = p->btn_export_gcode_removable->GetBitmapHeight();
+#else
     const int scaled_height = p->btn_export_gcode_removable->GetBitmapHeight() + 4;
+#endif
     auto init_btn = [this](wxButton **btn, wxString label, const int button_height) {
         *btn = new wxButton(this, wxID_ANY, label, wxDefaultPosition,
                             wxSize(-1, button_height), wxBU_EXACTFIT);
@@ -803,8 +807,8 @@ Sidebar::Sidebar(Plater *parent)
 
     auto* complect_btns_sizer = new wxBoxSizer(wxHORIZONTAL);
     complect_btns_sizer->Add(p->btn_export_gcode, 1, wxEXPAND);
-    complect_btns_sizer->Add(p->btn_send_gcode);
-	complect_btns_sizer->Add(p->btn_export_gcode_removable);
+    complect_btns_sizer->Add(p->btn_send_gcode, 0, wxLEFT, margin_5);
+	complect_btns_sizer->Add(p->btn_export_gcode_removable, 0, wxLEFT, margin_5);
 //    complect_btns_sizer->Add(p->btn_eject_device);
 	
 
@@ -982,7 +986,11 @@ void Sidebar::msw_rescale()
     p->btn_send_gcode->msw_rescale();
 //    p->btn_eject_device->msw_rescale();
 	p->btn_export_gcode_removable->msw_rescale();
-    const int scaled_height = p->btn_export_gcode_removable->GetBitmap().GetHeight() + 4;
+#ifdef _WIN32
+    const int scaled_height = p->btn_export_gcode_removable->GetBitmapHeight();
+#else
+    const int scaled_height = p->btn_export_gcode_removable->GetBitmapHeight() + 4;
+#endif
     p->btn_export_gcode->SetMinSize(wxSize(-1, scaled_height));
     p->btn_reslice     ->SetMinSize(wxSize(-1, scaled_height));
 

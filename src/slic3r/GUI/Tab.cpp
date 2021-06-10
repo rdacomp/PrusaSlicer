@@ -504,6 +504,7 @@ void Tab::OnActivate()
 
 void Tab::update_label_colours()
 {
+    m_default_text_clr = wxGetApp().get_label_clr_default();
     if (m_sys_label_clr == wxGetApp().get_label_clr_sys() && m_modified_label_clr == wxGetApp().get_label_clr_modified())
         return;
     m_sys_label_clr = wxGetApp().get_label_clr_sys();
@@ -1020,14 +1021,15 @@ void Tab::sys_color_changed()
         m_icons->Add(bmp.bmp());
     m_treectrl->AssignImageList(m_icons);
 
+    // Colors for ui "decoration"
+    update_label_colours();
 #ifdef _WIN32
     wxWindowUpdateLocker noUpdates(this);
     m_mode_sizer->msw_rescale();
     wxGetApp().UpdateDarkUI(this);
     wxGetApp().UpdateDarkUI(m_treectrl);
 #endif
-    // Colors for ui "decoration"
-    update_label_colours();
+    update_changed_tree_ui();
 
     // update options_groups
     if (m_active_page)

@@ -247,6 +247,7 @@ void create_combochecklist(wxComboCtrl* comboCtrl, const std::string& text, cons
 {
     if (comboCtrl == nullptr)
         return;
+    wxGetApp().UpdateDarkUI(comboCtrl);
 
     wxCheckListBoxComboPopup* popup = new wxCheckListBoxComboPopup;
     if (popup != nullptr) {
