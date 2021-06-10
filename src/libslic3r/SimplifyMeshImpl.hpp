@@ -388,11 +388,22 @@ double SimplifiableMesh<Mesh>::calculate_error(size_t id_v1, size_t id_v2, Verte
         double error1 = vertex_error(q, p1);
         double error2 = vertex_error(q, p2);
         double error3 = vertex_error(q, p3);
-        error         = std::min(error1, std::min(error2, error3));
-
-        if (is_approx(error1, error)) p_result = p1;
-        if (is_approx(error2, error)) p_result = p2;
-        if (is_approx(error3, error)) p_result = p3;
+        // select vertex with smallest error
+        if (error1 < error2) {
+            if (error1 < error3) {
+                error    = error1;
+                p_result = p1;
+            } else {
+                error    = error3;
+                p_result = p3;
+            }
+        } else if (error2 < error3) {
+            error    = error2;
+            p_result = p2;
+        } else {
+            error    = error3;
+            p_result = p3;
+        }
     }
 
     return error;
@@ -421,11 +432,13 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
             normalize(n);
             finf.n = n;
             
+            //q = plane quadric for actual face
+            SymMat q(x(n), y(n), z(n), -dot(n, p[0]));
             for (size_t fi : t)
-                m_vertexinfo[fi].q += SymMat(x(n), y(n), z(n), -dot(n, p[0]));
-            
-            calculate_error(finf);
+                m_vertexinfo[fi].q += q;            
         }
+        for (FaceInfo &finf : m_faceinfo)
+            calculate_error(finf);
     }
     
     // Init Reference ID list
