@@ -127,7 +127,7 @@ bool TriangleSelector::select_triangle(int facet_idx, EnforcerBlockerType type, 
     assert(facet_idx < int(m_triangles.size()));
 
     Triangle* tr = &m_triangles[facet_idx];
-    if (! tr->valid)
+    if (! tr->valid())
         return false;
 
     int num_of_inside_vertices = vertices_inside(facet_idx);
@@ -177,7 +177,7 @@ bool TriangleSelector::select_triangle(int facet_idx, EnforcerBlockerType type, 
 
         // Make sure that we did not lose track of invalid triangles.
         assert(m_invalid_triangles == std::count_if(m_triangles.begin(), m_triangles.end(),
-                   [](const Triangle& tr) { return ! tr.valid; }));
+                   [](const Triangle& tr) { return ! tr.valid(); }));
 
         // Do garbage collection maybe?
         if (2*m_invalid_triangles > int(m_triangles.size()))
@@ -213,7 +213,7 @@ void TriangleSelector::split_triangle(int facet_idx)
         tr->set_division(-1);
         for (int i=0; i<=tr->number_of_split_sides(); ++i) {
             m_triangles[tr->children[i]].set_state(old_type);
-            m_triangles[tr->children[i]].valid = true;
+            m_triangles[tr->children[i]].m_valid = true;
             --m_invalid_triangles;
         }
         return;
@@ -343,7 +343,7 @@ void TriangleSelector::undivide_triangle(int facet_idx)
     if (tr.is_split()) {
         for (int i=0; i<=tr.number_of_split_sides(); ++i) {
             undivide_triangle(tr.children[i]);
-            m_triangles[tr.children[i]].valid = false;
+            m_triangles[tr.children[i]].m_valid = false;
             ++m_invalid_triangles;
         }
         tr.set_division(0); // not split
@@ -356,7 +356,7 @@ void TriangleSelector::remove_useless_children(int facet_idx)
     // Check that all children are leafs of the same type. If not, try to
     // make them (recursive call). Remove them if sucessful.
 
-    assert(facet_idx < int(m_triangles.size()) && m_triangles[facet_idx].valid);
+    assert(facet_idx < int(m_triangles.size()) && m_triangles[facet_idx].valid());
     Triangle& tr = m_triangles[facet_idx];
 
     if (! tr.is_split()) {
@@ -367,7 +367,7 @@ void TriangleSelector::remove_useless_children(int facet_idx)
 
     // Call this for all non-leaf children.
     for (int child_idx=0; child_idx<=tr.number_of_split_sides(); ++child_idx) {
-        assert(child_idx < int(m_triangles.size()) && m_triangles[child_idx].valid);
+        assert(child_idx < int(m_triangles.size()) && m_triangles[child_idx].valid());
         if (m_triangles[tr.children[child_idx]].is_split())
             remove_useless_children(tr.children[child_idx]);
     }
@@ -397,7 +397,7 @@ void TriangleSelector::garbage_collect()
     int new_idx = m_orig_size_indices;
     std::vector<int> new_triangle_indices(m_triangles.size(), -1);
     for (int i = m_orig_size_indices; i<int(m_triangles.size()); ++i) {
-        if (m_triangles[i].valid) {
+        if (m_triangles[i].valid()) {
             new_triangle_indices[i] = new_idx;
             ++new_idx;
         } else {
@@ -421,7 +421,7 @@ void TriangleSelector::garbage_collect()
 
     // We can remove all invalid triangles and vertices that are no longer referenced.
     m_triangles.erase(std::remove_if(m_triangles.begin()+m_orig_size_indices, m_triangles.end(),
-                          [](const Triangle& tr) { return ! tr.valid; }),
+                          [](const Triangle& tr) { return ! tr.valid(); }),
                       m_triangles.end());
     m_vertices.erase(std::remove_if(m_vertices.begin()+m_orig_size_vertices, m_vertices.end(),
                           [](const Vertex& vert) { return vert.ref_cnt == 0; }),
@@ -429,7 +429,7 @@ void TriangleSelector::garbage_collect()
 
     // Now go through all remaining triangles and update changed indices.
     for (Triangle& tr : m_triangles) {
-        assert(tr.valid);
+        assert(tr.valid());
 
         if (tr.is_split()) {
             // There are children. Update their indices.
@@ -578,12 +578,17 @@ void TriangleSelector::perform_split(int facet_idx, EnforcerBlockerType old_stat
 indexed_triangle_set TriangleSelector::get_facets(EnforcerBlockerType state) const
 {
     indexed_triangle_set out;
+    std::vector<int> vertex_map(m_vertices.size(), -1);
     for (const Triangle& tr : m_triangles) {
-        if (tr.valid && ! tr.is_split() && tr.get_state() == state) {
+        if (tr.valid() && ! tr.is_split() && tr.get_state() == state) {
             stl_triangle_vertex_indices indices;
             for (int i=0; i<3; ++i) {
-                out.vertices.emplace_back(m_vertices[tr.verts_idxs[i]].v);
-                indices[i] = out.vertices.size() - 1;
+                int j = tr.verts_idxs[i];
+                if (vertex_map[j] == -1) {
+                    vertex_map[j] = int(out.vertices.size());
+                    out.vertices.emplace_back(m_vertices[j].v);
+                }
+                indices[i] = vertex_map[j];
             }
             out.indices.emplace_back(indices);
         }
@@ -593,7 +598,7 @@ indexed_triangle_set TriangleSelector::get_facets(EnforcerBlockerType state) con
 
 
 
-std::map<int, std::vector<bool>> TriangleSelector::serialize() const
+std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> TriangleSelector::serialize() const
 {
     // Each original triangle of the mesh is assigned a number encoding its state
     // or how it is split. Each triangle is encoded by 4 bits (xxyy) or 8 bits (zzzzxxyy):
@@ -605,27 +610,27 @@ std::map<int, std::vector<bool>> TriangleSelector::serialize() const
     // The function returns a map from original triangle indices to
     // stream of bits encoding state and offsprings.
 
-    std::map<int, std::vector<bool>> out;
+    std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> out;
+    out.first.reserve(m_orig_size_indices);
     for (int i=0; i<m_orig_size_indices; ++i) {
         const Triangle& tr = m_triangles[i];
 
         if (! tr.is_split() && tr.get_state() == EnforcerBlockerType::NONE)
             continue; // no need to save anything, unsplit and unselected is default
 
-        std::vector<bool> data; // complete encoding of this mesh triangle
-        int stored_triangles = 0; // how many have been already encoded
+        // Store index of the first bit assigned to ith triangle.
+        out.first.emplace_back(i, int(out.second.size()));
 
         std::function<void(int)> serialize_recursive;
-        serialize_recursive = [this, &serialize_recursive, &stored_triangles, &data](int facet_idx) {
+        serialize_recursive = [this, &serialize_recursive, &out](int facet_idx) {
             const Triangle& tr = m_triangles[facet_idx];
 
             // Always save number of split sides. It is zero for unsplit triangles.
             int split_sides = tr.number_of_split_sides();
             assert(split_sides >= 0 && split_sides <= 3);
 
-            //data |= (split_sides << (stored_triangles * 4));
-            data.push_back(split_sides & 0b01);
-            data.push_back(split_sides & 0b10);
+            out.second.push_back(split_sides & 0b01);
+            out.second.push_back(split_sides & 0b10);
 
             if (tr.is_split()) {
                 // If this triangle is split, save which side is split (in case
@@ -633,9 +638,8 @@ std::map<int, std::vector<bool>> TriangleSelector::serialize() const
                 // be ignored for 3-side split.
                 assert(split_sides > 0);
                 assert(tr.special_side() >= 0 && tr.special_side() <= 3);
-                data.push_back(tr.special_side() & 0b01);
-                data.push_back(tr.special_side() & 0b10);
-                ++stored_triangles;
+                out.second.push_back(tr.special_side() & 0b01);
+                out.second.push_back(tr.special_side() & 0b10);
                 // Now save all children.
                 for (int child_idx=0; child_idx<=split_sides; ++child_idx)
                     serialize_recursive(tr.children[child_idx]);
@@ -643,32 +647,33 @@ std::map<int, std::vector<bool>> TriangleSelector::serialize() const
                 // In case this is leaf, we better save information about its state.
                 assert(int(tr.get_state()) <= 15);
                 if (3 <= int(tr.get_state()) && int(tr.get_state()) <= 15) {
-                    data.insert(data.end(), {true, true});
+                    out.second.insert(out.second.end(), {true, true});
                     for (size_t bit_idx = 0; bit_idx < 4; ++bit_idx) {
                         size_t bit_mask = uint64_t(0b0001) << bit_idx;
-                        data.push_back((int(tr.get_state()) - 3) & bit_mask);
+                        out.second.push_back((int(tr.get_state()) - 3) & bit_mask);
                     }
                 } else {
-                    data.push_back(int(tr.get_state()) & 0b01);
-                    data.push_back(int(tr.get_state()) & 0b10);
+                    out.second.push_back(int(tr.get_state()) & 0b01);
+                    out.second.push_back(int(tr.get_state()) & 0b10);
                 }
-                ++stored_triangles;
             }
         };
 
         serialize_recursive(i);
-        out[i] = data;
     }
 
+    // May be stored onto Undo / Redo stack, thus conserve memory.
+    out.first.shrink_to_fit();
+    out.second.shrink_to_fit();
     return out;
 }
 
-void TriangleSelector::deserialize(const std::map<int, std::vector<bool>> data, const EnforcerBlockerType init_state)
+void TriangleSelector::deserialize(const std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> &data, const EnforcerBlockerType init_state)
 {
     reset(init_state); // dump any current state
-    for (const auto& [triangle_id, code] : data) {
+    for (const auto [triangle_id, first_bit] : data.first) {
         assert(triangle_id < int(m_triangles.size()));
-        assert(! code.empty());
+        assert(first_bit < data.second.size());
         int processed_nibbles = 0;
         struct ProcessingInfo {
             int facet_id = 0;
@@ -689,7 +694,7 @@ void TriangleSelector::deserialize(const std::map<int, std::vector<bool>> data, 
 
                 for (int i = 3; i >= 0; --i) {
                     next_code[nibble_idx] = next_code[nibble_idx] << 1;
-                    next_code[nibble_idx] |= int(code[4 * processed_nibbles + i]);
+                    next_code[nibble_idx] |= int(data.second[first_bit + 4 * processed_nibbles + i]);
                 }
 
                 ++processed_nibbles;
@@ -769,7 +774,7 @@ void TriangleSelector::seed_fill_apply_on_triangles(EnforcerBlockerType new_stat
             triangle.set_state(new_state);
 
     for (Triangle &triangle : m_triangles)
-        if (triangle.is_split() && triangle.valid) {
+        if (triangle.is_split() && triangle.valid()) {
             size_t facet_idx = &triangle - &m_triangles.front();
             remove_useless_children(facet_idx);
         }
