@@ -574,6 +574,8 @@ bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data,
     image.SaveFile(out_file, wxBITMAP_TYPE_PNG);
 #endif // DEBUG_OUTPUT
 
+    image = image.Mirror(false);
+
     std::vector<unsigned char> data;
 
     // Get RGB & alpha raw data from wxImage, pack them into an array.
