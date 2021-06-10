@@ -564,6 +564,9 @@ ModelObject& ModelObject::assign_copy(const ModelObject &rhs)
     this->layer_config_ranges         = rhs.layer_config_ranges;
     this->layer_height_profile        = rhs.layer_height_profile;
     this->printable                   = rhs.printable;
+#if ENABLE_TEXTURED_VOLUMES
+    this->texture                     = rhs.texture;
+#endif // ENABLE_TEXTURED_VOLUMES
     this->origin_translation          = rhs.origin_translation;
     m_bounding_box                    = rhs.m_bounding_box;
     m_bounding_box_valid              = rhs.m_bounding_box_valid;
@@ -604,6 +607,9 @@ ModelObject& ModelObject::assign_copy(ModelObject &&rhs)
     this->sla_drain_holes             = std::move(rhs.sla_drain_holes);
     this->layer_config_ranges         = std::move(rhs.layer_config_ranges);
     this->layer_height_profile        = std::move(rhs.layer_height_profile);
+#if ENABLE_TEXTURED_VOLUMES
+    this->texture                     = std::move(rhs.texture);
+#endif // ENABLE_TEXTURED_VOLUMES
     this->origin_translation          = std::move(rhs.origin_translation);
     m_bounding_box                    = std::move(rhs.m_bounding_box);
     m_bounding_box_valid              = std::move(rhs.m_bounding_box_valid);

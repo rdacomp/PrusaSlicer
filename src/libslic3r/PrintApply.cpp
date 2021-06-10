@@ -1069,6 +1069,9 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
                                           model_volume_list_changed(model_object, model_object_new, ModelVolumeType::SUPPORT_ENFORCER);
         bool layer_height_ranges_differ = ! layer_height_ranges_equal(model_object.layer_config_ranges, model_object_new.layer_config_ranges, model_object_new.layer_height_profile.empty());
         bool model_origin_translation_differ = model_object.origin_translation != model_object_new.origin_translation;
+#if ENABLE_TEXTURED_VOLUMES
+        bool texture_differ = model_object.texture != model_object_new.texture;
+#endif // ENABLE_TEXTURED_VOLUMES
         auto print_objects_range        = print_object_status_db.get_range(model_object);
         // The list actually can be empty if all instances are out of the print bed.
         //assert(print_objects_range.begin() != print_objects_range.end());
@@ -1077,10 +1080,18 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             model_object_status.print_object_regions = print_objects_range.begin()->print_object->m_shared_regions;
             model_object_status.print_object_regions->ref_cnt_inc();
         }
+#if ENABLE_TEXTURED_VOLUMES
+        if (solid_or_modifier_differ || model_origin_translation_differ || layer_height_ranges_differ || texture_differ ||
+#else
         if (solid_or_modifier_differ || model_origin_translation_differ || layer_height_ranges_differ ||
-            ! model_object.layer_height_profile.timestamp_matches(model_object_new.layer_height_profile)) {
+#endif // ENABLE_TEXTURED_VOLUMES
+            !model_object.layer_height_profile.timestamp_matches(model_object_new.layer_height_profile)) {
             // The very first step (the slicing step) is invalidated. One may freely remove all associated PrintObjects.
-            model_object_status.print_object_regions_status = model_origin_translation_differ || layer_height_ranges_differ ?
+#if ENABLE_TEXTURED_VOLUMES
+                model_object_status.print_object_regions_status = model_origin_translation_differ || layer_height_ranges_differ || texture_differ ?
+#else
+                model_object_status.print_object_regions_status = model_origin_translation_differ || layer_height_ranges_differ ?
+#endif // ENABLE_TEXTURED_VOLUMES
                 // Drop print_objects_regions.
                 ModelObjectStatus::PrintObjectRegionsStatus::Invalid :
                 // Reuse bounding boxes of print_objects_regions for ModelVolumes with unmodified transformation.
@@ -1138,6 +1149,9 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             // Copy the ModelObject name, input_file and instances. The instances will be compared against PrintObject instances in the next step.
             model_object.name       = model_object_new.name;
             model_object.input_file = model_object_new.input_file;
+#if ENABLE_TEXTURED_VOLUMES
+            model_object.texture    = model_object_new.texture;
+#endif // ENABLE_TEXTURED_VOLUMES
             // Only refresh ModelInstances if there is any change.
             if (model_object.instances.size() != model_object_new.instances.size() || 
             	! std::equal(model_object.instances.begin(), model_object.instances.end(), model_object_new.instances.begin(), [](auto l, auto r){ return l->id() == r->id(); })) {

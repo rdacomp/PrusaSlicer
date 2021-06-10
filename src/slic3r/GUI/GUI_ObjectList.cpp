@@ -2412,7 +2412,6 @@ void ObjectList::del_texture_item()
     del_subobject_item(texture_item);
     select_item(selectable_item);
 }
-
 #endif // ENABLE_TEXTURED_VOLUMES
 
 void ObjectList::update_info_items(size_t obj_idx)
@@ -2800,7 +2799,7 @@ void ObjectList::add_layer_range_after_current(const t_layer_height_range curren
     if (++ it_next_range == ranges.end())
     {
         // Adding a new layer height range after the last one.
-        take_snapshot(_(L("Add Height Range")));
+        take_snapshot(_L("Add Height Range"));
         changed = true;
 
         const t_layer_height_range new_range = { current_range.second, current_range.second + 2. };
@@ -2828,7 +2827,7 @@ void ObjectList::add_layer_range_after_current(const t_layer_height_range curren
                     	next_range.first + std::max(old_min_layer_height, 0.5 * delta);
                     t_layer_height_range new_range = { middle_layer_z, next_range.second };
 
-                    Plater::TakeSnapshot snapshot(wxGetApp().plater(), _(L("Add Height Range")));
+                    Plater::TakeSnapshot snapshot(wxGetApp().plater(), _L("Add Height Range"));
                     changed = true;
 
                     // create new 2 layers instead of deleted one
@@ -2848,7 +2847,7 @@ void ObjectList::add_layer_range_after_current(const t_layer_height_range curren
             else if (next_range.first - current_range.second >= get_min_layer_height(0) - EPSILON)
             {
                 // Filling in a gap between the current and a new layer height range with a new one.
-                take_snapshot(_(L("Add Height Range")));
+                take_snapshot(_L("Add Height Range"));
                 changed = true;
 
                 const t_layer_height_range new_range = { current_range.second, next_range.first };

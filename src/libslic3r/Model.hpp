@@ -409,6 +409,9 @@ private:
     	assert(this->id() == rhs.id()); 
         assert(this->config.id() == rhs.config.id());
         assert(this->layer_height_profile.id() == rhs.layer_height_profile.id());
+#if ENABLE_TEXTURED_VOLUMES
+        assert(this->texture == rhs.texture);
+#endif // ENABLE_TEXTURED_VOLUMES
     }
     explicit ModelObject(ModelObject &&rhs) : ObjectBase(-1), config(-1), layer_height_profile(-1) { 
     	assert(this->id().invalid()); 
@@ -425,6 +428,9 @@ private:
     	assert(this->id() == rhs.id());
         assert(this->config.id() == rhs.config.id());
         assert(this->layer_height_profile.id() == rhs.layer_height_profile.id());
+#if ENABLE_TEXTURED_VOLUMES
+        assert(this->texture == rhs.texture);
+#endif // ENABLE_TEXTURED_VOLUMES
     }
     ModelObject& operator=(const ModelObject &rhs) {
     	this->assign_copy(rhs); 
@@ -437,7 +443,10 @@ private:
     	assert(this->id() == rhs.id()); 
         assert(this->config.id() == rhs.config.id());
         assert(this->layer_height_profile.id() == rhs.layer_height_profile.id());
-    	return *this;
+#if ENABLE_TEXTURED_VOLUMES
+        assert(this->texture == rhs.texture);
+#endif // ENABLE_TEXTURED_VOLUMES
+        return *this;
     }
     ModelObject& operator=(ModelObject &&rhs) {
     	this->assign_copy(std::move(rhs)); 
@@ -450,6 +459,10 @@ private:
     	assert(this->id() == rhs.id());
         assert(this->config.id() == rhs.config.id());
         assert(this->layer_height_profile.id() == rhs.layer_height_profile.id());
+#if ENABLE_TEXTURED_VOLUMES
+        assert(this->texture == rhs.texture);
+#endif // ENABLE_TEXTURED_VOLUMES
+
     	return *this;
     }
 	void set_new_unique_id() { 
@@ -491,10 +504,16 @@ private:
 		ar(cereal::base_class<ObjectBase>(this));
 		Internal::StaticSerializationWrapper<ModelConfigObject> config_wrapper(config);
         Internal::StaticSerializationWrapper<LayerHeightProfile> layer_heigth_profile_wrapper(layer_height_profile);
-        ar(name, input_file, instances, volumes, config_wrapper, layer_config_ranges, layer_heigth_profile_wrapper, 
+#if ENABLE_TEXTURED_VOLUMES
+        ar(name, input_file, instances, volumes, config_wrapper, layer_config_ranges, layer_heigth_profile_wrapper,
+            sla_support_points, sla_points_status, sla_drain_holes, printable, origin_translation, texture,
+            m_bounding_box, m_bounding_box_valid, m_raw_bounding_box, m_raw_bounding_box_valid, m_raw_mesh_bounding_box, m_raw_mesh_bounding_box_valid);
+#else
+        ar(name, input_file, instances, volumes, config_wrapper, layer_config_ranges, layer_heigth_profile_wrapper,
             sla_support_points, sla_points_status, sla_drain_holes, printable, origin_translation,
             m_bounding_box, m_bounding_box_valid, m_raw_bounding_box, m_raw_bounding_box_valid, m_raw_mesh_bounding_box, m_raw_mesh_bounding_box_valid);
-	}
+#endif // ENABLE_TEXTURED_VOLUMES
+    }
 };
 
 enum class EnforcerBlockerType : int8_t {

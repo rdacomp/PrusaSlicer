@@ -638,8 +638,7 @@ wxDataViewItem ObjectDataViewModel::Delete(const wxDataViewItem &item)
 	// NOTE: MyObjectTreeModelNodePtrArray is only an array of _pointers_
 	//       thus removing the node from it doesn't result in freeing it
 	if (node_parent) {
-        if (node->m_type & (itInstanceRoot|itLayerRoot))
-        {
+        if (node->m_type & (itInstanceRoot|itLayerRoot)) {
             // node can be deleted by the Delete, let's check its type while we safely can
             bool is_instance_root = (node->m_type & itInstanceRoot);
 
@@ -666,16 +665,14 @@ wxDataViewItem ObjectDataViewModel::Delete(const wxDataViewItem &item)
 
 		//update idx value for remaining child-nodes
 		auto children = node_parent->GetChildren();
-        for (size_t i = 0; i < node_parent->GetChildCount() && idx>=0; i++)
-		{
+        for (size_t i = 0; i < node_parent->GetChildCount() && idx>=0; i++) {
             auto cur_idx = children[i]->GetIdx();
 			if (cur_idx > idx)
 				children[i]->SetIdx(cur_idx-1);
 		}
 
         // if there is last instance item, delete both of it and instance root item
-        if (node_parent->GetChildCount() == 1 && node_parent->GetNthChild(0)->m_type == itInstance)
-        {
+        if (node_parent->GetChildCount() == 1 && node_parent->GetNthChild(0)->m_type == itInstance) {
             delete node;
             ItemDeleted(parent, item);
 
@@ -703,8 +700,7 @@ wxDataViewItem ObjectDataViewModel::Delete(const wxDataViewItem &item)
             UpdateObjectPrintable(wxDataViewItem(node_parent->GetParent()));
 
         // if there was last layer item, delete this one and layers root item
-        if (node_parent->GetChildCount() == 0 && node_parent->m_type == itLayerRoot)
-        {
+        if (node_parent->GetChildCount() == 0 && node_parent->m_type == itLayerRoot) {
             ObjectDataViewModelNode *obj_node = node_parent->GetParent();
             obj_node->GetChildren().Remove(node_parent);
             delete node_parent;
@@ -759,12 +755,10 @@ wxDataViewItem ObjectDataViewModel::Delete(const wxDataViewItem &item)
             }
         }
 	}
-	else
-	{
+	else {
 		auto it = find(m_objects.begin(), m_objects.end(), node);
         size_t id = it - m_objects.begin();
-		if (it != m_objects.end())
-		{
+		if (it != m_objects.end()) {
             // Delete all sub-items
             int i = m_objects[id]->GetChildCount() - 1;
             while (i >= 0) {

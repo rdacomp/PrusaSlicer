@@ -60,7 +60,7 @@ ObjectSettings::ObjectSettings(wxWindow* parent) :
     OG_Settings(parent, true)
 {
     m_og->activate();
-    m_og->set_name(_(L("Additional Settings")));    
+    m_og->set_name(_L("Additional Settings"));    
 
     m_settings_list_sizer = new wxBoxSizer(wxVERTICAL);
     m_og->sizer->Add(m_settings_list_sizer, 1, wxEXPAND | wxLEFT, 5);
@@ -96,7 +96,7 @@ bool ObjectSettings::update_settings_list()
 			auto opt_key = (line.get_options())[0].opt_id;  //we assume that we have one option per line
 
 			auto btn = new ScalableButton(parent, wxID_ANY, m_bmp_delete);
-            btn->SetToolTip(_(L("Remove parameter")));
+            btn->SetToolTip(_L("Remove parameter"));
 
             btn->SetBitmapFocus(m_bmp_delete_focus.bmp());
             btn->SetBitmapHover(m_bmp_delete_focus.bmp());

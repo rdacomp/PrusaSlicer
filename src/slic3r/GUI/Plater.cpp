@@ -2870,25 +2870,25 @@ void Plater::priv::split_volume()
 
 void Plater::priv::scale_selection_to_fit_print_volume()
 {
-    this->view3D->get_canvas3d()->get_selection().scale_to_fit_print_volume(*config);
+    view3D->get_canvas3d()->get_selection().scale_to_fit_print_volume(*config);
 }
 
 void Plater::priv::schedule_background_process()
 {
     delayed_error_message.clear();
     // Trigger the timer event after 0.5s
-    this->background_process_timer.Start(500, wxTIMER_ONE_SHOT);
+    background_process_timer.Start(500, wxTIMER_ONE_SHOT);
     // Notify the Canvas3D that something has changed, so it may invalidate some of the layer editing stuff.
-    this->view3D->get_canvas3d()->set_config(this->config);
+    view3D->get_canvas3d()->set_config(config);
 }
 
 void Plater::priv::update_print_volume_state()
 {
-    BoundingBox     bed_box_2D = get_extents(Polygon::new_scale(this->config->opt<ConfigOptionPoints>("bed_shape")->values));
-    BoundingBoxf3   print_volume(unscale(bed_box_2D.min(0), bed_box_2D.min(1), 0.0), unscale(bed_box_2D.max(0), bed_box_2D.max(1), scale_(this->config->opt_float("max_print_height"))));
+    BoundingBox     bed_box_2D = get_extents(Polygon::new_scale(config->opt<ConfigOptionPoints>("bed_shape")->values));
+    BoundingBoxf3   print_volume(unscale(bed_box_2D.min(0), bed_box_2D.min(1), 0.0), unscale(bed_box_2D.max(0), bed_box_2D.max(1), scale_(config->opt_float("max_print_height"))));
     // Allow the objects to protrude below the print bed, only the part of the object above the print bed will be sliced.
     print_volume.min(2) = -1e10;
-    this->q->model().update_print_volume_state(print_volume);
+    q->model().update_print_volume_state(print_volume);
 }
 
 
@@ -3024,16 +3024,14 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         wxQueueEvent(GUI::wxGetApp().mainframe->m_plater, evt.Clone());
     }
 
-    if ((return_state & UPDATE_BACKGROUND_PROCESS_INVALID) != 0)
-    {
+    if ((return_state & UPDATE_BACKGROUND_PROCESS_INVALID) != 0) {
         // Validation of the background data failed.
         const wxString invalid_str = _L("Invalid data");
         for (auto btn : {ActionButtonType::abReslice, ActionButtonType::abSendGCode, ActionButtonType::abExport})
             sidebar->set_btn_label(btn, invalid_str);
         process_completed_with_error = true;
     }
-    else
-    {
+    else {
         // Background data is valid.
         if ((return_state & UPDATE_BACKGROUND_PROCESS_RESTART) != 0 ||
             (return_state & UPDATE_BACKGROUND_PROCESS_REFRESH_SCENE) != 0 )
@@ -3121,20 +3119,20 @@ void Plater::priv::export_gcode(fs::path output_path, bool output_path_on_remova
 unsigned int Plater::priv::update_restart_background_process(bool force_update_scene, bool force_update_preview)
 {
     // bitmask of UpdateBackgroundProcessReturnState
-    unsigned int state = this->update_background_process(false);
+    unsigned int state = update_background_process(false);
     if (force_update_scene || (state & UPDATE_BACKGROUND_PROCESS_REFRESH_SCENE) != 0)
         view3D->reload_scene(false);
 
     if (force_update_preview)
-        this->preview->reload_print();
-    this->restart_background_process(state);
+        preview->reload_print();
+    restart_background_process(state);
     return state;
 }
 
 void Plater::priv::update_fff_scene()
 {
-    if (this->preview != nullptr)
-        this->preview->reload_print();
+    if (preview != nullptr)
+        preview->reload_print();
     // In case this was MM print, wipe tower bounding box on 3D tab might need redrawing with exact depth:
     view3D->reload_scene(true);	
 }
@@ -3144,7 +3142,7 @@ void Plater::priv::update_sla_scene()
     // Update the SLAPrint from the current Model, so that the reload_scene()
     // pulls the correct data.
     delayed_scene_refresh = false;
-    this->update_restart_background_process(true, true);
+    update_restart_background_process(true, true);
 }
 
 void Plater::priv::reload_from_disk()
@@ -5575,11 +5573,11 @@ void Plater::reslice_SLA_until_step(SLAPrintObjectStep step, const ModelObject &
 {
     //FIXME Don't reslice if export of G-code or sending to OctoPrint is running.
     // bitmask of UpdateBackgroundProcessReturnState
-    unsigned int state = this->p->update_background_process(true, postpone_error_messages);
+    unsigned int state = p->update_background_process(true, postpone_error_messages);
     if (state & priv::UPDATE_BACKGROUND_PROCESS_REFRESH_SCENE)
-        this->p->view3D->reload_scene(false);
+        p->view3D->reload_scene(false);
 
-    if (this->p->background_process.empty() || (state & priv::UPDATE_BACKGROUND_PROCESS_INVALID))
+    if (p->background_process.empty() || (state & priv::UPDATE_BACKGROUND_PROCESS_INVALID))
         // Nothing to do on empty input or invalid configuration.
         return;
 
@@ -5588,13 +5586,13 @@ void Plater::reslice_SLA_until_step(SLAPrintObjectStep step, const ModelObject &
     task.single_model_object = object.id();
     // If the background processing is not enabled, calculate supports just for the single instance.
     // Otherwise calculate everything, but start with the provided object.
-    if (!this->p->background_processing_enabled()) {
+    if (!p->background_processing_enabled()) {
         task.single_model_instance_only = true;
         task.to_object_step = step;
     }
-    this->p->background_process.set_task(task);
+    p->background_process.set_task(task);
     // and let the background processing start.
-    this->p->restart_background_process(state | priv::UPDATE_BACKGROUND_PROCESS_FORCE_RESTART);
+    p->restart_background_process(state | priv::UPDATE_BACKGROUND_PROCESS_FORCE_RESTART);
 }
 
 void Plater::send_gcode()
@@ -6053,23 +6051,23 @@ void Plater::changed_object(int obj_idx)
     auto model_object = p->model.objects[obj_idx];
 #if ENABLE_ALLOW_NEGATIVE_Z
 #if DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
-    model_object->ensure_on_bed(this->p->printer_technology != ptSLA);
+    model_object->ensure_on_bed(p->printer_technology != ptSLA);
 #else
     model_object->ensure_on_bed(true);
 #endif // DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
 #else
     model_object->ensure_on_bed();
 #endif // ENABLE_ALLOW_NEGATIVE_Z
-    if (this->p->printer_technology == ptSLA) {
+    if (p->printer_technology == ptSLA) {
         // Update the SLAPrint from the current Model, so that the reload_scene()
         // pulls the correct data, update the 3D scene.
-        this->p->update_restart_background_process(true, false);
+        p->update_restart_background_process(true, false);
     }
     else
         p->view3D->reload_scene(false);
 
     // update print
-    this->p->schedule_background_process();
+    p->schedule_background_process();
 }
 
 void Plater::changed_objects(const std::vector<size_t>& object_idxs)

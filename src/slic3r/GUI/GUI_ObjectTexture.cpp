@@ -43,7 +43,7 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
 
         update();
         wxGetApp().plater()->add_textures_to_volumes(obj_idx);
-//        wxGetApp().obj_list()->changed_object(obj_idx);
+        wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
     m_tex_remove_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
