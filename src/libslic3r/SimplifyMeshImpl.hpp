@@ -286,19 +286,9 @@ template<class Mesh> class SimplifiableMesh {
     
     // Error for one edge    
     double calculate_error(size_t id_v1, size_t id_v2, Vertex &p_result);
-    
-    void calculate_error(FaceInfo &fi)
-    {
-        Vertex p;
-        Index3 t = read_triangle(fi);
-        for (size_t j = 0; j < 3; ++j)
-            fi.err[j] = calculate_error(t[j], t[(j + 1) % 3], p);
-        
-        fi.err[3] = std::min(fi.err[0], std::min(fi.err[1], fi.err[2]));
-    }
-    
+
     void update_mesh(int iteration);
-    
+
     // Update triangle connections and edge error after a edge is collapsed
     void update_triangles(size_t i, VertexInfo &vi, std::vector<bool> &deleted, int &deleted_triangles);
     
@@ -384,26 +374,16 @@ double SimplifiableMesh<Mesh>::calculate_error(size_t id_v1, size_t id_v2, Verte
         // det = 0 -> try to find best result
         Vertex p1     = read_vertex(id_v1);
         Vertex p2     = read_vertex(id_v2);
-        Vertex p3     = (p1 + p2) / 2;
-        double error1 = vertex_error(q, p1);
-        double error2 = vertex_error(q, p2);
-        double error3 = vertex_error(q, p3);
-        // select vertex with smallest error
-        if (error1 < error2) {
-            if (error1 < error3) {
-                error    = error1;
-                p_result = p1;
-            } else {
-                error    = error3;
-                p_result = p3;
-            }
-        } else if (error2 < error3) {
-            error    = error2;
-            p_result = p2;
-        } else {
-            error    = error3;
-            p_result = p3;
-        }
+        Vertex verts [] = {p1, p2, (p1 + p2) / 2};
+        double errors[] = {
+            vertex_error(q, verts[0]),
+            vertex_error(q, verts[1]),
+            vertex_error(q, verts[2])
+        };
+
+        auto mit = std::min_element(std::begin(errors), std::end(errors));
+        error    = *mit;
+        p_result = verts[mit - std::begin(errors)];
     }
 
     return error;
@@ -437,8 +417,15 @@ template<class Mesh> void SimplifiableMesh<Mesh>::update_mesh(int iteration)
             for (size_t fi : t)
                 m_vertexinfo[fi].q += q;            
         }
-        for (FaceInfo &finf : m_faceinfo)
-            calculate_error(finf);
+
+        for (FaceInfo &finf : m_faceinfo) {
+            Vertex p;
+            Index3 t = read_triangle(finf);
+            for (size_t j = 0; j < 3; ++j)
+                finf.err[j] = calculate_error(t[j], t[(j + 1) % 3], p);
+
+            finf.err[3] = std::min(finf.err[0], std::min(finf.err[1], finf.err[2]));
+        }
     }
     
     // Init Reference ID list
