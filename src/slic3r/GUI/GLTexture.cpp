@@ -16,6 +16,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/beast/core/detail/base64.hpp>
+#include <boost/nowide/fstream.hpp>
 
 #include <png.h>
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -761,10 +762,16 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
 
     if (boost::algorithm::iends_with(filename, ".texture")) {
 
-        boost::property_tree::ptree root;
-        boost::property_tree::read_json(filename, root); // << FIXME for utf8 files
+        boost::nowide::ifstream file(filename, boost::nowide::ifstream::binary);
+        if (!file.good())
+            return false;
 
-        //http://www.cochoy.fr/boost-property-tree/
+        boost::property_tree::ptree root;
+        boost::property_tree::read_json(file, root);
+
+        file.close();
+
+        // http://www.cochoy.fr/boost-property-tree/
         boost::optional<std::string> id = root.get_optional<std::string>("header.texture_id");
         boost::optional<std::string> name = root.get_optional<std::string>("header.texture_name");
         boost::optional<std::string> image_data = root.get_optional<std::string>("image_data");
