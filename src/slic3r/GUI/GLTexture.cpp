@@ -518,7 +518,7 @@ bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data,
     for (png_uint_32 row = 0; row < height; ++row) {
         png_read_row(png_ptr, (png_bytep)row_data.data(), nullptr);
         for (png_uint_32 col = 0; col < width; ++col) {
-            png_uint_32 alpha_id = row * width + col;
+            png_uint_32 alpha_id = (height - 1 - row) * width + col;
             png_uint_32 rgb_id = 3 * alpha_id;
             switch (colorType)
             {
@@ -571,10 +571,9 @@ bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data,
 #define DEBUG_OUTPUT 0
 #if DEBUG_OUTPUT
     wxString out_file = m_source + ".png";
-    image.SaveFile(out_file, wxBITMAP_TYPE_PNG);
+    wxImage out_image = image.Mirror(false);
+    out_image.SaveFile(out_file, wxBITMAP_TYPE_PNG);
 #endif // DEBUG_OUTPUT
-
-    image = image.Mirror(false);
 
     std::vector<unsigned char> data;
 
