@@ -13,9 +13,14 @@ namespace GUI {
 
 class ObjectTexture : public OG_Settings
 {
+    ScalableBitmap m_bmp_delete;
+    ScalableBitmap m_bmp_delete_focus;
+    ScalableBitmap m_bmp_delete_disabled;
+
     wxBoxSizer* m_main_sizer{ nullptr };
+    wxBoxSizer* m_tex_sizer{ nullptr };
     wxTextCtrl* m_tex_string{ nullptr };
-    wxButton* m_tex_remove_btn{ nullptr };
+    ScalableButton* m_tex_delete_btn{ nullptr };
 
 public:
     ObjectTexture(wxWindow* parent);

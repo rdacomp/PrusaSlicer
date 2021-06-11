@@ -18,15 +18,24 @@ namespace GUI {
 ObjectTexture::ObjectTexture(wxWindow* parent) :
     OG_Settings(parent, true)
 {
+    m_bmp_delete = ScalableBitmap(m_parent, "cross");
+    m_bmp_delete_focus = ScalableBitmap(m_parent, "cross_focus");
+    m_bmp_delete_disabled = ScalableBitmap(m_parent, "transparent.png");
+
     m_main_sizer = new wxBoxSizer(wxVERTICAL);
     
-    wxBoxSizer* tex_sizer = new wxBoxSizer(wxHORIZONTAL);
+    m_tex_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxStaticText* tex_label = new wxStaticText(m_parent, wxID_ANY, _L("Texture"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
     m_tex_string = new wxTextCtrl(m_parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
     m_tex_string->Enable(false);
     wxButton* tex_browse_btn = new wxButton(m_parent, wxID_ANY, _L("Browse..."));
-    m_tex_remove_btn = new wxButton(m_parent, wxID_ANY, _L("Remove"));
+
+    m_tex_delete_btn = new ScalableButton(m_parent, wxID_ANY, m_bmp_delete);
+    m_tex_delete_btn->SetToolTip(_L("Remove texture"));
+    m_tex_delete_btn->SetBitmapFocus(m_bmp_delete_focus.bmp());
+    m_tex_delete_btn->SetBitmapHover(m_bmp_delete_focus.bmp());
+    m_tex_delete_btn->SetBitmapDisabled_(m_bmp_delete_disabled);
 
     tex_browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
         wxFileDialog dialog(m_parent, _L("Choose a texture file:"), "", "", "Texture files (*.texture)|*.texture", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
@@ -46,9 +55,12 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    m_tex_remove_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
-        wxMessageDialog dlg(m_parent, _L("Do you want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
+    m_tex_delete_btn->Bind(wxEVT_BUTTON, [this](wxEvent& event) {
+        wxMessageDialog dlg(m_parent, _L("Do you really want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
         if (dlg.ShowModal() == wxID_YES) {
+
+            /* take_snapshot */
+
             const auto& [obj_idx, model_object] = get_model_object();
             if (model_object != nullptr)
                 model_object->texture.clear();
@@ -59,40 +71,18 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
         }
         });
 
-    tex_sizer->Add(tex_label, 0, wxALIGN_CENTER_VERTICAL);
-    tex_sizer->Add(m_tex_string, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
-    tex_sizer->Add(tex_browse_btn, 0, wxEXPAND | wxALL, 5);
-    tex_sizer->Add(m_tex_remove_btn, 0, wxEXPAND | wxALL, 5);
+    m_tex_sizer->Add(tex_label, 0, wxALIGN_CENTER_VERTICAL);
+    m_tex_sizer->Add(m_tex_string, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    m_tex_sizer->Add(tex_browse_btn, 0, wxEXPAND | wxALL, 5);
+    m_tex_sizer->Add(m_tex_delete_btn, 0, wxEXPAND | wxALL, 5);
 
-    m_main_sizer->Add(tex_sizer, 1);
-
+    m_main_sizer->Add(m_tex_sizer, 1, wxEXPAND);
 
     // https://docs.wxwidgets.org/trunk/classwx_property_grid.html
-
 
     m_og->activate();
     m_og->sizer->Clear(true);
     m_og->sizer->Add(m_main_sizer, 1, wxEXPAND | wxALL, wxOSX ? 0 : 5);
-
-//    m_grid_sizer = new wxFlexGridSizer(3, 5, wxGetApp().em_unit()); // "Min Z", "Max Z", "Layer height" & buttons sizer
-//    m_grid_sizer->SetFlexibleDirection(wxHORIZONTAL);
-//
-//    // Legend for object layers
-//    for (const std::string col : { L("Start at height"), L("Stop at height"), L("Layer height") }) {
-//        auto temp = new wxStaticText(m_parent, wxID_ANY, _(col), wxDefaultPosition, /*size*/wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
-//        temp->SetBackgroundStyle(wxBG_STYLE_PAINT);
-//        temp->SetFont(wxGetApp().bold_font());
-//
-//        m_grid_sizer->Add(temp);
-//    }
-//
-//    m_og->activate();
-//    m_og->sizer->Clear(true);
-//    m_og->sizer->Add(m_grid_sizer, 0, wxEXPAND | wxALL, wxOSX ? 0 : 5);
-//
-//    m_bmp_delete = ScalableBitmap(parent, "remove_copies"/*"cross"*/);
-//    m_bmp_add = ScalableBitmap(parent, "add_copies");
-
 }
 
 void ObjectTexture::msw_rescale()
@@ -184,7 +174,7 @@ void ObjectTexture::update()
 
     // update widgets
     m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object.second->texture).stem().string()) : "");
-    m_tex_remove_btn->Enable(has_texture);
+    m_tex_delete_btn->Enable(has_texture);
 
     // show/hide icon into object list
     ObjectDataViewModel* objects_model = wxGetApp().obj_list()->GetModel();
