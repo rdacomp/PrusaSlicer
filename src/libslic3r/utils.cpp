@@ -431,11 +431,11 @@ int copy_file_linux_read_write(int infile, int outfile, uintmax_t file_size)
     std::vector<char> buf(
 	    // Prefer the buffer to be larger than the file size so that we don't have
 	    // to perform an extra read if the file fits in the buffer exactly.
-    	std::clamp(file_size + (file_size < ~static_cast<uintmax_t >(0u)),
+    	std::clamp<size_t>(file_size + (file_size < ~static_cast<uintmax_t >(0u)),
 		// Min and max buffer sizes are selected to minimize the overhead from system calls.
 		// The values are picked based on coreutils cp(1) benchmarking data described here:
 		// https://github.com/coreutils/coreutils/blob/d1b0257077c0b0f0ee25087efd46270345d1dd1f/src/ioblksize.h#L23-L72
-    			   8u * 1024u, 256u * 1024u),
+    			   		   8u * 1024u, 256u * 1024u),
     	0);
 
 #if defined(POSIX_FADV_SEQUENTIAL)
