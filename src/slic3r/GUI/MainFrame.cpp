@@ -268,7 +268,7 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_S
     }
 }
 
-#ifdef _WIN32
+#ifdef _MSW_DARK_MODE
 static wxString pref() { return " [ "; }
 static wxString suff() { return " ] "; }
 static void append_tab_menu_items_to_menubar(wxMenuBar* bar, PrinterTechnology pt, bool is_mainframe_menu)
@@ -284,6 +284,8 @@ static void append_tab_menu_items_to_menubar(wxMenuBar* bar, PrinterTechnology p
 // update markers for selected/unselected menu items
 static void update_marker_for_tabs_menu(wxMenuBar* bar, const wxString& title, bool is_mainframe_menu)
 {
+    if (!bar)
+        return;
     size_t items_cnt = bar->GetMenuCount();
     for (size_t id = items_cnt - (is_mainframe_menu ? 4 : 3); id < items_cnt; id++) {
         wxString label = bar->GetMenuLabel(id);
@@ -342,7 +344,7 @@ void MainFrame::show_tabs_menu(bool show)
                 delete menu;
         }
 }
-#endif
+#endif // _MSW_DARK_MODE
 
 void MainFrame::update_layout()
 {
@@ -384,7 +386,7 @@ void MainFrame::update_layout()
 
     ESettingsLayout layout = wxGetApp().is_gcode_viewer() ? ESettingsLayout::GCodeViewer :
         (wxGetApp().app_config->get("old_settings_layout_mode") == "1" ? ESettingsLayout::Old :
-            wxGetApp().app_config->get("new_settings_layout_mode") == "1" ? ESettingsLayout::Old ://ESettingsLayout::New :
+            wxGetApp().app_config->get("new_settings_layout_mode") == "1" ? ( wxGetApp().dark_mode() ? ESettingsLayout::Old : ESettingsLayout::New) :
             wxGetApp().app_config->get("dlg_settings_layout_mode") == "1" ? ESettingsLayout::Dlg : ESettingsLayout::Old);
 
     if (m_layout == layout)
@@ -433,8 +435,9 @@ void MainFrame::update_layout()
         if (old_layout == ESettingsLayout::Dlg)
             if (int sel = m_tabpanel->GetSelection(); sel != wxNOT_FOUND)
                 m_tabpanel->SetSelection(sel+1);// call SetSelection to correct layout after switching from Dlg to Old mode
-#ifdef _WIN32
-        show_tabs_menu(true);
+#ifdef _MSW_DARK_MODE
+        if (wxGetApp().dark_mode())
+            show_tabs_menu(true);
 #endif
         break;
     }
@@ -456,8 +459,9 @@ void MainFrame::update_layout()
         m_tabpanel->Show();
         m_plater->Show();
 
-#ifdef _WIN32
-        show_tabs_menu(false);
+#ifdef _MSW_DARK_MODE
+        if (wxGetApp().dark_mode())
+            show_tabs_menu(false);
 #endif
         break;
     }
@@ -630,9 +634,13 @@ void MainFrame::init_tabpanel()
 {
     // wxNB_NOPAGETHEME: Disable Windows Vista theme for the Notebook background. The theme performance is terrible on Windows 10
     // with multiple high resolution displays connected.
-#ifdef __WXMSW__
-    m_tabpanel = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
-    wxGetApp().UpdateDarkUI(m_tabpanel);
+#ifdef _MSW_DARK_MODE
+    if (wxGetApp().dark_mode()) {
+        m_tabpanel = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
+        wxGetApp().UpdateDarkUI(m_tabpanel);
+    }
+    else
+        m_tabpanel = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
 #else
     m_tabpanel = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME);
 #endif
@@ -1407,15 +1415,18 @@ void MainFrame::init_menubar_as_editor()
     wxGetApp().add_config_menu(m_menubar);
     m_menubar->Append(helpMenu, _L("&Help"));
 
-#ifdef _WIN32
-    // Add separator 
-    m_menubar->Append(new wxMenu(), "          ");
-    add_tabs_as_menu(m_menubar, this, this);
+#ifdef _MSW_DARK_MODE
+    if (wxGetApp().dark_mode()) {
+        // Add separator 
+        m_menubar->Append(new wxMenu(), "          ");
+        add_tabs_as_menu(m_menubar, this, this);
+    }
 #endif
     SetMenuBar(m_menubar);
 
-#ifdef _WIN32
-    m_menubar->EnableTop(6, false);
+#ifdef _MSW_DARK_MODE
+    if (wxGetApp().dark_mode())
+        m_menubar->EnableTop(6, false);
 #endif
 
 #ifdef __APPLE__
@@ -1857,9 +1868,13 @@ void MainFrame::select_tab(size_t tab/* = size_t(-1)*/)
 
         if (m_tabpanel->GetSelection() != (int)new_selection)
             m_tabpanel->SetSelection(new_selection);
-        if (Tab* cur_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(new_selection)))
-#ifdef _WIN32
-            update_marker_for_tabs_menu((m_layout == ESettingsLayout::Old ? m_menubar : m_settings_dialog.menubar()), cur_tab->title(), m_layout == ESettingsLayout::Old);
+#ifdef _MSW_DARK_MODE
+        if (wxGetApp().dark_mode()) {
+            if (Tab* cur_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(new_selection)))
+                update_marker_for_tabs_menu((m_layout == ESettingsLayout::Old ? m_menubar : m_settings_dialog.menubar()), cur_tab->title(), m_layout == ESettingsLayout::Old);
+            else if (tab == 0 && m_layout == ESettingsLayout::Old)
+                m_plater->get_current_canvas3D()->render();
+        }
 #endif
         if (tab == 0 && m_layout == ESettingsLayout::Old)
             m_plater->canvas3D()->render();
@@ -2119,11 +2134,13 @@ SettingsDialog::SettingsDialog(MainFrame* mainframe)
     //just hide the Frame on closing
     this->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& evt) { this->Hide(); });
 
-#ifdef _WIN32
-    // menubar
-    m_menubar = new wxMenuBar();
-    add_tabs_as_menu(m_menubar, mainframe, this);
-    this->SetMenuBar(m_menubar);
+#ifdef _MSW_DARK_MODE
+    if (wxGetApp().dark_mode()) {
+        // menubar
+        m_menubar = new wxMenuBar();
+        add_tabs_as_menu(m_menubar, mainframe, this);
+        this->SetMenuBar(m_menubar);
+    }
 #endif
 
     // initialize layout

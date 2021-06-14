@@ -153,7 +153,7 @@ wxFont get_default_font_for_dpi(const wxWindow *window, int dpi)
 }
 
 bool check_dark_mode() {
-#ifdef _WIN32
+#if 0 //#ifdef _WIN32  // #ysDarkMSW - Allow it when we deside to support the sustem colors for application
     wxRegKey rk(wxRegKey::HKCU,
         "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
     if (rk.Exists() && rk.HasValue("AppsUseLightTheme")) {
@@ -174,7 +174,7 @@ bool check_dark_mode() {
 #ifdef _WIN32
 void update_dark_ui(wxWindow* window) 
 {
-    bool is_dark = wxGetApp().app_config->get("always_dark_color_mode") == "1" ? true : check_dark_mode();
+    bool is_dark = wxGetApp().app_config->get("dark_color_mode") == "1" ? true : check_dark_mode();
     window->SetBackgroundColour(is_dark ? wxColour(43,  43,  43)  : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
     window->SetForegroundColour(is_dark ? wxColour(250, 250, 250) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
 }

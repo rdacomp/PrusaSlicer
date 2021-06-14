@@ -76,7 +76,10 @@
 #ifdef __WXMSW__
 #include <dbt.h>
 #include <shlobj.h>
-#endif // __WXMSW__
+#ifdef _MSW_DARK_MODE
+#include <wx/msw/dark_mode.h>
+#endif // _MSW_DARK_MODE
+#endif
 
 #if ENABLE_THUMBNAIL_GENERATOR_DEBUG
 #include <boost/beast/core/detail/base64.hpp>
@@ -816,6 +819,10 @@ bool GUI_App::on_init_inner()
 
     wxInitAllImageHandlers();
 
+#ifdef _MSW_DARK_MODE
+    if (app_config->get("dark_color_mode") == "1")
+        NppDarkMode::InitDarkMode();
+#endif
     SplashScreen* scrn = nullptr;
     if (app_config->get("show_splash_screen") == "1") {
         // make a bitmap with dark grey banner on the left side
@@ -1015,7 +1022,7 @@ bool GUI_App::dark_mode()
     // proper dark mode was first introduced.
     return wxPlatformInfo::Get().CheckOSVersion(10, 14) && mac_dark_mode();
 #else
-    return wxGetApp().app_config->get("always_dark_color_mode") == "1" ? true : check_dark_mode();
+    return wxGetApp().app_config->get("dark_color_mode") == "1" ? true : check_dark_mode();
     //const unsigned luma = get_colour_approx_luma(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
     //return luma < 128;
 #endif
@@ -1072,22 +1079,24 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
             highlited = true;
         }
     }
-    else if (wxTextCtrl* text = dynamic_cast<wxTextCtrl*>(window)) {
-        if (text->GetBorder() != wxBORDER_SIMPLE)
-            text->SetWindowStyle(text->GetWindowStyle() | wxBORDER_SIMPLE);
+    else if (dark_mode()) {
+        if (wxTextCtrl* text = dynamic_cast<wxTextCtrl*>(window)) {
+            if (text->GetBorder() != wxBORDER_SIMPLE)
+                text->SetWindowStyle(text->GetWindowStyle() | wxBORDER_SIMPLE);
+        }
+        else if (wxCheckListBox* list = dynamic_cast<wxCheckListBox*>(window)) {
+            list->SetWindowStyle(list->GetWindowStyle() | wxBORDER_SIMPLE);
+            list->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
+            for (size_t i = 0; i < list->GetCount(); i++)
+                if (wxOwnerDrawn* item = list->GetItem(i)) {
+                    item->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
+                    item->SetTextColour(m_color_label_default);
+                }
+            return;
+        }
+        else if (dynamic_cast<wxListBox*>(window))
+            window->SetWindowStyle(window->GetWindowStyle() | wxBORDER_SIMPLE);
     }
-    else if (wxCheckListBox* list = dynamic_cast<wxCheckListBox*>(window)) {
-        list->SetWindowStyle(list->GetWindowStyle() | wxBORDER_SIMPLE);
-        list->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
-        for (size_t i = 0; i < list->GetCount(); i++)
-            if (wxOwnerDrawn* item = list->GetItem(i)) {
-                item->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
-                item->SetTextColour(m_color_label_default);
-            }
-        return;
-    }
-    else if (dynamic_cast<wxListBox*>(window))
-        window->SetWindowStyle(window->GetWindowStyle() | wxBORDER_SIMPLE);
 
     if (!just_font)
         window->SetBackgroundColour(highlited ? m_color_highlight_default : m_color_window_default);
@@ -1118,6 +1127,8 @@ void GUI_App::UpdateDlgDarkUI(wxDialog* dlg)
 void GUI_App::UpdateDVCDarkUI(wxDataViewCtrl* dvc, bool highlited/* = false*/)
 {
 #ifdef _WIN32
+    if (!dark_mode())
+        return;
     UpdateDarkUI(dvc, highlited);
     wxItemAttr attr(dark_mode() ? m_color_highlight_default : m_color_label_default,
         m_color_window_default,
@@ -1133,6 +1144,8 @@ void GUI_App::UpdateDVCDarkUI(wxDataViewCtrl* dvc, bool highlited/* = false*/)
 void GUI_App::UpdateAllStaticTextDarkUI(wxWindow* parent)
 {
 #ifdef _WIN32
+    if (!dark_mode())
+        return;
     wxGetApp().UpdateDarkUI(parent);
 
     auto children = parent->GetChildren();
@@ -1349,7 +1362,7 @@ void GUI_App::update_ui_from_settings()
     update_label_colours();
     mainframe->update_ui_from_settings();
 
-#ifdef _WIN32
+#if 0 //#ifdef _WIN32  // #ysDarkMSW - Use to force dark colors for SystemLightMode
     if (m_force_sys_colors_update) {
         m_force_sys_colors_update = false;
         mainframe->force_sys_color_changed();
@@ -1358,8 +1371,6 @@ void GUI_App::update_ui_from_settings()
             m_wizard->force_sys_color_changed();
     }
 #endif
-
-    mainframe->update_ui_from_settings(apply_free_camera_correction);
 }
 
 void GUI_App::persist_window_geometry(wxTopLevelWindow *window, bool default_maximized)

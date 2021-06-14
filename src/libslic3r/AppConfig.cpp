@@ -76,8 +76,8 @@ void AppConfig::set_defaults()
         if (get("associate_stl").empty())
             set("associate_stl", "0");
 
-        if (get("always_dark_color_mode").empty())
-            set("always_dark_color_mode", "0");
+        if (get("dark_color_mode").empty())
+            set("dark_color_mode", "0");
 #endif // _WIN32
 
         // remove old 'use_legacy_opengl' parameter from this config, if present

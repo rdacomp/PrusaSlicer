@@ -489,16 +489,17 @@ void Tab::OnActivate()
     m_hsizer->Layout();
 
     // Workaroud for Menu instead of NoteBook
-    if (wxSize sz = m_presets_choice->GetSize(); sz.x <= sz.y) {
-        sz = m_presets_choice->GetBestSize();
-        sz.x = 35 * m_em_unit;
-
-        m_presets_choice->SetMinSize(sz);
-        m_presets_choice->SetSize(sz);
-        GetSizer()->GetItem(size_t(0))->GetSizer()->Layout();
-        m_presets_choice->update();
+#ifdef _MSW_DARK_MODE
+    if (wxGetApp().dark_mode()) {
+        wxSize sz = m_presets_choice->GetSize(); 
+        wxSize ok_sz = wxSize(35 * m_em_unit, m_presets_choice->GetBestSize().y+1);
+        if (sz != ok_sz) {
+            m_presets_choice->SetMinSize(ok_sz);
+            m_presets_choice->SetSize(ok_sz);
+            GetSizer()->GetItem(size_t(0))->GetSizer()->Layout();
+        }
     }
-
+#endif // _MSW_DARK_MODE
     Refresh();
 }
 

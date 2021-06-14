@@ -29,10 +29,15 @@ KBShortcutsDialog::KBShortcutsDialog()
 
     main_sizer->Add(create_header(this, bold_font), 0, wxEXPAND | wxALL, 10);
 
-#ifdef __WXMSW__
-    wxListbook* book = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
-    wxGetApp().UpdateDarkUI(book);
-    wxGetApp().UpdateDarkUI(book->GetListView());
+#ifdef _MSW_DARK_MODE
+    wxBookCtrlBase* book;
+    if (wxGetApp().dark_mode()) {
+        book = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
+        wxGetApp().UpdateDarkUI(book);
+        wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(book)->GetListView());
+    }
+    else
+        book = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
 #else
     wxNotebook* book = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP);
 #endif

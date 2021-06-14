@@ -55,10 +55,17 @@ void PreferencesDialog::build()
 
 	auto app_config = get_app_config();
 
-#ifdef __WXMSW__
-	wxListbook* tabs = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME | wxNO_BORDER);
-	wxGetApp().UpdateDarkUI(tabs);
-	wxGetApp().UpdateDarkUI(tabs->GetListView());
+#ifdef _MSW_DARK_MODE
+	wxBookCtrlBase* tabs;
+	if (wxGetApp().dark_mode()) {
+		tabs = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME | wxNO_BORDER);
+		wxGetApp().UpdateDarkUI(tabs);
+		wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(tabs)->GetListView());
+	}
+	else {
+		tabs = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL | wxNB_NOPAGETHEME | wxNB_DEFAULT);
+		tabs->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
+	}
 #else
     wxNotebook* tabs = new wxNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxNB_TOP | wxTAB_TRAVERSAL  |wxNB_NOPAGETHEME | wxNB_DEFAULT );
 	tabs->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
@@ -329,13 +336,13 @@ void PreferencesDialog::build()
 		option = Option(def, "order_volumes");
 		m_optgroup_gui->append_single_option_line(option);
 
-#ifdef _WIN32
-		def.label = L("Always use Dark mode colors");
+#ifdef _MSW_DARK_MODE
+		def.label = L("Use Dark color mode (experimental)");
 		def.type = coBool;
-		def.tooltip = L("If enabled, UI will use Dark mode colors even for Light system color mode. "
-						"If disabled, UI will be updated in respect to the selected system color (Dark/Light).");
-		def.set_default_value(new ConfigOptionBool{ app_config->get("always_dark_color_mode") == "1" });
-		option = Option(def, "always_dark_color_mode");
+		def.tooltip = L("If enabled, UI will use Dark mode colors. "
+						"If disabled, old UI will be used.");
+		def.set_default_value(new ConfigOptionBool{ app_config->get("dark_color_mode") == "1" });
+		option = Option(def, "dark_color_mode");
 		m_optgroup_gui->append_single_option_line(option);
 #endif
 
@@ -395,7 +402,11 @@ void PreferencesDialog::build()
 
 void PreferencesDialog::accept()
 {
-    if (m_values.find("no_defaults") != m_values.end())
+    if (m_values.find("no_defaults") != m_values.end() 
+#ifdef _MSW_DARK_MODE
+		|| m_values.find("dark_color_mode") != m_values.end()
+#endif
+		)
         warning_catcher(this, wxString::Format(_L("You need to restart %s to make the changes effective."), SLIC3R_APP_NAME));
 
     auto app_config = get_app_config();
@@ -412,7 +423,7 @@ void PreferencesDialog::accept()
 
 	m_settings_layout_changed = false;
 	for (const std::string& key : { "old_settings_layout_mode",
-								    //"new_settings_layout_mode",
+								    "new_settings_layout_mode",
 								    "dlg_settings_layout_mode" })
 	{
 	    auto it = m_values.find(key);
@@ -428,7 +439,7 @@ void PreferencesDialog::accept()
 			m_values.erase(it); // we shouldn't change value, if some of those parameters was selected, and then deselected
 	}
 
-#ifdef _WIN32
+#if 0 //#ifdef _WIN32 // #ysDarkMSW - Allow it when we deside to support the sustem colors for application
 	if (m_values.find("always_dark_color_mode") != m_values.end())
 		wxGetApp().force_sys_colors_update();
 #endif
@@ -534,20 +545,22 @@ void PreferencesDialog::create_icon_size_slider()
 
 void PreferencesDialog::create_settings_mode_widget()
 {
-	wxString choices[] = { _L("Old regular layout with the tab bar"),
-#ifndef _WIN32
-                           _L("New layout, access via settings button in the top menu"),
-#endif
-                           _L("Settings in non-modal window") };
+	bool dark_mode = wxGetApp().dark_mode();
+	std::vector<wxString> choices = {  _L("Old regular layout with the tab bar"),
+                                       _L("New layout, access via settings button in the top menu"),
+                                       _L("Settings in non-modal window") };
 
 	auto app_config = get_app_config();
-    int selection =
-#ifdef _WIN32
-                    app_config->get("dlg_settings_layout_mode") == "1" ? 1 : 0;
-#else
-                    app_config->get("old_settings_layout_mode") == "1" ? 0 :
+    int selection = app_config->get("old_settings_layout_mode") == "1" ? 0 :
                     app_config->get("new_settings_layout_mode") == "1" ? 1 :
                     app_config->get("dlg_settings_layout_mode") == "1" ? 2 : 0;
+
+#ifdef _MSW_DARK_MODE
+	if (dark_mode) {
+		choices = { _L("Old regular layout with the tab bar"),
+					_L("Settings in non-modal window") };
+		selection = app_config->get("dlg_settings_layout_mode") == "1" ? 1 : 0;
+	}
 #endif
 
 	wxWindow* parent = m_optgroup_gui->parent();
@@ -566,15 +579,16 @@ void PreferencesDialog::create_settings_mode_widget()
 		stb_sizer->Add(btn);
 		btn->SetValue(id == selection);
 
-#ifdef _WIN32
-        int dlg_id = 1;
-#else
         int dlg_id = 2;
+#ifdef _MSW_DARK_MODE
+		if (dark_mode)
+			dlg_id = 1;
 #endif
 
-        btn->Bind(wxEVT_RADIOBUTTON, [this, id, dlg_id](wxCommandEvent& ) {
+        btn->Bind(wxEVT_RADIOBUTTON, [this, id, dlg_id, dark_mode](wxCommandEvent& ) {
             m_values["old_settings_layout_mode"] = (id == 0) ? "1" : "0";
-#ifndef _WIN32
+#ifdef _MSW_DARK_MODE
+			if (!dark_mode)
             m_values["new_settings_layout_mode"] = (id == 1) ? "1" : "0";
 #endif
             m_values["dlg_settings_layout_mode"] = (id == dlg_id) ? "1" : "0";

@@ -175,7 +175,7 @@ public:
     const wxFont& normal_font() const   { return m_normal_font; }
     void enable_force_rescale()         { m_force_rescale = true; }
 
-#ifdef _WIN32
+#if 0 //#ifdef _WIN32  // #ysDarkMSW - Use to force dark colors for SystemLightMode
     void force_sys_color_changed()
     {
         update_dark_ui(this);
@@ -259,7 +259,7 @@ private:
         m_prev_scale_factor = m_scale_factor;
     }
 
-#ifdef _WIN32
+#if 0 //#ifdef _WIN32  // #ysDarkMSW - Allow it when we deside to support the sustem colors for application 
     bool HandleSettingChange(WXWPARAM wParam, WXLPARAM lParam) override
     {
         update_dark_ui(this);
