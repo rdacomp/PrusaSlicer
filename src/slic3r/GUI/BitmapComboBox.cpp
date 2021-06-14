@@ -20,7 +20,9 @@
 #ifdef _WIN32
 #include <wx/msw/dcclient.h>
 #include <wx/msw/private.h>
+#ifdef _MSW_DARK_MODE
 #include <wx/msw/dark_mode.h>
+#endif //_MSW_DARK_MODE
 #endif
 
 #include "libslic3r/libslic3r.h"
@@ -246,7 +248,13 @@ void BitmapComboBox::DrawBackground_(wxDC& dc, const wxRect& rect, int WXUNUSED(
     {
         dc.SetTextForeground(flags & ODCB_PAINTING_DISABLED ? wxColour(108,108,108) : wxGetApp().get_label_clr_default());
 
-        wxColour selCol = flags & ODCB_PAINTING_DISABLED ? wxRGBToColour(NppDarkMode::InvertLightnessSofter(NppDarkMode::GetBackgroundColor())) : wxGetApp().get_window_default_clr();
+        wxColour selCol = flags & ODCB_PAINTING_DISABLED ? 
+#ifdef _MSW_DAEK_MODE
+            wxRGBToColour(NppDarkMode::InvertLightnessSofter(NppDarkMode::GetBackgroundColor())) : 
+#else
+            wxGetApp().get_highlight_default_clr() :
+#endif
+            wxGetApp().get_window_default_clr();
         dc.SetPen(selCol);
         dc.SetBrush(selCol);
         dc.DrawRectangle(rect);
