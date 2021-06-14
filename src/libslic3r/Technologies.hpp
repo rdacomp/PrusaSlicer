@@ -68,8 +68,15 @@
 #define DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA (1 && ENABLE_ALLOW_NEGATIVE_Z)
 // Enable visualization of objects clearance for sequential prints
 #define ENABLE_SEQUENTIAL_LIMITS (1 && ENABLE_2_4_0_ALPHA0)
+
+
+//====================
+// 2.5.0.alpha0 techs
+//====================
+#define ENABLE_2_5_0_ALPHA0 1
+
 // Enable application of textures to volumes
-#define ENABLE_TEXTURED_VOLUMES (1 && ENABLE_2_4_0_ALPHA0)
+#define ENABLE_TEXTURED_VOLUMES (1 && ENABLE_2_5_0_ALPHA0)
 
 
 #endif // _prusaslicer_technologies_h_
