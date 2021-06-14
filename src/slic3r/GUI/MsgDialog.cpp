@@ -74,57 +74,48 @@ void MsgDialog::add_btn(wxWindowID btn_id, bool set_focus /*= false*/)
 };
 
 // Text shown as HTML, so that mouse selection and Ctrl-V to copy will work.
-class MsgContent : public wxHtmlWindow
+static void add_msg_content(wxWindow* parent, wxBoxSizer* content_sizer, wxString msg, bool monospaced_font = false)
 {
-public:
-    MsgContent(wxWindow* parent, wxBoxSizer* content_sizer, wxString msg, bool monospaced_font = false) 
-    {
-        Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxHW_SCROLLBAR_AUTO);
+    wxHtmlWindow* html = new wxHtmlWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxHW_SCROLLBAR_AUTO);
 
-        // count lines in the message
-        int msg_lines = 0; 
-        if (!monospaced_font){
-            size_t line_len = 55;// count of symbols in one line
-            int start_line = 0;
-            for (auto i = msg.begin(); i != msg.end(); ++i) {
-                if (*i == '\n') {
-                    int cur_line_len = i - msg.begin() - start_line;
-                    start_line = i - msg.begin();
-                    if (cur_line_len == 0 || line_len > cur_line_len)
-                        msg_lines++;
-                    else
-                        msg_lines += std::lround((double)(cur_line_len) / line_len);
-                }
+    // count lines in the message
+    int msg_lines = 0;
+    if (!monospaced_font) {
+        int line_len = 55;// count of symbols in one line
+        int start_line = 0;
+        for (auto i = msg.begin(); i != msg.end(); ++i) {
+            if (*i == '\n') {
+                int cur_line_len = i - msg.begin() - start_line;
+                start_line = i - msg.begin();
+                if (cur_line_len == 0 || line_len > cur_line_len)
+                    msg_lines++;
+                else
+                    msg_lines += std::lround((double)(cur_line_len) / line_len);
             }
-            msg_lines++;
         }
-
-        this->SetMinSize(wxSize(40 * wxGetApp().em_unit(), monospaced_font ? 30 * wxGetApp().em_unit() : 2 * msg_lines * wxGetApp().em_unit()));
-        wxFont      font        = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
-        wxFont      monospace   = wxGetApp().code_font();
-        wxColour    text_clr    = wxGetApp().get_label_clr_default();
-#ifdef _WIN32
-        wxColour    bgr_clr     = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-#else
-        wxColour    bgr_clr     = parent->GetBackgroundColour();
-#endif
-        auto        text_clr_str= wxString::Format(wxT("#%02X%02X%02X"), text_clr.Red(), text_clr.Green(), text_clr.Blue());
-        auto        bgr_clr_str = wxString::Format(wxT("#%02X%02X%02X"), bgr_clr.Red(), bgr_clr.Green(), bgr_clr.Blue());
-        const int   font_size   = font.GetPointSize();
-        int         size[]      = { font_size, font_size, font_size, font_size, font_size, font_size, font_size };
-        this->SetFonts(font.GetFaceName(), monospace.GetFaceName(), size);
-        this->SetBorders(2);
-        std::string msg_escaped = xml_escape(msg.ToUTF8().data());
-        boost::replace_all(msg_escaped, "\r\n", "<br>");
-        boost::replace_all(msg_escaped, "\n", "<br>");
-        if (monospaced_font)
-            // Code formatting will be preserved. This is useful for reporting errors from the placeholder parser.
-            msg_escaped = std::string("<pre><code>") + msg_escaped + "</code></pre>";
-        this->SetPage("<html><body bgcolor=\"" + bgr_clr_str + "\"><font color=\"" + text_clr_str + "\">" + wxString::FromUTF8(msg_escaped.data()) + "</font></body></html>");
-        content_sizer->Add(this, 1, wxEXPAND | wxBOTTOM, 30);
+        msg_lines++;
     }
-    ~MsgContent() {};
-};
+
+    html->SetMinSize(wxSize(40 * wxGetApp().em_unit(), monospaced_font ? 30 * wxGetApp().em_unit() : 2 * msg_lines * wxGetApp().em_unit()));
+    wxFont      font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+    wxFont      monospace = wxGetApp().code_font();
+    wxColour    text_clr = wxGetApp().get_label_clr_default();
+    wxColour    bgr_clr = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+    auto        text_clr_str = wxString::Format(wxT("#%02X%02X%02X"), text_clr.Red(), text_clr.Green(), text_clr.Blue());
+    auto        bgr_clr_str = wxString::Format(wxT("#%02X%02X%02X"), bgr_clr.Red(), bgr_clr.Green(), bgr_clr.Blue());
+    const int   font_size = font.GetPointSize();
+    int         size[] = { font_size, font_size, font_size, font_size, font_size, font_size, font_size };
+    html->SetFonts(font.GetFaceName(), monospace.GetFaceName(), size);
+    html->SetBorders(2);
+    std::string msg_escaped = xml_escape(msg.ToUTF8().data());
+    boost::replace_all(msg_escaped, "\r\n", "<br>");
+    boost::replace_all(msg_escaped, "\n", "<br>");
+    if (monospaced_font)
+        // Code formatting will be preserved. This is useful for reporting errors from the placeholder parser.
+        msg_escaped = std::string("<pre><code>") + msg_escaped + "</code></pre>";
+    html->SetPage("<html><body bgcolor=\"" + bgr_clr_str + "\"><font color=\"" + text_clr_str + "\">" + wxString::FromUTF8(msg_escaped.data()) + "</font></body></html>");
+    content_sizer->Add(html, 1, wxEXPAND | wxBOTTOM, 30);
+}
 
 // ErrorDialog
 
@@ -134,8 +125,7 @@ ErrorDialog::ErrorDialog(wxWindow *parent, const wxString &msg, bool monospaced_
 		wxID_NONE)
 	, msg(msg)
 {
-    MsgContent* html = new MsgContent(this, content_sizer, msg, monospaced_font);
-
+    add_msg_content(this, content_sizer, msg, monospaced_font);
 	add_btn(wxID_OK, true);
 
 	// Use a small bitmap with monospaced font, as the error text will not be wrapped.
@@ -156,7 +146,7 @@ WarningDialog::WarningDialog(wxWindow *parent,
     : MsgDialog(parent, caption.IsEmpty() ? wxString::Format(_L("%s warning"), SLIC3R_APP_NAME) : caption, 
                         wxString::Format(_L("%s has a warning")+":", SLIC3R_APP_NAME), wxID_NONE)
 {
-    MsgContent* html = new MsgContent(this, content_sizer, message);
+    add_msg_content(this, content_sizer, message);
 
     if (style & wxOK)   add_btn(wxID_OK, true);
     if (style & wxYES)  add_btn(wxID_YES);
@@ -177,7 +167,7 @@ MessageDialog::MessageDialog(wxWindow* parent,
     long style/* = wxOK*/)
     : MsgDialog(parent, caption.IsEmpty() ? wxString::Format(_L("%s info"), SLIC3R_APP_NAME) : caption, wxEmptyString, wxID_NONE)
 {
-    MsgContent* html = new MsgContent(this, content_sizer, message);
+    add_msg_content(this, content_sizer, message);
 
     if (style & wxOK)       add_btn(wxID_OK, true);
     if (style & wxYES)      add_btn(wxID_YES);

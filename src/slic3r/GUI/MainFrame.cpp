@@ -268,6 +268,7 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxDEFAULT_FRAME_S
     }
 }
 
+#ifdef _WIN32
 static wxString pref() { return " [ "; }
 static wxString suff() { return " ] "; }
 static void append_tab_menu_items_to_menubar(wxMenuBar* bar, PrinterTechnology pt, bool is_mainframe_menu)
@@ -341,6 +342,7 @@ void MainFrame::show_tabs_menu(bool show)
                 delete menu;
         }
 }
+#endif
 
 void MainFrame::update_layout()
 {
@@ -431,9 +433,9 @@ void MainFrame::update_layout()
         if (old_layout == ESettingsLayout::Dlg)
             if (int sel = m_tabpanel->GetSelection(); sel != wxNOT_FOUND)
                 m_tabpanel->SetSelection(sel+1);// call SetSelection to correct layout after switching from Dlg to Old mode
-
+#ifdef _WIN32
         show_tabs_menu(true);
-
+#endif
         break;
     }
     case ESettingsLayout::New:
@@ -454,7 +456,9 @@ void MainFrame::update_layout()
         m_tabpanel->Show();
         m_plater->Show();
 
+#ifdef _WIN32
         show_tabs_menu(false);
+#endif
         break;
     }
     case ESettingsLayout::GCodeViewer:
@@ -990,7 +994,6 @@ void MainFrame::on_sys_color_changed()
     wxGetApp().init_label_colours();
 #ifdef __WXMSW__
     wxGetApp().UpdateDarkUI(m_tabpanel);
-//    wxGetApp().UpdateDarkUI(dynamic_cast<wxListbook*>(m_tabpanel)->GetListView());
     m_statusbar->update_dark_ui();
 #endif
 
@@ -1411,7 +1414,9 @@ void MainFrame::init_menubar_as_editor()
 #endif
     SetMenuBar(m_menubar);
 
+#ifdef _WIN32
     m_menubar->EnableTop(6, false);
+#endif
 
 #ifdef __APPLE__
     // This fixes a bug on Mac OS where the quit command doesn't emit window close events
@@ -1853,7 +1858,9 @@ void MainFrame::select_tab(size_t tab/* = size_t(-1)*/)
         if (m_tabpanel->GetSelection() != (int)new_selection)
             m_tabpanel->SetSelection(new_selection);
         if (Tab* cur_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(new_selection)))
+#ifdef _WIN32
             update_marker_for_tabs_menu((m_layout == ESettingsLayout::Old ? m_menubar : m_settings_dialog.menubar()), cur_tab->title(), m_layout == ESettingsLayout::Old);
+#endif
         if (tab == 0 && m_layout == ESettingsLayout::Old)
             m_plater->canvas3D()->render();
         else if (was_hidden) {

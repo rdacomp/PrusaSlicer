@@ -409,12 +409,7 @@ SearchDialog::SearchDialog(OptionsSearcher* searcher)
     searcher(searcher)
 {
     SetFont(GUI::wxGetApp().normal_font());
-#ifdef _WIN32
     GUI::wxGetApp().UpdateDarkUI(this);
-#else
-    SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
-#endif
-
 
     default_string = _L("Enter a search term");
     int border = 10;
@@ -423,7 +418,11 @@ SearchDialog::SearchDialog(OptionsSearcher* searcher)
     search_line = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
     GUI::wxGetApp().UpdateDarkUI(search_line);
 
-    search_list = new wxDataViewCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(em * 40, em * 30), wxDV_NO_HEADER | wxDV_SINGLE | wxBORDER_SIMPLE);
+    search_list = new wxDataViewCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(em * 40, em * 30), wxDV_NO_HEADER | wxDV_SINGLE
+#ifdef _WIN32
+        | wxBORDER_SIMPLE
+#endif
+    );
     GUI::wxGetApp().UpdateDarkUI(search_list);
     search_list_model = new SearchListModel(this);
     search_list->AssociateModel(search_list_model);

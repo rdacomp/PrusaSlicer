@@ -103,10 +103,12 @@ RammingPanel::RammingPanel(wxWindow* parent, const std::string& parameters)
     m_widget_ramming_line_width_multiplicator = new wxSpinCtrl(this,wxID_ANY,wxEmptyString,wxDefaultPosition,wxSize(ITEM_WIDTH(), -1),style,10,200,100);        
     m_widget_ramming_step_multiplicator		  = new wxSpinCtrl(this,wxID_ANY,wxEmptyString,wxDefaultPosition,wxSize(ITEM_WIDTH(), -1),style,10,200,100);
 
+#ifdef _WIN32
     update_ui(m_widget_time->GetText());
     update_ui(m_widget_volume);
     update_ui(m_widget_ramming_line_width_multiplicator);
     update_ui(m_widget_ramming_step_multiplicator);
+#endif
 
 	auto gsizer_param = new wxFlexGridSizer(2, 5, 15);
 	gsizer_param->Add(new wxStaticText(this, wxID_ANY, wxString(_(L("Total ramming time")) + " (" + _(L("s")) + "):")), 0, wxALIGN_CENTER_VERTICAL);

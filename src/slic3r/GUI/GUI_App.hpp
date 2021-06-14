@@ -20,8 +20,6 @@
 class wxMenuItem;
 class wxMenuBar;
 class wxTopLevelWindow;
-class wxNotebook;
-class wxListbook;
 class wxDataViewCtrl;
 class wxBookCtrlBase;
 struct wxLanguageInfo;

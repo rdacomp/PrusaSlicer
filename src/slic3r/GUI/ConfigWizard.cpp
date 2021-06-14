@@ -732,7 +732,7 @@ void PageMaterials::set_compatible_printers_html_window(const std::vector<std::s
 {
     const auto bgr_clr = 
 #if defined(__APPLE__)
-        wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+        html_window->GetParent()->GetBackgroundColour();
 #else 
 #if defined(_WIN32)
         wxGetApp().get_window_default_clr();
@@ -1527,7 +1527,9 @@ public:
         long style = wxSP_ARROW_KEYS;
 #endif
         Create(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, style);
+#ifdef _WIN32
         wxGetApp().UpdateDarkUI(this->GetText());
+#endif
         this->Refresh();
     }
     ~SpinCtrlDouble() {}

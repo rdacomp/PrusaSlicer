@@ -582,7 +582,11 @@ static std::string get_pure_opt_key(std::string opt_key)
 // ----------------------------------------------------------------------------
 
 DiffViewCtrl::DiffViewCtrl(wxWindow* parent, wxSize size)
-    : wxDataViewCtrl(parent, wxID_ANY, wxDefaultPosition, size, wxBORDER_SIMPLE | wxDV_VARIABLE_LINE_HEIGHT | wxDV_ROW_LINES),
+    : wxDataViewCtrl(parent, wxID_ANY, wxDefaultPosition, size, wxDV_VARIABLE_LINE_HEIGHT | wxDV_ROW_LINES
+#ifdef _WIN32
+        | wxBORDER_SIMPLE
+#endif
+    ),
     m_em_unit(em_unit(parent))
 {
     wxGetApp().UpdateDVCDarkUI(this);

@@ -230,7 +230,7 @@ static int GetSelectedChoices(  wxArrayInt& selections,
     selections = dialog.GetSelections();
     return static_cast<int>(selections.GetCount());
 #else
-    wxGetSelectedChoices(selections, message, caption, choices);
+    return wxGetSelectedChoices(selections, message, caption, choices);
 #endif
 }
 
