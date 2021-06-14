@@ -804,6 +804,14 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
             std::string value = wrapping.value();
             if (value == "repeat")
                 m_wrapping = EWrapping::Repeat;
+            else if (value == "mirror")
+                m_wrapping = EWrapping::Repeat;
+            else if (value == "clamptoedge")
+                m_wrapping = EWrapping::ClampToEdge;
+            else if (value == "clamptoborder")
+                m_wrapping = EWrapping::ClampToBorder;
+            else
+                m_wrapping = EWrapping::Unknown;
         }
         if (version.has_value())
             m_version = version.value();

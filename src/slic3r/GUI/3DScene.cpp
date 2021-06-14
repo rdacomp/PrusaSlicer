@@ -548,15 +548,24 @@ bool GLVolume::is_below_printbed() const
 #if ENABLE_TEXTURED_VOLUMES
 int TexturesManager::add_texture(const std::string& filename)
 {
-    for (int i = 0; i < static_cast<int>(m_textures.size()); ++i) {
-        if (filename == m_textures[i]->get_source())
-            return i;
-    }
+    const int tex_id = get_texture_id(filename);
+    if (tex_id >= 0)
+        return tex_id;
 
     std::shared_ptr<GUI::GLIdeaMakerTexture> texture = std::make_shared<GUI::GLIdeaMakerTexture>();
     if (texture->load_from_ideamaker_texture_file(filename, true, GUI::GLTexture::ECompressionType::SingleThreaded, true)) {
         m_textures.emplace_back(texture);
         return static_cast<int>(m_textures.size() - 1);
+    }
+
+    return -1;
+}
+
+int TexturesManager::get_texture_id(const std::string& filename) const
+{
+    for (int i = 0; i < static_cast<int>(m_textures.size()); ++i) {
+        if (filename == m_textures[i]->get_source())
+            return i;
     }
 
     return -1;

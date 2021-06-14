@@ -2059,14 +2059,9 @@ void ObjectList::texture_editing()
     wxDataViewItem texture_item = m_objects_model->GetTextureItem(obj_item);
 
     // if it doesn't exist now
-    if (!texture_item.IsOk()) {
+    if (!texture_item.IsOk())
         // no texture defined, add it
-        if (object(obj_idx)->texture.empty())
-            take_snapshot(_L("Add texture"));
-
-        // create texture item
         texture_item = add_texture_item(obj_item);
-    }
 
     if (!texture_item.IsOk())
         return;
@@ -3034,12 +3029,19 @@ void ObjectList::update_selections()
     const Selection& selection = scene_selection();
     wxDataViewItemArray sels;
 
+#if ENABLE_TEXTURED_VOLUMES
+    if ((m_selection_mode & (smSettings | smLayer | smLayerRoot | smTexture)) == 0)
+#else
     if ( ( m_selection_mode & (smSettings|smLayer|smLayerRoot) ) == 0)
+#endif // ENABLE_TEXTURED_VOLUMES
         m_selection_mode = smInstance;
 
     // We doesn't update selection if itSettings | itLayerRoot | itLayer Item for the current object/part is selected
-    if (GetSelectedItemsCount() == 1 && m_objects_model->GetItemType(GetSelection()) & (itSettings | itLayerRoot | itLayer))
-    {
+#if ENABLE_TEXTURED_VOLUMES
+    if (GetSelectedItemsCount() == 1 && m_objects_model->GetItemType(GetSelection()) & (itSettings | itLayerRoot | itLayer | itTexture)) {
+#else
+    if (GetSelectedItemsCount() == 1 && m_objects_model->GetItemType(GetSelection()) & (itSettings | itLayerRoot | itLayer)) {
+#endif // ENABLE_TEXTURED_VOLUMES
         const auto item = GetSelection();
         if (selection.is_single_full_object()) {
             if (m_objects_model->GetItemType(m_objects_model->GetParent(item)) & itObject &&
@@ -3070,16 +3072,13 @@ void ObjectList::update_selections()
             return;
         }
     }
-    else if (selection.is_single_full_object() || selection.is_multiple_full_object())
-    {
+    else if (selection.is_single_full_object() || selection.is_multiple_full_object()) {
         const Selection::ObjectIdxsToInstanceIdxsMap& objects_content = selection.get_content();
         // it's impossible to select Settings, Layer or LayerRoot for several objects
-        if (!selection.is_multiple_full_object() && (m_selection_mode & (smSettings | smLayer | smLayerRoot)))
-        {
+        if (!selection.is_multiple_full_object() && (m_selection_mode & (smSettings | smLayer | smLayerRoot))) {
             auto obj_idx = objects_content.begin()->first;
             wxDataViewItem obj_item = m_objects_model->GetItemById(obj_idx);
-            if (m_selection_mode & smSettings)
-            {
+            if (m_selection_mode & smSettings) {
                 if (m_selected_layers_range_idx < 0)
                     sels.Add(m_objects_model->GetSettingsItem(obj_item));
                 else
@@ -3095,36 +3094,35 @@ void ObjectList::update_selections()
             }
         }
         else {
-        for (const auto& object : objects_content) {
-            if (object.second.size() == 1)          // object with 1 instance                
-                sels.Add(m_objects_model->GetItemById(object.first));
-            else if (object.second.size() > 1)      // object with several instances                
-            {
-                wxDataViewItemArray current_sels;
-                GetSelections(current_sels);
-                const wxDataViewItem frst_inst_item = m_objects_model->GetItemByInstanceId(object.first, 0);
+            for (const auto& object : objects_content) {
+                if (object.second.size() == 1)          // object with 1 instance                
+                    sels.Add(m_objects_model->GetItemById(object.first));
+                else if (object.second.size() > 1)      // object with several instances                
+                {
+                    wxDataViewItemArray current_sels;
+                    GetSelections(current_sels);
+                    const wxDataViewItem frst_inst_item = m_objects_model->GetItemByInstanceId(object.first, 0);
 
-                bool root_is_selected = false;
-                for (const auto& item:current_sels)
-                    if (item == m_objects_model->GetParent(frst_inst_item) || 
-                        item == m_objects_model->GetTopParent(frst_inst_item)) {
-                        root_is_selected = true;
-                        sels.Add(item);
-                        break;
-                    }
-                if (root_is_selected)
-                    continue;
+                    bool root_is_selected = false;
+                    for (const auto& item:current_sels)
+                        if (item == m_objects_model->GetParent(frst_inst_item) || 
+                            item == m_objects_model->GetTopParent(frst_inst_item)) {
+                            root_is_selected = true;
+                            sels.Add(item);
+                            break;
+                        }
+                    if (root_is_selected)
+                        continue;
 
-                const Selection::InstanceIdxsList& instances = object.second;
-                for (const auto& inst : instances)
-                    sels.Add(m_objects_model->GetItemByInstanceId(object.first, inst));
+                    const Selection::InstanceIdxsList& instances = object.second;
+                    for (const auto& inst : instances)
+                        sels.Add(m_objects_model->GetItemByInstanceId(object.first, inst));
+                }
             }
-        } }
+        }
     }
-    else if (selection.is_any_volume() || selection.is_any_modifier())
-    {
-        if (m_selection_mode & smSettings)
-        {
+    else if (selection.is_any_volume() || selection.is_any_modifier()) {
+        if (m_selection_mode & smSettings) {
             const auto idx = *selection.get_volume_idxs().begin();
             const auto gl_vol = selection.get_volume(idx);
             if (gl_vol->volume_idx() >= 0) {
@@ -3136,24 +3134,23 @@ void ObjectList::update_selections()
             }
         }
         else {
-        for (auto idx : selection.get_volume_idxs()) {
-            const auto gl_vol = selection.get_volume(idx);
-			if (gl_vol->volume_idx() >= 0)
-                // Only add GLVolumes with non-negative volume_ids. GLVolumes with negative volume ids
-                // are not associated with ModelVolumes, but they are temporarily generated by the backend
-                // (for example, SLA supports or SLA pad).
-                sels.Add(m_objects_model->GetItemByVolumeId(gl_vol->object_idx(), gl_vol->volume_idx()));
+            for (auto idx : selection.get_volume_idxs()) {
+                const auto gl_vol = selection.get_volume(idx);
+			    if (gl_vol->volume_idx() >= 0)
+                    // Only add GLVolumes with non-negative volume_ids. GLVolumes with negative volume ids
+                    // are not associated with ModelVolumes, but they are temporarily generated by the backend
+                    // (for example, SLA supports or SLA pad).
+                    sels.Add(m_objects_model->GetItemByVolumeId(gl_vol->object_idx(), gl_vol->volume_idx()));
+            }
+            m_selection_mode = smVolume;
         }
-        m_selection_mode = smVolume; }
     }
-    else if (selection.is_single_full_instance() || selection.is_multiple_full_instance())
-    {
+    else if (selection.is_single_full_instance() || selection.is_multiple_full_instance()) {
         for (auto idx : selection.get_instance_idxs()) {            
             sels.Add(m_objects_model->GetItemByInstanceId(selection.get_object_idx(), idx));
         }
     }
-    else if (selection.is_mixed())
-    {
+    else if (selection.is_mixed()) {
         const Selection::ObjectIdxsToInstanceIdxsMap& objects_content_list = selection.get_content();
 
         for (auto idx : selection.get_volume_idxs()) {

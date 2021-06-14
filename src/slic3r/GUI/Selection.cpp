@@ -194,7 +194,7 @@ void Selection::add(unsigned int volume_idx, bool as_single_selection, bool chec
     }
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::remove(unsigned int volume_idx)
@@ -224,7 +224,7 @@ void Selection::remove(unsigned int volume_idx)
     }
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::add_object(unsigned int object_idx, bool as_single_selection)
@@ -248,7 +248,7 @@ void Selection::add_object(unsigned int object_idx, bool as_single_selection)
     do_add_volumes(volume_idxs);
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::remove_object(unsigned int object_idx)
@@ -261,7 +261,7 @@ void Selection::remove_object(unsigned int object_idx)
     do_remove_object(object_idx);
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::add_instance(unsigned int object_idx, unsigned int instance_idx, bool as_single_selection)
@@ -285,7 +285,7 @@ void Selection::add_instance(unsigned int object_idx, unsigned int instance_idx,
     do_add_volumes(volume_idxs);
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::remove_instance(unsigned int object_idx, unsigned int instance_idx)
@@ -298,7 +298,7 @@ void Selection::remove_instance(unsigned int object_idx, unsigned int instance_i
     do_remove_instance(object_idx, instance_idx);
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::add_volume(unsigned int object_idx, unsigned int volume_idx, int instance_idx, bool as_single_selection)
@@ -320,7 +320,7 @@ void Selection::add_volume(unsigned int object_idx, unsigned int volume_idx, int
     do_add_volumes(volume_idxs);
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::remove_volume(unsigned int object_idx, unsigned int volume_idx)
@@ -335,7 +335,7 @@ void Selection::remove_volume(unsigned int object_idx, unsigned int volume_idx)
     }
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::add_volumes(EMode mode, const std::vector<unsigned int>& volume_idxs, bool as_single_selection)
@@ -358,7 +358,7 @@ void Selection::add_volumes(EMode mode, const std::vector<unsigned int>& volume_
     }
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::remove_volumes(EMode mode, const std::vector<unsigned int>& volume_idxs)
@@ -373,7 +373,7 @@ void Selection::remove_volumes(EMode mode, const std::vector<unsigned int>& volu
     }
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::add_all()
@@ -390,7 +390,7 @@ void Selection::add_all()
     if ((unsigned int)m_list.size() == count)
         return;
     
-    wxGetApp().plater()->take_snapshot(_(L("Selection-Add All")));
+    wxGetApp().plater()->take_snapshot(_L("Selection-Add All"));
 
     m_mode = Instance;
     clear();
@@ -401,7 +401,7 @@ void Selection::add_all()
     }
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::remove_all()
@@ -415,7 +415,7 @@ void Selection::remove_all()
 // Not taking the snapshot with non-empty Redo stack will likely be more confusing than losing the Redo stack.
 // Let's wait for user feedback.
 //    if (!wxGetApp().plater()->can_redo())
-        wxGetApp().plater()->take_snapshot(_(L("Selection-Remove All")));
+        wxGetApp().plater()->take_snapshot(_L("Selection-Remove All"));
 
     m_mode = Instance;
     clear();
@@ -432,9 +432,9 @@ void Selection::set_deserialized(EMode mode, const std::vector<std::pair<size_t,
     m_list.clear();
     for (unsigned int i = 0; i < (unsigned int)m_volumes->size(); ++ i)
 		if (std::binary_search(volumes_and_instances.begin(), volumes_and_instances.end(), (*m_volumes)[i]->geometry_id))
-			this->do_add_volume(i);
+			do_add_volume(i);
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 void Selection::clear()
@@ -452,7 +452,7 @@ void Selection::clear()
     m_list.clear();
 
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 
     // this happens while the application is closing
     if (wxGetApp().obj_manipul() == nullptr)
@@ -475,10 +475,10 @@ void Selection::instances_changed(const std::vector<size_t> &instance_ids_select
         const GLVolume *volume = (*m_volumes)[volume_idx];
         auto it = std::lower_bound(instance_ids_selected.begin(), instance_ids_selected.end(), volume->geometry_id.second);
 		if (it != instance_ids_selected.end() && *it == volume->geometry_id.second)
-            this->do_add_volume(volume_idx);
+            do_add_volume(volume_idx);
     }
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 // Update the selection based on the map from old indices to new indices after m_volumes changed.
@@ -496,7 +496,7 @@ void Selection::volumes_changed(const std::vector<size_t> &map_volume_old_to_new
         }
     m_list = std::move(list_new);
     update_type();
-    this->set_bounding_boxes_dirty();
+    set_bounding_boxes_dirty();
 }
 
 bool Selection::is_single_full_instance() const
@@ -1270,8 +1270,7 @@ void Selection::copy_to_clipboard()
 
     m_clipboard.reset();
 
-    for (const ObjectIdxsToInstanceIdxsMap::value_type& object : m_cache.content)
-    {
+    for (const ObjectIdxsToInstanceIdxsMap::value_type& object : m_cache.content) {
         ModelObject* src_object = m_model->objects[object.first];
         ModelObject* dst_object = m_clipboard.add_object();
         dst_object->name                 = src_object->name;
@@ -1283,21 +1282,21 @@ void Selection::copy_to_clipboard()
         dst_object->layer_config_ranges  = src_object->layer_config_ranges;     // #ys_FIXME_experiment
         dst_object->layer_height_profile.assign(src_object->layer_height_profile);
         dst_object->origin_translation   = src_object->origin_translation;
+        dst_object->printable            = src_object->printable;
+#if ENABLE_TEXTURED_VOLUMES
+        dst_object->texture              = src_object->texture;
+#endif // ENABLE_TEXTURED_VOLUMES
 
-        for (int i : object.second)
-        {
+        for (int i : object.second) {
             dst_object->add_instance(*src_object->instances[i]);
         }
 
-        for (unsigned int i : m_list)
-        {
+        for (unsigned int i : m_list) {
             // Copy the ModelVolumes only for the selected GLVolumes of the 1st selected instance.
             const GLVolume* volume = (*m_volumes)[i];
-            if ((volume->object_idx() == object.first) && (volume->instance_idx() == *object.second.begin()))
-            {
+            if (volume->object_idx() == object.first && volume->instance_idx() == *object.second.begin()) {
                 int volume_idx = volume->volume_idx();
-                if ((0 <= volume_idx) && (volume_idx < (int)src_object->volumes.size()))
-                {
+                if (0 <= volume_idx && volume_idx < (int)src_object->volumes.size()) {
                     ModelVolume* src_volume = src_object->volumes[volume_idx];
                     ModelVolume* dst_volume = dst_object->add_volume(*src_volume);
                     dst_volume->set_new_unique_id();

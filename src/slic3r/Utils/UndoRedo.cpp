@@ -889,16 +889,16 @@ void StackImpl::load_snapshot(size_t timestamp, Slic3r::Model& model, Slic3r::GU
 	m_active_snapshot_time = timestamp;
 	model.clear_objects();
 	model.clear_materials();
-	this->load_mutable_object<Slic3r::Model>(ObjectID(it_snapshot->model_id), model);
+	load_mutable_object<Slic3r::Model>(ObjectID(it_snapshot->model_id), model);
 	model.update_links_bottom_up_recursive();
 	m_selection.volumes_and_instances.clear();
-	this->load_mutable_object<Selection>(m_selection.id(), m_selection);
+	load_mutable_object<Selection>(m_selection.id(), m_selection);
     //gizmos.reset_all_states(); FIXME: is this really necessary? It is quite unpleasant for the gizmo undo/redo substack
-    this->load_mutable_object<Slic3r::GUI::GLGizmosManager>(gizmos.id(), gizmos);
+    load_mutable_object<Slic3r::GUI::GLGizmosManager>(gizmos.id(), gizmos);
     // Sort the volumes so that we may use binary search.
 	std::sort(m_selection.volumes_and_instances.begin(), m_selection.volumes_and_instances.end());
 	m_active_snapshot_time = timestamp;
-	assert(this->valid());
+	assert(valid());
 }
 
 bool StackImpl::has_undo_snapshot() const
@@ -922,7 +922,7 @@ bool StackImpl::has_redo_snapshot() const
 
 bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selection, Slic3r::GUI::GLGizmosManager &gizmos, const SnapshotData &snapshot_data, size_t time_to_load)
 {
-	assert(this->valid());
+	assert(valid());
 	if (time_to_load == SIZE_MAX) {
 		auto it_current = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(m_active_snapshot_time));
 		if (-- it_current == m_snapshots.begin())
@@ -934,7 +934,7 @@ bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selecti
 	bool new_snapshot_taken = false;
 	if (m_active_snapshot_time == m_snapshots.back().timestamp && ! m_snapshots.back().is_topmost_captured()) {
 		// The current state is temporary. The current state needs to be captured to be redoable.
-        this->take_snapshot(topmost_snapshot_name, model, selection, gizmos, snapshot_data);
+        take_snapshot(topmost_snapshot_name, model, selection, gizmos, snapshot_data);
         // The line above entered another topmost_snapshot_name.
 		assert(m_snapshots.back().is_topmost());
 		assert(! m_snapshots.back().is_topmost_captured());
@@ -946,7 +946,7 @@ bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selecti
 		assert(m_snapshots.back().is_topmost_captured());
 		new_snapshot_taken = true;
 	}
-    this->load_snapshot(time_to_load, model, gizmos);
+    load_snapshot(time_to_load, model, gizmos);
 	if (new_snapshot_taken) {
 		// Release old snapshots if the memory allocated due to capturing the top most state is excessive.
 		// Don't release the snapshots here, release them first after the scene and background processing gets updated, as this will release some references
@@ -955,14 +955,14 @@ bool StackImpl::undo(Slic3r::Model &model, const Slic3r::GUI::Selection &selecti
 	}
 #ifdef SLIC3R_UNDOREDO_DEBUG
 	std::cout << "After undo" << std::endl;
- 	this->print();
+ 	print();
 #endif /* SLIC3R_UNDOREDO_DEBUG */
 	return true;
 }
 
 bool StackImpl::redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos, size_t time_to_load)
 {
-	assert(this->valid());
+	assert(valid());
 	if (time_to_load == SIZE_MAX) {
 		auto it_current = std::lower_bound(m_snapshots.begin(), m_snapshots.end(), Snapshot(m_active_snapshot_time));
 		if (++ it_current == m_snapshots.end())
@@ -971,10 +971,10 @@ bool StackImpl::redo(Slic3r::Model& model, Slic3r::GUI::GLGizmosManager& gizmos,
 	}
 	assert(time_to_load > m_active_snapshot_time);
 	assert(std::binary_search(m_snapshots.begin(), m_snapshots.end(), Snapshot(time_to_load)));
-    this->load_snapshot(time_to_load, model, gizmos);
+    load_snapshot(time_to_load, model, gizmos);
 #ifdef SLIC3R_UNDOREDO_DEBUG
 	std::cout << "After redo" << std::endl;
- 	this->print();
+ 	print();
 #endif /* SLIC3R_UNDOREDO_DEBUG */
 	return true;
 }

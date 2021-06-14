@@ -142,6 +142,7 @@ namespace GUI {
     {
         enum class EWrapping
         {
+            Unknown,
             Repeat,
             Mirror,
             ClampToEdge,

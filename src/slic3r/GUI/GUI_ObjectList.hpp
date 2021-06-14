@@ -77,6 +77,9 @@ public:
         smLayer     = 4,
         smSettings  = 8,  // used for undo/redo
         smLayerRoot = 16, // used for undo/redo
+#if ENABLE_TEXTURED_VOLUMES
+        smTexture   = 32, // used for undo/redo
+#endif // ENABLE_TEXTURED_VOLUMES
     };
 
     struct Clipboard

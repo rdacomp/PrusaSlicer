@@ -2071,19 +2071,19 @@ void Plater::priv::update(unsigned int flags)
     }
 
     unsigned int update_status = 0;
-    if (this->printer_technology == ptSLA || (flags & (unsigned int)UpdateParams::FORCE_BACKGROUND_PROCESSING_UPDATE))
+    if (printer_technology == ptSLA || (flags & (unsigned int)UpdateParams::FORCE_BACKGROUND_PROCESSING_UPDATE))
         // Update the SLAPrint from the current Model, so that the reload_scene()
         // pulls the correct data.
-        update_status = this->update_background_process(false, flags & (unsigned int)UpdateParams::POSTPONE_VALIDATION_ERROR_MESSAGE);
-    this->view3D->reload_scene(false, flags & (unsigned int)UpdateParams::FORCE_FULL_SCREEN_REFRESH);
-    this->preview->reload_print();
-    if (this->printer_technology == ptSLA)
-        this->restart_background_process(update_status);
+        update_status = update_background_process(false, flags & (unsigned int)UpdateParams::POSTPONE_VALIDATION_ERROR_MESSAGE);
+    view3D->reload_scene(false, flags & (unsigned int)UpdateParams::FORCE_FULL_SCREEN_REFRESH);
+    preview->reload_print();
+    if (printer_technology == ptSLA)
+        restart_background_process(update_status);
     else
-        this->schedule_background_process();
+        schedule_background_process();
 
-    if (get_config("autocenter") == "1" && this->sidebar->obj_manipul()->IsShown())
-        this->sidebar->obj_manipul()->UpdateAndShow(true);
+    if (get_config("autocenter") == "1" && sidebar->obj_manipul()->IsShown())
+        sidebar->obj_manipul()->UpdateAndShow(true);
 }
 
 void Plater::priv::select_view(const std::string& direction)
@@ -4335,19 +4335,23 @@ void Plater::priv::take_snapshot(const std::string& snapshot_name)
         return;
     assert(m_prevent_snapshots >= 0);
     UndoRedo::SnapshotData snapshot_data;
-    snapshot_data.printer_technology = this->printer_technology;
-    if (this->view3D->is_layers_editing_enabled())
+    snapshot_data.printer_technology = printer_technology;
+    if (view3D->is_layers_editing_enabled())
         snapshot_data.flags |= UndoRedo::SnapshotData::VARIABLE_LAYER_EDITING_ACTIVE;
-    if (this->sidebar->obj_list()->is_selected(itSettings)) {
+    if (sidebar->obj_list()->is_selected(itSettings)) {
         snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_SETTINGS_ON_SIDEBAR;
-        snapshot_data.layer_range_idx = this->sidebar->obj_list()->get_selected_layers_range_idx();
+        snapshot_data.layer_range_idx = sidebar->obj_list()->get_selected_layers_range_idx();
     }
-    else if (this->sidebar->obj_list()->is_selected(itLayer)) {
+    else if (sidebar->obj_list()->is_selected(itLayer)) {
         snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_LAYER_ON_SIDEBAR;
-        snapshot_data.layer_range_idx = this->sidebar->obj_list()->get_selected_layers_range_idx();
+        snapshot_data.layer_range_idx = sidebar->obj_list()->get_selected_layers_range_idx();
     }
-    else if (this->sidebar->obj_list()->is_selected(itLayerRoot))
+    else if (sidebar->obj_list()->is_selected(itLayerRoot))
         snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_LAYERROOT_ON_SIDEBAR;
+#if ENABLE_TEXTURED_VOLUMES
+    else if (sidebar->obj_list()->is_selected(itTexture))
+        snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_TEXTURE_ON_SIDEBAR;
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // If SLA gizmo is active, ask it if it wants to trigger support generation
     // on loading this snapshot.
@@ -4356,21 +4360,21 @@ void Plater::priv::take_snapshot(const std::string& snapshot_name)
 
     //FIXME updating the Wipe tower config values at the ModelWipeTower from the Print config.
     // This is a workaround until we refactor the Wipe Tower position / orientation to live solely inside the Model, not in the Print config.
-    if (this->printer_technology == ptFFF) {
+    if (printer_technology == ptFFF) {
         const DynamicPrintConfig &config = wxGetApp().preset_bundle->prints.get_edited_preset().config;
         model.wipe_tower.position = Vec2d(config.opt_float("wipe_tower_x"), config.opt_float("wipe_tower_y"));
         model.wipe_tower.rotation = config.opt_float("wipe_tower_rotation_angle");
     }
-    this->undo_redo_stack().take_snapshot(snapshot_name, model, view3D->get_canvas3d()->get_selection(), view3D->get_canvas3d()->get_gizmos_manager(), snapshot_data);
-    this->undo_redo_stack().release_least_recently_used();
+    undo_redo_stack().take_snapshot(snapshot_name, model, view3D->get_canvas3d()->get_selection(), view3D->get_canvas3d()->get_gizmos_manager(), snapshot_data);
+    undo_redo_stack().release_least_recently_used();
 
 #if ENABLE_PROJECT_DIRTY_STATE
     dirty_state.update_from_undo_redo_stack(ProjectDirtyStateManager::UpdateType::TakeSnapshot);
 #endif // ENABLE_PROJECT_DIRTY_STATE
 
     // Save the last active preset name of a particular printer technology.
-    ((this->printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
-    BOOST_LOG_TRIVIAL(info) << "Undo / Redo snapshot taken: " << snapshot_name << ", Undo / Redo stack memory: " << Slic3r::format_memsize_MB(this->undo_redo_stack().memsize()) << log_memory_info();
+    ((printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
+    BOOST_LOG_TRIVIAL(info) << "Undo / Redo snapshot taken: " << snapshot_name << ", Undo / Redo stack memory: " << Slic3r::format_memsize_MB(undo_redo_stack().memsize()) << log_memory_info();
 }
 
 void Plater::priv::undo()
@@ -4402,9 +4406,9 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
     // Make sure that no updating function calls take_snapshot until we are done.
     SuppressSnapshots snapshot_supressor(q);
 
-    bool 				temp_snapshot_was_taken 	= this->undo_redo_stack().temp_snapshot_active();
+    bool 				temp_snapshot_was_taken 	= undo_redo_stack().temp_snapshot_active();
     PrinterTechnology 	new_printer_technology 		= it_snapshot->snapshot_data.printer_technology;
-    bool 				printer_technology_changed 	= this->printer_technology != new_printer_technology;
+    bool 				printer_technology_changed 	= printer_technology != new_printer_technology;
     if (printer_technology_changed) {
         // Switching the printer technology when jumping forwards / backwards in time. Switch to the last active printer profile of the other type.
         std::string s_pt = (it_snapshot->snapshot_data.printer_technology == ptFFF) ? "FFF" : "SLA";
@@ -4419,10 +4423,10 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
             return;
     }
     // Save the last active preset name of a particular printer technology.
-    ((this->printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
+    ((printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
     //FIXME updating the Wipe tower config values at the ModelWipeTower from the Print config.
     // This is a workaround until we refactor the Wipe Tower position / orientation to live solely inside the Model, not in the Print config.
-    if (this->printer_technology == ptFFF) {
+    if (printer_technology == ptFFF) {
         const DynamicPrintConfig &config = wxGetApp().preset_bundle->prints.get_edited_preset().config;
                 model.wipe_tower.position = Vec2d(config.opt_float("wipe_tower_x"), config.opt_float("wipe_tower_y"));
                 model.wipe_tower.rotation = config.opt_float("wipe_tower_rotation_angle");
@@ -4431,25 +4435,33 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
     // Flags made of Snapshot::Flags enum values.
     unsigned int new_flags = it_snapshot->snapshot_data.flags;
     UndoRedo::SnapshotData top_snapshot_data;
-    top_snapshot_data.printer_technology = this->printer_technology;
-    if (this->view3D->is_layers_editing_enabled())
+    top_snapshot_data.printer_technology = printer_technology;
+    if (view3D->is_layers_editing_enabled())
         top_snapshot_data.flags |= UndoRedo::SnapshotData::VARIABLE_LAYER_EDITING_ACTIVE;
-    if (this->sidebar->obj_list()->is_selected(itSettings)) {
+    if (sidebar->obj_list()->is_selected(itSettings)) {
         top_snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_SETTINGS_ON_SIDEBAR;
-        top_snapshot_data.layer_range_idx = this->sidebar->obj_list()->get_selected_layers_range_idx();
+        top_snapshot_data.layer_range_idx = sidebar->obj_list()->get_selected_layers_range_idx();
     }
-    else if (this->sidebar->obj_list()->is_selected(itLayer)) {
+    else if (sidebar->obj_list()->is_selected(itLayer)) {
         top_snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_LAYER_ON_SIDEBAR;
-        top_snapshot_data.layer_range_idx = this->sidebar->obj_list()->get_selected_layers_range_idx();
+        top_snapshot_data.layer_range_idx = sidebar->obj_list()->get_selected_layers_range_idx();
     }
-    else if (this->sidebar->obj_list()->is_selected(itLayerRoot))
+    else if (sidebar->obj_list()->is_selected(itLayerRoot))
         top_snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_LAYERROOT_ON_SIDEBAR;
+#if ENABLE_TEXTURED_VOLUMES
+    else if (sidebar->obj_list()->is_selected(itTexture))
+        top_snapshot_data.flags |= UndoRedo::SnapshotData::SELECTED_TEXTURE_ON_SIDEBAR;
+#endif // ENABLE_TEXTURED_VOLUMES
+
     bool   		 new_variable_layer_editing_active = (new_flags & UndoRedo::SnapshotData::VARIABLE_LAYER_EDITING_ACTIVE) != 0;
     bool         new_selected_settings_on_sidebar  = (new_flags & UndoRedo::SnapshotData::SELECTED_SETTINGS_ON_SIDEBAR) != 0;
     bool         new_selected_layer_on_sidebar     = (new_flags & UndoRedo::SnapshotData::SELECTED_LAYER_ON_SIDEBAR) != 0;
     bool         new_selected_layerroot_on_sidebar = (new_flags & UndoRedo::SnapshotData::SELECTED_LAYERROOT_ON_SIDEBAR) != 0;
+#if ENABLE_TEXTURED_VOLUMES
+    bool         new_selected_texture_on_sidebar   = (new_flags & UndoRedo::SnapshotData::SELECTED_TEXTURE_ON_SIDEBAR) != 0;
+#endif // ENABLE_TEXTURED_VOLUMES
 
-    if (this->view3D->get_canvas3d()->get_gizmos_manager().wants_reslice_supports_on_undo())
+    if (view3D->get_canvas3d()->get_gizmos_manager().wants_reslice_supports_on_undo())
         top_snapshot_data.flags |= UndoRedo::SnapshotData::RECALCULATE_SLA_SUPPORTS;
 
     // Disable layer editing before the Undo / Redo jump.
@@ -4459,9 +4471,9 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
     // Make a copy of the snapshot, undo/redo could invalidate the iterator
     const UndoRedo::Snapshot snapshot_copy = *it_snapshot;
     // Do the jump in time.
-    if (it_snapshot->timestamp < this->undo_redo_stack().active_snapshot_time() ?
-        this->undo_redo_stack().undo(model, this->view3D->get_canvas3d()->get_selection(), this->view3D->get_canvas3d()->get_gizmos_manager(), top_snapshot_data, it_snapshot->timestamp) :
-        this->undo_redo_stack().redo(model, this->view3D->get_canvas3d()->get_gizmos_manager(), it_snapshot->timestamp)) {
+    if (it_snapshot->timestamp < undo_redo_stack().active_snapshot_time() ?
+        undo_redo_stack().undo(model, view3D->get_canvas3d()->get_selection(), view3D->get_canvas3d()->get_gizmos_manager(), top_snapshot_data, it_snapshot->timestamp) :
+        undo_redo_stack().redo(model, view3D->get_canvas3d()->get_gizmos_manager(), it_snapshot->timestamp)) {
         if (printer_technology_changed) {
             // Switch to the other printer technology. Switch to the last printer active for that particular technology.
             AppConfig *app_config = wxGetApp().app_config;
@@ -4469,14 +4481,14 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
             wxGetApp().preset_bundle->load_presets(*app_config);
 			// load_current_presets() calls Tab::load_current_preset() -> TabPrint::update() -> Object_list::update_and_show_object_settings_item(),
 			// but the Object list still keeps pointer to the old Model. Avoid a crash by removing selection first.
-			this->sidebar->obj_list()->unselect_objects();
+			sidebar->obj_list()->unselect_objects();
             // Load the currently selected preset into the GUI, update the preset selection box.
             // This also switches the printer technology based on the printer technology of the active printer profile.
             wxGetApp().load_current_presets();
         }
         //FIXME updating the Print config from the Wipe tower config values at the ModelWipeTower.
         // This is a workaround until we refactor the Wipe Tower position / orientation to live solely inside the Model, not in the Print config.
-        if (this->printer_technology == ptFFF) {
+        if (printer_technology == ptFFF) {
             const DynamicPrintConfig &current_config = wxGetApp().preset_bundle->prints.get_edited_preset().config;
             Vec2d 					  current_position(current_config.opt_float("wipe_tower_x"), current_config.opt_float("wipe_tower_y"));
             double 					  current_rotation = current_config.opt_float("wipe_tower_rotation_angle");
@@ -4491,16 +4503,28 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
             }
         }
         // set selection mode for ObjectList on sidebar
-        this->sidebar->obj_list()->set_selection_mode(new_selected_settings_on_sidebar  ? ObjectList::SELECTION_MODE::smSettings :
-                                                      new_selected_layer_on_sidebar     ? ObjectList::SELECTION_MODE::smLayer :
-                                                      new_selected_layerroot_on_sidebar ? ObjectList::SELECTION_MODE::smLayerRoot :
-                                                                                          ObjectList::SELECTION_MODE::smUndef);
-        if (new_selected_settings_on_sidebar || new_selected_layer_on_sidebar)
-            this->sidebar->obj_list()->set_selected_layers_range_idx(layer_range_idx);
+#if ENABLE_TEXTURED_VOLUMES
+        sidebar->obj_list()->set_selection_mode(new_selected_settings_on_sidebar ? ObjectList::SELECTION_MODE::smSettings :
+                                                new_selected_layer_on_sidebar ? ObjectList::SELECTION_MODE::smLayer :
+                                                new_selected_layerroot_on_sidebar ? ObjectList::SELECTION_MODE::smLayerRoot :
+                                                new_selected_texture_on_sidebar ? ObjectList::SELECTION_MODE::smTexture :
+                                                ObjectList::SELECTION_MODE::smUndef);
 
-        this->update_after_undo_redo(snapshot_copy, temp_snapshot_was_taken);
+        if (new_selected_settings_on_sidebar || new_selected_layer_on_sidebar || new_selected_texture_on_sidebar)
+            sidebar->obj_list()->set_selected_layers_range_idx(layer_range_idx);
+#else
+        sidebar->obj_list()->set_selection_mode(new_selected_settings_on_sidebar  ? ObjectList::SELECTION_MODE::smSettings :
+                                                new_selected_layer_on_sidebar     ? ObjectList::SELECTION_MODE::smLayer :
+                                                new_selected_layerroot_on_sidebar ? ObjectList::SELECTION_MODE::smLayerRoot :
+                                                                                          ObjectList::SELECTION_MODE::smUndef);
+
+        if (new_selected_settings_on_sidebar || new_selected_layer_on_sidebar)
+            sidebar->obj_list()->set_selected_layers_range_idx(layer_range_idx);
+#endif // ENABLE_TEXTURED_VOLUMES
+
+        update_after_undo_redo(snapshot_copy, temp_snapshot_was_taken);
         // Enable layer editing after the Undo / Redo jump.
-        if (! view3D->is_layers_editing_enabled() && this->layers_height_allowed() && new_variable_layer_editing_active)
+        if (! view3D->is_layers_editing_enabled() && layers_height_allowed() && new_variable_layer_editing_active)
             view3D->get_canvas3d()->force_main_toolbar_left_action(view3D->get_canvas3d()->get_main_toolbar_item_id("layersediting"));
     }
 
@@ -4511,21 +4535,24 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
 
 void Plater::priv::update_after_undo_redo(const UndoRedo::Snapshot& snapshot, bool /* temp_snapshot_was_taken */)
 {
-    this->view3D->get_canvas3d()->get_selection().clear();
+    view3D->get_canvas3d()->get_selection().clear();
     // Update volumes from the deserializd model, always stop / update the background processing (for both the SLA and FFF technologies).
-    this->update((unsigned int)UpdateParams::FORCE_BACKGROUND_PROCESSING_UPDATE | (unsigned int)UpdateParams::POSTPONE_VALIDATION_ERROR_MESSAGE);
+    update((unsigned int)UpdateParams::FORCE_BACKGROUND_PROCESSING_UPDATE | (unsigned int)UpdateParams::POSTPONE_VALIDATION_ERROR_MESSAGE);
     // Release old snapshots if the memory allocated is excessive. This may remove the top most snapshot if jumping to the very first snapshot.
     //if (temp_snapshot_was_taken)
     // Release the old snapshots always, as it may have happened, that some of the triangle meshes got deserialized from the snapshot, while some
     // triangle meshes may have gotten released from the scene or the background processing, therefore now being calculated into the Undo / Redo stack size.
-        this->undo_redo_stack().release_least_recently_used();
+        undo_redo_stack().release_least_recently_used();
     //YS_FIXME update obj_list from the deserialized model (maybe store ObjectIDs into the tree?) (no selections at this point of time)
-    this->view3D->get_canvas3d()->get_selection().set_deserialized(GUI::Selection::EMode(this->undo_redo_stack().selection_deserialized().mode), this->undo_redo_stack().selection_deserialized().volumes_and_instances);
-    this->view3D->get_canvas3d()->get_gizmos_manager().update_after_undo_redo(snapshot);
+    view3D->get_canvas3d()->get_selection().set_deserialized(GUI::Selection::EMode(undo_redo_stack().selection_deserialized().mode), undo_redo_stack().selection_deserialized().volumes_and_instances);
+    view3D->get_canvas3d()->get_gizmos_manager().update_after_undo_redo(snapshot);
+#if ENABLE_TEXTURED_VOLUMES
+    view3D->get_canvas3d()->add_textures_from_all_objects();
+#endif // ENABLE_TEXTURED_VOLUMES
 
     wxGetApp().obj_list()->update_after_undo_redo();
 
-    if (wxGetApp().get_mode() == comSimple && model_has_advanced_features(this->model)) {
+    if (wxGetApp().get_mode() == comSimple && model_has_advanced_features(model)) {
         // If the user jumped to a snapshot that require user interface with advanced features, switch to the advanced mode without asking.
         // There is a little risk of surprising the user, as he already must have had the advanced or expert mode active for such a snapshot to be taken.
         Slic3r::GUI::wxGetApp().save_mode(comAdvanced);
@@ -4535,12 +4562,12 @@ void Plater::priv::update_after_undo_redo(const UndoRedo::Snapshot& snapshot, bo
 	// this->update() above was called with POSTPONE_VALIDATION_ERROR_MESSAGE, so that if an error message was generated when updating the back end, it would not open immediately, 
 	// but it would be saved to be show later. Let's do it now. We do not want to display the message box earlier, because on Windows & OSX the message box takes over the message
 	// queue pump, which in turn executes the rendering function before a full update after the Undo / Redo jump.
-	this->show_delayed_error_message();
+	show_delayed_error_message();
 
     //FIXME what about the state of the manipulators?
     //FIXME what about the focus? Cursor in the side panel?
 
-    BOOST_LOG_TRIVIAL(info) << "Undo / Redo snapshot reloaded. Undo / Redo stack memory: " << Slic3r::format_memsize_MB(this->undo_redo_stack().memsize()) << log_memory_info();
+    BOOST_LOG_TRIVIAL(info) << "Undo / Redo snapshot reloaded. Undo / Redo stack memory: " << Slic3r::format_memsize_MB(undo_redo_stack().memsize()) << log_memory_info();
 }
 
 void Plater::priv::bring_instance_forward() const
@@ -6418,9 +6445,14 @@ void Plater::bring_instance_forward()
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void Plater::add_textures_to_volumes(int object_id)
+void Plater::add_texture_to_volumes_from_object(int object_id)
 {
-    canvas3D()->add_object_texture(object_id);
+    canvas3D()->add_texture_from_object(object_id);
+}
+
+void Plater::add_texture_to_volumes_from_all_objects()
+{
+    canvas3D()->add_textures_from_all_objects();
 }
 #endif // ENABLE_TEXTURED_VOLUMES
 

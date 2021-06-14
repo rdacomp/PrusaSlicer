@@ -489,7 +489,7 @@ class TexturesManager
 
 public:
     int add_texture(const std::string& filename);
-
+    int get_texture_id(const std::string& filename) const;
     std::shared_ptr<GUI::GLIdeaMakerTexture> get_texture(int id);
 };
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -568,6 +568,7 @@ public:
 
 #if ENABLE_TEXTURED_VOLUMES
     int add_volume_texture(const std::string& filename) { return m_textures_manager.add_texture(filename); }
+    int get_texture_id(const std::string& filename) const { return m_textures_manager.get_texture_id(filename); }
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // Render the volumes by OpenGL.

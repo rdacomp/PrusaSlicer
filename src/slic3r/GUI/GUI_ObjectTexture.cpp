@@ -46,12 +46,15 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
         if (!boost::algorithm::iends_with(filename, ".texture"))
             return;
 
+        wxGetApp().plater()->take_snapshot(_L("Add texture"));
+
         const auto& [obj_idx, model_object] = get_model_object();
-        if (model_object != nullptr)
+        if (model_object != nullptr) {
             model_object->texture = filename;
+        }
 
         update();
-        wxGetApp().plater()->add_textures_to_volumes(obj_idx);
+        wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
@@ -59,14 +62,15 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
         wxMessageDialog dlg(m_parent, _L("Do you really want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
         if (dlg.ShowModal() == wxID_YES) {
 
-            /* take_snapshot */
+            wxGetApp().plater()->take_snapshot(_L("Remove texture"));
 
             const auto& [obj_idx, model_object] = get_model_object();
-            if (model_object != nullptr)
+            if (model_object != nullptr) {
                 model_object->texture.clear();
+            }
 
             update();
-            wxGetApp().plater()->add_textures_to_volumes(obj_idx);
+            wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
             wxGetApp().obj_list()->del_texture_item();
         }
         });

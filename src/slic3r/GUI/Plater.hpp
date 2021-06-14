@@ -368,7 +368,8 @@ public:
     void bring_instance_forward();
 
 #if ENABLE_TEXTURED_VOLUMES
-    void add_textures_to_volumes(int object_id);
+    void add_texture_to_volumes_from_object(int object_id);
+    void add_texture_to_volumes_from_all_objects();
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // ROII wrapper for suppressing the Undo / Redo snapshot to be taken.

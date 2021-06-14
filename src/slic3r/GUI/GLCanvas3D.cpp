@@ -3884,10 +3884,10 @@ void GLCanvas3D::update_sequential_clearance()
 #endif // ENABLE_SEQUENTIAL_LIMITS
 
 #if ENABLE_TEXTURED_VOLUMES
-int GLCanvas3D::add_object_texture(int object_id)
+int GLCanvas3D::add_texture_from_object(int object_id)
 {
     int tex_id = (0 <= object_id && object_id < static_cast<int>(m_model->objects.size())) ?
-    m_volumes.add_volume_texture(m_model->objects[object_id]->texture) : -1;
+        m_volumes.add_volume_texture(m_model->objects[object_id]->texture) : -1;
     for (GLVolume* volume : m_volumes.volumes) {
         if (volume->object_idx() == object_id)
             volume->texture_id = tex_id;
@@ -3895,23 +3895,14 @@ int GLCanvas3D::add_object_texture(int object_id)
     return tex_id;
 }
 
-//int GLCanvas3D::add_volume_texture(int object_id, int volume_id, const std::string& filename)
-//{
-//    int tex_id = m_volumes.add_volume_texture(filename);
-//    for (GLVolume* volume : m_volumes.volumes) {
-//        if (volume->object_idx() == object_id && volume->volume_idx() == volume_id) {
-//            volume->texture_id = tex_id;
-//        }
-//    }
-//    return tex_id;
-//}
-
-//int GLCanvas3D::add_volume_texture(GLVolume* volume, const std::string& filename)
-//{
-//    int tex_id = m_volumes.add_volume_texture(filename);
-//    volume->texture_id = tex_id;
-//    return tex_id;
-//}
+void GLCanvas3D::add_textures_from_all_objects()
+{
+    for (GLVolume* volume : m_volumes.volumes) {
+        int obj_idx = volume->object_idx();
+        volume->texture_id = (0 <= obj_idx && obj_idx < static_cast<int>(m_model->objects.size())) ?
+            m_volumes.get_texture_id(m_model->objects[obj_idx]->texture) : -1;
+    }
+}
 #endif // ENABLE_TEXTURED_VOLUMES
 
 bool GLCanvas3D::_is_shown_on_screen() const
