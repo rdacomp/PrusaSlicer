@@ -385,6 +385,12 @@ void PresetComboBox::msw_rescale()
     update();
 }
 
+void PresetComboBox::sys_color_changed()
+{
+    wxGetApp().UpdateDarkUI(this);
+    msw_rescale();
+}
+
 void PresetComboBox::fill_width_height()
 {
     // To avoid asserts, each added bitmap to wxBitmapCombobox should be the same size, so

@@ -26,7 +26,7 @@ void msw_rescale_menu(wxMenu* menu)
 		static void run(wxMenuItem* item) {
 			const auto it = msw_menuitem_bitmaps.find(item->GetId());
 			if (it != msw_menuitem_bitmaps.end()) {
-				const wxBitmap& item_icon = create_scaled_bitmap(it->second);
+				const wxBitmap& item_icon = create_menu_bitmap(it->second);
 				if (item_icon.IsOk())
 					item->SetBitmap(item_icon);
 			}
@@ -96,7 +96,7 @@ wxMenuItem* append_menu_item(wxMenu* menu, int id, const wxString& string, const
     if (id == wxID_ANY)
         id = wxNewId();
 
-    const wxBitmap& bmp = !icon.empty() ? create_scaled_bitmap(icon) : wxNullBitmap;   // FIXME: pass window ptr
+    const wxBitmap& bmp = !icon.empty() ? create_menu_bitmap(icon) : wxNullBitmap;   // FIXME: pass window ptr
 //#ifdef __WXMSW__
 #ifndef __WXGTK__
     if (bmp.IsOk())
@@ -114,7 +114,7 @@ wxMenuItem* append_submenu(wxMenu* menu, wxMenu* sub_menu, int id, const wxStrin
 
     wxMenuItem* item = new wxMenuItem(menu, id, string, description);
     if (!icon.empty()) {
-        item->SetBitmap(create_scaled_bitmap(icon));    // FIXME: pass window ptr
+        item->SetBitmap(create_menu_bitmap(icon));    // FIXME: pass window ptr
 //#ifdef __WXMSW__
 #ifndef __WXGTK__
         msw_menuitem_bitmaps[id] = icon;
@@ -416,13 +416,19 @@ int mode_icon_px_size()
 #endif
 }
 
+wxBitmap create_menu_bitmap(const std::string& bmp_name)
+{
+    return create_scaled_bitmap(bmp_name, nullptr, 16, false, true);
+}
+
 // win is used to get a correct em_unit value
 // It's important for bitmaps of dialogs.
 // if win == nullptr, em_unit value of MainFrame will be used
 wxBitmap create_scaled_bitmap(  const std::string& bmp_name_in, 
                                 wxWindow *win/* = nullptr*/,
                                 const int px_cnt/* = 16*/, 
-                                const bool grayscale/* = false*/)
+                                const bool grayscale/* = false*/,
+                                const bool menu_bitmap/* = false*/)
 {
     static Slic3r::GUI::BitmapCache cache;
 
@@ -432,8 +438,14 @@ wxBitmap create_scaled_bitmap(  const std::string& bmp_name_in,
     std::string bmp_name = bmp_name_in;
     boost::replace_last(bmp_name, ".png", "");
 
+    bool dark_mode = 
+#ifdef _WIN32
+    menu_bitmap ? Slic3r::GUI::check_dark_mode() :
+#endif
+        Slic3r::GUI::wxGetApp().dark_mode();
+
     // Try loading an SVG first, then PNG if SVG is not found:
-    wxBitmap *bmp = cache.load_svg(bmp_name, width, height, grayscale, Slic3r::GUI::wxGetApp().dark_mode());
+    wxBitmap *bmp = cache.load_svg(bmp_name, width, height, grayscale, dark_mode);
     if (bmp == nullptr) {
         bmp = cache.load_png(bmp_name, width, height, grayscale);
     }

@@ -1010,9 +1010,9 @@ void Sidebar::sys_color_changed()
                                                                 p->combo_sla_print,
                                                                 p->combo_sla_material,
                                                                 p->combo_printer })
-        combo->msw_rescale();
+        combo->sys_color_changed();
     for (PlaterPresetComboBox* combo : p->combos_filament)
-        combo->msw_rescale();
+        combo->sys_color_changed();
 
     p->object_list->sys_color_changed();
     p->object_manipulation->sys_color_changed();

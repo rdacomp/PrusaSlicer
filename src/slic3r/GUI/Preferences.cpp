@@ -330,12 +330,12 @@ void PreferencesDialog::build()
 		m_optgroup_gui->append_single_option_line(option);
 
 #ifdef _WIN32
-		def.label = L("Use prototype of Dark/Light mode");
+		def.label = L("Always use Dark mode colors");
 		def.type = coBool;
-		def.tooltip = L("If enabled, UI will be updated in respect to the selected system color (Dark/Light) "
-						"If disabled, old UI will be used.");
-		def.set_default_value(new ConfigOptionBool{ app_config->get("use_system_color_mode") == "1" });
-		option = Option(def, "use_system_color_mode");
+		def.tooltip = L("If enabled, UI will use Dark mode colors even for Light system color mode. "
+						"If disabled, UI will be updated in respect to the selected system color (Dark/Light).");
+		def.set_default_value(new ConfigOptionBool{ app_config->get("always_dark_color_mode") == "1" });
+		option = Option(def, "always_dark_color_mode");
 		m_optgroup_gui->append_single_option_line(option);
 #endif
 
@@ -427,6 +427,9 @@ void PreferencesDialog::accept()
 		if (it != m_values.end() && it->second != "none" && app_config->get(key) != "none")
 			m_values.erase(it); // we shouldn't change value, if some of those parameters was selected, and then deselected
 	}
+
+	if (m_values.find("always_dark_color_mode") != m_values.end())
+		wxGetApp().force_sys_colors_update();
 
 	for (std::map<std::string, std::string>::iterator it = m_values.begin(); it != m_values.end(); ++it)
 		app_config->set(it->first, it->second);

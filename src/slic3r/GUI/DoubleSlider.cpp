@@ -1621,7 +1621,7 @@ void Control::append_add_color_change_menu_item(wxMenu* menu, bool switch_curren
                                    format_wxstr(_L("Switch code to Color change (%1%) for:"), gcode(ColorChange)) : 
                                    format_wxstr(_L("Add color change (%1%) for:"), gcode(ColorChange));
         wxMenuItem* add_color_change_menu_item = menu->AppendSubMenu(add_color_change_menu, menu_name, "");
-        add_color_change_menu_item->SetBitmap(create_scaled_bitmap("colorchange_add_m"));
+        add_color_change_menu_item->SetBitmap(create_menu_bitmap("colorchange_add_m"));
     }
 }
 

@@ -1015,7 +1015,7 @@ bool GUI_App::dark_mode()
     // proper dark mode was first introduced.
     return wxPlatformInfo::Get().CheckOSVersion(10, 14) && mac_dark_mode();
 #else
-    return check_dark_mode();
+    return wxGetApp().app_config->get("always_dark_color_mode") == "1" ? true : check_dark_mode();
     const unsigned luma = get_colour_approx_luma(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
     return luma < 128;
 #endif
@@ -1034,9 +1034,9 @@ void GUI_App::init_label_colours()
     }
 #ifdef _WIN32
     m_color_label_default           = is_dark_mode ? wxColour(250, 250, 250): wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-    m_color_highlight_label_default = is_dark_mode ? wxColour(230, 230, 230): wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHTTEXT);
+    m_color_highlight_label_default = is_dark_mode ? wxColour(230, 230, 230): wxSystemSettings::GetColour(/*wxSYS_COLOUR_HIGHLIGHTTEXT*/wxSYS_COLOUR_WINDOWTEXT);
     m_color_window_default          = is_dark_mode ? wxColour(43, 43, 43)   : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-    m_color_highlight_default       = is_dark_mode ? wxColour(78, 78, 78)   : wxSystemSettings::GetColour(/*wxSYS_COLOUR_BTNSHADOW*/wxSYS_COLOUR_3DLIGHT);
+    m_color_highlight_default       = is_dark_mode ? wxColour(78, 78, 78)   : wxSystemSettings::GetColour(wxSYS_COLOUR_3DLIGHT);
 #else
     m_color_label_default = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
 #endif
@@ -1099,7 +1099,8 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
 #ifdef _WIN32
 static void update_dark_children_ui(wxWindow* window)
 {
-    wxGetApp().UpdateDarkUI(window);
+    bool highlight_btn = dynamic_cast<wxButton*>(window) != nullptr;
+    wxGetApp().UpdateDarkUI(window, highlight_btn);
 
     auto children = window->GetChildren();
     for (auto child : children) {        
@@ -1347,6 +1348,18 @@ void GUI_App::update_ui_from_settings()
 {
     update_label_colours();
     mainframe->update_ui_from_settings();
+
+#ifdef _WIN32
+    if (m_force_sys_colors_update) {
+        m_force_sys_colors_update = false;
+        mainframe->force_sys_color_changed();
+        mainframe->diff_dialog.force_sys_color_changed();
+        if (m_wizard)
+            m_wizard->force_sys_color_changed();
+    }
+#endif
+
+    mainframe->update_ui_from_settings(apply_free_camera_correction);
 }
 
 void GUI_App::persist_window_geometry(wxTopLevelWindow *window, bool default_maximized)

@@ -175,6 +175,14 @@ public:
     const wxFont& normal_font() const   { return m_normal_font; }
     void enable_force_rescale()         { m_force_rescale = true; }
 
+#ifdef _WIN32
+    void force_sys_color_changed()
+    {
+        update_dark_ui(this);
+        on_sys_color_changed();
+    }
+#endif
+
 protected:
     virtual void on_dpi_changed(const wxRect &suggested_rect) = 0;
     virtual void on_sys_color_changed() {};

@@ -72,6 +72,7 @@ public:
     void             show_all(bool show_all);
     virtual void update();
     virtual void msw_rescale();
+    virtual void sys_color_changed();
     virtual void OnSelect(wxCommandEvent& evt);
 
 protected:

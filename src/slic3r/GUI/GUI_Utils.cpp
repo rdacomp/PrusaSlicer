@@ -6,6 +6,8 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+#include "GUI_App.hpp"
+#include "libslic3r/AppConfig.hpp"
 #endif
 
 #include <wx/toplevel.h>
@@ -167,7 +169,7 @@ bool check_dark_mode() {
 #ifdef _WIN32
 void update_dark_ui(wxWindow* window) 
 {
-    bool is_dark = check_dark_mode();
+    bool is_dark = wxGetApp().app_config->get("always_dark_color_mode") == "1" ? true : check_dark_mode();
     window->SetBackgroundColour(is_dark ? wxColour(43,  43,  43)  : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW));
     window->SetForegroundColour(is_dark ? wxColour(250, 250, 250) : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
 }

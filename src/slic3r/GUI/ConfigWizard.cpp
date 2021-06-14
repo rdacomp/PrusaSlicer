@@ -2862,5 +2862,11 @@ void ConfigWizard::on_dpi_changed(const wxRect &suggested_rect)
     Refresh();
 }
 
+void ConfigWizard::on_sys_color_changed()
+{
+    wxGetApp().UpdateDlgDarkUI(this);
+    Refresh();
+}
+
 }
 }

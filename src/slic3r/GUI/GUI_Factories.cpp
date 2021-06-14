@@ -138,11 +138,11 @@ std::map<std::string, std::string> SettingsFactory::CATEGORY_ICON =
     { L("Hollowing")            , "hollowing"   }
 };
 
-wxBitmap SettingsFactory::get_category_bitmap(const std::string& category_name)
+wxBitmap SettingsFactory::get_category_bitmap(const std::string& category_name, bool menu_bmp /*= true*/)
 {
     if (CATEGORY_ICON.find(category_name) == CATEGORY_ICON.end())
         return wxNullBitmap;
-    return create_scaled_bitmap(CATEGORY_ICON.at(category_name));
+    return menu_bmp ? create_menu_bitmap(CATEGORY_ICON.at(category_name)) : create_scaled_bitmap(CATEGORY_ICON.at(category_name));
 }
 
 
@@ -402,7 +402,7 @@ std::vector<wxBitmap> MenuFactory::get_volume_bitmaps()
     std::vector<wxBitmap> volume_bmps;
     volume_bmps.reserve(ADD_VOLUME_MENU_ITEMS.size());
     for (auto item : ADD_VOLUME_MENU_ITEMS)
-        volume_bmps.push_back(create_scaled_bitmap(item.second));
+        volume_bmps.push_back(create_menu_bitmap(item.second));
     return volume_bmps;
 }
 
@@ -570,7 +570,7 @@ wxMenuItem* MenuFactory::append_menu_item_settings(wxMenu* menu_)
 
     // Add full settings list
     auto  menu_item = new wxMenuItem(menu, wxID_ANY, menu_name);
-    menu_item->SetBitmap(create_scaled_bitmap("cog"));
+    menu_item->SetBitmap(create_menu_bitmap("cog"));
     menu_item->SetSubMenu(create_settings_popupmenu(menu, is_object_settings, item));
 
     return menu->Append(menu_item);
