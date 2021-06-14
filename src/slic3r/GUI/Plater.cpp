@@ -1615,7 +1615,8 @@ struct Plater::priv
     void reset_gcode_toolpaths();
 
     void reset_all_gizmos();
-    void update_ui_from_settings(bool apply_free_camera_correction = true);
+    void apply_free_camera_correction(bool apply = true);
+    void update_ui_from_settings();
     void update_main_toolbar_tooltips();
     std::shared_ptr<ProgressStatusBar> statusbar();
     std::string get_config(const std::string &key) const;
@@ -2093,6 +2094,13 @@ void Plater::priv::select_view(const std::string& direction)
         preview->select_view(direction);
 }
 
+void Plater::priv::apply_free_camera_correction(bool apply/* = true*/)
+{
+    camera.set_type(wxGetApp().app_config->get("use_perspective_camera"));
+    if (apply && wxGetApp().app_config->get("use_free_camera") != "1")
+        camera.recover_from_free_camera();
+}
+
 void Plater::priv::select_view_3D(const std::string& name)
 {
     if (name == "3D")
@@ -2100,7 +2108,7 @@ void Plater::priv::select_view_3D(const std::string& name)
     else if (name == "Preview")
         set_current_panel(preview);
 
-    wxGetApp().update_ui_from_settings(false);
+    apply_free_camera_correction(false);
 }
 
 void Plater::priv::select_next_view_3D()
@@ -2132,11 +2140,9 @@ void Plater::priv::reset_all_gizmos()
 
 // Called after the Preferences dialog is closed and the program settings are saved.
 // Update the UI based on the current preferences.
-void Plater::priv::update_ui_from_settings(bool apply_free_camera_correction)
+void Plater::priv::update_ui_from_settings()
 {
-    camera.set_type(wxGetApp().app_config->get("use_perspective_camera"));
-    if (apply_free_camera_correction && wxGetApp().app_config->get("use_free_camera") != "1")
-        camera.recover_from_free_camera();
+    apply_free_camera_correction();
 
     view3D->get_canvas3d()->update_ui_from_settings();
     preview->get_canvas3d()->update_ui_from_settings();
@@ -4969,7 +4975,7 @@ void Plater::update() { p->update(); }
 
 void Plater::stop_jobs() { p->m_ui_jobs.stop_all(); }
 
-void Plater::update_ui_from_settings(bool apply_free_camera_correction) { p->update_ui_from_settings(apply_free_camera_correction); }
+void Plater::update_ui_from_settings() { p->update_ui_from_settings(); }
 
 void Plater::select_view(const std::string& direction) { p->select_view(direction); }
 

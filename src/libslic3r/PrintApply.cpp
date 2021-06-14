@@ -1088,9 +1088,11 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             !model_object.layer_height_profile.timestamp_matches(model_object_new.layer_height_profile)) {
             // The very first step (the slicing step) is invalidated. One may freely remove all associated PrintObjects.
 #if ENABLE_TEXTURED_VOLUMES
-                model_object_status.print_object_regions_status = model_origin_translation_differ || layer_height_ranges_differ || texture_differ ?
+            model_object_status.print_object_regions_status =
+                model_object_status.print_object_regions == nullptr || model_origin_translation_differ || layer_height_ranges_differ || texture_differ ?
 #else
-                model_object_status.print_object_regions_status = model_origin_translation_differ || layer_height_ranges_differ ?
+            model_object_status.print_object_regions_status =
+                model_object_status.print_object_regions == nullptr || model_origin_translation_differ || layer_height_ranges_differ ?
 #endif // ENABLE_TEXTURED_VOLUMES
                 // Drop print_objects_regions.
                 ModelObjectStatus::PrintObjectRegionsStatus::Invalid :
@@ -1103,7 +1105,7 @@ Print::ApplyStatus Print::apply(const Model &model, DynamicPrintConfig new_full_
             if (model_object_status.print_object_regions_status == ModelObjectStatus::PrintObjectRegionsStatus::PartiallyValid)
                 // Drop everything from PrintObjectRegions but those VolumeExtents (of their particular ModelVolumes) that are still valid.
                 print_objects_regions_invalidate_keep_some_volumes(*model_object_status.print_object_regions, model_object.volumes, model_object_new.volumes);
-            else
+            else if (model_object_status.print_object_regions != nullptr)
                 model_object_status.print_object_regions->clear();
             // Copy content of the ModelObject including its ID, do not change the parent.
             model_object.assign_copy(model_object_new);

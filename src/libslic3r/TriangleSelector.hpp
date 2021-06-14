@@ -22,6 +22,8 @@ public:
         SPHERE
     };
 
+    // Set a limit to the edge length, below which the edge will not be split by select_patch().
+    // Called by select_patch() internally. Made public for debugging purposes, see TriangleSelectorGUI::render_debug().
     void set_edge_limit(float edge_limit);
 
     // Create new object on a TriangleMesh. The referenced mesh must
@@ -30,7 +32,7 @@ public:
 
     // Select all triangles fully inside the circle, subdivide where needed.
     void select_patch(const Vec3f        &hit,         // point where to start
-                      int                 facet_start, // facet that point belongs to
+                      int                 facet_start, // facet of the original mesh (unsplit) that the hit point belongs to
                       const Vec3f        &source,      // camera position (mesh coords)
                       float               radius,      // radius of the cursor
                       CursorType          type,        // current type of cursor
@@ -39,7 +41,7 @@ public:
                       bool                triangle_splitting); // If triangles will be split base on the cursor or not
 
     void seed_fill_select_triangles(const Vec3f &hit,               // point where to start
-                                    int          facet_start,       // facet that point belongs to
+                                    int          facet_start,       // facet of the original mesh (unsplit) that the hit point belongs to
                                     float        seed_fill_angle);  // the maximal angle between two facets to be painted by the same color
 
     // Get facets currently in the given state.
@@ -65,6 +67,7 @@ public:
     void seed_fill_unselect_all_triangles();
 
     // For all triangles selected by seed fill, set new EnforcerBlockerType and remove flag indicating that triangle was selected by seed fill.
+    // The operation may merge split triangles if they are being assigned the same color.
     void seed_fill_apply_on_triangles(EnforcerBlockerType new_state);
 
 protected:
@@ -73,19 +76,21 @@ protected:
     public:
         // Use TriangleSelector::push_triangle to create a new triangle.
         // It increments/decrements reference counter on vertices.
-        Triangle(int a, int b, int c, const Vec3f& normal_, const EnforcerBlockerType init_state)
+        Triangle(int a, int b, int c, int source_triangle, const EnforcerBlockerType init_state)
             : verts_idxs{a, b, c},
-              normal{normal_},
-              state{init_state},
-              number_of_splits{0},
-              special_side_idx{0},
-              old_number_of_splits{0}
-        {}
+              source_triangle{source_triangle},
+              state{init_state}
+        {
+            // Initialize bit fields. Default member initializers are not supported by C++17.
+            m_selected_by_seed_fill = false;
+            m_valid = true;
+            old_number_of_splits = 0;
+        }
         // Indices into m_vertices.
         std::array<int, 3> verts_idxs;
 
-        // Triangle normal (a shader might need it).
-        Vec3f normal;
+        // Index of the source triangle at the initial (unsplit) mesh.
+        int source_triangle;
 
         // Children triangles.
         std::array<int, 4> children;
@@ -115,16 +120,22 @@ protected:
     private:
         friend TriangleSelector;
 
-        int number_of_splits;
-        int special_side_idx;
+        // Packing the rest of member variables into 4 bytes, aligned to 4 bytes boundary.
+        char number_of_splits { 0 };
+        // Index of a vertex opposite to the split edge (for number_of_splits == 1)
+        // or index of a vertex shared by the two split edges (for number_of_splits == 2).
+        // For number_of_splits == 3, special_side_idx is always zero.
+        char special_side_idx { 0 };
         EnforcerBlockerType state;
-        bool m_selected_by_seed_fill = false;
+        bool m_selected_by_seed_fill : 1;
         // Is this triangle valid or marked to be removed?
-        bool m_valid{true};
+        bool m_valid : 1;
 
         // How many children were spawned during last split?
         // Is not reset on remerging the triangle.
-        int old_number_of_splits;
+        int old_number_of_splits : 3;
+
+        // there are still 3 bits available at the last byte :-)
     };
 
     struct Vertex {
@@ -173,6 +184,7 @@ protected:
     float m_old_cursor_radius_sqr;
 
     // Private functions:
+private:
     bool select_triangle(int facet_idx, EnforcerBlockerType type, bool recursive_call = false, bool triangle_splitting = true);
     int  vertices_inside(int facet_idx) const;
     bool faces_camera(int facet) const;
@@ -181,7 +193,7 @@ protected:
     void remove_useless_children(int facet_idx); // No hidden meaning. Triangles are meant.
     bool is_pointer_in_triangle(int facet_idx) const;
     bool is_edge_inside_cursor(int facet_idx) const;
-    void push_triangle(int a, int b, int c, const Vec3f &normal, const EnforcerBlockerType state = EnforcerBlockerType{0});
+    void push_triangle(int a, int b, int c, int source_triangle, const EnforcerBlockerType state = EnforcerBlockerType{0});
     void perform_split(int facet_idx, EnforcerBlockerType old_state);
 };
 
