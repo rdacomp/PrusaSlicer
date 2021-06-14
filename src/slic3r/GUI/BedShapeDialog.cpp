@@ -31,14 +31,13 @@ BedShape::BedShape(const ConfigOptionPoints& points)
             // okay, it's a rectangle
             // find origin
             coordf_t x_min, x_max, y_min, y_max;
-            x_max = x_min = points.values[0](0);
-            y_max = y_min = points.values[0](1);
-            for (auto pt : points.values)
-            {
-                x_min = std::min(x_min, pt(0));
-                x_max = std::max(x_max, pt(0));
-                y_min = std::min(y_min, pt(1));
-                y_max = std::max(y_max, pt(1));
+            x_max = x_min = points.values[0].x();
+            y_max = y_min = points.values[0].y();
+            for (auto pt : points.values) {
+                x_min = std::min(x_min, pt.x());
+                x_max = std::max(x_max, pt.x());
+                y_min = std::min(y_min, pt.y());
+                y_max = std::max(y_max, pt.y());
             }
 
             m_type          = Type::Rectangular;
@@ -55,8 +54,7 @@ BedShape::BedShape(const ConfigOptionPoints& points)
         auto center = polygon.bounding_box().center();
         std::vector<double> vertex_distances;
         double avg_dist = 0;
-        for (auto pt : polygon.points)
-        {
+        for (auto pt : polygon.points) {
             double distance = (pt - center).cast<double>().norm();
             vertex_distances.push_back(distance);
             avg_dist += distance;
@@ -64,8 +62,7 @@ BedShape::BedShape(const ConfigOptionPoints& points)
 
         avg_dist /= vertex_distances.size();
         bool defined_value = true;
-        for (auto el : vertex_distances)
-        {
+        for (auto el : vertex_distances) {
             if (abs(el - avg_dist) > 10 * SCALED_EPSILON)
                 defined_value = false;
             break;
@@ -188,7 +185,7 @@ void BedShapeDialog::build_dialog(const ConfigOptionPoints& default_pt, const Co
 	SetMinSize(GetSize());
 	main_sizer->SetSizeHints(this);
 
-    this->Bind(wxEVT_CLOSE_WINDOW, ([this](wxCloseEvent& evt) {
+    Bind(wxEVT_CLOSE_WINDOW, ([this](wxCloseEvent& evt) {
         EndModal(wxID_CANCEL);
     }));
 }
@@ -218,7 +215,7 @@ void BedShapePanel::build_panel(const ConfigOptionPoints& default_pt, const Conf
     m_custom_texture = custom_texture.value.empty() ? NONE : custom_texture.value;
     m_custom_model = custom_model.value.empty() ? NONE : custom_model.value;
 
-    auto sbsizer = new wxStaticBoxSizer(wxVERTICAL, this, _(L("Shape")));
+    auto sbsizer = new wxStaticBoxSizer(wxVERTICAL, this, _L("Shape"));
     sbsizer->GetStaticBox()->SetFont(wxGetApp().bold_font());
 
 	// shape options
@@ -288,7 +285,7 @@ void BedShapePanel::build_panel(const ConfigOptionPoints& default_pt, const Conf
 ConfigOptionsGroupShp BedShapePanel::init_shape_options_page(const wxString& title)
 {
     wxPanel* panel = new wxPanel(m_shape_options_book);
-    ConfigOptionsGroupShp optgroup = std::make_shared<ConfigOptionsGroup>(panel, _(L("Settings")));
+    ConfigOptionsGroupShp optgroup = std::make_shared<ConfigOptionsGroup>(panel, _L("Settings"));
 
     optgroup->label_width = 10;
     optgroup->m_on_change = [this](t_config_option_key opt_key, boost::any value) {
@@ -311,7 +308,7 @@ void BedShapePanel::activate_options_page(ConfigOptionsGroupShp options_group)
 wxPanel* BedShapePanel::init_texture_panel()
 {
     wxPanel* panel = new wxPanel(this);
-    ConfigOptionsGroupShp optgroup = std::make_shared<ConfigOptionsGroup>(panel, _(L("Texture")));
+    ConfigOptionsGroupShp optgroup = std::make_shared<ConfigOptionsGroup>(panel, _L("Texture"));
 
     optgroup->label_width = 10;
     optgroup->m_on_change = [this](t_config_option_key opt_key, boost::any value) {
@@ -321,7 +318,7 @@ wxPanel* BedShapePanel::init_texture_panel()
     Line line{ "", "" };
     line.full_width = 1;
     line.widget = [this](wxWindow* parent) {
-        wxButton* load_btn = new wxButton(parent, wxID_ANY, _(L("Load...")));
+        wxButton* load_btn = new wxButton(parent, wxID_ANY, _L("Load..."));
         wxSizer* load_sizer = new wxBoxSizer(wxHORIZONTAL);
         load_sizer->Add(load_btn, 1, wxEXPAND);
 
@@ -329,7 +326,7 @@ wxPanel* BedShapePanel::init_texture_panel()
         wxSizer* filename_sizer = new wxBoxSizer(wxHORIZONTAL);
         filename_sizer->Add(filename_lbl, 1, wxEXPAND);
 
-        wxButton* remove_btn = new wxButton(parent, wxID_ANY, _(L("Remove")));
+        wxButton* remove_btn = new wxButton(parent, wxID_ANY, _L("Remove"));
         wxSizer* remove_sizer = new wxBoxSizer(wxHORIZONTAL);
         remove_sizer->Add(remove_btn, 1, wxEXPAND);
 
@@ -353,22 +350,20 @@ wxPanel* BedShapePanel::init_texture_panel()
             {
                 e.SetText(_(boost::filesystem::path(m_custom_texture).filename().string()));
                 wxStaticText* lbl = dynamic_cast<wxStaticText*>(e.GetEventObject());
-                if (lbl != nullptr)
-                {
+                if (lbl != nullptr) {
                     bool exists = (m_custom_texture == NONE) || boost::filesystem::exists(m_custom_texture);
                     lbl->SetForegroundColour(exists ? wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT) : wxColor(*wxRED));
 
                     wxString tooltip_text = "";
-                    if (m_custom_texture != NONE)
-                    {
+                    if (m_custom_texture != NONE) {
                         if (!exists)
-                            tooltip_text += _(L("Not found:")) + " ";
+                            tooltip_text += _L("Not found:") + " ";
 
                         tooltip_text += _(m_custom_texture);
                     }
 
                     wxToolTip* tooltip = lbl->GetToolTip();
-                    if ((tooltip == nullptr) || (tooltip->GetTip() != tooltip_text))
+                    if (tooltip == nullptr || tooltip->GetTip() != tooltip_text)
                         lbl->SetToolTip(tooltip_text);
                 }
             }));
@@ -391,7 +386,7 @@ wxPanel* BedShapePanel::init_texture_panel()
 wxPanel* BedShapePanel::init_model_panel()
 {
     wxPanel* panel = new wxPanel(this);
-    ConfigOptionsGroupShp optgroup = std::make_shared<ConfigOptionsGroup>(panel, _(L("Model")));
+    ConfigOptionsGroupShp optgroup = std::make_shared<ConfigOptionsGroup>(panel, _L("Model"));
 
     optgroup->label_width = 10;
     optgroup->m_on_change = [this](t_config_option_key opt_key, boost::any value) {
@@ -401,7 +396,7 @@ wxPanel* BedShapePanel::init_model_panel()
     Line line{ "", "" };
     line.full_width = 1;
     line.widget = [this](wxWindow* parent) {
-        wxButton* load_btn = new wxButton(parent, wxID_ANY, _(L("Load...")));
+        wxButton* load_btn = new wxButton(parent, wxID_ANY, _L("Load..."));
         wxSizer* load_sizer = new wxBoxSizer(wxHORIZONTAL);
         load_sizer->Add(load_btn, 1, wxEXPAND);
 
@@ -409,7 +404,7 @@ wxPanel* BedShapePanel::init_model_panel()
         wxSizer* filename_sizer = new wxBoxSizer(wxHORIZONTAL);
         filename_sizer->Add(filename_lbl, 1, wxEXPAND);
 
-        wxButton* remove_btn = new wxButton(parent, wxID_ANY, _(L("Remove")));
+        wxButton* remove_btn = new wxButton(parent, wxID_ANY, _L("Remove"));
         wxSizer* remove_sizer = new wxBoxSizer(wxHORIZONTAL);
         remove_sizer->Add(remove_btn, 1, wxEXPAND);
 
@@ -433,22 +428,20 @@ wxPanel* BedShapePanel::init_model_panel()
             {
                 e.SetText(_(boost::filesystem::path(m_custom_model).filename().string()));
                 wxStaticText* lbl = dynamic_cast<wxStaticText*>(e.GetEventObject());
-                if (lbl != nullptr)
-                {
+                if (lbl != nullptr) {
                     bool exists = (m_custom_model == NONE) || boost::filesystem::exists(m_custom_model);
                     lbl->SetForegroundColour(exists ? wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT) : wxColor(*wxRED));
 
                     wxString tooltip_text = "";
-                    if (m_custom_model != NONE)
-                    {
+                    if (m_custom_model != NONE) {
                         if (!exists)
-                            tooltip_text += _(L("Not found:")) + " ";
+                            tooltip_text += _L("Not found:") + " ";
 
                         tooltip_text += _(m_custom_model);
                     }
 
                     wxToolTip* tooltip = lbl->GetToolTip();
-                    if ((tooltip == nullptr) || (tooltip->GetTip() != tooltip_text))
+                    if (tooltip == nullptr || tooltip->GetTip() != tooltip_text)
                         lbl->SetToolTip(tooltip_text);
                 }
             }));
@@ -559,14 +552,13 @@ void BedShapePanel::update_shape()
 // Loads an stl file, projects it to the XY plane and calculates a polygon.
 void BedShapePanel::load_stl()
 {
-    wxFileDialog dialog(this, _(L("Choose an STL file to import bed shape from:")), "", "", file_wildcards(FT_STL), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+    wxFileDialog dialog(this, _L("Choose an STL file to import bed shape from:"), "", "", file_wildcards(FT_STL), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
     if (dialog.ShowModal() != wxID_OK)
         return;
 
     std::string file_name = dialog.GetPath().ToUTF8().data();
-    if (!boost::algorithm::iends_with(file_name, ".stl"))
-    {
-        show_error(this, _(L("Invalid file format.")));
+    if (!boost::algorithm::iends_with(file_name, ".stl")) {
+        show_error(this, _L("Invalid file format."));
         return;
     }
 
@@ -577,7 +569,7 @@ void BedShapePanel::load_stl()
         model = Model::read_from_file(file_name);
 	}
 	catch (std::exception &) {
-        show_error(this, _(L("Error! Invalid model")));
+        show_error(this, _L("Error! Invalid model"));
         return;
     }
 
@@ -585,11 +577,11 @@ void BedShapePanel::load_stl()
 	auto expolygons = mesh.horizontal_projection();
 
 	if (expolygons.size() == 0) {
-		show_error(this, _(L("The selected file contains no geometry.")));
+		show_error(this, _L("The selected file contains no geometry."));
 		return;
 	}
 	if (expolygons.size() > 1) {
-		show_error(this, _(L("The selected file contains several disjoint areas. This is not supported.")));
+		show_error(this, _L("The selected file contains several disjoint areas. This is not supported."));
 		return;
 	}
 
@@ -604,7 +596,7 @@ void BedShapePanel::load_stl()
 
 void BedShapePanel::load_texture()
 {
-    wxFileDialog dialog(this, _(L("Choose a file to import bed texture from (PNG/SVG):")), "", "",
+    wxFileDialog dialog(this, _L("Choose a file to import bed texture from (PNG/SVG):"), "", "",
         file_wildcards(FT_TEX), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 
     if (dialog.ShowModal() != wxID_OK)
@@ -613,9 +605,8 @@ void BedShapePanel::load_texture()
     m_custom_texture = NONE;
 
     std::string file_name = dialog.GetPath().ToUTF8().data();
-    if (!boost::algorithm::iends_with(file_name, ".png") && !boost::algorithm::iends_with(file_name, ".svg"))
-    {
-        show_error(this, _(L("Invalid file format.")));
+    if (!boost::algorithm::iends_with(file_name, ".png") && !boost::algorithm::iends_with(file_name, ".svg")) {
+        show_error(this, _L("Invalid file format."));
         return;
     }
 
@@ -627,7 +618,7 @@ void BedShapePanel::load_texture()
 
 void BedShapePanel::load_model()
 {
-    wxFileDialog dialog(this, _(L("Choose an STL file to import bed model from:")), "", "",
+    wxFileDialog dialog(this, _L("Choose an STL file to import bed model from:"), "", "",
         file_wildcards(FT_STL), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
 
     if (dialog.ShowModal() != wxID_OK)
@@ -636,9 +627,8 @@ void BedShapePanel::load_model()
     m_custom_model = NONE;
 
     std::string file_name = dialog.GetPath().ToUTF8().data();
-    if (!boost::algorithm::iends_with(file_name, ".stl"))
-    {
-        show_error(this, _(L("Invalid file format.")));
+    if (!boost::algorithm::iends_with(file_name, ".stl")) {
+        show_error(this, _L("Invalid file format."));
         return;
     }
 
