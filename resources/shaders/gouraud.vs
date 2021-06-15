@@ -48,14 +48,19 @@ struct ProjectedTexture
     BoundingBox box;
 };
 
+struct ClippingPlane
+{
+    bool active;
+    // Clipping plane, x = min z, y = max z. Used by the FFF and SLA previews to clip with a top / bottom plane.
+    vec2 z_range;
+    // Clipping plane - general orientation. Used by the SLA gizmo.
+    vec4 plane;
+};
+
 uniform PrintBoxDetection print_box;
 uniform SlopeDetection slope;
 uniform ProjectedTexture proj_texture;
-
-// Clipping plane, x = min z, y = max z. Used by the FFF and SLA previews to clip with a top / bottom plane.
-uniform vec2 z_range;
-// Clipping plane - general orientation. Used by the SLA gizmo.
-uniform vec4 clipping_plane;
+uniform ClippingPlane clipping_plane;
 
 // x = diffuse, y = specular;
 varying vec2 intensity;
@@ -154,8 +159,10 @@ void main()
 	world_normal_z = slope.active ? (normalize(slope.volume_world_normal_matrix * gl_Normal)).z : 0.0;
 
     gl_Position = ftransform();
+    
     // Fill in the scalars for fragment shader clipping. Fragments with any of these components lower than zero are discarded.
-    clipping_planes_dots = vec3(dot(world_pos, clipping_plane), world_pos.z - z_range.x, z_range.y - world_pos.z);
+    if (clipping_plane.active)
+        clipping_planes_dots = vec3(dot(world_pos, clipping_plane.plane), world_pos.z - clipping_plane.z_range.x, clipping_plane.z_range.y - world_pos.z);
     
 //    tex_coords = proj_texture.active ? cylindrical_uv(gl_Vertex.xyz, gl_Normal) : vec2(0.0);
     tex_coords = proj_texture.active ? spherical_uv(gl_Vertex.xyz) : vec2(0.0);

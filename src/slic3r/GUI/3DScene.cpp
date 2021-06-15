@@ -830,8 +830,9 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
  
     shader->set_uniform("print_box.min", m_print_box_min, 3);
     shader->set_uniform("print_box.max", m_print_box_max, 3);
-    shader->set_uniform("z_range", m_z_range, 2);
-    shader->set_uniform("clipping_plane", m_clipping_plane, 4);
+    shader->set_uniform("clipping_plane.active", true);
+    shader->set_uniform("clipping_plane.z_range", m_z_range, 2);
+    shader->set_uniform("clipping_plane.plane", m_clipping_plane, 4);
     shader->set_uniform("slope.normal_z", m_slope.normal_z);
 
 #if ENABLE_ENVIRONMENT_MAP

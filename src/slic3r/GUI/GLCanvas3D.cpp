@@ -4153,7 +4153,11 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
 
     camera.apply_projection(box, near_z, far_z);
 
+#if ENABLE_TEXTURED_VOLUMES
+    GLShaderProgram* shader = wxGetApp().get_shader("gouraud");
+#else
     GLShaderProgram* shader = wxGetApp().get_shader("gouraud_light");
+#endif // ENABLE_TEXTURED_VOLUMES
     if (shader == nullptr)
         return;
 
@@ -4165,14 +4169,45 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
 
     shader->start_using();
     shader->set_uniform("emission_factor", 0.0);
+#if ENABLE_TEXTURED_VOLUMES
+#if ENABLE_ALLOW_NEGATIVE_Z
+    shader->set_uniform("sinking", false);
+#endif // ENABLE_ALLOW_NEGATIVE_Z
+    shader->set_uniform("print_box.active", false);
+    shader->set_uniform("slope.active", false);
+    shader->set_uniform("clipping_plane.active", false);
+#endif // ENABLE_TEXTURED_VOLUMES
 
     for (GLVolume* vol : visible_volumes) {
         shader->set_uniform("uniform_color", (vol->printable && !vol->is_outside) ? orange : gray);
+#if ENABLE_TEXTURED_VOLUMES
+        shader->set_uniform("print_box.volume_world_matrix", vol->world_matrix());
+        shader->set_uniform("proj_texture.active", vol->texture_id >= 0 ? 1 : 0);
+        unsigned int tex_id = 0;
+        if (vol->texture_id >= 0) {
+            std::shared_ptr<GUI::GLIdeaMakerTexture> texture = m_volumes.get_texture(vol->texture_id);
+            if (texture != nullptr) {
+                tex_id = texture->get_id();
+                if (tex_id > 0) {
+                    shader->set_uniform("proj_texture.box.center", vol->bounding_box().center());
+                    shader->set_uniform("proj_texture.box.sizes", vol->bounding_box().size());
+                    shader->set_uniform("projection_tex", 0);
+                    glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
+                }
+            }
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
+
         // the volume may have been deactivated by an active gizmo
         bool is_active = vol->is_active;
         vol->is_active = true;
         vol->render();
         vol->is_active = is_active;
+
+#if ENABLE_TEXTURED_VOLUMES
+        if (tex_id > 0)
+            glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
+#endif // ENABLE_TEXTURED_VOLUMES
     }
 
     shader->stop_using();

@@ -27,11 +27,21 @@ struct ProjectedTexture
     BoundingBox box;
 };
 
+struct ClippingPlane
+{
+    bool active;
+    // Clipping plane, x = min z, y = max z. Used by the FFF and SLA previews to clip with a top / bottom plane.
+    vec2 z_range;
+    // Clipping plane - general orientation. Used by the SLA gizmo.
+    vec4 plane;
+};
+
 uniform vec4 uniform_color;
 uniform SlopeDetection slope;
 uniform ProjectedTexture proj_texture;
 uniform sampler2D projection_tex;
 uniform bool sinking;
+uniform ClippingPlane clipping_plane;
 
 #ifdef ENABLE_ENVIRONMENT_MAP
     uniform bool use_environment_tex;
@@ -60,7 +70,7 @@ vec3 sinking_color(vec3 color)
 
 void main()
 {
-    if (any(lessThan(clipping_planes_dots, ZERO)))
+    if (clipping_plane.active && any(lessThan(clipping_planes_dots, ZERO)))
         discard;
     vec3 color = uniform_color.rgb;
     float alpha = uniform_color.a;
