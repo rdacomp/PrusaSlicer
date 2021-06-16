@@ -15,6 +15,7 @@
 #include "GUI_Utils.hpp"
 #include "Plater.hpp"
 #include "../Utils/MacDarkMode.hpp"
+#include "BitmapComboBox.hpp"
 
 #ifndef __linux__
 // msw_menuitem_bitmaps is used for MSW and OSX
@@ -499,7 +500,7 @@ std::vector<wxBitmap*> get_extruder_color_icons(bool thin_icon/* = false*/)
 }
 
 
-void apply_extruder_selector(wxBitmapComboBox** ctrl, 
+void apply_extruder_selector(Slic3r::GUI::BitmapComboBox** ctrl, 
                              wxWindow* parent,
                              const std::string& first_item/* = ""*/, 
                              wxPoint pos/* = wxDefaultPosition*/,
@@ -508,9 +509,10 @@ void apply_extruder_selector(wxBitmapComboBox** ctrl,
 {
     std::vector<wxBitmap*> icons = get_extruder_color_icons(use_thin_icon);
 
-    if (!*ctrl)
-        *ctrl = new wxBitmapComboBox(parent, wxID_ANY, wxEmptyString, pos, size,
-            0, nullptr, wxCB_READONLY);
+    if (!*ctrl) {
+        *ctrl = new Slic3r::GUI::BitmapComboBox(parent, wxID_ANY, wxEmptyString, pos, size, 0, nullptr, wxCB_READONLY);
+        Slic3r::GUI::wxGetApp().UpdateDarkUI(*ctrl);
+    }
     else
     {
         (*ctrl)->SetPosition(pos);
@@ -641,7 +643,6 @@ void ModeButton::Init(const wxString &mode)
     m_tt_selected = Slic3r::GUI::from_u8((boost::format(_utf8(L("Current mode is %s"))) % mode_str).str());
 
     SetBitmapMargins(3, 0);
-    Slic3r::GUI::wxGetApp().UpdateDarkUI(this, true);
 
     //button events
     Bind(wxEVT_BUTTON,          &ModeButton::OnButton, this);
@@ -671,9 +672,7 @@ void ModeButton::focus_button(const bool focus)
                              Slic3r::GUI::wxGetApp().normal_font();
 
     SetFont(new_font);
-#ifdef _WIN32
-    Slic3r::GUI::wxGetApp().UpdateDarkUI(this, true, true);
-#else
+#ifndef _WIN32
     SetForegroundColour(wxSystemSettings::GetColour(focus ? wxSYS_COLOUR_BTNTEXT : 
 #if defined (__linux__) && defined (__WXGTK3__)
         wxSYS_COLOUR_GRAYTEXT
@@ -683,7 +682,7 @@ void ModeButton::focus_button(const bool focus)
         wxSYS_COLOUR_BTNSHADOW
 #endif    
     ));
-#endif /* _WIN32 */
+#endif /* no _WIN32 */
 
     Refresh();
     Update();

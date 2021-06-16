@@ -54,7 +54,13 @@ wxBitmap create_scaled_bitmap(const std::string& bmp_name, wxWindow *win = nullp
     const int px_cnt = 16, const bool grayscale = false, const bool menu_bitmap = false);
 
 std::vector<wxBitmap*> get_extruder_color_icons(bool thin_icon = false);
-void apply_extruder_selector(wxBitmapComboBox** ctrl,
+
+namespace Slic3r {
+namespace GUI {
+class BitmapComboBox;
+}
+}
+void apply_extruder_selector(Slic3r::GUI::BitmapComboBox** ctrl,
                              wxWindow* parent,
                              const std::string& first_item = "",
                              wxPoint pos = wxDefaultPosition,

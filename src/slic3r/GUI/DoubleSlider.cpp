@@ -2138,6 +2138,8 @@ static std::string get_new_color(const std::string& color)
  * */
 static void upgrade_text_entry_dialog(wxTextEntryDialog* dlg, double min = -1.0, double max = -1.0)
 {
+    GUI::wxGetApp().UpdateDlgDarkUI(dlg);
+
     // detect TextCtrl and OK button
     wxTextCtrl* textctrl {nullptr};
     wxWindowList& dlg_items = dlg->GetChildren();

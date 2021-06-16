@@ -122,6 +122,7 @@ private:
     wxColour        m_color_window_default;
 #ifdef _WIN32
     wxColour        m_color_highlight_label_default;
+    wxColour        m_color_hovered_btn_label;
     wxColour        m_color_highlight_default;
     //bool            m_force_sys_colors_update { false }; // #ysDarkMSW - Use to force dark colors for SystemLightMode
 #endif

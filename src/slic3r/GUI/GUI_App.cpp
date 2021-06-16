@@ -1043,6 +1043,7 @@ void GUI_App::init_label_colours()
     m_color_label_default           = is_dark_mode ? wxColour(250, 250, 250): wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
     m_color_highlight_label_default = is_dark_mode ? wxColour(230, 230, 230): wxSystemSettings::GetColour(/*wxSYS_COLOUR_HIGHLIGHTTEXT*/wxSYS_COLOUR_WINDOWTEXT);
     m_color_highlight_default       = is_dark_mode ? wxColour(78, 78, 78)   : wxSystemSettings::GetColour(wxSYS_COLOUR_3DLIGHT);
+    m_color_hovered_btn_label       = is_dark_mode ? wxColour(253, 111, 40) : wxColour(252, 77, 1);
 #else
     m_color_label_default = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
 #endif
@@ -1077,6 +1078,17 @@ void GUI_App::UpdateDarkUI(wxWindow* window, bool highlited/* = false*/, bool ju
         if (!(btn->GetWindowStyle() & wxNO_BORDER)) {
             btn->SetWindowStyle(btn->GetWindowStyle() | wxNO_BORDER);
             highlited = true;
+        }
+        // hovering for buttons
+        {
+            auto focus_button = [this, btn](const bool focus) {
+                btn->SetForegroundColour(focus ? m_color_hovered_btn_label : m_color_label_default);
+                btn->Refresh();
+                btn->Update();
+            };
+
+            btn->Bind(wxEVT_ENTER_WINDOW, [focus_button](wxMouseEvent& event) { focus_button(true); event.Skip(); });
+            btn->Bind(wxEVT_LEAVE_WINDOW, [focus_button](wxMouseEvent& event) { focus_button(false); event.Skip(); });
         }
     }
     else if (dark_mode()) {

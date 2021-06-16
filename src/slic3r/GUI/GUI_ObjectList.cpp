@@ -7,6 +7,7 @@
 #include "GUI_App.hpp"
 #include "I18N.hpp"
 #include "Plater.hpp"
+#include "BitmapComboBox.hpp"
 #if ENABLE_PROJECT_DIRTY_STATE
 #include "MainFrame.hpp"
 #endif // ENABLE_PROJECT_DIRTY_STATE
