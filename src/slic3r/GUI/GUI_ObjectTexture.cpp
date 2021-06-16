@@ -35,7 +35,7 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
 
     m_og->activate();
     m_og->sizer->Clear(true);
-    m_og->sizer->Add(m_main_sizer, 1, wxEXPAND | wxALL, wxOSX ? 0 : 5);
+    m_og->sizer->Add(m_main_sizer, 0, wxEXPAND | wxALL, wxOSX ? 0 : 5);
 }
 
 void ObjectTexture::msw_rescale()
@@ -163,7 +163,7 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
 
             const auto& [obj_idx, model_object] = get_model_object();
             if (model_object != nullptr)
-                model_object->texture.clear();
+                model_object->texture.reset();
 
             update();
             wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
@@ -185,9 +185,11 @@ wxBoxSizer* ObjectTexture::init_metadata_sizer()
 
     wxBoxSizer* map_sizer = init_map_sizer();
     wxBoxSizer* wrap_sizer = init_wrap_sizer();
+    wxBoxSizer* repeat_sizer = init_repeat_sizer();
 
     sizer->Add(map_sizer, 0, wxEXPAND);
     sizer->Add(wrap_sizer, 0, wxEXPAND);
+    sizer->Add(repeat_sizer, 0, wxEXPAND);
 
     return sizer;
 }
@@ -252,6 +254,48 @@ wxBoxSizer* ObjectTexture::init_wrap_sizer()
     return sizer;
 }
 
+wxBoxSizer* ObjectTexture::init_repeat_sizer()
+{
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+
+    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Repeat"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+
+    m_repeat_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 0.1, 1.0);
+    m_repeat_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 0.1, 1.0);
+
+    m_repeat_u_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
+        wxGetApp().plater()->take_snapshot(_L("Changed texture repeat u"));
+
+        const auto& [obj_idx, model_object] = get_model_object();
+        if (model_object != nullptr)
+            model_object->texture.set_repeat_u(static_cast<float>(m_repeat_u_spin->GetValue()));
+
+        update();
+        wxGetApp().obj_list()->changed_object(obj_idx);
+        });
+
+    m_repeat_v_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
+        wxGetApp().plater()->take_snapshot(_L("Changed texture repeat v"));
+
+        const auto& [obj_idx, model_object] = get_model_object();
+        if (model_object != nullptr)
+            model_object->texture.set_repeat_v(static_cast<float>(m_repeat_v_spin->GetValue()));
+
+        update();
+        wxGetApp().obj_list()->changed_object(obj_idx);
+        });
+
+    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->AddSpacer(5);
+    sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("U")), 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_repeat_u_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->AddSpacer(5);
+    sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("V")), 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_repeat_v_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+
+    return sizer;
+}
+
 void ObjectTexture::update()
 {
     const std::pair<int, ModelObject*>& model_object = get_model_object();
@@ -269,6 +313,8 @@ void ObjectTexture::update()
             // update data widgets
             m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.get_mapping()));
             m_wrap_choices->SetSelection(static_cast<int>(model_object.second->texture.get_wrapping()));
+            m_repeat_u_spin->SetValue(static_cast<double>(model_object.second->texture.get_repeat_u()));
+            m_repeat_v_spin->SetValue(static_cast<double>(model_object.second->texture.get_repeat_v()));
             m_parent->Layout();
         }
     }

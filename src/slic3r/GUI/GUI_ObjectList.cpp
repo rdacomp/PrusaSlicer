@@ -1689,7 +1689,7 @@ void ObjectList::del_layers_from_object(const int obj_idx)
 #if ENABLE_TEXTURED_VOLUMES
 void ObjectList::del_texture_from_object(const int obj_idx)
 {
-    object(obj_idx)->texture.clear();
+    object(obj_idx)->texture.reset();
     changed_object(obj_idx);
 }
 #endif // ENABLE_TEXTURED_VOLUMES

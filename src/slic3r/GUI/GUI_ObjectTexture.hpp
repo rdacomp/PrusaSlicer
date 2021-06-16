@@ -26,6 +26,8 @@ class ObjectTexture : public OG_Settings
     wxBoxSizer* m_metadata_sizer{ nullptr };
     wxChoice* m_map_choices{ nullptr };
     wxChoice* m_wrap_choices{ nullptr };
+    wxSpinCtrlDouble* m_repeat_u_spin{ nullptr };
+    wxSpinCtrlDouble* m_repeat_v_spin{ nullptr };
 
 public:
     ObjectTexture(wxWindow* parent);
@@ -40,6 +42,7 @@ private:
     wxBoxSizer* init_metadata_sizer();
     wxBoxSizer* init_map_sizer();
     wxBoxSizer* init_wrap_sizer();
+    wxBoxSizer* init_repeat_sizer();
 
     void update();
     std::pair<int, ModelObject*> get_model_object();

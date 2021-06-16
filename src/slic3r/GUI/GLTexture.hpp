@@ -144,8 +144,6 @@ namespace GUI {
     {
         TextureMetadata m_metadata;
 
-        float m_repeat_x{ 1.0f };
-        float m_repeat_y{ 1.0f };
         float m_rotation_z{ 0.0f };
         float m_translation_x{ 0.0f };
         float m_translation_y{ 0.0f };
@@ -158,10 +156,8 @@ namespace GUI {
 
     protected:
         virtual void on_reset() override {
-            m_metadata = TextureMetadata();
+            m_metadata.reset();
 
-            m_repeat_x = 1.0f;
-            m_repeat_y = 1.0f;
             m_rotation_z = 0.0f;
             m_translation_x = 0.0f;
             m_translation_y = 0.0f;

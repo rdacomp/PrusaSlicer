@@ -251,6 +251,11 @@ private:
     // Type of wrapping
     EWrapping m_wrapping{ EWrapping::Repeat };
 
+    // Repeat factor in u direction
+    float m_repeat_u{ 1.0f };
+    // Repeat factor in v direction
+    float m_repeat_v{ 1.0f };
+
     // Path of texture file
     std::string m_source_path;
 
@@ -260,6 +265,8 @@ public:
     TextureMetadata(const TextureMetadata& rhs)
         : m_mapping(rhs.m_mapping)
         , m_wrapping(rhs.m_wrapping)
+        , m_repeat_u(rhs.m_repeat_u)
+        , m_repeat_v(rhs.m_repeat_v)
         , m_source_path(rhs.m_source_path)
     {
     }
@@ -267,6 +274,8 @@ public:
     TextureMetadata(TextureMetadata&& rhs)
         : m_mapping(std::move(rhs.m_mapping))
         , m_wrapping(std::move(rhs.m_wrapping))
+        , m_repeat_u(std::move(rhs.m_repeat_u))
+        , m_repeat_v(std::move(rhs.m_repeat_v))
         , m_source_path(std::move(rhs.m_source_path))
     {
     }
@@ -274,6 +283,8 @@ public:
     TextureMetadata& operator = (const TextureMetadata& rhs) {
         m_mapping = rhs.m_mapping;
         m_wrapping = rhs.m_wrapping;
+        m_repeat_u = rhs.m_repeat_u;
+        m_repeat_v = rhs.m_repeat_v;
         m_source_path = rhs.m_source_path;
         return *this;
     }
@@ -281,6 +292,8 @@ public:
     TextureMetadata& operator = (TextureMetadata&& rhs) {
         m_mapping = std::move(rhs.m_mapping);
         m_wrapping = std::move(rhs.m_wrapping);
+        m_repeat_u = std::move(rhs.m_repeat_u);
+        m_repeat_v = std::move(rhs.m_repeat_v);
         m_source_path = std::move(rhs.m_source_path);
         return *this;
     }
@@ -289,6 +302,10 @@ public:
         if (m_mapping != rhs.m_mapping)
             return false;
         if (m_wrapping != rhs.m_wrapping)
+            return false;
+        if (m_repeat_u != rhs.m_repeat_u)
+            return false;
+        if (m_repeat_v != rhs.m_repeat_v)
             return false;
         if (m_source_path != rhs.m_source_path)
             return false;
@@ -300,9 +317,11 @@ public:
         return !operator==(rhs);
     }
 
-    void clear() {
+    void reset() {
         m_mapping = EMapping::Cubic;
         m_wrapping = EWrapping::Repeat;
+        m_repeat_u = 1.0f;
+        m_repeat_v = 1.0f;
         m_source_path.clear();
     }
 
@@ -312,11 +331,17 @@ public:
     EWrapping get_wrapping() const { return m_wrapping; }
     void set_wrapping(EWrapping wrapping) { m_wrapping = wrapping; }
 
+    float get_repeat_u() const { return m_repeat_u; }
+    void set_repeat_u(float u) { m_repeat_u = u; }
+
+    float get_repeat_v() const { return m_repeat_v; }
+    void set_repeat_v(float v) { m_repeat_v = v; }
+
     const std::string& get_source_path() const { return m_source_path; }
     void set_source_path(const std::string& path) { m_source_path = path; }
 
     template<class Archive> void serialize(Archive& ar) {
-        ar(m_mapping, m_wrapping, m_source_path);
+        ar(m_mapping, m_wrapping, m_repeat_u, m_repeat_v, m_source_path);
     }
 };
 #endif // ENABLE_TEXTURED_VOLUMES

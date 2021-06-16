@@ -792,9 +792,9 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
         if (border_color.has_value())
             m_border_color = border_color.value();
         if (repeat_x.has_value())
-            m_repeat_x = repeat_x.value();
+            m_metadata.set_repeat_u(repeat_x.value());
         if (repeat_y.has_value())
-            m_repeat_y = repeat_y.value();
+            m_metadata.set_repeat_v(repeat_y.value());
         if (rotation_z.has_value())
             m_rotation_z = rotation_z.value();
         if (translation_x.has_value())
