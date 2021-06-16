@@ -24,6 +24,8 @@ struct BoundingBox
 struct ProjectedTexture
 {
     bool active;
+    // 0 = cubic, 1 = cylindrical, 2 = spherical
+    int projection;
     BoundingBox box;
 };
 

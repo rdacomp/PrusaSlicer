@@ -45,6 +45,8 @@ struct BoundingBox
 struct ProjectedTexture
 {
     bool active;
+    // 0 = cubic, 1 = cylindrical, 2 = spherical
+    int projection;
     BoundingBox box;
 };
 
@@ -104,12 +106,9 @@ float azimuth(vec2 dir)
     return ret;
 }
 
-vec2 spherical_uv(vec3 position)
+vec2 cubic_uv(vec3 position)
 {
     vec2 ret = vec2(0.0, 0.0);
-    vec3 dir = position - proj_texture.box.center;
-    ret.x = azimuth(dir.xy);
-    ret.y = atan(length(dir.xy), -dir.z) / PI; // [0..1]
     return ret;
 }
 
@@ -128,6 +127,15 @@ vec2 cylindrical_uv(vec3 position, vec3 normal)
         float min_z = proj_texture.box.center.z - 0.5 * proj_texture.box.sizes.z;
         ret.y = (position.z - min_z) / proj_texture.box.sizes.z; // [0..1]
     }
+    return ret;
+}
+
+vec2 spherical_uv(vec3 position)
+{
+    vec2 ret = vec2(0.0, 0.0);
+    vec3 dir = position - proj_texture.box.center;
+    ret.x = azimuth(dir.xy);
+    ret.y = atan(length(dir.xy), -dir.z) / PI; // [0..1]
     return ret;
 }
 
@@ -164,6 +172,14 @@ void main()
     if (clipping_plane.active)
         clipping_planes_dots = vec3(dot(world_pos, clipping_plane.plane), world_pos.z - clipping_plane.z_range.x, clipping_plane.z_range.y - world_pos.z);
     
-//    tex_coords = proj_texture.active ? cylindrical_uv(gl_Vertex.xyz, gl_Normal) : vec2(0.0);
-    tex_coords = proj_texture.active ? spherical_uv(gl_Vertex.xyz) : vec2(0.0);
+    if (proj_texture.active) {
+        if (proj_texture.projection == 1)
+            tex_coords = cylindrical_uv(gl_Vertex.xyz, gl_Normal);
+        else if (proj_texture.projection == 2)
+            tex_coords = spherical_uv(gl_Vertex.xyz);
+        else
+            tex_coords = cubic_uv(gl_Vertex.xyz);
+    }
+    else
+        vec2(0.0);
 }

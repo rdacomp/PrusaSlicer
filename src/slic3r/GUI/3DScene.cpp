@@ -860,15 +860,18 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
-        shader->set_uniform("proj_texture.active", volume.first->texture_id >= 0 ? 1 : 0);
+        bool has_texture = volume.first->texture_id >= 0;
+        shader->set_uniform("proj_texture.active", has_texture ? 1 : 0);
         unsigned int tex_id = 0;
-        if (volume.first->texture_id >= 0) {
+        if (has_texture) {
             std::shared_ptr<GUI::GLIdeaMakerTexture> texture = m_textures_manager.get_texture(volume.first->texture_id);
             if (texture != nullptr) {
                 tex_id = texture->get_id();
                 if (tex_id > 0) {
                     shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
                     shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
+                    const ModelObject* model_object = GUI::wxGetApp().model().objects[volume.first->object_idx()];
+                    shader->set_uniform("proj_texture.projection", static_cast<int>(model_object->texture.get_mapping()));
                     shader->set_uniform("projection_tex", 0);
 #if ENABLE_ENVIRONMENT_MAP
                     glsafe(::glActiveTexture(GL_TEXTURE0));

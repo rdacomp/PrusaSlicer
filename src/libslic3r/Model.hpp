@@ -226,6 +226,83 @@ enum class ModelVolumeType : int {
     SUPPORT_ENFORCER,
 };
 
+#if ENABLE_TEXTURED_VOLUMES
+class ModelObjectTexture
+{
+public:
+    enum class EMapping
+    {
+        Cubic,
+        Cylindrical,
+        Spherical
+    };
+
+private:
+    // Type of mapping
+    EMapping m_mapping{ EMapping::Cubic };
+
+    // Path of texture file
+    std::string m_source_path;
+
+public:
+    ModelObjectTexture() = default;
+
+    ModelObjectTexture(const ModelObjectTexture& rhs)
+        : m_mapping(rhs.m_mapping)
+        , m_source_path(rhs.m_source_path)
+    {
+        int a = 0;
+    }
+
+    ModelObjectTexture(ModelObjectTexture&& rhs)
+        : m_mapping(std::move(rhs.m_mapping))
+        , m_source_path(std::move(rhs.m_source_path))
+    {
+        int a = 0;
+    }
+
+    ModelObjectTexture& operator = (const ModelObjectTexture& rhs) {
+        m_mapping = rhs.m_mapping;
+        m_source_path = rhs.m_source_path;
+        return *this;
+    }
+
+    ModelObjectTexture& operator = (ModelObjectTexture&& rhs) {
+        m_mapping = std::move(rhs.m_mapping);
+        m_source_path = std::move(rhs.m_source_path);
+        return *this;
+    }
+
+    bool operator == (const ModelObjectTexture& rhs) const {
+        if (m_mapping != rhs.m_mapping)
+            return false;
+        if (m_source_path != rhs.m_source_path)
+            return false;
+
+        return true;
+    }
+
+    bool operator != (const ModelObjectTexture& rhs) const {
+        return !operator==(rhs);
+    }
+
+    void clear() {
+        m_mapping = EMapping::Cubic;
+        m_source_path.clear();
+    }
+
+    EMapping get_mapping() const { return m_mapping; }
+    void set_mapping(EMapping mapping) { m_mapping = mapping; }
+
+    const std::string& get_source_path() const { return m_source_path; }
+    void set_source_path(const std::string& path) { m_source_path = path; }
+
+    template<class Archive> void serialize(Archive& ar) {
+        ar(m_mapping, m_source_path);
+    }
+};
+#endif // ENABLE_TEXTURED_VOLUMES
+
 // A printable object, possibly having multiple print volumes (each with its own set of parameters and materials),
 // and possibly having multiple modifier volumes, each modifier volume with its set of parameters and materials.
 // Each ModelObject may be instantiated mutliple times, each instance having different placement on the print bed,
@@ -251,8 +328,8 @@ public:
     // Whether or not this object is printable
     bool                    printable;
 #if ENABLE_TEXTURED_VOLUMES
-    // Path of texture file
-    std::string             texture;
+    // Texture data
+    ModelObjectTexture      texture;
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // This vector holds position of selected support points for SLA. The data are

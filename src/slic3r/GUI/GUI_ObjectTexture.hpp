@@ -18,9 +18,13 @@ class ObjectTexture : public OG_Settings
     ScalableBitmap m_bmp_delete_disabled;
 
     wxBoxSizer* m_main_sizer{ nullptr };
+
     wxBoxSizer* m_tex_sizer{ nullptr };
     wxTextCtrl* m_tex_string{ nullptr };
     ScalableButton* m_tex_delete_btn{ nullptr };
+
+    wxBoxSizer* m_map_sizer{ nullptr };
+    wxChoice* m_map_choices{ nullptr };
 
 public:
     ObjectTexture(wxWindow* parent);
@@ -31,6 +35,9 @@ public:
     void UpdateAndShow(const bool show) override;
 
 private:
+    wxBoxSizer* init_tex_sizer();
+    wxBoxSizer* init_map_sizer();
+
     void update();
     std::pair<int, ModelObject*> get_model_object();
 };

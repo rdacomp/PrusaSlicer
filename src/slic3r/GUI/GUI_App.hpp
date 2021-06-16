@@ -245,7 +245,7 @@ public:
     ObjectList*          obj_list();
     ObjectLayers*        obj_layers();
 #if ENABLE_TEXTURED_VOLUMES
-    ObjectTexture*      obj_texture();
+    ObjectTexture*       obj_texture();
 #endif // ENABLE_TEXTURED_VOLUMES
     Plater*              plater();
     Model&      		 model();

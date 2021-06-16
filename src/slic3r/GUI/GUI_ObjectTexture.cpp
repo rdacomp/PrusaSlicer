@@ -24,63 +24,12 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
 
     m_main_sizer = new wxBoxSizer(wxVERTICAL);
     
-    m_tex_sizer = new wxBoxSizer(wxHORIZONTAL);
+    m_tex_sizer = init_tex_sizer();
+    m_map_sizer = init_map_sizer();
 
-    wxStaticText* tex_label = new wxStaticText(m_parent, wxID_ANY, _L("Texture"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
-    m_tex_string = new wxTextCtrl(m_parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
-    m_tex_string->Enable(false);
-    wxButton* tex_browse_btn = new wxButton(m_parent, wxID_ANY, _L("Browse..."));
-
-    m_tex_delete_btn = new ScalableButton(m_parent, wxID_ANY, m_bmp_delete);
-    m_tex_delete_btn->SetToolTip(_L("Remove texture"));
-    m_tex_delete_btn->SetBitmapFocus(m_bmp_delete_focus.bmp());
-    m_tex_delete_btn->SetBitmapHover(m_bmp_delete_focus.bmp());
-    m_tex_delete_btn->SetBitmapDisabled_(m_bmp_delete_disabled);
-
-    tex_browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
-        wxFileDialog dialog(m_parent, _L("Choose a texture file:"), "", "", "Texture files (*.texture)|*.texture", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
-        if (dialog.ShowModal() != wxID_OK)
-            return;
-
-        std::string filename = dialog.GetPath().ToUTF8().data();
-        if (!boost::algorithm::iends_with(filename, ".texture"))
-            return;
-
-        wxGetApp().plater()->take_snapshot(_L("Add texture"));
-
-        const auto& [obj_idx, model_object] = get_model_object();
-        if (model_object != nullptr) {
-            model_object->texture = filename;
-        }
-
-        update();
-        wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
-        wxGetApp().obj_list()->changed_object(obj_idx);
-        });
-
-    m_tex_delete_btn->Bind(wxEVT_BUTTON, [this](wxEvent& event) {
-        wxMessageDialog dlg(m_parent, _L("Do you really want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
-        if (dlg.ShowModal() == wxID_YES) {
-
-            wxGetApp().plater()->take_snapshot(_L("Remove texture"));
-
-            const auto& [obj_idx, model_object] = get_model_object();
-            if (model_object != nullptr) {
-                model_object->texture.clear();
-            }
-
-            update();
-            wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
-            wxGetApp().obj_list()->del_texture_item();
-        }
-        });
-
-    m_tex_sizer->Add(tex_label, 0, wxALIGN_CENTER_VERTICAL);
-    m_tex_sizer->Add(m_tex_string, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
-    m_tex_sizer->Add(tex_browse_btn, 0, wxEXPAND | wxALL, 5);
-    m_tex_sizer->Add(m_tex_delete_btn, 0, wxEXPAND | wxALL, 5);
-
-    m_main_sizer->Add(m_tex_sizer, 1, wxEXPAND);
+    m_main_sizer->Add(m_tex_sizer, 0, wxEXPAND);
+    m_main_sizer->Add(m_map_sizer, 0, wxEXPAND);
+    m_main_sizer->Hide(m_map_sizer);
 
     // https://docs.wxwidgets.org/trunk/classwx_property_grid.html
 
@@ -171,14 +120,119 @@ void ObjectTexture::UpdateAndShow(const bool show)
     OG_Settings::UpdateAndShow(show);
 }
 
+wxBoxSizer* ObjectTexture::init_tex_sizer()
+{
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+
+    wxStaticText* tex_label = new wxStaticText(m_parent, wxID_ANY, _L("Texture"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+    m_tex_string = new wxTextCtrl(m_parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
+    m_tex_string->Enable(false);
+    wxButton* tex_browse_btn = new wxButton(m_parent, wxID_ANY, _L("Browse..."));
+
+    m_tex_delete_btn = new ScalableButton(m_parent, wxID_ANY, m_bmp_delete);
+    m_tex_delete_btn->SetToolTip(_L("Remove texture"));
+    m_tex_delete_btn->SetBitmapFocus(m_bmp_delete_focus.bmp());
+    m_tex_delete_btn->SetBitmapHover(m_bmp_delete_focus.bmp());
+    m_tex_delete_btn->SetBitmapDisabled_(m_bmp_delete_disabled);
+
+    tex_browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
+        wxFileDialog dialog(m_parent, _L("Choose a texture file:"), "", "", "Texture files (*.texture)|*.texture", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+        if (dialog.ShowModal() != wxID_OK)
+            return;
+
+        std::string filename = dialog.GetPath().ToUTF8().data();
+        if (!boost::algorithm::iends_with(filename, ".texture"))
+            return;
+
+        wxGetApp().plater()->take_snapshot(_L("Add texture"));
+
+        const auto& [obj_idx, model_object] = get_model_object();
+        if (model_object != nullptr)
+            model_object->texture.set_source_path(filename);
+
+        update();
+        wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
+        wxGetApp().obj_list()->changed_object(obj_idx);
+        });
+
+    m_tex_delete_btn->Bind(wxEVT_BUTTON, [this](wxEvent& event) {
+        wxMessageDialog dlg(m_parent, _L("Do you really want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
+        if (dlg.ShowModal() == wxID_YES) {
+
+            wxGetApp().plater()->take_snapshot(_L("Remove texture"));
+
+            const auto& [obj_idx, model_object] = get_model_object();
+            if (model_object != nullptr)
+                model_object->texture.clear();
+
+            update();
+            wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
+            wxGetApp().obj_list()->del_texture_item();
+        }
+        });
+
+    sizer->Add(tex_label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_tex_string, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->Add(tex_browse_btn, 0, wxEXPAND | wxALL, 5);
+    sizer->Add(m_tex_delete_btn, 0, wxEXPAND | wxALL, 5);
+
+    return sizer;
+}
+
+wxBoxSizer* ObjectTexture::init_map_sizer()
+{
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+
+    wxStaticText* map_label = new wxStaticText(m_parent, wxID_ANY, _L("Mapping type"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+
+    const wxString mappings[] = { _L("Cubic"), _L("Cylindrical"), _L("Spherical") };
+    m_map_choices = new wxChoice(m_parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxArrayString(3, mappings));
+
+    m_map_choices->Bind(wxEVT_CHOICE, [this](wxEvent& event) {
+        int selection = m_map_choices->GetSelection();
+        if (selection == wxNOT_FOUND)
+            return;
+
+            wxGetApp().plater()->take_snapshot(_L("Changed texture mapping"));
+
+            const auto& [obj_idx, model_object] = get_model_object();
+            if (model_object != nullptr)
+                model_object->texture.set_mapping(static_cast<ModelObjectTexture::EMapping>(selection));
+
+            update();
+            wxGetApp().obj_list()->changed_object(obj_idx);
+        });
+
+    sizer->Add(map_label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_map_choices, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+
+    return sizer;
+}
+
 void ObjectTexture::update()
 {
     const std::pair<int, ModelObject*>& model_object = get_model_object();
-    bool has_texture = model_object.second != nullptr && !model_object.second->texture.empty();
+    bool has_texture = model_object.second != nullptr && !model_object.second->texture.get_source_path().empty();
 
-    // update widgets
-    m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object.second->texture).stem().string()) : "");
+    // update texture widgets
+    m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object.second->texture.get_source_path()).stem().string()) : "None");
     m_tex_delete_btn->Enable(has_texture);
+
+    if (has_texture) {
+        if (m_main_sizer->GetItem(m_map_sizer) == nullptr) {
+            m_main_sizer->Add(m_map_sizer, 0, wxEXPAND);
+            m_main_sizer->Show(m_map_sizer);
+            m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.get_mapping()));
+            m_parent->Layout();
+        }
+    }
+    else {
+        if (m_main_sizer->GetItem(m_map_sizer) != nullptr) {
+            m_main_sizer->Hide(m_map_sizer);
+            m_main_sizer->Detach(m_map_sizer);
+            m_parent->Layout();
+        }
+    }
 
     // show/hide icon into object list
     ObjectDataViewModel* objects_model = wxGetApp().obj_list()->GetModel();
@@ -187,6 +241,7 @@ void ObjectTexture::update()
     wxDataViewItem texture_item = objects_model->GetItemByType(selectable_item, itTexture);
     ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(texture_item.GetID());
     node->SetBitmap(has_texture ? create_scaled_bitmap("edit_texture") : wxBitmap());
+
     wxGetApp().obj_list()->Refresh();
 }
 
