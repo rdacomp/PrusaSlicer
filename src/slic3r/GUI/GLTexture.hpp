@@ -143,8 +143,6 @@ namespace GUI {
     class GLIdeaMakerTexture : public GLTexture
     {
         TextureMetadata m_metadata;
-
-        float m_rotation_z{ 0.0f };
         std::string m_imaker_id;
         std::string m_border_color;
         std::string m_version;
@@ -155,8 +153,6 @@ namespace GUI {
     protected:
         virtual void on_reset() override {
             m_metadata.reset();
-
-            m_rotation_z = 0.0f;
             m_imaker_id.clear();
             m_border_color.clear();
             m_version.clear();

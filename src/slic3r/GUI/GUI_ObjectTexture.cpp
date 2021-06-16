@@ -186,11 +186,13 @@ wxBoxSizer* ObjectTexture::init_metadata_sizer()
     wxBoxSizer* map_sizer = init_map_sizer();
     wxBoxSizer* move_sizer = init_move_sizer();
     wxBoxSizer* repeat_sizer = init_repeat_sizer();
+    wxBoxSizer* rot_sizer = init_rot_sizer();
     wxBoxSizer* wrap_sizer = init_wrap_sizer();
 
     sizer->Add(map_sizer, 0, wxEXPAND);
     sizer->Add(move_sizer, 0, wxEXPAND);
     sizer->Add(repeat_sizer, 0, wxEXPAND);
+    sizer->Add(rot_sizer, 0, wxEXPAND);
     sizer->Add(wrap_sizer, 0, wxEXPAND);
 
     return sizer;
@@ -240,7 +242,7 @@ wxBoxSizer* ObjectTexture::init_move_sizer()
 
         const auto& [obj_idx, model_object] = get_model_object();
         if (model_object != nullptr)
-            model_object->texture.set_offset_u(static_cast<float>(m_move_u_spin->GetValue()));
+            model_object->texture.set_offset_u(0.01f * static_cast<float>(m_move_u_spin->GetValue()));
 
         update();
         wxGetApp().obj_list()->changed_object(obj_idx);
@@ -251,7 +253,7 @@ wxBoxSizer* ObjectTexture::init_move_sizer()
 
         const auto& [obj_idx, model_object] = get_model_object();
         if (model_object != nullptr)
-            model_object->texture.set_offset_v(static_cast<float>(m_move_v_spin->GetValue()));
+            model_object->texture.set_offset_v(0.01f * static_cast<float>(m_move_v_spin->GetValue()));
 
         update();
         wxGetApp().obj_list()->changed_object(obj_idx);
@@ -274,8 +276,8 @@ wxBoxSizer* ObjectTexture::init_repeat_sizer()
 
     wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Repeat"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
 
-    m_repeat_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 0.1, 1.0);
-    m_repeat_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 0.1, 1.0);
+    m_repeat_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 1.0, 1.0);
+    m_repeat_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 1.0, 1.0);
 
     m_repeat_u_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
         wxGetApp().plater()->take_snapshot(_L("Changed texture repeat u"));
@@ -306,6 +308,31 @@ wxBoxSizer* ObjectTexture::init_repeat_sizer()
     sizer->AddSpacer(5);
     sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("V")), 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(m_repeat_v_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+
+    return sizer;
+}
+
+wxBoxSizer* ObjectTexture::init_rot_sizer()
+{
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+
+    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Rotation") + " (" + _L("") + ")", wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+
+    m_rotation_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.0, 360.0, 0.0, 1.0);
+
+    m_rotation_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
+        wxGetApp().plater()->take_snapshot(_L("Changed texture rotation"));
+
+        const auto& [obj_idx, model_object] = get_model_object();
+        if (model_object != nullptr)
+            model_object->texture.set_rotation(static_cast<float>(m_rotation_spin->GetValue()));
+
+        update();
+        wxGetApp().obj_list()->changed_object(obj_idx);
+        });
+
+    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_rotation_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
 
     return sizer;
 }
@@ -356,10 +383,11 @@ void ObjectTexture::update()
             m_main_sizer->Show(m_metadata_sizer);
             // update data widgets
             m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.get_mapping()));
-            m_move_u_spin->SetValue(static_cast<double>(model_object.second->texture.get_offset_u()));
-            m_move_v_spin->SetValue(static_cast<double>(model_object.second->texture.get_offset_v()));
+            m_move_u_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.get_offset_u()));
+            m_move_v_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.get_offset_v()));
             m_repeat_u_spin->SetValue(static_cast<double>(model_object.second->texture.get_repeat_u()));
             m_repeat_v_spin->SetValue(static_cast<double>(model_object.second->texture.get_repeat_v()));
+            m_rotation_spin->SetValue(static_cast<double>(model_object.second->texture.get_rotation()));
             m_wrap_choices->SetSelection(static_cast<int>(model_object.second->texture.get_wrapping()));
             m_parent->Layout();
         }

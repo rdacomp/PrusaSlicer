@@ -251,15 +251,18 @@ private:
     // Type of wrapping
     EWrapping m_wrapping{ EWrapping::Repeat };
 
-    // Offset in u direction
+    // Offset in u direction, [0..1] in percent
     float m_offset_u{ 0.0f };
-    // Offset in v direction
+    // Offset in v direction, [0..1] in percent
     float m_offset_v{ 0.0f };
 
     // Repeat factor in u direction
     float m_repeat_u{ 1.0f };
     // Repeat factor in v direction
     float m_repeat_v{ 1.0f };
+
+    // rotation, [0..360] in degrees
+    float m_rotation{ 0.0f };
 
     // Path of texture file
     std::string m_source_path;
@@ -274,20 +277,10 @@ public:
         , m_offset_v(rhs.m_offset_v)
         , m_repeat_u(rhs.m_repeat_u)
         , m_repeat_v(rhs.m_repeat_v)
+        , m_rotation(rhs.m_rotation)
         , m_source_path(rhs.m_source_path)
     {
     }
-
-    //TextureMetadata(TextureMetadata&& rhs)
-    //    : m_mapping(std::move(rhs.m_mapping))
-    //    , m_wrapping(std::move(rhs.m_wrapping))
-    //    , m_offset_u(std::move(rhs.m_offset_u))
-    //    , m_offset_v(std::move(rhs.m_offset_v))
-    //    , m_repeat_u(std::move(rhs.m_repeat_u))
-    //    , m_repeat_v(std::move(rhs.m_repeat_v))
-    //    , m_source_path(std::move(rhs.m_source_path))
-    //{
-    //}
 
     TextureMetadata& operator = (const TextureMetadata& rhs) {
         m_mapping = rhs.m_mapping;
@@ -296,20 +289,10 @@ public:
         m_offset_v = rhs.m_offset_v;
         m_repeat_u = rhs.m_repeat_u;
         m_repeat_v = rhs.m_repeat_v;
+        m_rotation = rhs.m_rotation;
         m_source_path = rhs.m_source_path;
         return *this;
     }
-
-    //TextureMetadata& operator = (TextureMetadata&& rhs) {
-    //    m_mapping = std::move(rhs.m_mapping);
-    //    m_wrapping = std::move(rhs.m_wrapping);
-    //    m_offset_u = std::move(rhs.m_offset_u);
-    //    m_offset_v = std::move(rhs.m_offset_v);
-    //    m_repeat_u = std::move(rhs.m_repeat_u);
-    //    m_repeat_v = std::move(rhs.m_repeat_v);
-    //    m_source_path = std::move(rhs.m_source_path);
-    //    return *this;
-    //}
 
     bool operator == (const TextureMetadata& rhs) const {
         if (m_mapping != rhs.m_mapping)
@@ -323,6 +306,8 @@ public:
         if (m_repeat_u != rhs.m_repeat_u)
             return false;
         if (m_repeat_v != rhs.m_repeat_v)
+            return false;
+        if (m_rotation != rhs.m_rotation)
             return false;
         if (m_source_path != rhs.m_source_path)
             return false;
@@ -341,6 +326,7 @@ public:
         m_offset_v = 0.0f;
         m_repeat_u = 1.0f;
         m_repeat_v = 1.0f;
+        m_rotation = 0.0f;
         m_source_path.clear();
     }
 
@@ -362,11 +348,14 @@ public:
     float get_repeat_v() const { return m_repeat_v; }
     void set_repeat_v(float v) { m_repeat_v = v; }
 
+    float get_rotation() const { return m_rotation; }
+    void set_rotation(float rot_deg) { m_rotation = rot_deg; }
+
     const std::string& get_source_path() const { return m_source_path; }
     void set_source_path(const std::string& path) { m_source_path = path; }
 
     template<class Archive> void serialize(Archive& ar) {
-        ar(m_mapping, m_wrapping, m_offset_u, m_offset_v, m_repeat_u, m_repeat_v, m_source_path);
+        ar(m_mapping, m_wrapping, m_offset_u, m_offset_v, m_repeat_u, m_repeat_v, m_rotation, m_source_path);
     }
 };
 #endif // ENABLE_TEXTURED_VOLUMES

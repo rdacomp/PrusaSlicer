@@ -29,6 +29,7 @@ class ObjectTexture : public OG_Settings
     wxSpinCtrlDouble* m_move_v_spin{ nullptr };
     wxSpinCtrlDouble* m_repeat_u_spin{ nullptr };
     wxSpinCtrlDouble* m_repeat_v_spin{ nullptr };
+    wxSpinCtrlDouble* m_rotation_spin{ nullptr };
     wxChoice* m_wrap_choices{ nullptr };
 
 public:
@@ -45,6 +46,7 @@ private:
     wxBoxSizer* init_map_sizer();
     wxBoxSizer* init_move_sizer();
     wxBoxSizer* init_repeat_sizer();
+    wxBoxSizer* init_rot_sizer();
     wxBoxSizer* init_wrap_sizer();
 
     void update();

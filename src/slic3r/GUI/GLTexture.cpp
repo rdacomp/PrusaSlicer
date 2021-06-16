@@ -796,7 +796,7 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
         if (repeat_y.has_value())
             m_metadata.set_repeat_v(repeat_y.value());
         if (rotation_z.has_value())
-            m_rotation_z = rotation_z.value();
+            m_metadata.set_rotation(rotation_z.value());
         if (translation_x.has_value())
             m_metadata.set_offset_u(translation_x.value());
         if (translation_y.has_value())
