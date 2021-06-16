@@ -251,6 +251,11 @@ private:
     // Type of wrapping
     EWrapping m_wrapping{ EWrapping::Repeat };
 
+    // Offset in u direction
+    float m_offset_u{ 0.0f };
+    // Offset in v direction
+    float m_offset_v{ 0.0f };
+
     // Repeat factor in u direction
     float m_repeat_u{ 1.0f };
     // Repeat factor in v direction
@@ -265,43 +270,55 @@ public:
     TextureMetadata(const TextureMetadata& rhs)
         : m_mapping(rhs.m_mapping)
         , m_wrapping(rhs.m_wrapping)
+        , m_offset_u(rhs.m_offset_u)
+        , m_offset_v(rhs.m_offset_v)
         , m_repeat_u(rhs.m_repeat_u)
         , m_repeat_v(rhs.m_repeat_v)
         , m_source_path(rhs.m_source_path)
     {
     }
 
-    TextureMetadata(TextureMetadata&& rhs)
-        : m_mapping(std::move(rhs.m_mapping))
-        , m_wrapping(std::move(rhs.m_wrapping))
-        , m_repeat_u(std::move(rhs.m_repeat_u))
-        , m_repeat_v(std::move(rhs.m_repeat_v))
-        , m_source_path(std::move(rhs.m_source_path))
-    {
-    }
+    //TextureMetadata(TextureMetadata&& rhs)
+    //    : m_mapping(std::move(rhs.m_mapping))
+    //    , m_wrapping(std::move(rhs.m_wrapping))
+    //    , m_offset_u(std::move(rhs.m_offset_u))
+    //    , m_offset_v(std::move(rhs.m_offset_v))
+    //    , m_repeat_u(std::move(rhs.m_repeat_u))
+    //    , m_repeat_v(std::move(rhs.m_repeat_v))
+    //    , m_source_path(std::move(rhs.m_source_path))
+    //{
+    //}
 
     TextureMetadata& operator = (const TextureMetadata& rhs) {
         m_mapping = rhs.m_mapping;
         m_wrapping = rhs.m_wrapping;
+        m_offset_u = rhs.m_offset_u;
+        m_offset_v = rhs.m_offset_v;
         m_repeat_u = rhs.m_repeat_u;
         m_repeat_v = rhs.m_repeat_v;
         m_source_path = rhs.m_source_path;
         return *this;
     }
 
-    TextureMetadata& operator = (TextureMetadata&& rhs) {
-        m_mapping = std::move(rhs.m_mapping);
-        m_wrapping = std::move(rhs.m_wrapping);
-        m_repeat_u = std::move(rhs.m_repeat_u);
-        m_repeat_v = std::move(rhs.m_repeat_v);
-        m_source_path = std::move(rhs.m_source_path);
-        return *this;
-    }
+    //TextureMetadata& operator = (TextureMetadata&& rhs) {
+    //    m_mapping = std::move(rhs.m_mapping);
+    //    m_wrapping = std::move(rhs.m_wrapping);
+    //    m_offset_u = std::move(rhs.m_offset_u);
+    //    m_offset_v = std::move(rhs.m_offset_v);
+    //    m_repeat_u = std::move(rhs.m_repeat_u);
+    //    m_repeat_v = std::move(rhs.m_repeat_v);
+    //    m_source_path = std::move(rhs.m_source_path);
+    //    return *this;
+    //}
 
     bool operator == (const TextureMetadata& rhs) const {
         if (m_mapping != rhs.m_mapping)
             return false;
         if (m_wrapping != rhs.m_wrapping)
+            return false;
+        if (m_offset_u != rhs.m_offset_u)
+            return false;
+        if (m_offset_v != rhs.m_offset_v)
             return false;
         if (m_repeat_u != rhs.m_repeat_u)
             return false;
@@ -320,6 +337,8 @@ public:
     void reset() {
         m_mapping = EMapping::Cubic;
         m_wrapping = EWrapping::Repeat;
+        m_offset_u = 0.0f;
+        m_offset_v = 0.0f;
         m_repeat_u = 1.0f;
         m_repeat_v = 1.0f;
         m_source_path.clear();
@@ -331,6 +350,12 @@ public:
     EWrapping get_wrapping() const { return m_wrapping; }
     void set_wrapping(EWrapping wrapping) { m_wrapping = wrapping; }
 
+    float get_offset_u() const { return m_offset_u; }
+    void set_offset_u(float u) { m_offset_u = u; }
+
+    float get_offset_v() const { return m_offset_v; }
+    void set_offset_v(float v) { m_offset_v = v; }
+
     float get_repeat_u() const { return m_repeat_u; }
     void set_repeat_u(float u) { m_repeat_u = u; }
 
@@ -341,7 +366,7 @@ public:
     void set_source_path(const std::string& path) { m_source_path = path; }
 
     template<class Archive> void serialize(Archive& ar) {
-        ar(m_mapping, m_wrapping, m_repeat_u, m_repeat_v, m_source_path);
+        ar(m_mapping, m_wrapping, m_offset_u, m_offset_v, m_repeat_u, m_repeat_v, m_source_path);
     }
 };
 #endif // ENABLE_TEXTURED_VOLUMES

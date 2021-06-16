@@ -145,8 +145,6 @@ namespace GUI {
         TextureMetadata m_metadata;
 
         float m_rotation_z{ 0.0f };
-        float m_translation_x{ 0.0f };
-        float m_translation_y{ 0.0f };
         std::string m_imaker_id;
         std::string m_border_color;
         std::string m_version;
@@ -159,8 +157,6 @@ namespace GUI {
             m_metadata.reset();
 
             m_rotation_z = 0.0f;
-            m_translation_x = 0.0f;
-            m_translation_y = 0.0f;
             m_imaker_id.clear();
             m_border_color.clear();
             m_version.clear();
