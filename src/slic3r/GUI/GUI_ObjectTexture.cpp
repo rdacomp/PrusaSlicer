@@ -25,11 +25,11 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
     m_main_sizer = new wxBoxSizer(wxVERTICAL);
     
     m_tex_sizer = init_tex_sizer();
-    m_map_sizer = init_map_sizer();
+    m_metadata_sizer = init_metadata_sizer();
 
     m_main_sizer->Add(m_tex_sizer, 0, wxEXPAND);
-    m_main_sizer->Add(m_map_sizer, 0, wxEXPAND);
-    m_main_sizer->Hide(m_map_sizer);
+    m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND);
+    m_main_sizer->Hide(m_metadata_sizer);
 
     // https://docs.wxwidgets.org/trunk/classwx_property_grid.html
 
@@ -124,10 +124,10 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
 
-    wxStaticText* tex_label = new wxStaticText(m_parent, wxID_ANY, _L("Texture"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Texture"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
     m_tex_string = new wxTextCtrl(m_parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
     m_tex_string->Enable(false);
-    wxButton* tex_browse_btn = new wxButton(m_parent, wxID_ANY, _L("Browse..."));
+    wxButton* browse_btn = new wxButton(m_parent, wxID_ANY, _L("Browse..."));
 
     m_tex_delete_btn = new ScalableButton(m_parent, wxID_ANY, m_bmp_delete);
     m_tex_delete_btn->SetToolTip(_L("Remove texture"));
@@ -135,7 +135,7 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
     m_tex_delete_btn->SetBitmapHover(m_bmp_delete_focus.bmp());
     m_tex_delete_btn->SetBitmapDisabled_(m_bmp_delete_disabled);
 
-    tex_browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
+    browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
         wxFileDialog dialog(m_parent, _L("Choose a texture file:"), "", "", "Texture files (*.texture)|*.texture", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
         if (dialog.ShowModal() != wxID_OK)
             return;
@@ -171,10 +171,23 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
         }
         });
 
-    sizer->Add(tex_label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(m_tex_string, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
-    sizer->Add(tex_browse_btn, 0, wxEXPAND | wxALL, 5);
+    sizer->Add(browse_btn, 0, wxEXPAND | wxALL, 5);
     sizer->Add(m_tex_delete_btn, 0, wxEXPAND | wxALL, 5);
+
+    return sizer;
+}
+
+wxBoxSizer* ObjectTexture::init_metadata_sizer()
+{
+    wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+
+    wxBoxSizer* map_sizer = init_map_sizer();
+    wxBoxSizer* wrap_sizer = init_wrap_sizer();
+
+    sizer->Add(map_sizer, 0, wxEXPAND);
+    sizer->Add(wrap_sizer, 0, wxEXPAND);
 
     return sizer;
 }
@@ -183,7 +196,7 @@ wxBoxSizer* ObjectTexture::init_map_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
 
-    wxStaticText* map_label = new wxStaticText(m_parent, wxID_ANY, _L("Mapping type"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Mapping type"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
 
     const wxString mappings[] = { _L("Cubic"), _L("Cylindrical"), _L("Spherical") };
     m_map_choices = new wxChoice(m_parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxArrayString(3, mappings));
@@ -197,14 +210,44 @@ wxBoxSizer* ObjectTexture::init_map_sizer()
 
             const auto& [obj_idx, model_object] = get_model_object();
             if (model_object != nullptr)
-                model_object->texture.set_mapping(static_cast<ModelObjectTexture::EMapping>(selection));
+                model_object->texture.set_mapping(static_cast<TextureMetadata::EMapping>(selection));
 
             update();
             wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    sizer->Add(map_label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
     sizer->Add(m_map_choices, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+
+    return sizer;
+}
+
+wxBoxSizer* ObjectTexture::init_wrap_sizer()
+{
+    wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
+
+    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Wrapping"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+
+    const wxString wrappings[] = { _L("Repeat"), _L("Mirror"), _L("Clamp to edge"), _L("Clamp to border") };
+    m_wrap_choices = new wxChoice(m_parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxArrayString(4, wrappings));
+
+    m_wrap_choices->Bind(wxEVT_CHOICE, [this](wxEvent& event) {
+        int selection = m_wrap_choices->GetSelection();
+        if (selection == wxNOT_FOUND)
+            return;
+
+        wxGetApp().plater()->take_snapshot(_L("Changed texture wrapping"));
+
+        const auto& [obj_idx, model_object] = get_model_object();
+        if (model_object != nullptr)
+            model_object->texture.set_wrapping(static_cast<TextureMetadata::EWrapping>(selection));
+
+        update();
+        wxGetApp().obj_list()->changed_object(obj_idx);
+        });
+
+    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(m_wrap_choices, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
 
     return sizer;
 }
@@ -219,17 +262,21 @@ void ObjectTexture::update()
     m_tex_delete_btn->Enable(has_texture);
 
     if (has_texture) {
-        if (m_main_sizer->GetItem(m_map_sizer) == nullptr) {
-            m_main_sizer->Add(m_map_sizer, 0, wxEXPAND);
-            m_main_sizer->Show(m_map_sizer);
+        if (m_main_sizer->GetItem(m_metadata_sizer) == nullptr) {
+            // show metadata
+            m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND);
+            m_main_sizer->Show(m_metadata_sizer);
+            // update data widgets
             m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.get_mapping()));
+            m_wrap_choices->SetSelection(static_cast<int>(model_object.second->texture.get_wrapping()));
             m_parent->Layout();
         }
     }
     else {
-        if (m_main_sizer->GetItem(m_map_sizer) != nullptr) {
-            m_main_sizer->Hide(m_map_sizer);
-            m_main_sizer->Detach(m_map_sizer);
+        if (m_main_sizer->GetItem(m_metadata_sizer) != nullptr) {
+            // hide metadata
+            m_main_sizer->Hide(m_metadata_sizer);
+            m_main_sizer->Detach(m_metadata_sizer);
             m_parent->Layout();
         }
     }

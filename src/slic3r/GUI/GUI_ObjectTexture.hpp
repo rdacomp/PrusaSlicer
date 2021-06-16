@@ -23,8 +23,9 @@ class ObjectTexture : public OG_Settings
     wxTextCtrl* m_tex_string{ nullptr };
     ScalableButton* m_tex_delete_btn{ nullptr };
 
-    wxBoxSizer* m_map_sizer{ nullptr };
+    wxBoxSizer* m_metadata_sizer{ nullptr };
     wxChoice* m_map_choices{ nullptr };
+    wxChoice* m_wrap_choices{ nullptr };
 
 public:
     ObjectTexture(wxWindow* parent);
@@ -36,7 +37,9 @@ public:
 
 private:
     wxBoxSizer* init_tex_sizer();
+    wxBoxSizer* init_metadata_sizer();
     wxBoxSizer* init_map_sizer();
+    wxBoxSizer* init_wrap_sizer();
 
     void update();
     std::pair<int, ModelObject*> get_model_object();

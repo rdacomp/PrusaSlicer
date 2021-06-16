@@ -227,7 +227,7 @@ enum class ModelVolumeType : int {
 };
 
 #if ENABLE_TEXTURED_VOLUMES
-class ModelObjectTexture
+class TextureMetadata
 {
 public:
     enum class EMapping
@@ -237,44 +237,58 @@ public:
         Spherical
     };
 
+    enum class EWrapping
+    {
+        Repeat,
+        Mirror,
+        ClampToEdge,
+        ClampToBorder
+    };
+
 private:
     // Type of mapping
     EMapping m_mapping{ EMapping::Cubic };
+    // Type of wrapping
+    EWrapping m_wrapping{ EWrapping::Repeat };
 
     // Path of texture file
     std::string m_source_path;
 
 public:
-    ModelObjectTexture() = default;
+    TextureMetadata() = default;
 
-    ModelObjectTexture(const ModelObjectTexture& rhs)
+    TextureMetadata(const TextureMetadata& rhs)
         : m_mapping(rhs.m_mapping)
+        , m_wrapping(rhs.m_wrapping)
         , m_source_path(rhs.m_source_path)
     {
-        int a = 0;
     }
 
-    ModelObjectTexture(ModelObjectTexture&& rhs)
+    TextureMetadata(TextureMetadata&& rhs)
         : m_mapping(std::move(rhs.m_mapping))
+        , m_wrapping(std::move(rhs.m_wrapping))
         , m_source_path(std::move(rhs.m_source_path))
     {
-        int a = 0;
     }
 
-    ModelObjectTexture& operator = (const ModelObjectTexture& rhs) {
+    TextureMetadata& operator = (const TextureMetadata& rhs) {
         m_mapping = rhs.m_mapping;
+        m_wrapping = rhs.m_wrapping;
         m_source_path = rhs.m_source_path;
         return *this;
     }
 
-    ModelObjectTexture& operator = (ModelObjectTexture&& rhs) {
+    TextureMetadata& operator = (TextureMetadata&& rhs) {
         m_mapping = std::move(rhs.m_mapping);
+        m_wrapping = std::move(rhs.m_wrapping);
         m_source_path = std::move(rhs.m_source_path);
         return *this;
     }
 
-    bool operator == (const ModelObjectTexture& rhs) const {
+    bool operator == (const TextureMetadata& rhs) const {
         if (m_mapping != rhs.m_mapping)
+            return false;
+        if (m_wrapping != rhs.m_wrapping)
             return false;
         if (m_source_path != rhs.m_source_path)
             return false;
@@ -282,23 +296,27 @@ public:
         return true;
     }
 
-    bool operator != (const ModelObjectTexture& rhs) const {
+    bool operator != (const TextureMetadata& rhs) const {
         return !operator==(rhs);
     }
 
     void clear() {
         m_mapping = EMapping::Cubic;
+        m_wrapping = EWrapping::Repeat;
         m_source_path.clear();
     }
 
     EMapping get_mapping() const { return m_mapping; }
     void set_mapping(EMapping mapping) { m_mapping = mapping; }
 
+    EWrapping get_wrapping() const { return m_wrapping; }
+    void set_wrapping(EWrapping wrapping) { m_wrapping = wrapping; }
+
     const std::string& get_source_path() const { return m_source_path; }
     void set_source_path(const std::string& path) { m_source_path = path; }
 
     template<class Archive> void serialize(Archive& ar) {
-        ar(m_mapping, m_source_path);
+        ar(m_mapping, m_wrapping, m_source_path);
     }
 };
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -329,7 +347,7 @@ public:
     bool                    printable;
 #if ENABLE_TEXTURED_VOLUMES
     // Texture data
-    ModelObjectTexture      texture;
+    TextureMetadata         texture;
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // This vector holds position of selected support points for SLA. The data are

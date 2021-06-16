@@ -785,6 +785,7 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
         boost::optional<std::string> version = root.get_optional<std::string>("version");
 
         m_source = filename;
+        m_metadata.set_source_path(filename);
 
         if (id.has_value())
             m_imaker_id = id.value();
@@ -803,15 +804,13 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
         if (wrapping.has_value()) {
             std::string value = wrapping.value();
             if (value == "repeat")
-                m_wrapping = EWrapping::Repeat;
+                m_metadata.set_wrapping(TextureMetadata::EWrapping::Repeat);
             else if (value == "mirror")
-                m_wrapping = EWrapping::Repeat;
+                m_metadata.set_wrapping(TextureMetadata::EWrapping::Mirror);
             else if (value == "clamptoedge")
-                m_wrapping = EWrapping::ClampToEdge;
+                m_metadata.set_wrapping(TextureMetadata::EWrapping::ClampToEdge);
             else if (value == "clamptoborder")
-                m_wrapping = EWrapping::ClampToBorder;
-            else
-                m_wrapping = EWrapping::Unknown;
+                m_metadata.set_wrapping(TextureMetadata::EWrapping::ClampToBorder);
         }
         if (version.has_value())
             m_version = version.value();

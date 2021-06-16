@@ -1,6 +1,8 @@
 #ifndef slic3r_GLTexture_hpp_
 #define slic3r_GLTexture_hpp_
 
+#include "libslic3r/Model.hpp"
+
 #include <atomic>
 #include <string>
 #include <vector>
@@ -140,21 +142,13 @@ namespace GUI {
 #if ENABLE_TEXTURED_VOLUMES
     class GLIdeaMakerTexture : public GLTexture
     {
-        enum class EWrapping
-        {
-            Unknown,
-            Repeat,
-            Mirror,
-            ClampToEdge,
-            ClampToBorder
-        };
+        TextureMetadata m_metadata;
 
         float m_repeat_x{ 1.0f };
         float m_repeat_y{ 1.0f };
         float m_rotation_z{ 0.0f };
         float m_translation_x{ 0.0f };
         float m_translation_y{ 0.0f };
-        EWrapping m_wrapping{ EWrapping::Repeat };
         std::string m_imaker_id;
         std::string m_border_color;
         std::string m_version;
@@ -164,12 +158,13 @@ namespace GUI {
 
     protected:
         virtual void on_reset() override {
+            m_metadata = TextureMetadata();
+
             m_repeat_x = 1.0f;
             m_repeat_y = 1.0f;
             m_rotation_z = 0.0f;
             m_translation_x = 0.0f;
             m_translation_y = 0.0f;
-            m_wrapping = EWrapping::Repeat;
             m_imaker_id.clear();
             m_border_color.clear();
             m_version.clear();
