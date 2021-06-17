@@ -23,7 +23,7 @@ class ObjectTexture : public OG_Settings
     wxTextCtrl* m_tex_string{ nullptr };
     ScalableButton* m_tex_delete_btn{ nullptr };
 
-    wxBoxSizer* m_metadata_sizer{ nullptr };
+    wxSizer* m_metadata_sizer{ nullptr };
     wxChoice* m_map_choices{ nullptr };
     wxSpinCtrlDouble* m_move_u_spin{ nullptr };
     wxSpinCtrlDouble* m_move_v_spin{ nullptr };
@@ -42,7 +42,7 @@ public:
 
 private:
     wxBoxSizer* init_tex_sizer();
-    wxBoxSizer* init_metadata_sizer();
+    wxSizer* init_metadata_sizer();
     wxBoxSizer* init_map_sizer();
     wxBoxSizer* init_move_sizer();
     wxBoxSizer* init_repeat_sizer();

@@ -27,11 +27,9 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
     m_tex_sizer = init_tex_sizer();
     m_metadata_sizer = init_metadata_sizer();
 
-    m_main_sizer->Add(m_tex_sizer, 0, wxEXPAND);
-    m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND);
+    m_main_sizer->Add(m_tex_sizer, 0, wxEXPAND | wxALL);
+    m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND | wxALL);
     m_main_sizer->Hide(m_metadata_sizer);
-
-    // https://docs.wxwidgets.org/trunk/classwx_property_grid.html
 
     m_og->activate();
     m_og->sizer->Clear(true);
@@ -40,8 +38,9 @@ ObjectTexture::ObjectTexture(wxWindow* parent) :
 
 void ObjectTexture::msw_rescale()
 {
-    {
-    }
+    m_bmp_delete.msw_rescale();
+    m_bmp_delete_focus.msw_rescale();
+    m_bmp_delete_disabled.msw_rescale();
 
     m_main_sizer->Layout();
 
@@ -85,7 +84,11 @@ void ObjectTexture::msw_rescale()
 
 void ObjectTexture::sys_color_changed()
 {
+    m_bmp_delete.msw_rescale();
+    m_bmp_delete_focus.msw_rescale();
+    m_bmp_delete_disabled.msw_rescale();
 
+    m_main_sizer->Layout();
 
 
 //    m_bmp_delete.msw_rescale();
@@ -179,30 +182,33 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
     return sizer;
 }
 
-wxBoxSizer* ObjectTexture::init_metadata_sizer()
+wxSizer* ObjectTexture::init_metadata_sizer()
 {
-    wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+    wxStaticBoxSizer* sizer = new wxStaticBoxSizer(wxVERTICAL, m_parent, _L("Parameters"));
+    wxFlexGridSizer* grid_sizer = new wxFlexGridSizer(2, 5, 5);
 
-    wxBoxSizer* map_sizer = init_map_sizer();
-    wxBoxSizer* move_sizer = init_move_sizer();
-    wxBoxSizer* repeat_sizer = init_repeat_sizer();
-    wxBoxSizer* rot_sizer = init_rot_sizer();
-    wxBoxSizer* wrap_sizer = init_wrap_sizer();
+    grid_sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("Mapping type")), 0, wxALIGN_CENTER_VERTICAL);
+    grid_sizer->Add(init_map_sizer());
 
-    sizer->Add(map_sizer, 0, wxEXPAND);
-    sizer->Add(move_sizer, 0, wxEXPAND);
-    sizer->Add(repeat_sizer, 0, wxEXPAND);
-    sizer->Add(rot_sizer, 0, wxEXPAND);
-    sizer->Add(wrap_sizer, 0, wxEXPAND);
+    grid_sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("Move")), 0, wxALIGN_CENTER_VERTICAL);
+    grid_sizer->Add(init_move_sizer());
 
+    grid_sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("Repeat")), 0, wxALIGN_CENTER_VERTICAL);
+    grid_sizer->Add(init_repeat_sizer());
+    
+    grid_sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("Rotation")), 0, wxALIGN_CENTER_VERTICAL);
+    grid_sizer->Add(init_rot_sizer());
+
+    grid_sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("Wrapping")), 0, wxALIGN_CENTER_VERTICAL);
+    grid_sizer->Add(init_wrap_sizer());
+
+    sizer->Add(grid_sizer, 0, wxEXPAND | wxALL, 5);
     return sizer;
 }
 
 wxBoxSizer* ObjectTexture::init_map_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
-
-    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Mapping type"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
 
     const wxString mappings[] = { _L("Cubic"), _L("Cylindrical"), _L("Spherical") };
     m_map_choices = new wxChoice(m_parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxArrayString(3, mappings));
@@ -212,18 +218,17 @@ wxBoxSizer* ObjectTexture::init_map_sizer()
         if (selection == wxNOT_FOUND)
             return;
 
-            wxGetApp().plater()->take_snapshot(_L("Changed texture mapping"));
+        wxGetApp().plater()->take_snapshot(_L("Changed texture mapping"));
 
-            const auto& [obj_idx, model_object] = get_model_object();
-            if (model_object != nullptr)
-                model_object->texture.set_mapping(static_cast<TextureMetadata::EMapping>(selection));
+        const auto& [obj_idx, model_object] = get_model_object();
+        if (model_object != nullptr)
+            model_object->texture.set_mapping(static_cast<TextureMetadata::EMapping>(selection));
 
-            update();
-            wxGetApp().obj_list()->changed_object(obj_idx);
+        update();
+        wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_map_choices, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->Add(m_map_choices, 0, wxEXPAND | wxALL);
 
     return sizer;
 }
@@ -232,10 +237,10 @@ wxBoxSizer* ObjectTexture::init_move_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
 
-    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Move") + " (%)", wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
-
-    m_move_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.0, 100.0, 0.0, 1.0);
-    m_move_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.0, 100.0, 0.0, 1.0);
+    m_move_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1), wxSP_ARROW_KEYS, 0.0, 100.0, 0.0, 1.0);
+    m_move_u_spin->SetDigits(2);
+    m_move_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1), wxSP_ARROW_KEYS, 0.0, 100.0, 0.0, 1.0);
+    m_move_v_spin->SetDigits(2);
 
     m_move_u_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
         wxGetApp().plater()->take_snapshot(_L("Changed texture offset u"));
@@ -259,13 +264,13 @@ wxBoxSizer* ObjectTexture::init_move_sizer()
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->AddSpacer(5);
     sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("U")), 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_move_u_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
     sizer->AddSpacer(5);
+    sizer->Add(m_move_u_spin, 0, wxEXPAND | wxALL);
+    sizer->AddSpacer(10);
     sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("V")), 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_move_v_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->AddSpacer(5);
+    sizer->Add(m_move_v_spin, 0, wxEXPAND | wxALL);
 
     return sizer;
 }
@@ -274,10 +279,10 @@ wxBoxSizer* ObjectTexture::init_repeat_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
 
-    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Repeat"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
-
-    m_repeat_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 1.0, 1.0);
-    m_repeat_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.1, 100.0, 1.0, 1.0);
+    m_repeat_u_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1), wxSP_ARROW_KEYS, 0.1, 100.0, 1.0, 1.0);
+    m_repeat_u_spin->SetDigits(2);
+    m_repeat_v_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1), wxSP_ARROW_KEYS, 0.1, 100.0, 1.0, 1.0);
+    m_repeat_v_spin->SetDigits(2);
 
     m_repeat_u_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
         wxGetApp().plater()->take_snapshot(_L("Changed texture repeat u"));
@@ -301,13 +306,13 @@ wxBoxSizer* ObjectTexture::init_repeat_sizer()
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->AddSpacer(5);
     sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("U")), 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_repeat_u_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
     sizer->AddSpacer(5);
+    sizer->Add(m_repeat_u_spin, 0, wxEXPAND | wxALL);
+    sizer->AddSpacer(10);
     sizer->Add(new wxStaticText(m_parent, wxID_ANY, _L("V")), 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_repeat_v_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->AddSpacer(5);
+    sizer->Add(m_repeat_v_spin, 0, wxEXPAND | wxALL);
 
     return sizer;
 }
@@ -316,9 +321,8 @@ wxBoxSizer* ObjectTexture::init_rot_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
 
-    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Rotation") + " (" + _L("") + ")", wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
-
-    m_rotation_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0.0, 360.0, 0.0, 1.0);
+    m_rotation_spin = new wxSpinCtrlDouble(m_parent, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1), wxSP_ARROW_KEYS, 0.0, 360.0, 0.0, 1.0);
+    m_rotation_spin->SetDigits(2);
 
     m_rotation_spin->Bind(wxEVT_SPINCTRLDOUBLE, [this](wxEvent& event) {
         wxGetApp().plater()->take_snapshot(_L("Changed texture rotation"));
@@ -331,8 +335,7 @@ wxBoxSizer* ObjectTexture::init_rot_sizer()
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_rotation_spin, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->Add(m_rotation_spin, 0, wxEXPAND | wxALL);
 
     return sizer;
 }
@@ -340,8 +343,6 @@ wxBoxSizer* ObjectTexture::init_rot_sizer()
 wxBoxSizer* ObjectTexture::init_wrap_sizer()
 {
     wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
-
-    wxStaticText* label = new wxStaticText(m_parent, wxID_ANY, _L("Wrapping"), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
 
     const wxString wrappings[] = { _L("Repeat"), _L("Mirror"), _L("Clamp to edge"), _L("Clamp to border") };
     m_wrap_choices = new wxChoice(m_parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxArrayString(4, wrappings));
@@ -361,8 +362,7 @@ wxBoxSizer* ObjectTexture::init_wrap_sizer()
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
-    sizer->Add(label, 0, wxALIGN_CENTER_VERTICAL);
-    sizer->Add(m_wrap_choices, 1, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, 5);
+    sizer->Add(m_wrap_choices, 0, wxEXPAND | wxALL);
 
     return sizer;
 }
@@ -379,7 +379,7 @@ void ObjectTexture::update()
     if (has_texture) {
         if (m_main_sizer->GetItem(m_metadata_sizer) == nullptr) {
             // show metadata
-            m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND);
+            m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND | wxALL);
             m_main_sizer->Show(m_metadata_sizer);
             // update data widgets
             m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.get_mapping()));
