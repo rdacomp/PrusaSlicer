@@ -5,6 +5,7 @@
 #include <wx/dialog.h>
 #include <wx/sizer.h>
 #include <wx/bmpcbox.h>
+#include <wx/checkbox.h>
 
 #include <vector>
 #include <set>
@@ -90,7 +91,8 @@ ExtruderSequenceDialog::ExtruderSequenceDialog(const DoubleSlider::ExtrudersSequ
                                       double_to_string(sequence.interval_by_mm), 
                                       wxDefaultPosition, editor_sz, wxTE_PROCESS_ENTER);
 
-    auto change_value = [this]()
+    double min_layer_height = wxGetApp().preset_bundle->prints.get_edited_preset().config.opt_float("layer_height");
+    auto change_value = [this, min_layer_height]()
     {
         wxString str = m_interval_by_mm->GetValue();
         if (str.IsEmpty()) {
@@ -110,6 +112,11 @@ ExtruderSequenceDialog::ExtruderSequenceDialog(const DoubleSlider::ExtrudersSequ
 
         if (fabs(m_sequence.interval_by_layers - val) < 0.001)
             return;
+
+        if (val < min_layer_height) {
+            val = min_layer_height;
+            m_interval_by_mm->SetValue(double_to_string(val, 2));
+        }
 
         m_sequence.interval_by_mm = val;
     };
@@ -138,6 +145,18 @@ ExtruderSequenceDialog::ExtruderSequenceDialog(const DoubleSlider::ExtrudersSequ
     intervals_box_sizer->Add(m_intervals_grid_sizer, 0, wxLEFT, em);
     option_sizer->Add(intervals_box_sizer, 0, wxEXPAND);
 
+    m_random_sequence = new wxCheckBox(this, wxID_ANY, "Random sequence");
+    m_random_sequence->SetValue(m_sequence.random_sequence);
+    m_random_sequence->SetToolTip(_L("If enabled, random sequence of the selected extruders will be used."));
+    m_random_sequence->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& e) {
+        m_sequence.random_sequence = e.IsChecked();
+        m_color_repetition->Enable(m_sequence.random_sequence);
+    });
+
+    m_color_repetition = new wxCheckBox(this, wxID_ANY, "Allow next color repetition");
+    m_color_repetition->SetValue(m_sequence.color_repetition);
+    m_color_repetition->SetToolTip(_L("If enabled, a repetition of the next random color will be allowed."));
+    m_color_repetition->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& e) {m_sequence.color_repetition = e.IsChecked();  });
     
     auto extruders_box = new wxStaticBox(this, wxID_ANY, _(L("Set extruder(tool) sequence"))+ ": ");
     auto extruders_box_sizer = new wxStaticBoxSizer(extruders_box, wxVERTICAL);
@@ -147,6 +166,8 @@ ExtruderSequenceDialog::ExtruderSequenceDialog(const DoubleSlider::ExtrudersSequ
     apply_extruder_sequence();
 
     extruders_box_sizer->Add(m_extruders_grid_sizer, 0, wxALL, em);
+    extruders_box_sizer->Add(m_random_sequence, 0, wxLEFT | wxBOTTOM, em);
+    extruders_box_sizer->Add(m_color_repetition, 0, wxLEFT | wxBOTTOM, em);
     option_sizer->Add(extruders_box_sizer, 0, wxEXPAND | wxTOP, em);
 
     main_sizer->Add(option_sizer, 0, wxEXPAND | wxALL, em);
@@ -197,8 +218,11 @@ void ExtruderSequenceDialog::apply_extruder_sequence()
         auto add_btn = new ScalableButton(this, wxID_ANY, m_bmp_add);
         add_btn->SetToolTip(_(L("Add extruder to sequence")));
 
-        add_btn->Bind(wxEVT_BUTTON, [this, extruder](wxEvent&) {
-            m_sequence.add_extruder(extruder);
+        add_btn->Bind(wxEVT_BUTTON, [this, extruder, extruder_selector](wxEvent&) {
+            size_t extr_cnt = (size_t)extruder_selector->GetCount();
+            size_t seq_extr_cnt = m_sequence.extruders.size();
+            size_t extr_id = seq_extr_cnt - size_t(seq_extr_cnt / extr_cnt) * extr_cnt;
+            m_sequence.add_extruder(extruder, std::min(extr_id, extr_cnt-1));
             apply_extruder_sequence();
         });
 
@@ -207,6 +231,10 @@ void ExtruderSequenceDialog::apply_extruder_sequence()
         m_extruders_grid_sizer->Add(add_btn, 0, wxALIGN_CENTER_VERTICAL);
     }
     m_extruders_grid_sizer->ShowItems(true); // show items hidden in apply_extruder_selector()
+
+    bool show_checkboxes = m_sequence.extruders.size() > 1;
+    m_random_sequence->Enable(show_checkboxes);
+    m_color_repetition->Enable(show_checkboxes && m_sequence.random_sequence);
 
     Fit();
     Refresh();
