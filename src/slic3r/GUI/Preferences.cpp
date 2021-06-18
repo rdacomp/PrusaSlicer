@@ -347,6 +347,14 @@ void PreferencesDialog::build()
 		m_optgroup_gui->append_single_option_line(option);
 #endif
 
+		def.label = L("Set settings tabs as menu items (experimental)");
+		def.type = coBool;
+		def.tooltip = L("If enabled, Settings Tabs will be placed as menu items. "
+			            "If disabled, old UI will be used.");
+		def.set_default_value(new ConfigOptionBool{ app_config->get("tabs_as_menu") == "1" });
+		option = Option(def, "tabs_as_menu");
+		m_optgroup_gui->append_single_option_line(option);
+
 		def.label = L("Use custom size for toolbar icons");
 		def.type = coBool;
 		def.tooltip = L("If enabled, you can change size of toolbar icons manually.");
@@ -403,29 +411,36 @@ void PreferencesDialog::build()
 
 void PreferencesDialog::accept()
 {
-    if (m_values.find("no_defaults") != m_values.end() 
-#ifdef _MSW_DARK_MODE
-		|| m_values.find("dark_color_mode") != m_values.end()
-#endif
-		) {
+//	if (m_values.find("no_defaults") != m_values.end()
 //		warning_catcher(this, wxString::Format(_L("You need to restart %s to make the changes effective."), SLIC3R_APP_NAME));
-		wxString title = wxGetApp().is_editor() ? wxString(SLIC3R_APP_NAME) : wxString(GCODEVIEWER_APP_NAME);
-		title += " - " + _L("Changes for the critical options");
-		MessageDialog dialog(nullptr,
-			_L("Changing fo some options will trigger application restart.\n"
-			   "You will lose content of the plater.") + "\n\n" +
-			_L("Do you want to proceed?"),
-			title,
-			wxICON_QUESTION | wxYES | wxNO);
-		if (dialog.ShowModal() == wxID_YES) {
-			m_recreate_GUI = true;
+
+	std::vector<std::string> options_to_recreate_GUI = { "no_defaults", "tabs_as_menu"
 #ifdef _MSW_DARK_MODE
-			m_color_mode_changed = m_values.find("dark_color_mode") != m_values.end();
+		,"dark_color_mode"
 #endif
-		}
-		else {
-			m_values.erase("no_defaults");
-			m_values.erase("dark_color_mode");
+	};
+
+	for (const std::string& option : options_to_recreate_GUI) {
+		if (m_values.find(option) != m_values.end()) {
+			wxString title = wxGetApp().is_editor() ? wxString(SLIC3R_APP_NAME) : wxString(GCODEVIEWER_APP_NAME);
+			title += " - " + _L("Changes for the critical options");
+			MessageDialog dialog(nullptr,
+				_L("Changing fo some options will trigger application restart.\n"
+				   "You will lose content of the plater.") + "\n\n" +
+				_L("Do you want to proceed?"),
+				title,
+				wxICON_QUESTION | wxYES | wxNO);
+			if (dialog.ShowModal() == wxID_YES) {
+				m_recreate_GUI = true;
+#ifdef _MSW_DARK_MODE
+				m_color_mode_changed = m_values.find("dark_color_mode") != m_values.end();
+#endif
+			}
+			else {
+				for (const std::string& option : options_to_recreate_GUI)
+					m_values.erase(option);
+			}
+			break;
 		}
 	}
 
