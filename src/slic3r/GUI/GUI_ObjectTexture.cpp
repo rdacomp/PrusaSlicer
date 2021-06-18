@@ -150,11 +150,15 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
         wxGetApp().plater()->take_snapshot(_L("Add texture"));
 
         const auto& [obj_idx, model_object] = get_model_object();
-        if (model_object != nullptr)
-            model_object->texture.set_source_path(filename);
+        if (model_object != nullptr) {
+            // add texture to the cache
+            std::string tex_name = wxGetApp().plater()->add_object_texture(filename);
+            // update object texture
+            model_object->texture = wxGetApp().plater()->get_object_texture_metadata(tex_name);
+        }
 
         update();
-        wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
+        wxGetApp().plater()->update_volumes_texture_from_objects();
         wxGetApp().obj_list()->changed_object(obj_idx);
         });
 
@@ -165,11 +169,15 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
             wxGetApp().plater()->take_snapshot(_L("Remove texture"));
 
             const auto& [obj_idx, model_object] = get_model_object();
-            if (model_object != nullptr)
+            if (model_object != nullptr) {
+                // remove texture from the cache
+                wxGetApp().plater()->remove_object_texture(model_object->texture.get_name());
+                // reset object texture
                 model_object->texture.reset();
+            }
 
             update();
-            wxGetApp().plater()->add_texture_to_volumes_from_object(obj_idx);
+            wxGetApp().plater()->update_volumes_texture_from_objects();
             wxGetApp().obj_list()->del_texture_item();
         }
         });
@@ -370,10 +378,18 @@ wxBoxSizer* ObjectTexture::init_wrap_sizer()
 void ObjectTexture::update()
 {
     const std::pair<int, ModelObject*>& model_object = get_model_object();
-    bool has_texture = model_object.second != nullptr && !model_object.second->texture.get_source_path().empty();
+    bool has_texture = model_object.second != nullptr && !model_object.second->texture.get_name().empty();
 
     // update texture widgets
-    m_tex_string->SetValue(has_texture ? wxString(boost::filesystem::path(model_object.second->texture.get_source_path()).stem().string()) : "None");
+    std::string name;
+    if (has_texture) {
+        name = model_object.second->texture.get_name();
+        std::string::size_type pos = name.find('?');
+        if (pos != name.npos)
+            name = name.substr(0, pos);
+    }
+
+    m_tex_string->SetValue(name.empty() ? _L("None") : _(name));
     m_tex_delete_btn->Enable(has_texture);
 
     if (has_texture) {

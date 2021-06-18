@@ -571,7 +571,7 @@ bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data,
 
 #define DEBUG_OUTPUT 0
 #if DEBUG_OUTPUT
-    wxString out_file = m_source + ".png";
+    wxString out_file = wxString::FromUTF8(m_source) + ".png";
     wxImage out_image = image.Mirror(false);
     out_image.SaveFile(out_file, wxBITMAP_TYPE_PNG);
 #endif // DEBUG_OUTPUT
@@ -785,7 +785,7 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
         boost::optional<std::string> version = root.get_optional<std::string>("version");
 
         m_source = filename;
-        m_metadata.set_source_path(filename);
+        m_metadata.set_name(boost::filesystem::path(filename).stem().string());
 
         if (id.has_value())
             m_imaker_id = id.value();

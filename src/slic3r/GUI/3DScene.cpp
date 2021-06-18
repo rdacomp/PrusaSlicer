@@ -546,34 +546,119 @@ bool GLVolume::is_below_printbed() const
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
-int TexturesManager::add_texture(const std::string& filename)
+// strips trailing ":id" from the given name string, if present
+static std::string decode_name(const std::string& name)
 {
-    const int tex_id = get_texture_id(filename);
-    if (tex_id >= 0)
-        return tex_id;
+    std::string::size_type pos = name.find(':');
+    return (pos == name.npos) ? name : name.substr(0, pos);
+}
 
+// add new trailing ":id" to the given name string
+static std::string encode_name(const std::string& name, unsigned int id)
+{
+    return decode_name(name) + ":" + std::to_string(id);
+}
+
+std::string TexturesManager::add_texture(const std::string& filename)
+{
+    // check if the texture from the given filename is already in cache
+    for (TexItem& item : m_textures) {
+        if (filename == item.texture->get_source()) {
+            // increment reference count
+            ++item.count;
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+            output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+            // return texture name
+            return item.texture->get_name();
+        }
+    }
+
+    // load the texture and add it to the cache
     std::shared_ptr<GUI::GLIdeaMakerTexture> texture = std::make_shared<GUI::GLIdeaMakerTexture>();
     if (texture->load_from_ideamaker_texture_file(filename, true, GUI::GLTexture::ECompressionType::SingleThreaded, true)) {
-        m_textures.emplace_back(texture);
-        return static_cast<int>(m_textures.size() - 1);
+        texture->set_name(encode_name(texture->get_name(), m_unique_id++));
+        TexItem item = { texture, (unsigned int)1 };
+        m_textures.emplace_back(item);
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+        output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+        // return texture name
+        return m_textures.back().texture->get_name();
     }
 
-    return -1;
+    return "";
 }
 
-int TexturesManager::get_texture_id(const std::string& filename) const
+void TexturesManager::remove_texture(const std::string& name)
 {
-    for (int i = 0; i < static_cast<int>(m_textures.size()); ++i) {
-        if (filename == m_textures[i]->get_source())
-            return i;
+    for (size_t i = 0; i < m_textures.size(); ++i) {
+        TexItem& item = m_textures[i];
+        if (name == item.texture->get_name()) {
+            // decrement reference count
+            --item.count;
+            if (item.count == 0) {
+                // remove texture from the cache if count == 0
+                item.texture.reset();
+                m_textures.erase(m_textures.begin() + i);
+            }
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+            output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+            return;
+        }
+    }
+}
+
+void TexturesManager::remove_all_textures()
+{
+    m_textures.clear();
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+    output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+}
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+void TexturesManager::output_content() const
+{
+    std::cout << "\nTEXTURES LIST\n";
+    std::cout << "=============\n";
+
+    if (m_textures.empty()) {
+        std::cout << "empty\n";
+        return;
     }
 
-    return -1;
+    for (const TexItem& item : m_textures) {
+        std::cout << item.texture->get_name() << " - " << item.count << "\n";
+    }
+
+    std::cout << "=============\n";
+}
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+unsigned int TexturesManager::get_texture_id(const std::string& name) const
+{
+    for (const TexItem& item : m_textures) {
+        if (name == item.texture->get_name())
+            return item.texture->get_id();
+    }
+    return 0;
 }
 
-std::shared_ptr<GUI::GLIdeaMakerTexture> TexturesManager::get_texture(int id)
+const TextureMetadata& TexturesManager::get_texture_metadata(const std::string& name) const
 {
-    return (id < static_cast<int>(m_textures.size())) ? m_textures[id] : nullptr;
+    for (const TexItem& item : m_textures) {
+        if (name == item.texture->get_name())
+            return item.texture->get_metadata();
+    }
+    return TextureMetadata::DUMMY;
 }
 #endif // ENABLE_TEXTURED_VOLUMES
 
@@ -860,24 +945,21 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
-        bool has_texture = volume.first->texture_id >= 0;
+        bool has_texture = !volume.first->texture.empty();
         shader->set_uniform("proj_texture.active", has_texture ? 1 : 0);
         unsigned int tex_id = 0;
         if (has_texture) {
-            std::shared_ptr<GUI::GLIdeaMakerTexture> texture = m_textures_manager.get_texture(volume.first->texture_id);
-            if (texture != nullptr) {
-                tex_id = texture->get_id();
-                if (tex_id > 0) {
-                    shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
-                    shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
-                    const ModelObject* model_object = GUI::wxGetApp().model().objects[volume.first->object_idx()];
-                    shader->set_uniform("proj_texture.projection", static_cast<int>(model_object->texture.get_mapping()));
-                    shader->set_uniform("projection_tex", 0);
+            tex_id = m_textures_manager.get_texture_id(volume.first->texture);
+            if (tex_id > 0) {
+                shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
+                shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
+                const ModelObject* model_object = GUI::wxGetApp().model().objects[volume.first->object_idx()];
+                shader->set_uniform("proj_texture.projection", static_cast<int>(model_object->texture.get_mapping()));
+                shader->set_uniform("projection_tex", 0);
 #if ENABLE_ENVIRONMENT_MAP
-                    glsafe(::glActiveTexture(GL_TEXTURE0));
+                glsafe(::glActiveTexture(GL_TEXTURE0));
 #endif // ENABLE_ENVIRONMENT_MAP
-                    glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
-                }
+                glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
             }
         }
 #endif // ENABLE_TEXTURED_VOLUMES

@@ -3884,23 +3884,37 @@ void GLCanvas3D::update_sequential_clearance()
 #endif // ENABLE_SEQUENTIAL_LIMITS
 
 #if ENABLE_TEXTURED_VOLUMES
-int GLCanvas3D::add_texture_from_object(int object_id)
+std::string GLCanvas3D::add_object_texture(const std::string& filename)
 {
-    int tex_id = (0 <= object_id && object_id < static_cast<int>(m_model->objects.size())) ?
-        m_volumes.add_volume_texture(m_model->objects[object_id]->texture.get_source_path()) : -1;
-    for (GLVolume* volume : m_volumes.volumes) {
-        if (volume->object_idx() == object_id)
-            volume->texture_id = tex_id;
-    }
-    return tex_id;
+    return m_volumes.add_texture(filename);
 }
 
-void GLCanvas3D::add_textures_from_all_objects()
+void GLCanvas3D::remove_object_texture(const std::string& name)
+{
+    m_volumes.remove_texture(name);
+}
+
+void GLCanvas3D::remove_all_object_textures()
+{
+    m_volumes.remove_all_textures();
+}
+
+unsigned int GLCanvas3D::get_object_texture_id(const std::string& name) const
+{
+    return m_volumes.get_texture_id(name);
+}
+
+const TextureMetadata& GLCanvas3D::get_object_texture_metadata(const std::string& name) const
+{
+    return m_volumes.get_texture_metadata(name);
+}
+
+void GLCanvas3D::update_volumes_texture_from_objects()
 {
     for (GLVolume* volume : m_volumes.volumes) {
         int obj_idx = volume->object_idx();
-        volume->texture_id = (0 <= obj_idx && obj_idx < static_cast<int>(m_model->objects.size())) ?
-            m_volumes.get_texture_id(m_model->objects[obj_idx]->texture.get_source_path()) : -1;
+        volume->texture = (0 <= obj_idx && obj_idx < static_cast<int>(m_model->objects.size())) ?
+            m_model->objects[obj_idx]->texture.get_name() : "";
     }
 }
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -4182,18 +4196,16 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
         shader->set_uniform("uniform_color", (vol->printable && !vol->is_outside) ? orange : gray);
 #if ENABLE_TEXTURED_VOLUMES
         shader->set_uniform("print_box.volume_world_matrix", vol->world_matrix());
-        shader->set_uniform("proj_texture.active", vol->texture_id >= 0 ? 1 : 0);
+        bool has_texture = !vol->texture.empty();
+        shader->set_uniform("proj_texture.active", has_texture ? 1 : 0);
         unsigned int tex_id = 0;
-        if (vol->texture_id >= 0) {
-            std::shared_ptr<GUI::GLIdeaMakerTexture> texture = m_volumes.get_texture(vol->texture_id);
-            if (texture != nullptr) {
-                tex_id = texture->get_id();
-                if (tex_id > 0) {
-                    shader->set_uniform("proj_texture.box.center", vol->bounding_box().center());
-                    shader->set_uniform("proj_texture.box.sizes", vol->bounding_box().size());
-                    shader->set_uniform("projection_tex", 0);
-                    glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
-                }
+        if (has_texture) {
+            tex_id = m_volumes.get_texture_id(vol->texture);
+            if (tex_id > 0) {
+                shader->set_uniform("proj_texture.box.center", vol->bounding_box().center());
+                shader->set_uniform("proj_texture.box.sizes", vol->bounding_box().size());
+                shader->set_uniform("projection_tex", 0);
+                glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
             }
         }
 #endif // ENABLE_TEXTURED_VOLUMES

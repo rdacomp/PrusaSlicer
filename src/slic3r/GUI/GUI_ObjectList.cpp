@@ -1656,7 +1656,7 @@ void ObjectList::del_instances_from_object(const int obj_idx)
     if (instances.size() <= 1)
         return;
 
-    take_snapshot(_(L("Delete All Instances from Object")));
+    take_snapshot(_L("Delete All Instances from Object"));
 
     while ( instances.size()> 1)
         instances.pop_back();
@@ -2536,7 +2536,7 @@ void ObjectList::delete_from_model_and_list(const ItemType type, const int obj_i
     if ( !(type&(itObject|itVolume|itInstance)) )
         return;
 
-    take_snapshot(_(L("Delete Selected Item")));
+    take_snapshot(_L("Delete Selected Item"));
 
     if (type&itObject) {
         del_object(obj_idx);
@@ -2556,8 +2556,7 @@ void ObjectList::delete_from_model_and_list(const std::vector<ItemForDelete>& it
         return;
 
     m_prevent_list_events = true;
-    for (std::vector<ItemForDelete>::const_reverse_iterator item = items_for_delete.rbegin(); item != items_for_delete.rend(); ++item)
-    {
+    for (std::vector<ItemForDelete>::const_reverse_iterator item = items_for_delete.rbegin(); item != items_for_delete.rend(); ++item) {
         if (!(item->type&(itObject | itVolume | itInstance)))
             continue;
         if (item->type&itObject) {
@@ -2567,12 +2566,10 @@ void ObjectList::delete_from_model_and_list(const std::vector<ItemForDelete>& it
         else {
             if (!del_subobject_from_object(item->obj_idx, item->sub_obj_idx, item->type))
                 continue;
-            if (item->type&itVolume)
-            {
+            if (item->type&itVolume) {
                 m_objects_model->Delete(m_objects_model->GetItemByVolumeId(item->obj_idx, item->sub_obj_idx));
                 if ((*m_objects)[item->obj_idx]->volumes.size() == 1 && 
-                    (*m_objects)[item->obj_idx]->config.has("extruder"))
-                {
+                    (*m_objects)[item->obj_idx]->config.has("extruder")) {
                     const wxString extruder = wxString::Format("%d", (*m_objects)[item->obj_idx]->config.extruder());
                     m_objects_model->SetExtruder(extruder, m_objects_model->GetItemById(item->obj_idx));
                 }
@@ -2712,16 +2709,14 @@ void ObjectList::remove()
 
     if (sels.Count() == 1)
         parent = delete_item(GetSelection());
-    else
-    {
+    else {
         SELECTION_MODE sels_mode = m_selection_mode;
         UnselectAll();
         update_selection(sels, sels_mode, m_objects_model);
 
-        Plater::TakeSnapshot snapshot = Plater::TakeSnapshot(wxGetApp().plater(), _(L("Delete Selected")));
+        Plater::TakeSnapshot snapshot = Plater::TakeSnapshot(wxGetApp().plater(), _L("Delete Selected"));
 
-        for (auto& item : sels)
-        {
+        for (auto& item : sels) {
             if (m_objects_model->InvalidItem(item)) // item can be deleted for this moment (like last 2 Instances or Volumes)
                 continue;
             parent = delete_item(item);

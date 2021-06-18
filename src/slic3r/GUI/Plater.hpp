@@ -25,6 +25,9 @@ namespace Slic3r {
 class Model;
 class ModelObject;
 class ModelInstance;
+#if ENABLE_TEXTURED_VOLUMES
+class TextureMetadata;
+#endif // ENABLE_TEXTURED_VOLUMES
 class Print;
 class SLAPrint;
 enum SLAPrintObjectStep : unsigned int;
@@ -368,8 +371,12 @@ public:
     void bring_instance_forward();
 
 #if ENABLE_TEXTURED_VOLUMES
-    void add_texture_to_volumes_from_object(int object_id);
-    void add_texture_to_volumes_from_all_objects();
+    std::string add_object_texture(const std::string& filename);
+    void remove_object_texture(const std::string& name);
+    void remove_all_object_textures();
+    unsigned int get_object_texture_id(const std::string& name) const;
+    const TextureMetadata& get_object_texture_metadata(const std::string& name) const;
+    void update_volumes_texture_from_objects();
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // ROII wrapper for suppressing the Undo / Redo snapshot to be taken.

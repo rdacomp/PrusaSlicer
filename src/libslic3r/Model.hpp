@@ -264,11 +264,12 @@ private:
     // rotation, [0..360] in degrees
     float m_rotation{ 0.0f };
 
-    // Path of texture file
-    std::string m_source_path;
+    // Texture name
+    std::string m_name;
 
 public:
     TextureMetadata() = default;
+    ~TextureMetadata() = default;
 
     TextureMetadata(const TextureMetadata& rhs)
         : m_mapping(rhs.m_mapping)
@@ -278,7 +279,7 @@ public:
         , m_repeat_u(rhs.m_repeat_u)
         , m_repeat_v(rhs.m_repeat_v)
         , m_rotation(rhs.m_rotation)
-        , m_source_path(rhs.m_source_path)
+        , m_name(rhs.m_name)
     {
     }
 
@@ -290,7 +291,7 @@ public:
         m_repeat_u = rhs.m_repeat_u;
         m_repeat_v = rhs.m_repeat_v;
         m_rotation = rhs.m_rotation;
-        m_source_path = rhs.m_source_path;
+        m_name = rhs.m_name;
         return *this;
     }
 
@@ -309,7 +310,7 @@ public:
             return false;
         if (m_rotation != rhs.m_rotation)
             return false;
-        if (m_source_path != rhs.m_source_path)
+        if (m_name != rhs.m_name)
             return false;
 
         return true;
@@ -327,7 +328,7 @@ public:
         m_repeat_u = 1.0f;
         m_repeat_v = 1.0f;
         m_rotation = 0.0f;
-        m_source_path.clear();
+        m_name.clear();
     }
 
     EMapping get_mapping() const { return m_mapping; }
@@ -351,12 +352,14 @@ public:
     float get_rotation() const { return m_rotation; }
     void set_rotation(float rot_deg) { m_rotation = rot_deg; }
 
-    const std::string& get_source_path() const { return m_source_path; }
-    void set_source_path(const std::string& path) { m_source_path = path; }
+    const std::string& get_name() const { return m_name; }
+    void set_name(const std::string& name) { m_name = name; }
 
     template<class Archive> void serialize(Archive& ar) {
-        ar(m_mapping, m_wrapping, m_offset_u, m_offset_v, m_repeat_u, m_repeat_v, m_rotation, m_source_path);
+        ar(m_mapping, m_wrapping, m_offset_u, m_offset_v, m_repeat_u, m_repeat_v, m_rotation, m_name);
     }
+
+    static const TextureMetadata DUMMY;
 };
 #endif // ENABLE_TEXTURED_VOLUMES
 

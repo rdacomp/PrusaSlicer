@@ -540,6 +540,8 @@ std::string Model::propose_export_file_name_and_path(const std::string &new_exte
     return boost::filesystem::path(this->propose_export_file_name_and_path()).replace_extension(new_extension).string();
 }
 
+const TextureMetadata TextureMetadata::DUMMY = TextureMetadata();
+
 ModelObject::~ModelObject()
 {
     this->clear_volumes();

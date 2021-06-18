@@ -2740,6 +2740,9 @@ void Plater::priv::remove(size_t obj_idx)
     if (view3D->is_layers_editing_enabled())
         view3D->enable_layers_editing(false);
 
+#if ENABLE_TEXTURED_VOLUMES
+    q->remove_object_texture(model.objects[obj_idx]->texture.get_name());
+#endif // ENABLE_TEXTURED_VOLUMES
     model.delete_object(obj_idx);
     update();
     // Delete object from Sidebar list. Do it after update, so that the GLScene selection is updated with the modified model.
@@ -2754,6 +2757,9 @@ void Plater::priv::delete_object_from_model(size_t obj_idx)
     if (! model.objects[obj_idx]->name.empty())
         snapshot_label += ": " + wxString::FromUTF8(model.objects[obj_idx]->name.c_str());
     Plater::TakeSnapshot snapshot(q, snapshot_label);
+#if ENABLE_TEXTURED_VOLUMES
+    q->remove_object_texture(model.objects[obj_idx]->texture.get_name());
+#endif // ENABLE_TEXTURED_VOLUMES
     model.delete_object(obj_idx);
     update();
     object_list_changed();
@@ -2778,7 +2784,10 @@ void Plater::priv::reset()
 #endif // ENABLE_SEQUENTIAL_LIMITS
 
     // Stop and reset the Print content.
-    this->background_process.reset();
+    background_process.reset();
+#if ENABLE_TEXTURED_VOLUMES
+    q->remove_all_object_textures();
+#endif // ENABLE_TEXTURED_VOLUMES
     model.clear_objects();
     update();
     // Delete object from Sidebar list. Do it after update, so that the GLScene selection is updated with the modified model.
@@ -2786,7 +2795,7 @@ void Plater::priv::reset()
     object_list_changed();
 
     // The hiding of the slicing results, if shown, is not taken care by the background process, so we do it here
-    this->sidebar->show_sliced_info_sizer(false);
+    sidebar->show_sliced_info_sizer(false);
 
     model.custom_gcode_per_print_z.gcodes.clear();
 }
@@ -4547,7 +4556,7 @@ void Plater::priv::update_after_undo_redo(const UndoRedo::Snapshot& snapshot, bo
     view3D->get_canvas3d()->get_selection().set_deserialized(GUI::Selection::EMode(undo_redo_stack().selection_deserialized().mode), undo_redo_stack().selection_deserialized().volumes_and_instances);
     view3D->get_canvas3d()->get_gizmos_manager().update_after_undo_redo(snapshot);
 #if ENABLE_TEXTURED_VOLUMES
-    view3D->get_canvas3d()->add_textures_from_all_objects();
+    view3D->get_canvas3d()->update_volumes_texture_from_objects();
 #endif // ENABLE_TEXTURED_VOLUMES
 
     wxGetApp().obj_list()->update_after_undo_redo();
@@ -5037,7 +5046,7 @@ void Plater::delete_object_from_model(size_t obj_idx) { p->delete_object_from_mo
 void Plater::remove_selected()
 {
     Plater::TakeSnapshot snapshot(this, _L("Delete Selected Objects"));
-    this->p->view3D->delete_selected();
+    p->view3D->delete_selected();
 }
 
 void Plater::increase_instances(size_t num)
@@ -6445,14 +6454,34 @@ void Plater::bring_instance_forward()
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void Plater::add_texture_to_volumes_from_object(int object_id)
+std::string Plater::add_object_texture(const std::string& filename)
 {
-    canvas3D()->add_texture_from_object(object_id);
+    return canvas3D()->add_object_texture(filename);
 }
 
-void Plater::add_texture_to_volumes_from_all_objects()
+void Plater::remove_object_texture(const std::string& name)
 {
-    canvas3D()->add_textures_from_all_objects();
+    canvas3D()->remove_object_texture(name);
+}
+
+void Plater::remove_all_object_textures()
+{
+    canvas3D()->remove_all_object_textures();
+}
+
+unsigned int Plater::get_object_texture_id(const std::string& name) const
+{
+    return canvas3D()->get_object_texture_id(name);
+}
+
+const TextureMetadata& Plater::get_object_texture_metadata(const std::string& name) const
+{
+    return canvas3D()->get_object_texture_metadata(name);
+}
+
+void Plater::update_volumes_texture_from_objects()
+{
+    canvas3D()->update_volumes_texture_from_objects();
 }
 #endif // ENABLE_TEXTURED_VOLUMES
 

@@ -150,6 +150,11 @@ namespace GUI {
     public:
         bool load_from_ideamaker_texture_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
 
+        const std::string& get_name() const { return m_metadata.get_name(); }
+        void set_name(const std::string& name) { m_metadata.set_name(name); }
+
+        const TextureMetadata& get_metadata() const { return m_metadata; }
+
     protected:
         virtual void on_reset() override {
             m_metadata.reset();
