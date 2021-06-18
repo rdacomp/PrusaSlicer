@@ -3202,7 +3202,7 @@ void Plater::priv::replace_with_stl()
 
     fs::path out_path = dialog.GetPath().ToUTF8().data();
     if (out_path.empty()) {
-        wxMessageDialog dlg(q, _L("File for the replace wasn't selected"), _L("Error during replace"), wxOK | wxOK_DEFAULT | wxICON_WARNING);
+        MessageDialog dlg(q, _L("File for the replace wasn't selected"), _L("Error during replace"), wxOK | wxOK_DEFAULT | wxICON_WARNING);
         dlg.ShowModal();
         return;
     }
@@ -3227,7 +3227,7 @@ void Plater::priv::replace_with_stl()
     }
 
     if (new_model.objects.size() > 1 || new_model.objects[0]->volumes.size() > 1) {
-        wxMessageDialog dlg(q, _L("Unable to replace with more than one volume"), _L("Error during replace"), wxOK | wxOK_DEFAULT | wxICON_WARNING);
+        MessageDialog dlg(q, _L("Unable to replace with more than one volume"), _L("Error during replace"), wxOK | wxOK_DEFAULT | wxICON_WARNING);
         dlg.ShowModal();
         return;
     }

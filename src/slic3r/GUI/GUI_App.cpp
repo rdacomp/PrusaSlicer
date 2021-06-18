@@ -1895,6 +1895,17 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                 if (dlg.seq_top_layer_only_changed())
 #endif // ENABLE_GCODE_LINES_ID_IN_H_SLIDER
                     this->plater_->refresh_print();
+
+                if (dlg.recreate_GUI()) {
+#ifdef _MSW_DARK_MODE
+                    if (dlg.color_mode_changed()) {
+                        NppDarkMode::SetDarkMode(app_config->get("dark_color_mode") == "1");
+                        init_label_colours();
+                    }
+#endif
+                    recreate_GUI(_L("Restart application") + dots);
+                    return;
+                }
 #ifdef _WIN32
                 if (is_editor()) {
                     if (app_config->get("associate_3mf") == "1")

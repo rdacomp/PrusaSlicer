@@ -2,6 +2,7 @@
 #include "OptionsGroup.hpp"
 #include "GUI_App.hpp"
 #include "Plater.hpp"
+#include "MsgDialog.hpp"
 #include "I18N.hpp"
 #include "libslic3r/AppConfig.hpp"
 #include <wx/notebook.h>
@@ -406,8 +407,32 @@ void PreferencesDialog::accept()
 #ifdef _MSW_DARK_MODE
 		|| m_values.find("dark_color_mode") != m_values.end()
 #endif
-		)
-        warning_catcher(this, wxString::Format(_L("You need to restart %s to make the changes effective."), SLIC3R_APP_NAME));
+		) {
+//		warning_catcher(this, wxString::Format(_L("You need to restart %s to make the changes effective."), SLIC3R_APP_NAME));
+		wxString title = wxGetApp().is_editor() ? wxString(SLIC3R_APP_NAME) : wxString(GCODEVIEWER_APP_NAME);
+		title += " - " + _L("Changes for the critical options");
+		MessageDialog dialog(nullptr,
+			_L("Changing fo some options will trigger application restart.\n"
+			   "You will lose content of the plater.") + "\n\n" +
+			_L("Do you want to proceed?"),
+			title,
+			wxICON_QUESTION | wxYES | wxNO);
+		if (dialog.ShowModal() == wxID_YES) {
+			m_recreate_GUI = true;
+#ifdef _MSW_DARK_MODE
+			m_color_mode_changed = m_values.find("dark_color_mode") != m_values.end();
+#endif
+		}
+		else {
+			m_values.erase("no_defaults");
+			m_values.erase("dark_color_mode");
+		}
+	}
+
+	if (m_values.empty()) {
+		EndModal(wxID_CANCEL);
+		return;
+	}
 
     auto app_config = get_app_config();
 
