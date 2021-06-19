@@ -42,6 +42,7 @@ typedef std::string                                 t_texture;
 namespace GUI {
 
 wxDECLARE_EVENT(EVT_OBJ_LIST_OBJECT_SELECT, SimpleEvent);
+class BitmapComboBox;
 
 struct ItemForDelete
 {
@@ -150,7 +151,7 @@ private:
     ModelConfig                 *m_config {nullptr};
     std::vector<ModelObject*>   *m_objects{ nullptr };
 
-    wxBitmapComboBox            *m_extruder_editor { nullptr };
+    BitmapComboBox              *m_extruder_editor { nullptr };
 
     std::vector<wxBitmap*>      m_bmp_vector;
 
