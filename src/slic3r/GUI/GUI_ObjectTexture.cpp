@@ -1,5 +1,7 @@
 #include "libslic3r/libslic3r.h"
 #include "GUI_ObjectTexture.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "3DScene.hpp"
 #include "OptionsGroup.hpp"
 #include "GUI_App.hpp"
 #include "Plater.hpp"
@@ -9,8 +11,6 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem.hpp>
-
-#if ENABLE_TEXTURED_VOLUMES
 
 namespace Slic3r {
 namespace GUI {
@@ -381,14 +381,7 @@ void ObjectTexture::update()
     bool has_texture = model_object.second != nullptr && !model_object.second->texture.get_name().empty();
 
     // update texture widgets
-    std::string name;
-    if (has_texture) {
-        name = model_object.second->texture.get_name();
-        std::string::size_type pos = name.find('?');
-        if (pos != name.npos)
-            name = name.substr(0, pos);
-    }
-
+    std::string name = has_texture ? TexturesManager::decode_name(model_object.second->texture.get_name()) : "";
     m_tex_string->SetValue(name.empty() ? _L("None") : _(name));
     m_tex_delete_btn->Enable(has_texture);
 

@@ -79,7 +79,7 @@ ObjectList::ObjectList(wxWindow* parent) :
         // if we detect it later, the user may have moved the mouse pointer while calculations are performed, and this would mess-up the HitTest() call performed into list_manipulation()
         // see: https://github.com/prusa3d/PrusaSlicer/issues/3802
 #ifndef __WXOSX__
-        const wxPoint mouse_pos = this->get_mouse_position_in_control();
+        const wxPoint mouse_pos = get_mouse_position_in_control();
 #endif
 
 #ifndef __APPLE__
@@ -88,7 +88,7 @@ ObjectList::ObjectList(wxWindow* parent) :
         // if we change selection in object list.
         // see https://github.com/prusa3d/PrusaSlicer/issues/3303
         // But, if we call SetFocus() for ObjectList it will cause an invoking of a KillFocus event for "temporary" panels  
-        this->SetFocus();
+        SetFocus();
 #else
         // To avoid selection update from SetSelection() and UnselectAll() under osx
         if (m_prevent_list_events)
@@ -104,8 +104,7 @@ ObjectList::ObjectList(wxWindow* parent) :
 		// Workaround for entering the column editing mode on Windows. Simulate keyboard enter when another column of the active line is selected.
 		int new_selected_column = -1;
 #endif //__WXMSW__
-        if (wxGetKeyState(WXK_SHIFT))
-        {
+        if (wxGetKeyState(WXK_SHIFT)) {
             wxDataViewItemArray sels;
             GetSelections(sels);
             if (! sels.empty() && sels.front() == m_last_selected_item)
@@ -119,7 +118,7 @@ ObjectList::ObjectList(wxWindow* parent) :
 			// Workaround for entering the column editing mode on Windows. Simulate keyboard enter when another column of the active line is selected.
 		    wxDataViewItem    item;
 		    wxDataViewColumn *col;
-		    this->HitTest(this->get_mouse_position_in_control(), item, col);
+		    HitTest(get_mouse_position_in_control(), item, col);
 		    new_selected_column = (col == nullptr) ? -1 : (int)col->GetModelColumn();
 	        if (new_selected_item == m_last_selected_item && m_last_selected_column != -1 && m_last_selected_column != new_selected_column) {
 	        	// Mouse clicked on another column of the active row. Simulate keyboard enter to enter the editing mode of the current column.
@@ -127,7 +126,7 @@ ObjectList::ObjectList(wxWindow* parent) :
 				sim.Char(WXK_RETURN);
 	        }
 #endif //__WXMSW__
-	        m_last_selected_item = new_selected_item;
+            m_last_selected_item = new_selected_item;
         }
 #ifdef __WXMSW__
         m_last_selected_column = new_selected_column;
@@ -135,7 +134,7 @@ ObjectList::ObjectList(wxWindow* parent) :
 
         selection_changed();
 #ifndef __WXMSW__
-        set_tooltip_for_item(this->get_mouse_position_in_control());
+        set_tooltip_for_item(get_mouse_position_in_control());
 #endif //__WXMSW__
 
 #ifndef __WXOSX__
@@ -174,20 +173,20 @@ ObjectList::ObjectList(wxWindow* parent) :
         wxAcceleratorTable accel(33, entries);
         SetAcceleratorTable(accel);
 
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->copy();                      }, wxID_COPY);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->paste();                     }, wxID_PASTE);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->select_item_all_children();  }, wxID_SELECTALL);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->remove();                    }, wxID_DELETE);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->undo();  					}, wxID_UNDO);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->redo();                    	}, wxID_REDO);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->increase_instances();        }, wxID_ADD);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->decrease_instances();        }, wxID_REMOVE);
-        this->Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { this->toggle_printable_state();    }, wxID_PRINT);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { copy();                      }, wxID_COPY);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { paste();                     }, wxID_PASTE);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { select_item_all_children();  }, wxID_SELECTALL);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { remove();                    }, wxID_DELETE);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { undo();  					}, wxID_UNDO);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { redo();                    	}, wxID_REDO);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { increase_instances();        }, wxID_ADD);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { decrease_instances();        }, wxID_REMOVE);
+        Bind(wxEVT_MENU, [this](wxCommandEvent &evt) { toggle_printable_state();    }, wxID_PRINT);
         
         for (int i = 0; i < 10; i++)
-            this->Bind(wxEVT_MENU, [this, i](wxCommandEvent &evt) {
+            Bind(wxEVT_MENU, [this, i](wxCommandEvent &evt) {
                 if (extruders_count() > 1 && i <= extruders_count())
-                    this->set_extruder_for_selected_items(i);
+                    set_extruder_for_selected_items(i);
             }, wxID_LAST+i+1);
     }
 #else //__WXOSX__
@@ -196,7 +195,7 @@ ObjectList::ObjectList(wxWindow* parent) :
 
 #ifdef __WXMSW__
     GetMainWindow()->Bind(wxEVT_MOTION, [this](wxMouseEvent& event) {
-        set_tooltip_for_item(this->get_mouse_position_in_control());
+        set_tooltip_for_item(get_mouse_position_in_control());
         event.Skip();
     });
 #endif //__WXMSW__
@@ -230,16 +229,12 @@ ObjectList::ObjectList(wxWindow* parent) :
 	}));
 }
 
-ObjectList::~ObjectList()
-{
-}
-
 void ObjectList::set_min_height()
 {
     if (m_items_count == size_t(-1))
         m_items_count = 7;
     int list_min_height = lround(2.25 * (m_items_count + 1) * wxGetApp().em_unit()); // +1 is for height of control header
-    this->SetMinSize(wxSize(1, list_min_height));
+    SetMinSize(wxSize(1, list_min_height));
 }
 
 void ObjectList::update_min_height()
@@ -615,8 +610,7 @@ void ObjectList::selection_changed()
         wxPostEvent(this, event);
     }
 
-    if (const wxDataViewItem item = GetSelection())
-    {
+    if (const wxDataViewItem item = GetSelection()) {
         const ItemType type = m_objects_model->GetItemType(item);
         // to correct visual hints for layers editing on the Scene
         if (type & (itLayer|itLayerRoot)) {
@@ -758,8 +752,7 @@ void ObjectList::paste_objects_into_list(const std::vector<size_t>& object_idxs)
         return;
 
     wxDataViewItemArray items;
-    for (const size_t object : object_idxs)
-    {
+    for (const size_t object : object_idxs) {
         add_object_to_list(object);
         items.Add(m_objects_model->GetItemById(object));
     }
@@ -2061,7 +2054,7 @@ void ObjectList::texture_editing()
     // if it doesn't exist now
     if (!texture_item.IsOk())
         // no texture defined, add it
-        texture_item = add_texture_item(obj_item);
+        texture_item = add_texture_item(obj_item, true);
 
     if (!texture_item.IsOk())
         return;
@@ -2384,14 +2377,17 @@ wxDataViewItem ObjectList::add_settings_item(wxDataViewItem parent_item, const D
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-wxDataViewItem ObjectList::add_texture_item(const wxDataViewItem obj_item)
+wxDataViewItem ObjectList::add_texture_item(const wxDataViewItem obj_item, bool force_creation)
 {
     const int obj_idx = m_objects_model->GetIdByItem(obj_item);
-    if (obj_idx < 0 || printer_technology() == ptSLA)
+    if (obj_idx < 0 || printer_technology() == ptSLA || (!force_creation && object(obj_idx)->texture.get_name().empty()))
         return wxDataViewItem(nullptr);
 
     // create Texture item
     wxDataViewItem texture_item = m_objects_model->AddTextureChild(obj_item);
+    ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(texture_item.GetID());
+    node->SetBitmap(object(obj_idx)->texture.get_name().empty() ? wxBitmap() : create_scaled_bitmap("edit_texture"));
+
     return texture_item;
 }
 
@@ -2482,14 +2478,13 @@ void ObjectList::add_object_to_list(size_t obj_idx, bool call_selection_changed)
     }
 
     // add instances to the object, if it has those
-    if (model_object->instances.size()>1)
-    {
-        std::vector<bool> print_idicator(model_object->instances.size());
+    if (model_object->instances.size()>1) {
+        std::vector<bool> print_indicator(model_object->instances.size());
         for (size_t i = 0; i < model_object->instances.size(); ++i)
-            print_idicator[i] = model_object->instances[i]->printable;
+            print_indicator[i] = model_object->instances[i]->printable;
 
         const wxDataViewItem object_item = m_objects_model->GetItemById(obj_idx);
-        m_objects_model->AddInstanceChild(object_item, print_idicator);
+        m_objects_model->AddInstanceChild(object_item, print_indicator);
         Expand(m_objects_model->GetInstanceRootItem(object_item));
     }
     else
@@ -2500,6 +2495,11 @@ void ObjectList::add_object_to_list(size_t obj_idx, bool call_selection_changed)
 
     // Add layers if it has
     add_layer_root_item(item);
+
+#if ENABLE_TEXTURED_VOLUMES
+    // Add texture if it has
+    add_texture_item(item, false);
+#endif // ENABLE_TEXTURED_VOLUMES
 
 #ifndef __WXOSX__ 
     if (call_selection_changed)
@@ -2636,10 +2636,8 @@ void ObjectList::select_object_item(bool is_msr_gizmo)
 
 static void update_selection(wxDataViewItemArray& sels, ObjectList::SELECTION_MODE mode, ObjectDataViewModel* model)
 {
-    if (mode == ObjectList::smInstance)
-    {
-        for (auto& item : sels)
-        {
+    if (mode == ObjectList::smInstance) {
+        for (auto& item : sels) {
             ItemType type = model->GetItemType(item);
             if (type == itObject)
                 continue;
@@ -2650,8 +2648,7 @@ static void update_selection(wxDataViewItemArray& sels, ObjectList::SELECTION_MO
                 update_selection(sels, mode, model);
                 return;
             }
-            if (type == itInstance)
-            {
+            if (type == itInstance) {
                 wxDataViewItemArray instances;
                 model->GetChildren(model->GetParent(item), instances);
                 assert(instances.Count() > 0);
@@ -2662,8 +2659,7 @@ static void update_selection(wxDataViewItemArray& sels, ObjectList::SELECTION_MO
                     selected_instances_cnt++;
                 }
 
-                if (selected_instances_cnt == instances.Count()) 
-                {
+                if (selected_instances_cnt == instances.Count()) {
                     wxDataViewItem obj_item = model->GetTopParent(item);
                     for (auto& inst : instances)
                         sels.Remove(inst);
@@ -3072,7 +3068,11 @@ void ObjectList::update_selections()
     else if (selection.is_single_full_object() || selection.is_multiple_full_object()) {
         const Selection::ObjectIdxsToInstanceIdxsMap& objects_content = selection.get_content();
         // it's impossible to select Settings, Layer or LayerRoot for several objects
+#if ENABLE_TEXTURED_VOLUMES
+        if (!selection.is_multiple_full_object() && (m_selection_mode & (smSettings | smLayer | smLayerRoot | smTexture))) {
+#else
         if (!selection.is_multiple_full_object() && (m_selection_mode & (smSettings | smLayer | smLayerRoot))) {
+#endif // ENABLE_TEXTURED_VOLUMES
             auto obj_idx = objects_content.begin()->first;
             wxDataViewItem obj_item = m_objects_model->GetItemById(obj_idx);
             if (m_selection_mode & smSettings) {
@@ -3089,13 +3089,17 @@ void ObjectList::update_selections()
                 else
                     sels.Add(obj_item);
             }
+#if ENABLE_TEXTURED_VOLUMES
+            else if (m_selection_mode & smTexture) {
+                sels.Add(m_objects_model->GetTextureItem(obj_item));
+            }
+#endif // ENABLE_TEXTURED_VOLUMES
         }
         else {
             for (const auto& object : objects_content) {
                 if (object.second.size() == 1)          // object with 1 instance                
                     sels.Add(m_objects_model->GetItemById(object.first));
-                else if (object.second.size() > 1)      // object with several instances                
-                {
+                else if (object.second.size() > 1) {      // object with several instances                                
                     wxDataViewItemArray current_sels;
                     GetSelections(current_sels);
                     const wxDataViewItem frst_inst_item = m_objects_model->GetItemByInstanceId(object.first, 0);
@@ -4016,7 +4020,7 @@ void ObjectList::update_after_undo_redo()
      * wrap this two functions into m_prevent_list_events *
      * */
     m_prevent_list_events = true;
-    this->UnselectAll();
+    UnselectAll();
     m_objects_model->DeleteAll();
     m_prevent_list_events = false;
 

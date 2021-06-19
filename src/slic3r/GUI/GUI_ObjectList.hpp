@@ -187,7 +187,7 @@ private:
 
 public:
     ObjectList(wxWindow* parent);
-    ~ObjectList();
+    ~ObjectList() = default;
 
     void set_min_height();
     void update_min_height();
@@ -268,7 +268,7 @@ public:
     wxDataViewItem      add_layer_root_item(const wxDataViewItem obj_item);
     wxDataViewItem      add_settings_item(wxDataViewItem parent_item, const DynamicPrintConfig* config);
 #if ENABLE_TEXTURED_VOLUMES
-    wxDataViewItem      add_texture_item(const wxDataViewItem obj_item);
+    wxDataViewItem      add_texture_item(const wxDataViewItem obj_item, bool force_creation);
     void                del_texture_item();
 #endif // ENABLE_TEXTURED_VOLUMES
 

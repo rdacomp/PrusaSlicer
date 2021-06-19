@@ -507,6 +507,9 @@ public:
 #if ENABLE_TEXTURES_MANAGER_DEBUG
     void output_content() const;
 #endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+    // strips trailing ":id" from the given name string, if present
+    static std::string decode_name(const std::string& name);
 };
 #endif // ENABLE_TEXTURED_VOLUMES
 

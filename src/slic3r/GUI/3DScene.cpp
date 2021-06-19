@@ -546,8 +546,7 @@ bool GLVolume::is_below_printbed() const
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
-// strips trailing ":id" from the given name string, if present
-static std::string decode_name(const std::string& name)
+std::string TexturesManager::decode_name(const std::string& name)
 {
     std::string::size_type pos = name.find(':');
     return (pos == name.npos) ? name : name.substr(0, pos);
@@ -556,7 +555,7 @@ static std::string decode_name(const std::string& name)
 // add new trailing ":id" to the given name string
 static std::string encode_name(const std::string& name, unsigned int id)
 {
-    return decode_name(name) + ":" + std::to_string(id);
+    return TexturesManager::decode_name(name) + ":" + std::to_string(id);
 }
 
 std::string TexturesManager::add_texture(const std::string& filename)
