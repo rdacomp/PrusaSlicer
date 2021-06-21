@@ -492,7 +492,6 @@ class TexturesManager
         unsigned int count{ 0 };
     };
 
-    int m_unique_id{ 0 };
     std::vector<TexItem> m_textures;
 
 public:
@@ -508,8 +507,12 @@ public:
     void output_content() const;
 #endif // ENABLE_TEXTURES_MANAGER_DEBUG
 
-    // strips trailing ":id" from the given name string, if present
+    // remove the trailing ":id" from the given name string, if present
     static std::string decode_name(const std::string& name);
+
+private:
+    // add a trailing ":id" to the given name string, if already in use
+    std::string encode_name(const std::string& name);
 };
 #endif // ENABLE_TEXTURED_VOLUMES
 

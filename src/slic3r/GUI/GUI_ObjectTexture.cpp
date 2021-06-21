@@ -384,7 +384,7 @@ void ObjectTexture::update()
     bool has_texture = model_object.second != nullptr && !model_object.second->texture.get_name().empty();
 
     // update texture widgets
-    std::string name = has_texture ? TexturesManager::decode_name(model_object.second->texture.get_name()) : "";
+    std::string name = has_texture ? model_object.second->texture.get_name() : "";
     m_tex_string->SetValue(name.empty() ? _L("None") : _(name));
     m_tex_delete_btn->Enable(has_texture);
 

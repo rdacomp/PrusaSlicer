@@ -553,9 +553,16 @@ std::string TexturesManager::decode_name(const std::string& name)
 }
 
 // add new trailing ":id" to the given name string
-static std::string encode_name(const std::string& name, unsigned int id)
+std::string TexturesManager::encode_name(const std::string& name)
 {
-    return TexturesManager::decode_name(name) + ":" + std::to_string(id);
+    unsigned int count = 0;
+    for (TexItem& item : m_textures) {
+        const std::string& tex_name = item.texture->get_name();
+        if (tex_name == name || boost::istarts_with(tex_name, name + ":"))
+            ++count;
+    }
+
+    return (count == 0) ? name : TexturesManager::decode_name(name) + ":" + std::to_string(count);
 }
 
 std::string TexturesManager::add_texture(const std::string& filename)
@@ -578,7 +585,7 @@ std::string TexturesManager::add_texture(const std::string& filename)
     // load the texture and add it to the cache
     std::shared_ptr<GUI::GLIdeaMakerTexture> texture = std::make_shared<GUI::GLIdeaMakerTexture>();
     if (texture->load_from_ideamaker_texture_file(filename, true, GUI::GLTexture::ECompressionType::SingleThreaded, true)) {
-        texture->set_name(encode_name(texture->get_name(), m_unique_id++));
+        texture->set_name(encode_name(texture->get_name()));
         TexItem item = { texture, (unsigned int)1 };
         m_textures.emplace_back(item);
 
