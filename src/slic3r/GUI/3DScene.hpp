@@ -364,7 +364,7 @@ public:
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // Bounding box of this volume, in unscaled coordinates.
-    const BoundingBoxf3& bounding_box() const { return this->indexed_vertex_array.bounding_box(); }
+    const BoundingBoxf3& bounding_box() const { return indexed_vertex_array.bounding_box(); }
 
     void set_render_color(float r, float g, float b, float a);
     void set_render_color(const float* rgba, unsigned int size);
@@ -434,9 +434,9 @@ public:
     void set_convex_hull(const TriangleMesh &convex_hull) { m_convex_hull = std::make_shared<const TriangleMesh>(convex_hull); }
     void set_convex_hull(TriangleMesh &&convex_hull) { m_convex_hull = std::make_shared<const TriangleMesh>(std::move(convex_hull)); }
 
-    int                 object_idx() const { return this->composite_id.object_id; }
-    int                 volume_idx() const { return this->composite_id.volume_id; }
-    int                 instance_idx() const { return this->composite_id.instance_id; }
+    int                 object_idx() const { return composite_id.object_id; }
+    int                 volume_idx() const { return composite_id.volume_id; }
+    int                 instance_idx() const { return composite_id.instance_id; }
 
     Transform3d         world_matrix() const;
     bool                is_left_handed() const;
@@ -449,14 +449,14 @@ public:
     // convex hull
     const TriangleMesh*  convex_hull() const { return m_convex_hull.get(); }
 
-    bool                empty() const { return this->indexed_vertex_array.empty(); }
+    bool                empty() const { return indexed_vertex_array.empty(); }
 
     void                set_range(double low, double high);
 
     void                render() const;
 
-    void                finalize_geometry(bool opengl_initialized) { this->indexed_vertex_array.finalize_geometry(opengl_initialized); }
-    void                release_geometry() { this->indexed_vertex_array.release_geometry(); }
+    void                finalize_geometry(bool opengl_initialized) { indexed_vertex_array.finalize_geometry(opengl_initialized); }
+    void                release_geometry() { indexed_vertex_array.release_geometry(); }
 
     void                set_bounding_boxes_as_dirty() { m_transformed_bounding_box_dirty = true; m_transformed_convex_hull_bounding_box_dirty = true; }
 
@@ -471,11 +471,11 @@ public:
     // Return an estimate of the memory consumed by this class.
     size_t 				cpu_memory_used() const { 
     	//FIXME what to do wih m_convex_hull?
-    	return sizeof(*this) - sizeof(this->indexed_vertex_array) + this->indexed_vertex_array.cpu_memory_used() + this->print_zs.capacity() * sizeof(coordf_t) + this->offsets.capacity() * sizeof(size_t);
+    	return sizeof(*this) - sizeof(indexed_vertex_array) + indexed_vertex_array.cpu_memory_used() + print_zs.capacity() * sizeof(coordf_t) + offsets.capacity() * sizeof(size_t);
     }
     // Return an estimate of the memory held by GPU vertex buffers.
-    size_t 				gpu_memory_used() const { return this->indexed_vertex_array.gpu_memory_used(); }
-    size_t 				total_memory_used() const { return this->cpu_memory_used() + this->gpu_memory_used(); }
+    size_t 				gpu_memory_used() const { return indexed_vertex_array.gpu_memory_used(); }
+    size_t 				total_memory_used() const { return cpu_memory_used() + gpu_memory_used(); }
 };
 
 typedef std::vector<GLVolume*> GLVolumePtrs;
