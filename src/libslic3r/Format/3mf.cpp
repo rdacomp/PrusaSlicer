@@ -964,7 +964,7 @@ namespace Slic3r {
                         std::string opt_key = option.second.get<std::string>("<xmlattr>.opt_key");
                         std::string value = option.second.data();
 
-                        config.set_deserialize(opt_key, value);
+                        config.set_deserialize(opt_key, value, std::string());
                     }
 
                     config_ranges[{ min_z, max_z }].assign_config(std::move(config));

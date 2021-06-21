@@ -467,7 +467,7 @@ void ConfigBase::set(const std::string &opt_key, double value, bool create)
     }
 }
 
-bool ConfigBase::set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, bool append)
+bool ConfigBase::set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, std::string& change_message, bool append)
 {
     t_config_option_key opt_key = opt_key_src;
     std::string         value   = value_src;
@@ -477,22 +477,22 @@ bool ConfigBase::set_deserialize_nothrow(const t_config_option_key &opt_key_src,
     if (opt_key.empty())
         // Ignore the option.
         return true;
-    return this->set_deserialize_raw(opt_key, value, append);
+    return this->set_deserialize_raw(opt_key, value, change_message, append);
 }
 
-void ConfigBase::set_deserialize(const t_config_option_key &opt_key_src, const std::string &value_src, bool append)
+void ConfigBase::set_deserialize(const t_config_option_key &opt_key_src, const std::string &value_src, std::string& change_message, bool append)
 {
-	if (! this->set_deserialize_nothrow(opt_key_src, value_src, append))
+	if (! this->set_deserialize_nothrow(opt_key_src, value_src, change_message, append))
 		throw BadOptionTypeException(format("ConfigBase::set_deserialize() failed for parameter \"%1%\", value \"%2%\"", opt_key_src,  value_src));
 }
 
-void ConfigBase::set_deserialize(std::initializer_list<SetDeserializeItem> items)
+void ConfigBase::set_deserialize(std::initializer_list<SetDeserializeItem> items, std::string& change_message)
 {
 	for (const SetDeserializeItem &item : items)
-		this->set_deserialize(item.opt_key, item.opt_value, item.append);
+		this->set_deserialize(item.opt_key, item.opt_value, change_message, item.append);
 }
 
-bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, const std::string &value, bool append)
+DeserializeResult ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, const std::string &value, std::string& change_message, bool append)
 {
     t_config_option_key opt_key = opt_key_src;
     // Try to deserialize the option by its name.
@@ -521,14 +521,17 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
         // Aliasing for example "solid_layers" to "top_solid_layers" and "bottom_solid_layers".
         for (const t_config_option_key &shortcut : optdef->shortcut)
             // Recursive call.
-            if (! this->set_deserialize_raw(shortcut, value, append))
-                return false;
-        return true;
+            if (! this->set_deserialize_raw(shortcut, value, change_message, append))
+                return DeserializeResult::DR_FAIL;
+        return DeserializeResult::DR_SUCCESS;
     }
     
     ConfigOption *opt = this->option(opt_key, true);
     assert(opt != nullptr);
-    return opt->deserialize(value, append);
+    DeserializeResult res = opt->deserialize(value, append);
+    if (res == DeserializeResult::DR_CHANGE)
+        change_message = (change_message.empty() ? "" : change_message + "\n") + "Option " + opt_key + " was changed to " + opt->serialize();
+    return res;
 }
 
 // Return an absolute value of a possibly relative config variable.
@@ -592,23 +595,27 @@ void ConfigBase::load(const std::string &file)
     if (is_gcode_file(file))
         this->load_from_gcode_file(file);
     else
-        this->load_from_ini(file);
+        this->load_from_ini(file, std::string());
 }
 
-void ConfigBase::load_from_ini(const std::string &file)
+void ConfigBase::load_from_ini(const std::string &file, std::string& change_message)
 {
     boost::property_tree::ptree tree;
     boost::nowide::ifstream ifs(file);
     boost::property_tree::read_ini(ifs, tree);
-    this->load(tree);
+    std::string local_change_message;
+    this->load(tree, local_change_message);
+    if (!local_change_message.empty()) {
+        change_message += format("\nIn file %1%:\n%2%", file, local_change_message);
+    }
 }
 
-void ConfigBase::load(const boost::property_tree::ptree &tree)
+void ConfigBase::load(const boost::property_tree::ptree &tree, std::string& change_message)
 {
     for (const boost::property_tree::ptree::value_type &v : tree) {
         try {
             t_config_option_key opt_key = v.first;
-            this->set_deserialize(opt_key, v.second.get_value<std::string>());
+            this->set_deserialize(opt_key, v.second.get_value<std::string>(), change_message);
         } catch (UnknownOptionException & /* e */) {
             // ignore
         }
@@ -688,7 +695,7 @@ size_t ConfigBase::load_from_gcode_string(const char* str)
         if (key == nullptr)
             break;
         try {
-            this->set_deserialize(std::string(key, key_end), std::string(value, end));
+            this->set_deserialize(std::string(key, key_end), std::string(value, end), std::string());
             ++num_key_value_pairs;
         }
         catch (UnknownOptionException & /* e */) {
@@ -882,7 +889,7 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
             static_cast<ConfigOptionString*>(opt_base)->value = value;
         } else {
             // Any scalar value of a type different from Bool and String.
-            if (! this->set_deserialize_nothrow(opt_key, value, false)) {
+            if (! this->set_deserialize_nothrow(opt_key, value, std::string(), false)) {
 				boost::nowide::cerr << "Invalid value supplied for --" << token.c_str() << std::endl;
 				return false;
 			}

@@ -786,7 +786,12 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 
 				// Reload global configuration
 				auto* app_config = GUI::wxGetApp().app_config;
-				GUI::wxGetApp().preset_bundle->load_presets(*app_config);
+				std::string change_message;
+				GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
+				if (!change_message.empty()) {
+					//TODO: what type of dialog to use?, translations
+					GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+				}
 				GUI::wxGetApp().load_current_presets();
 				GUI::wxGetApp().plater()->set_bed_shape();
 				return R_UPDATE_INSTALLED;
@@ -816,7 +821,12 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 
 				// Reload global configuration
 				auto* app_config = GUI::wxGetApp().app_config;
-				GUI::wxGetApp().preset_bundle->load_presets(*app_config);
+				std::string change_message;
+				GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
+				if (!change_message.empty()) {
+					//TODO: what type of dialog to use?, translations
+					GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+				}
 				GUI::wxGetApp().load_current_presets();
 				return R_UPDATE_INSTALLED;
 			}
@@ -873,7 +883,12 @@ void PresetUpdater::on_update_notification_confirm()
 
 		// Reload global configuration
 		auto* app_config = GUI::wxGetApp().app_config;
-		GUI::wxGetApp().preset_bundle->load_presets(*app_config);
+		std::string change_message;
+		GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
+		if (!change_message.empty()) {
+			//TODO: what type of dialog to use?, translations
+			GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+		}
 		GUI::wxGetApp().load_current_presets();
 		p->has_waiting_updates = false;
 		//return R_UPDATE_INSTALLED;

@@ -162,7 +162,7 @@ void PresetBundle::setup_directories()
     }
 }
 
-void PresetBundle::load_presets(AppConfig &config, const std::string &preferred_model_id)
+void PresetBundle::load_presets(AppConfig &config, std::string& change_message, const std::string &preferred_model_id)
 {
     // First load the vendor specific system presets.
     std::string errors_cummulative = this->load_system_presets();
@@ -176,32 +176,32 @@ void PresetBundle::load_presets(AppConfig &config, const std::string &preferred_
 #endif
         ;
     try {
-        this->prints.load_presets(dir_user_presets, "print");
+        this->prints.load_presets(dir_user_presets, "print", change_message);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->sla_prints.load_presets(dir_user_presets, "sla_print");
+        this->sla_prints.load_presets(dir_user_presets, "sla_print", change_message);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->filaments.load_presets(dir_user_presets, "filament");
+        this->filaments.load_presets(dir_user_presets, "filament", change_message);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->sla_materials.load_presets(dir_user_presets, "sla_material");
+        this->sla_materials.load_presets(dir_user_presets, "sla_material", change_message);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->printers.load_presets(dir_user_presets, "printer");
+        this->printers.load_presets(dir_user_presets, "printer", change_message);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->physical_printers.load_printers(dir_user_presets, "physical_printer");
+        this->physical_printers.load_printers(dir_user_presets, "physical_printer", change_message);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
@@ -702,7 +702,7 @@ void PresetBundle::load_config_file(const std::string &path)
 		// Initialize a config from full defaults.
 		DynamicPrintConfig config;
 		config.apply(FullPrintConfig::defaults());
-		config.load(tree);
+		config.load(tree, std::string());
 		Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
 		break;
@@ -1234,7 +1234,7 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
 			                    section.first << "\" contains invalid \"renamed_from\" key, which is being ignored.";
                    		}
                 	}
-                    config.set_deserialize(kvp.first, kvp.second.data());
+                    config.set_deserialize(kvp.first, kvp.second.data(), std::string());
                 }
             };
             if (presets == &this->printers) {
@@ -1352,7 +1352,7 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
             DynamicPrintConfig        config = default_config;
 
             for (auto& kvp : section.second)
-                config.set_deserialize(kvp.first, kvp.second.data());
+                config.set_deserialize(kvp.first, kvp.second.data(), std::string());
 
             // Report configuration fields, which are misplaced into a wrong group.
             std::string incorrect_keys = Preset::remove_invalid_keys(config, default_config);

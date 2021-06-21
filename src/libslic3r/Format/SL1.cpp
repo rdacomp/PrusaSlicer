@@ -290,7 +290,7 @@ std::vector<ExPolygons> extract_slices_from_sla_archive(
 void import_sla_archive(const std::string &zipfname, DynamicPrintConfig &out)
 {
     ArchiveData arch = extract_sla_archive(zipfname, "png");
-    out.load(arch.profile);
+    out.load(arch.profile, std::string());
 }
 
 void import_sla_archive(
@@ -305,7 +305,7 @@ void import_sla_archive(
     windowsize.y() = std::max(2, windowsize.y());
 
     ArchiveData arch = extract_sla_archive(zipfname, "thumbnail");
-    profile.load(arch.profile);
+    profile.load(arch.profile, std::string());
 
     RasterParams rstp = get_raster_params(profile);
     rstp.win          = {windowsize.y(), windowsize.x()};

@@ -870,10 +870,15 @@ bool GUI_App::on_init_inner()
 
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
+    std::string change_message;
     try {
-        preset_bundle->load_presets(*app_config);
+        preset_bundle->load_presets(*app_config, change_message);
     } catch (const std::exception &ex) {
         show_error(nullptr, ex.what());
+    }
+    if (!change_message.empty()) {
+        //TODO: what type of dialog to use?, translations
+        show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
     }
 
 #ifdef WIN32
@@ -1683,7 +1688,12 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                         Config::SnapshotDB::singleton().take_snapshot(*app_config, Config::Snapshot::SNAPSHOT_BEFORE_ROLLBACK);
                     try {
                         app_config->set("on_snapshot", Config::SnapshotDB::singleton().restore_snapshot(dlg.snapshot_to_activate(), *app_config).id);
-                        preset_bundle->load_presets(*app_config);
+                        std::string change_message;
+                        preset_bundle->load_presets(*app_config, change_message);
+                        if (!change_message.empty()) {
+                            //TODO: what type of dialog to use?, translations
+                            GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+                        }
                         // Load the currently selected preset into the GUI, update the preset selection box.
                         load_current_presets();
                     } catch (std::exception &ex) {

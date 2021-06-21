@@ -120,6 +120,13 @@ enum PrinterTechnology : unsigned char
     ptAny
 };
 
+enum DeserializeResult : int
+{
+    DR_FAIL = 0,
+    DR_SUCCESS = 1,
+    DR_CHANGE
+};
+
 // A generic value of a configuration option.
 class ConfigOption {
 public:
@@ -127,7 +134,7 @@ public:
 
     virtual ConfigOptionType    type() const = 0;
     virtual std::string         serialize() const = 0;
-    virtual bool                deserialize(const std::string &str, bool append = false) = 0;
+    virtual DeserializeResult   deserialize(const std::string &str, bool append = false) = 0;
     virtual ConfigOption*       clone() const = 0;
     // Set a value from a ConfigOption. The two options should be compatible.
     virtual void                set(const ConfigOption *option) = 0;
@@ -422,12 +429,12 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail();
+        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
     ConfigOptionFloat& operator=(const ConfigOption *opt)
@@ -492,7 +499,7 @@ public:
         return vv;
     }
 
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -512,7 +519,7 @@ public:
 	            this->values.push_back(value);
 	        }
         }
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
     ConfigOptionFloatsTempl& operator=(const ConfigOption *opt)
@@ -575,12 +582,12 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail();
+        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
     ConfigOptionInt& operator=(const ConfigOption *opt) 
@@ -638,7 +645,7 @@ public:
         return vv;
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -658,7 +665,7 @@ public:
 	            this->values.push_back(value);
 	        }
         }
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
 private:
@@ -697,10 +704,10 @@ public:
         return escape_string_cstyle(this->value); 
     }
 
-    bool deserialize(const std::string &str, bool append = false) override 
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
-        return unescape_string_cstyle(str, this->value);
+        return unescape_string_cstyle(str, this->value) ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
 private:
@@ -735,11 +742,11 @@ public:
         return this->values;
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
-        return unescape_strings_cstyle(str, this->values);
+        return unescape_strings_cstyle(str, this->values) ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
 private:
@@ -769,13 +776,13 @@ public:
         return s;
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         // don't try to parse the trailing % since it's optional
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail();
+        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
 private:
@@ -877,13 +884,13 @@ public:
         return s;
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         this->percent = str.find_first_of("%") != std::string::npos;
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail();
+        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
 private:
@@ -963,7 +970,7 @@ public:
         return vv;
     }
 
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -984,7 +991,7 @@ public:
                 this->values.push_back({ value, percent });
             }
         }
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
     ConfigOptionFloatsOrPercentsTempl& operator=(const ConfigOption *opt)
@@ -1049,12 +1056,13 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         char dummy;
-        return sscanf(str.data(), " %lf , %lf %c", &this->value(0), &this->value(1), &dummy) == 2 ||
-               sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2;
+        return (sscanf(str.data(), " %lf , %lf %c", &this->value(0), &this->value(1), &dummy) == 2 ||
+                sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2)
+               ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
 private:
@@ -1100,7 +1108,7 @@ public:
         return vv;
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1118,7 +1126,7 @@ public:
             }
             this->values.push_back(point);
         }
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
 private:
@@ -1159,12 +1167,13 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         char dummy;
-        return sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
-               sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2;
+        return (sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
+                sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2)
+                ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
 private:
@@ -1190,11 +1199,11 @@ public:
         return std::string(this->value ? "1" : "0");
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         this->value = (str.compare("1") == 0);
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
 private:
@@ -1256,7 +1265,7 @@ public:
         return vv;
     }
     
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1272,7 +1281,7 @@ public:
         	} else
         		this->values.push_back(item_str.compare("1") == 0);	
         }
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
 protected:
@@ -1336,10 +1345,10 @@ public:
         return names[static_cast<int>(this->value)];
     }
 
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
-        return from_string(str, this->value);
+        return from_string(str, this->value) ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
     }
 
     static bool has(T value) 
@@ -1421,14 +1430,16 @@ public:
         return std::string();
     }
 
-    bool deserialize(const std::string &str, bool append = false) override
+    DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         auto it = this->keys_map->find(str);
-        if (it == this->keys_map->end())
-            return false;
+        if (it == this->keys_map->end()) {
+            this->value = keys_map->begin()->second;
+            return DeserializeResult::DR_CHANGE;
+        }            
         this->value = it->second;
-        return true;
+        return DeserializeResult::DR_SUCCESS;
     }
 
 private:
@@ -1679,6 +1690,8 @@ public:
     }
 };
 
+
+
 // An abstract configuration store.
 class ConfigBase : public ConfigOptionResolver
 {
@@ -1766,9 +1779,9 @@ public:
 
     // Set a configuration value from a string, it will call an overridable handle_legacy() 
     // to resolve renamed and removed configuration keys.
-	bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, bool append = false);
+    bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, std::string& change_message, bool append = false);
 	// May throw BadOptionTypeException() if the operation fails.
-    void set_deserialize(const t_config_option_key &opt_key, const std::string &str, bool append = false);
+    void set_deserialize(const t_config_option_key &opt_key, const std::string &str, std::string& change_message, bool append = false);
     struct SetDeserializeItem {
     	SetDeserializeItem(const char *opt_key, const char *opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
     	SetDeserializeItem(const std::string &opt_key, const std::string &opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
@@ -1783,17 +1796,17 @@ public:
     	std::string opt_key; std::string opt_value; bool append = false;
     };
 	// May throw BadOptionTypeException() if the operation fails.
-    void set_deserialize(std::initializer_list<SetDeserializeItem> items);
+    void set_deserialize(std::initializer_list<SetDeserializeItem> items, std::string& change_message);
 
     double get_abs_value(const t_config_option_key &opt_key) const;
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
     void setenv_() const;
     void load(const std::string &file);
-    void load_from_ini(const std::string &file);
+    void load_from_ini(const std::string &file, std::string& change_message);
     void load_from_gcode_file(const std::string &file);
     // Returns number of key/value pairs extracted.
     size_t load_from_gcode_string(const char* str);
-    void load(const boost::property_tree::ptree &tree);
+    void load(const boost::property_tree::ptree &tree, std::string& change_message);
     void save(const std::string &file) const;
 
 	// Set all the nullable values to nils.
@@ -1801,7 +1814,8 @@ public:
 
 private:
     // Set a configuration value from a string.
-    bool set_deserialize_raw(const t_config_option_key &opt_key_src, const std::string &str, bool append);
+    //bool set_deserialize_raw(const t_config_option_key &opt_key_src, const std::string &str, bool append);
+    DeserializeResult set_deserialize_raw(const t_config_option_key& opt_key_src, const std::string& str, std::string& change_message, bool append);
 };
 
 // Configuration store with dynamic number of configuration values.

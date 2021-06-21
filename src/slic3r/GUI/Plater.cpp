@@ -4623,7 +4623,12 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
             // Switch to the other printer technology. Switch to the last printer active for that particular technology.
             AppConfig *app_config = wxGetApp().app_config;
             app_config->set("presets", "printer", (new_printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name);
-            wxGetApp().preset_bundle->load_presets(*app_config);
+            std::string change_message;
+            wxGetApp().preset_bundle->load_presets(*app_config, change_message);
+            if (!change_message.empty()) {
+                //TODO: what type of dialog to use?, translations
+                GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+            }
 			// load_current_presets() calls Tab::load_current_preset() -> TabPrint::update() -> Object_list::update_and_show_object_settings_item(),
 			// but the Object list still keeps pointer to the old Model. Avoid a crash by removing selection first.
 			this->sidebar->obj_list()->unselect_objects();
