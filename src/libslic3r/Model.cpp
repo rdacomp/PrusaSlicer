@@ -540,6 +540,17 @@ std::string Model::propose_export_file_name_and_path(const std::string &new_exte
     return boost::filesystem::path(this->propose_export_file_name_and_path()).replace_extension(new_extension).string();
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+bool Model::has_any_texture() const
+{
+    for (const ModelObject* model_object : objects) {
+        if (!model_object->texture.get_name().empty())
+            return true;
+    }
+    return false;
+}
+#endif // ENABLE_TEXTURED_VOLUMES
+
 const TextureMetadata TextureMetadata::DUMMY = TextureMetadata();
 
 ModelObject::~ModelObject()

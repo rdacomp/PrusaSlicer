@@ -1244,6 +1244,11 @@ public:
     // Propose an output path, replace extension. The new_extension shall contain the initial dot.
     std::string   propose_export_file_name_and_path(const std::string &new_extension) const;
 
+#if ENABLE_TEXTURED_VOLUMES
+    // Whether or not any object of this model uses a texture
+    bool          has_any_texture() const;
+#endif // ENABLE_TEXTURED_VOLUMES
+
 private:
     explicit Model(int) : ObjectBase(-1) { assert(this->id().invalid()); }
 	void assign_new_unique_ids_recursive();

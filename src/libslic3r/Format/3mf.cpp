@@ -54,6 +54,10 @@ const std::string MODEL_EXTENSION = ".model";
 const std::string MODEL_FILE = "3D/3dmodel.model"; // << this is the only format of the string which works with CURA
 const std::string CONTENT_TYPES_FILE = "[Content_Types].xml";
 const std::string RELATIONSHIPS_FILE = "_rels/.rels";
+#if ENABLE_TEXTURED_VOLUMES
+const std::string MODEL_RELATIONSHIPS_FILE = "3D/_rels/3dmodel.model.rels";
+const std::string TEXTURES_PATH = "3D/Texture/";
+#endif // ENABLE_TEXTURED_VOLUMES
 const std::string THUMBNAIL_FILE = "Metadata/thumbnail.png";
 const std::string PRINT_CONFIG_FILE = "Metadata/Slic3r_PE.config";
 const std::string MODEL_CONFIG_FILE = "Metadata/Slic3r_PE_model.config";
@@ -2042,6 +2046,9 @@ namespace Slic3r {
         bool _add_content_types_file_to_archive(mz_zip_archive& archive);
         bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data);
         bool _add_relationships_file_to_archive(mz_zip_archive& archive);
+#if ENABLE_TEXTURED_VOLUMES
+        bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const Model& model);
+#endif // ENABLE_TEXTURED_VOLUMES
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
         bool _add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
         bool _add_mesh_to_object_stream(mz_zip_writer_staged_context &context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
@@ -2098,6 +2105,17 @@ namespace Slic3r {
             boost::filesystem::remove(filename);
             return false;
         }
+
+#if ENABLE_TEXTURED_VOLUMES
+        // Adds relationships file ("3D/_rels/3dmodel.model.rels"). 
+        // This relationshis file contains a reference to the texture files used by "3D/3dmodel.model"
+        // and it is added only if any texture is used
+        if (!_add_model_relationships_file_to_archive(archive, model)) {
+            close_zip_writer(&archive);
+            boost::filesystem::remove(filename);
+            return false;
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
 
         // Adds model file ("3D/3dmodel.model").
         // This is the one and only file that contains all the geometry (vertices and triangles) of all ModelVolumes.
@@ -2237,6 +2255,41 @@ namespace Slic3r {
 
         return true;
     }
+
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::_add_model_relationships_file_to_archive(mz_zip_archive& archive, const Model& model)
+    {
+        if (!model.has_any_texture())
+            return true;
+
+        std::stringstream stream;
+        stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        stream << "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n";
+
+        std::set<std::string> added;
+        for (const ModelObject* model_object : model.objects) {
+            std::string name = model_object->texture.get_name();
+            if (!name.empty()) {
+                boost::replace_all(name, " ", "%20"); // Microsoft 3DBuilder does this, is it really needed ?
+                if (added.find(name) == added.end()) {
+                    added.insert(name);
+                    stream << " <Relationship Target=\"/" << TEXTURES_PATH << name << ".texture.png\" Id=\"rel-model-" << added.size() << "\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture\"/>\n";
+                }
+            }
+        }
+
+        stream << "</Relationships>";
+
+        std::string out = stream.str();
+
+        if (!mz_zip_writer_add_mem(&archive, MODEL_RELATIONSHIPS_FILE.c_str(), (const void*)out.data(), out.length(), MZ_DEFAULT_COMPRESSION)) {
+            add_error("Unable to add model relationships file to archive");
+            return false;
+        }
+
+        return true;
+    }
+#endif // ENABLE_TEXTURED_VOLUMES
 
     static void reset_stream(std::stringstream &stream)
     {
