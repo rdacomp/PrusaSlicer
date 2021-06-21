@@ -393,7 +393,11 @@ void ObjectTexture::update()
             // show metadata
             m_main_sizer->Add(m_metadata_sizer, 0, wxEXPAND | wxALL);
             m_main_sizer->Show(m_metadata_sizer);
-            // update data widgets
+            m_parent->Layout();
+        }
+
+        if (m_main_sizer->IsShown(m_metadata_sizer)) {
+            // update widgets data
             m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.get_mapping()));
             m_move_u_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.get_offset_u()));
             m_move_v_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.get_offset_v()));
@@ -401,7 +405,6 @@ void ObjectTexture::update()
             m_repeat_v_spin->SetValue(static_cast<double>(model_object.second->texture.get_repeat_v()));
             m_rotation_spin->SetValue(static_cast<double>(model_object.second->texture.get_rotation()));
             m_wrap_choices->SetSelection(static_cast<int>(model_object.second->texture.get_wrapping()));
-            m_parent->Layout();
         }
     }
     else {
