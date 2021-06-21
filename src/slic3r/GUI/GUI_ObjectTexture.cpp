@@ -147,38 +147,41 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
         if (!boost::algorithm::iends_with(filename, ".texture"))
             return;
 
-        wxGetApp().plater()->take_snapshot(_L("Add texture"));
-
         const auto& [obj_idx, model_object] = get_model_object();
         if (model_object != nullptr) {
+            if (model_object->texture.get_name().empty())
+                wxGetApp().plater()->take_snapshot(_L("Add texture"));
+            else
+                wxGetApp().plater()->take_snapshot(_L("Change texture"));
+
             // add texture to the cache
             std::string tex_name = wxGetApp().plater()->add_object_texture(filename);
             // update object texture
             model_object->texture = wxGetApp().plater()->get_object_texture_metadata(tex_name);
-        }
 
-        update();
-        wxGetApp().plater()->update_volumes_texture_from_objects();
-        wxGetApp().obj_list()->changed_object(obj_idx);
+            update();
+            wxGetApp().plater()->update_volumes_texture_from_objects();
+            wxGetApp().obj_list()->changed_object(obj_idx);
+        }
         });
 
     m_tex_delete_btn->Bind(wxEVT_BUTTON, [this](wxEvent& event) {
         wxMessageDialog dlg(m_parent, _L("Do you really want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
         if (dlg.ShowModal() == wxID_YES) {
 
-            wxGetApp().plater()->take_snapshot(_L("Remove texture"));
-
             const auto& [obj_idx, model_object] = get_model_object();
             if (model_object != nullptr) {
+                wxGetApp().plater()->take_snapshot(_L("Remove texture"));
+
                 // remove texture from the cache
                 wxGetApp().plater()->remove_object_texture(model_object->texture.get_name());
                 // reset object texture
                 model_object->texture.reset();
-            }
 
-            update();
-            wxGetApp().plater()->update_volumes_texture_from_objects();
-            wxGetApp().obj_list()->del_texture_item();
+                update();
+                wxGetApp().plater()->update_volumes_texture_from_objects();
+                wxGetApp().obj_list()->del_texture_item();
+            }
         }
         });
 
