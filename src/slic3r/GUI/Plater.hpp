@@ -186,7 +186,7 @@ public:
 
     // Called after the Preferences dialog is closed and the program settings are saved.
     // Update the UI based on the current preferences.
-    void update_ui_from_settings(bool apply_free_camera_correction = true);
+    void update_ui_from_settings();
 
     void select_all();
     void deselect_all();
@@ -215,6 +215,7 @@ public:
     void export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path());
 #endif // ENABLE_PROJECT_DIRTY_STATE
     void reload_from_disk();
+    void replace_with_stl();
     void reload_all_from_disk();
     bool has_toolpaths_to_export() const;
     void export_toolpaths_to_obj() const;
@@ -315,6 +316,7 @@ public:
     bool can_undo() const;
     bool can_redo() const;
     bool can_reload_from_disk() const;
+    bool can_replace_with_stl() const;
     bool can_mirror() const;
     bool can_split(bool to_objects) const;
 
