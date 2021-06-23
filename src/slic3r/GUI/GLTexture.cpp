@@ -306,112 +306,11 @@ bool GLTexture::load_from_svg_files_as_sprites_array(const std::vector<std::stri
     return true;
 }
 
-void GLTexture::reset()
-{
-    if (m_id != 0)
-        glsafe(::glDeleteTextures(1, &m_id));
-
-    m_id = 0;
-    m_width = 0;
-    m_height = 0;
-    m_source = "";
-    m_compressor.reset();
-
-#if ENABLE_TEXTURED_VOLUMES
-    on_reset();
-#endif // ENABLE_TEXTURED_VOLUMES
-}
-
-void GLTexture::render_texture(unsigned int tex_id, float left, float right, float bottom, float top)
-{
-    render_sub_texture(tex_id, left, right, bottom, top, FullTextureUVs);
-}
-
-void GLTexture::render_sub_texture(unsigned int tex_id, float left, float right, float bottom, float top, const GLTexture::Quad_UVs& uvs)
-{
-    glsafe(::glEnable(GL_BLEND));
-    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-
-    glsafe(::glEnable(GL_TEXTURE_2D));
-    glsafe(::glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE));
-
-    glsafe(::glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id));
-
-    ::glBegin(GL_QUADS);
-    ::glTexCoord2f(uvs.left_bottom.u, uvs.left_bottom.v); ::glVertex2f(left, bottom);
-    ::glTexCoord2f(uvs.right_bottom.u, uvs.right_bottom.v); ::glVertex2f(right, bottom);
-    ::glTexCoord2f(uvs.right_top.u, uvs.right_top.v); ::glVertex2f(right, top);
-    ::glTexCoord2f(uvs.left_top.u, uvs.left_top.v); ::glVertex2f(left, top);
-    glsafe(::glEnd());
-
-    glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
-
-    glsafe(::glDisable(GL_TEXTURE_2D));
-    glsafe(::glDisable(GL_BLEND));
-}
-
-bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
-{
-    const bool compression_enabled = (compression_type != ECompressionType::None) && GLEW_EXT_texture_compression_s3tc;
-
-    // Load a PNG with an alpha channel.
-    wxImage image;
-    if (!image.LoadFile(wxString::FromUTF8(filename.c_str()), wxBITMAP_TYPE_PNG))
-        return false;
-
-    m_width = image.GetWidth();
-    m_height = image.GetHeight();
-
-    bool requires_rescale = false;
-
-    if (compression_enabled && compression_type == ECompressionType::MultiThreaded)
-        requires_rescale = adjust_size_for_compression();
-
-    if (requires_rescale)
-        image = image.ResampleBicubic(m_width, m_height);
-
-    const int n_pixels = m_width * m_height;
-    if (n_pixels <= 0) {
-        reset();
-        return false;
-    }
-
-    std::vector<unsigned char> data;
-
-    // Get RGB & alpha raw data from wxImage, pack them into an array.
-    auto copy_data = [](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
-        unsigned char* img_rgb = image.GetData();
-        unsigned char* img_alpha = image.GetAlpha();
-        data.resize(n_pixels * 4);
-        for (int i = 0; i < n_pixels; ++i) {
-            const int data_id = i * 4;
-            const int img_id = i * 3;
-            data[data_id + 0] = img_rgb[img_id + 0];
-            data[data_id + 1] = img_rgb[img_id + 1];
-            data[data_id + 2] = img_rgb[img_id + 2];
-            data[data_id + 3] = (img_alpha != nullptr) ? img_alpha[i] : 255;
-        }
-    };
-
-    copy_data(image, data, n_pixels);
-
-    send_to_gpu(data, use_mipmaps, compression_type, apply_anisotropy, [&image, copy_data](int lod_w, int lod_h, std::vector<unsigned char>& data) {
-        wxImage im = image.ResampleBicubic(lod_w, lod_h);
-        copy_data(im, data, lod_w * lod_h);
-        });
-
-    m_source = filename;
-
-    if (compression_enabled && compression_type == ECompressionType::MultiThreaded)
-        // start asynchronous compression
-        m_compressor.start_compressing();
-
-    return true;
-}
-
 #if ENABLE_TEXTURED_VOLUMES
 bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
 {
+    reset();
+
     bool compression_enabled = (compression_type != ECompressionType::None) && GLEW_EXT_texture_compression_s3tc;
 
     // for reference, see: http://pulsarengine.com/2009/01/reading-png-images-from-memory/
@@ -608,6 +507,109 @@ bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data,
 }
 #endif // ENABLE_TEXTURED_VOLUMES
 
+void GLTexture::reset()
+{
+    if (m_id != 0)
+        glsafe(::glDeleteTextures(1, &m_id));
+
+    m_id = 0;
+    m_width = 0;
+    m_height = 0;
+    m_source = "";
+    m_compressor.reset();
+
+#if ENABLE_TEXTURED_VOLUMES
+    on_reset();
+#endif // ENABLE_TEXTURED_VOLUMES
+}
+
+void GLTexture::render_texture(unsigned int tex_id, float left, float right, float bottom, float top)
+{
+    render_sub_texture(tex_id, left, right, bottom, top, FullTextureUVs);
+}
+
+void GLTexture::render_sub_texture(unsigned int tex_id, float left, float right, float bottom, float top, const GLTexture::Quad_UVs& uvs)
+{
+    glsafe(::glEnable(GL_BLEND));
+    glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+
+    glsafe(::glEnable(GL_TEXTURE_2D));
+    glsafe(::glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE));
+
+    glsafe(::glBindTexture(GL_TEXTURE_2D, (GLuint)tex_id));
+
+    ::glBegin(GL_QUADS);
+    ::glTexCoord2f(uvs.left_bottom.u, uvs.left_bottom.v); ::glVertex2f(left, bottom);
+    ::glTexCoord2f(uvs.right_bottom.u, uvs.right_bottom.v); ::glVertex2f(right, bottom);
+    ::glTexCoord2f(uvs.right_top.u, uvs.right_top.v); ::glVertex2f(right, top);
+    ::glTexCoord2f(uvs.left_top.u, uvs.left_top.v); ::glVertex2f(left, top);
+    glsafe(::glEnd());
+
+    glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
+
+    glsafe(::glDisable(GL_TEXTURE_2D));
+    glsafe(::glDisable(GL_BLEND));
+}
+
+bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
+{
+    const bool compression_enabled = (compression_type != ECompressionType::None) && GLEW_EXT_texture_compression_s3tc;
+
+    // Load a PNG with an alpha channel.
+    wxImage image;
+    if (!image.LoadFile(wxString::FromUTF8(filename.c_str()), wxBITMAP_TYPE_PNG))
+        return false;
+
+    m_width = image.GetWidth();
+    m_height = image.GetHeight();
+
+    bool requires_rescale = false;
+
+    if (compression_enabled && compression_type == ECompressionType::MultiThreaded)
+        requires_rescale = adjust_size_for_compression();
+
+    if (requires_rescale)
+        image = image.ResampleBicubic(m_width, m_height);
+
+    const int n_pixels = m_width * m_height;
+    if (n_pixels <= 0) {
+        reset();
+        return false;
+    }
+
+    std::vector<unsigned char> data;
+
+    // Get RGB & alpha raw data from wxImage, pack them into an array.
+    auto copy_data = [](wxImage& image, std::vector<unsigned char>& data, int n_pixels) {
+        unsigned char* img_rgb = image.GetData();
+        unsigned char* img_alpha = image.GetAlpha();
+        data.resize(n_pixels * 4);
+        for (int i = 0; i < n_pixels; ++i) {
+            const int data_id = i * 4;
+            const int img_id = i * 3;
+            data[data_id + 0] = img_rgb[img_id + 0];
+            data[data_id + 1] = img_rgb[img_id + 1];
+            data[data_id + 2] = img_rgb[img_id + 2];
+            data[data_id + 3] = (img_alpha != nullptr) ? img_alpha[i] : 255;
+        }
+    };
+
+    copy_data(image, data, n_pixels);
+
+    send_to_gpu(data, use_mipmaps, compression_type, apply_anisotropy, [&image, copy_data](int lod_w, int lod_h, std::vector<unsigned char>& data) {
+        wxImage im = image.ResampleBicubic(lod_w, lod_h);
+        copy_data(im, data, lod_w * lod_h);
+        });
+
+    m_source = filename;
+
+    if (compression_enabled && compression_type == ECompressionType::MultiThreaded)
+        // start asynchronous compression
+        m_compressor.start_compressing();
+
+    return true;
+}
+
 bool GLTexture::load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px)
 {
     const bool compression_enabled = compress && GLEW_EXT_texture_compression_s3tc;
@@ -751,86 +753,6 @@ void GLTexture::send_to_gpu(std::vector<unsigned char>& data, bool use_mipmaps, 
 
     glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
 }
-
-#if ENABLE_TEXTURED_VOLUMES
-bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
-{
-    reset();
-
-    if (!boost::filesystem::exists(filename))
-        return false;
-
-    if (boost::algorithm::iends_with(filename, ".texture")) {
-
-        boost::nowide::ifstream file(filename, boost::nowide::ifstream::binary);
-        if (!file.good())
-            return false;
-
-        boost::property_tree::ptree root;
-        boost::property_tree::read_json(file, root);
-
-        file.close();
-
-        // http://www.cochoy.fr/boost-property-tree/
-        boost::optional<std::string> id = root.get_optional<std::string>("header.texture_id");
-        boost::optional<std::string> name = root.get_optional<std::string>("header.texture_name");
-        boost::optional<std::string> image_data = root.get_optional<std::string>("image_data");
-        boost::optional<std::string> border_color = root.get_optional<std::string>("settings.texture_border_color");
-        boost::optional<float> repeat_x = root.get_optional<float>("settings.texture_repeat_x");
-        boost::optional<float> repeat_y = root.get_optional<float>("settings.texture_repeat_y");
-        boost::optional<float> rotation_z = root.get_optional<float>("settings.texture_rotation_z");
-        boost::optional<float> translation_x = root.get_optional<float>("settings.texture_translation_x");
-        boost::optional<float> translation_y = root.get_optional<float>("settings.texture_translation_y");
-        boost::optional<std::string> wrapping = root.get_optional<std::string>("settings.texture_wrapping");
-        boost::optional<std::string> version = root.get_optional<std::string>("version");
-
-        m_source = filename;
-        m_metadata.name = boost::filesystem::path(filename).stem().string();
-
-        if (id.has_value())
-            m_imaker_id = id.value();
-        if (border_color.has_value())
-            m_border_color = border_color.value();
-        if (repeat_x.has_value())
-            m_metadata.repeat_u = repeat_x.value();
-        if (repeat_y.has_value())
-            m_metadata.repeat_v = repeat_y.value();
-        if (rotation_z.has_value())
-            m_metadata.rotation = rotation_z.value();
-        if (translation_x.has_value())
-            m_metadata.offset_u = translation_x.value();
-        if (translation_y.has_value())
-            m_metadata.offset_v = translation_y.value();
-        if (wrapping.has_value()) {
-            std::string value = wrapping.value();
-            if (value == "repeat")
-                m_metadata.wrapping = TextureMetadata::EWrapping::Repeat;
-            else if (value == "mirror")
-                m_metadata.wrapping = TextureMetadata::EWrapping::Mirror;
-            else if (value == "clamptoedge")
-                m_metadata.wrapping = TextureMetadata::EWrapping::ClampToEdge;
-            else if (value == "clamptoborder")
-                m_metadata.wrapping= TextureMetadata::EWrapping::ClampToBorder;
-        }
-        if (version.has_value())
-            m_version = version.value();
-
-        if (image_data.has_value()) {
-            const std::string src = image_data.value();
-            std::string decoded;
-            decoded.resize(boost::beast::detail::base64::decoded_size(src.length()));
-            decoded.resize(boost::beast::detail::base64::decode((void*)&decoded[0], src.data(), src.length()).first);
-            std::vector<unsigned char> src_data(decoded.length());
-            ::memcpy((void*)src_data.data(), (const void*)decoded.data(), decoded.length());
-            bool ret = load_from_png_memory(src_data, true, GLTexture::ECompressionType::SingleThreaded, true);
-            if (!ret)
-                reset();
-            return ret;
-        }
-    }
-    return false;
-}
-#endif // ENABLE_TEXTURED_VOLUMES
 
 } // namespace GUI
 } // namespace Slic3r

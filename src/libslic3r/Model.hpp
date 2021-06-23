@@ -1095,13 +1095,6 @@ public:
     void 		  translate(coordf_t x, coordf_t y, coordf_t z) { for (ModelObject *o : this->objects) o->translate(x, y, z); }
     TriangleMesh  mesh() const;
     
-#if ENABLE_TEXTURED_VOLUMES
-    std::string add_object_texture(const std::string& filename) { return textures_manager.add_texture(filename); }
-    void remove_object_texture(const std::string& name) { textures_manager.remove_texture(name); }
-    void remove_all_object_textures() { textures_manager.remove_all_textures(); }
-    unsigned int get_object_texture_id(const std::string& name) const { return textures_manager.get_texture_id(name); }
-#endif // ENABLE_TEXTURED_VOLUMES
-
     // Croaks if the duplicated objects do not fit the print bed.
     void duplicate_objects_grid(size_t x, size_t y, coordf_t dist);
 

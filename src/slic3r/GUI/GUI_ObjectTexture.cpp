@@ -99,7 +99,7 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
             // add texture to the cache
             std::string tex_name = wxGetApp().plater()->add_object_texture(filename);
             // update object texture
-            model_object->texture = wxGetApp().plater()->get_object_texture_metadata(tex_name);
+            model_object->texture.name = tex_name;
 
             update();
             wxGetApp().plater()->update_volumes_texture_from_objects();
@@ -110,15 +110,14 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
     m_tex_delete_btn->Bind(wxEVT_BUTTON, [this](wxEvent& event) {
         wxMessageDialog dlg(m_parent, _L("Do you really want to remove the texture ?"), wxString(SLIC3R_APP_NAME), wxYES_NO);
         if (dlg.ShowModal() == wxID_YES) {
-
-            const auto& [obj_idx, model_object] = get_model_object();
-            if (model_object != nullptr) {
+            const auto& model_object = get_model_object();
+            if (model_object.second != nullptr) {
                 wxGetApp().plater()->take_snapshot(_L("Remove texture"));
 
                 // remove texture from the cache
-                wxGetApp().plater()->remove_object_texture(model_object->texture.name);
+                wxGetApp().plater()->remove_object_texture(model_object.second->texture.name);
                 // reset object texture
-                model_object->texture.reset();
+                model_object.second->texture.reset();
 
                 update();
                 wxGetApp().plater()->update_volumes_texture_from_objects();

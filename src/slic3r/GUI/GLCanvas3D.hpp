@@ -806,12 +806,8 @@ public:
 #endif // ENABLE_SCROLLABLE_LEGEND
 
 #if ENABLE_TEXTURED_VOLUMES
-    std::string add_object_texture(const std::string& filename);
-    void remove_object_texture(const std::string& name);
-    void remove_all_object_textures();
-    unsigned int get_object_texture_id(const std::string& name) const;
-    const TextureMetadata& get_object_texture_metadata(const std::string& name) const;
-
+    void update_object_textures_from_model(const Model& model) { m_volumes.update_textures_from_model(model); }
+    unsigned int get_object_texture_id(const std::string& name) const { return m_volumes.get_texture_id(name); }
     void update_volumes_texture_from_objects();
 #endif // ENABLE_TEXTURED_VOLUMES
 

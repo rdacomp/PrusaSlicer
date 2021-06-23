@@ -546,126 +546,70 @@ bool GLVolume::is_below_printbed() const
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
-std::string TexturesManager2::decode_name(const std::string& name)
+void GLTexturesManager::update_from_model(const Model& model)
 {
-    std::string::size_type pos = name.find(':');
-    return (pos == name.npos) ? name : name.substr(0, pos);
-}
+    std::vector<std::string> names = model.textures_manager.get_texture_names();
 
-// add new trailing ":id" to the given name string
-std::string TexturesManager2::encode_name(const std::string& name)
-{
-    unsigned int count = 0;
-    for (TexItem& item : m_textures) {
-        const std::string& tex_name = item.texture->get_name();
-        if (tex_name == name || boost::istarts_with(tex_name, name + ":"))
-            ++count;
-    }
-
-    return (count == 0) ? name : TexturesManager::decode_name(name) + ":" + std::to_string(count);
-}
-
-std::string TexturesManager2::add_texture(const std::string& filename)
-{
-    // check if the texture from the given filename is already in cache
-    for (TexItem& item : m_textures) {
-        if (filename == item.texture->get_source()) {
-            // increment reference count
-            ++item.count;
-
-#if ENABLE_TEXTURES_MANAGER2_DEBUG
-            output_content();
-#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
-
-            // return texture name
-            return item.texture->get_name();
-        }
-    }
-
-    // load the texture and add it to the cache
-    std::shared_ptr<GUI::GLIdeaMakerTexture> texture = std::make_shared<GUI::GLIdeaMakerTexture>();
-    if (texture->load_from_ideamaker_texture_file(filename, true, GUI::GLTexture::ECompressionType::SingleThreaded, true)) {
-        texture->set_name(encode_name(texture->get_name()));
-        TexItem item = { texture, (unsigned int)1 };
-        m_textures.emplace_back(item);
-
-#if ENABLE_TEXTURES_MANAGER2_DEBUG
-        output_content();
-#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
-
-        // return texture name
-        return m_textures.back().texture->get_name();
-    }
-
-    return "";
-}
-
-void TexturesManager2::remove_texture(const std::string& name)
-{
-    for (size_t i = 0; i < m_textures.size(); ++i) {
-        TexItem& item = m_textures[i];
-        if (name == item.texture->get_name()) {
-            // decrement reference count
-            --item.count;
-            if (item.count == 0) {
-                // remove texture from the cache if count == 0
-                item.texture.reset();
-                m_textures.erase(m_textures.begin() + i);
+    // check for newly added textures
+    for (const std::string& name : names) {
+        auto it = std::find_if(m_textures.begin(), m_textures.end(), [&name](const TexItem& item) { return item.name == name; });
+        if (it == m_textures.end()) {
+            std::shared_ptr<GUI::GLTexture> texture = std::make_shared<GUI::GLTexture>();
+            const TextureData& data = model.textures_manager.get_texture_data(name);
+            if (data.is_valid()) {
+                bool res = texture->load_from_png_memory(data.data, true, GUI::GLTexture::ECompressionType::SingleThreaded, true);
+                if (res) {
+                    TexItem item = { name, texture };
+                    m_textures.emplace_back(item);
+                }
             }
-
-#if ENABLE_TEXTURES_MANAGER2_DEBUG
-            output_content();
-#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
-
-            return;
         }
     }
-}
 
-void TexturesManager2::remove_all_textures()
-{
-    m_textures.clear();
-#if ENABLE_TEXTURES_MANAGER2_DEBUG
+    // check for removed textures
+    size_t i = 0;
+    while (i < m_textures.size()) {
+        TexItem& item = m_textures[i];
+
+        auto it = std::find_if(names.begin(), names.end(), [&item](const std::string& name) { return name == item.name; });
+        if (it == names.end()) {
+            m_textures.erase(m_textures.begin() + i);
+            --i;
+        }
+        ++i;
+    }
+
+#if ENABLE_GLTEXTURES_MANAGER_DEBUG
     output_content();
-#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
+#endif // ENABLE_GLTEXTURES_MANAGER_DEBUG
 }
 
-#if ENABLE_TEXTURES_MANAGER2_DEBUG
-void TexturesManager2::output_content() const
-{
-    std::cout << "\nTEXTURES LIST 2\n";
-    std::cout << "===============\n";
-
-    if (m_textures.empty()) {
-        std::cout << "empty\n";
-        return;
-    }
-
-    for (const TexItem& item : m_textures) {
-        std::cout << item.texture->get_name() << " - " << item.count << "\n";
-    }
-
-    std::cout << "===============\n";
-}
-#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
-
-unsigned int TexturesManager2::get_texture_id(const std::string& name) const
+unsigned int GLTexturesManager::get_texture_id(const std::string& name) const
 {
     for (const TexItem& item : m_textures) {
-        if (name == item.texture->get_name())
+        if (name == item.name)
             return item.texture->get_id();
     }
     return 0;
 }
 
-const TextureMetadata& TexturesManager2::get_texture_metadata(const std::string& name) const
+#if ENABLE_GLTEXTURES_MANAGER_DEBUG
+void GLTexturesManager::output_content() const
 {
-    for (const TexItem& item : m_textures) {
-        if (name == item.texture->get_name())
-            return item.texture->get_metadata();
+    std::cout << "\GLTexturesManager content\n";
+    std::cout << "=======================\n";
+
+    if (m_textures.empty())
+        std::cout << "empty\n";
+    else {
+        for (const TexItem& item : m_textures) {
+            std::cout << item.name << "\n";
+        }
     }
-    return TextureMetadata::DUMMY;
+
+    std::cout << "=======================\n\n";
 }
+#endif // ENABLE_GLTEXTURES_MANAGER_DEBUG
 #endif // ENABLE_TEXTURED_VOLUMES
 
 std::vector<int> GLVolumeCollection::load_object(

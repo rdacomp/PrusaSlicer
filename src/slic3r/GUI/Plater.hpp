@@ -377,7 +377,6 @@ public:
     void remove_object_texture(const std::string& name);
     void remove_all_object_textures();
     unsigned int get_object_texture_id(const std::string& name) const;
-    const TextureMetadata& get_object_texture_metadata(const std::string& name) const;
     void update_volumes_texture_from_objects();
 #endif // ENABLE_TEXTURED_VOLUMES
 

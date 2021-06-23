@@ -3893,31 +3893,6 @@ void GLCanvas3D::update_sequential_clearance()
 #endif // ENABLE_SEQUENTIAL_LIMITS
 
 #if ENABLE_TEXTURED_VOLUMES
-std::string GLCanvas3D::add_object_texture(const std::string& filename)
-{
-    return m_volumes.add_texture(filename);
-}
-
-void GLCanvas3D::remove_object_texture(const std::string& name)
-{
-    m_volumes.remove_texture(name);
-}
-
-void GLCanvas3D::remove_all_object_textures()
-{
-    m_volumes.remove_all_textures();
-}
-
-unsigned int GLCanvas3D::get_object_texture_id(const std::string& name) const
-{
-    return m_volumes.get_texture_id(name);
-}
-
-const TextureMetadata& GLCanvas3D::get_object_texture_metadata(const std::string& name) const
-{
-    return m_volumes.get_texture_metadata(name);
-}
-
 void GLCanvas3D::update_volumes_texture_from_objects()
 {
     for (GLVolume* volume : m_volumes.volumes) {

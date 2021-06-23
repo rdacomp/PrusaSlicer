@@ -2,7 +2,7 @@
 #define slic3r_TexturesManager_hpp_
 
 #if ENABLE_TEXTURED_VOLUMES
-#define ENABLE_TEXTURES_MANAGER_DEBUG 1
+#define ENABLE_TEXTURES_MANAGER_DEBUG 0
 
 #include "TextureData.hpp"
 
@@ -16,8 +16,6 @@ class TexturesManager
         std::shared_ptr<TextureData> texture;
         // reference count
         unsigned int count{ 0 };
-        // id of the texture on gpu
-        unsigned int id{ 0 };
         // texture name
         std::string name;
         // texture source
@@ -31,9 +29,6 @@ public:
     void remove_texture(const std::string& name);
     void remove_all_textures();
 
-    // return the gpu id of the texture
-    unsigned int get_texture_id(const std::string& name) const;
-//    const TextureMetadata& get_texture_metadata(const std::string& name) const;
     std::vector<std::string> get_texture_names() const;
     const TextureData& get_texture_data(const std::string& name) const;
 

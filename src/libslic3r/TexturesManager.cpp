@@ -83,30 +83,20 @@ void TexturesManager::remove_all_textures()
 #if ENABLE_TEXTURES_MANAGER_DEBUG
 void TexturesManager::output_content() const
 {
-    std::cout << "\nTEXTURES LIST\n";
-    std::cout << "=============\n";
+    std::cout << "\nTexturesManager content\n";
+    std::cout << "=======================\n";
 
-    if (m_textures.empty()) {
+    if (m_textures.empty())
         std::cout << "empty\n";
-        return;
+    else {
+        for (const TextureItem& item : m_textures) {
+            std::cout << item.name << " (" << item.count << ")\n";
+        }
     }
 
-    for (const TextureItem& item : m_textures) {
-        std::cout << item.name << " - " << item.count << "\n";
-    }
-
-    std::cout << "=============\n";
+    std::cout << "=======================\n\n";
 }
 #endif // ENABLE_TEXTURES_MANAGER_DEBUG
-
-unsigned int TexturesManager::get_texture_id(const std::string& name) const
-{
-    for (const TextureItem& item : m_textures) {
-        if (name == item.name)
-            return item.id;
-    }
-    return 0;
-}
 
 std::vector<std::string> TexturesManager::get_texture_names() const
 {
@@ -125,15 +115,6 @@ const TextureData& TexturesManager::get_texture_data(const std::string& name) co
     }
     return TextureData::DUMMY;
 }
-
-//const TextureMetadata& TexturesManager::get_texture_metadata(const std::string& name) const
-//{
-//    for (const TextureItem& item : m_textures) {
-//        if (name == item.texture->get_name())
-//            return item.texture->get_metadata();
-//    }
-//    return TextureMetadata::DUMMY;
-//}
 
 std::string TexturesManager::decode_name(const std::string& name)
 {

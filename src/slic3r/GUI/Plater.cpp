@@ -6664,35 +6664,26 @@ void Plater::bring_instance_forward()
 #if ENABLE_TEXTURED_VOLUMES
 std::string Plater::add_object_texture(const std::string& filename)
 {
-    std::string res1 = p->model.add_object_texture(filename); // <<<<< FIXME
-    std::string res2 = canvas3D()->add_object_texture(filename); // <<<<< FIXME
-    assert(res1 == res2); // <<<<< FIXME
-    return res2; // <<<<< FIXME
+    std::string ret = p->model.textures_manager.add_texture(filename);
+    canvas3D()->update_object_textures_from_model(p->model);
+    return ret;
 }
 
 void Plater::remove_object_texture(const std::string& name)
 {
-    p->model.remove_object_texture(name);
-    canvas3D()->remove_object_texture(name);
+    p->model.textures_manager.remove_texture(name);
+    canvas3D()->update_object_textures_from_model(p->model);
 }
 
 void Plater::remove_all_object_textures()
 {
-    p->model.remove_all_object_textures();
-    canvas3D()->remove_all_object_textures();
+    p->model.textures_manager.remove_all_textures();
+    canvas3D()->update_object_textures_from_model(p->model);
 }
 
 unsigned int Plater::get_object_texture_id(const std::string& name) const
 {
-    unsigned int res1 = p->model.get_object_texture_id(name); // <<<<< FIXME
-    unsigned int res2 = canvas3D()->get_object_texture_id(name); // <<<<< FIXME
-    assert(res1 == res2); // <<<<< FIXME
-    return res2; // <<<<< FIXME
-}
-
-const TextureMetadata& Plater::get_object_texture_metadata(const std::string& name) const
-{
-    return canvas3D()->get_object_texture_metadata(name);
+    return canvas3D()->get_object_texture_id(name);
 }
 
 void Plater::update_volumes_texture_from_objects()

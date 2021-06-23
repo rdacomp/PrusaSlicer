@@ -483,36 +483,26 @@ typedef std::pair<GLVolume*, std::pair<unsigned int, double>> GLVolumeWithIdAndZ
 typedef std::vector<GLVolumeWithIdAndZ> GLVolumeWithIdAndZList;
 
 #if ENABLE_TEXTURED_VOLUMES
-#define ENABLE_TEXTURES_MANAGER2_DEBUG 0
-class TexturesManager2
+#define ENABLE_GLTEXTURES_MANAGER_DEBUG 0
+class GLTexturesManager
 {
     struct TexItem
     {
-        std::shared_ptr<GUI::GLIdeaMakerTexture> texture;
-        unsigned int count{ 0 };
+        std::string name;
+        std::shared_ptr<GUI::GLTexture> texture;
     };
 
     std::vector<TexItem> m_textures;
 
 public:
-    std::string add_texture(const std::string& filename);
-    void remove_texture(const std::string& name);
-    void remove_all_textures();
+    void update_from_model(const Model& model);
 
     // return the gpu id of the texture
     unsigned int get_texture_id(const std::string& name) const;
-    const TextureMetadata& get_texture_metadata(const std::string& name) const;
 
-#if ENABLE_TEXTURES_MANAGER2_DEBUG
+#if ENABLE_GLTEXTURES_MANAGER_DEBUG
     void output_content() const;
-#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
-
-    // remove the trailing ":id" from the given name string, if present
-    static std::string decode_name(const std::string& name);
-
-private:
-    // add a trailing ":id" to the given name string, if already in use
-    std::string encode_name(const std::string& name);
+#endif // ENABLE_GLTEXTURES_MANAGER_DEBUG
 };
 #endif // ENABLE_TEXTURED_VOLUMES
 
@@ -547,7 +537,7 @@ private:
     Slope m_slope;
 
 #if ENABLE_TEXTURED_VOLUMES
-    mutable TexturesManager2 m_textures_manager;
+    mutable GLTexturesManager m_textures_manager;
 #endif // ENABLE_TEXTURED_VOLUMES
 
 public:
@@ -589,11 +579,8 @@ public:
     GLVolume* new_nontoolpath_volume(const float *rgba, size_t reserve_vbo_floats = 0);
 
 #if ENABLE_TEXTURED_VOLUMES
-    std::string add_texture(const std::string& filename) { return m_textures_manager.add_texture(filename); }
-    void remove_texture(const std::string& name) { m_textures_manager.remove_texture(name); }
-    void remove_all_textures() { m_textures_manager.remove_all_textures(); }
+    void update_textures_from_model(const Model& model) { m_textures_manager.update_from_model(model); }
     unsigned int get_texture_id(const std::string& name) const { return m_textures_manager.get_texture_id(name); }
-    const TextureMetadata& get_texture_metadata(const std::string& name) const { return m_textures_manager.get_texture_metadata(name); }
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // Render the volumes by OpenGL.
