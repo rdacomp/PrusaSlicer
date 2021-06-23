@@ -122,9 +122,9 @@ enum PrinterTechnology : unsigned char
 
 enum DeserializeResult : int
 {
-    DR_FAIL = 0,
-    DR_SUCCESS = 1,
-    DR_CHANGE
+    Fail = 0,
+    Success = 1,
+    Change
 };
 
 // A generic value of a configuration option.
@@ -434,7 +434,7 @@ public:
         UNUSED(append);
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
     ConfigOptionFloat& operator=(const ConfigOption *opt)
@@ -519,7 +519,7 @@ public:
 	            this->values.push_back(value);
 	        }
         }
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
     ConfigOptionFloatsTempl& operator=(const ConfigOption *opt)
@@ -587,7 +587,7 @@ public:
         UNUSED(append);
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
     ConfigOptionInt& operator=(const ConfigOption *opt) 
@@ -665,7 +665,7 @@ public:
 	            this->values.push_back(value);
 	        }
         }
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
 private:
@@ -707,7 +707,7 @@ public:
     DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
-        return unescape_string_cstyle(str, this->value) ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return unescape_string_cstyle(str, this->value) ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
 private:
@@ -746,7 +746,7 @@ public:
     {
         if (! append)
             this->values.clear();
-        return unescape_strings_cstyle(str, this->values) ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return unescape_strings_cstyle(str, this->values) ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
 private:
@@ -782,7 +782,7 @@ public:
         // don't try to parse the trailing % since it's optional
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
 private:
@@ -890,7 +890,7 @@ public:
         this->percent = str.find_first_of("%") != std::string::npos;
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
 private:
@@ -991,7 +991,7 @@ public:
                 this->values.push_back({ value, percent });
             }
         }
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
     ConfigOptionFloatsOrPercentsTempl& operator=(const ConfigOption *opt)
@@ -1062,7 +1062,7 @@ public:
         char dummy;
         return (sscanf(str.data(), " %lf , %lf %c", &this->value(0), &this->value(1), &dummy) == 2 ||
                 sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2)
-               ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+               ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
 private:
@@ -1126,7 +1126,7 @@ public:
             }
             this->values.push_back(point);
         }
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
 private:
@@ -1173,7 +1173,7 @@ public:
         char dummy;
         return (sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
                 sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2)
-                ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+                ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
 private:
@@ -1203,7 +1203,7 @@ public:
     {
         UNUSED(append);
         this->value = (str.compare("1") == 0);
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
 private:
@@ -1281,7 +1281,7 @@ public:
         	} else
         		this->values.push_back(item_str.compare("1") == 0);	
         }
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
 protected:
@@ -1348,7 +1348,7 @@ public:
     DeserializeResult deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
-        return from_string(str, this->value) ? DeserializeResult::DR_SUCCESS : DeserializeResult::DR_FAIL;
+        return from_string(str, this->value) ? DeserializeResult::Success : DeserializeResult::Fail;
     }
 
     static bool has(T value) 
@@ -1436,10 +1436,10 @@ public:
         auto it = this->keys_map->find(str);
         if (it == this->keys_map->end()) {
             this->value = keys_map->begin()->second;
-            return DeserializeResult::DR_CHANGE;
+            return DeserializeResult::Change;
         }            
         this->value = it->second;
-        return DeserializeResult::DR_SUCCESS;
+        return DeserializeResult::Success;
     }
 
 private:
@@ -1801,11 +1801,11 @@ public:
     double get_abs_value(const t_config_option_key &opt_key) const;
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
     void setenv_() const;
-    void load(const std::string &file);
+    void load(const std::string &file, std::string& change_message);
     void load_from_ini(const std::string &file, std::string& change_message);
-    void load_from_gcode_file(const std::string &file);
+    void load_from_gcode_file(const std::string &file, std::string& change_message);
     // Returns number of key/value pairs extracted.
-    size_t load_from_gcode_string(const char* str);
+    size_t load_from_gcode_string(const char* str, std::string change_message);
     void load(const boost::property_tree::ptree &tree, std::string& change_message);
     void save(const std::string &file) const;
 

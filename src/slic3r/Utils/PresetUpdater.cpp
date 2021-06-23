@@ -789,8 +789,9 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 				std::string change_message;
 				GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
 				if (!change_message.empty()) {
-					//TODO: what type of dialog to use?, translations
-					GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+					GUI::show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+						" To recover these files, incompatible values were changed to default values."
+						" But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
 				}
 				GUI::wxGetApp().load_current_presets();
 				GUI::wxGetApp().plater()->set_bed_shape();
@@ -824,8 +825,9 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 				std::string change_message;
 				GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
 				if (!change_message.empty()) {
-					//TODO: what type of dialog to use?, translations
-					GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+					GUI::show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+						" To recover these files, incompatible values were changed to default values."
+						" But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
 				}
 				GUI::wxGetApp().load_current_presets();
 				return R_UPDATE_INSTALLED;
@@ -886,8 +888,9 @@ void PresetUpdater::on_update_notification_confirm()
 		std::string change_message;
 		GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
 		if (!change_message.empty()) {
-			//TODO: what type of dialog to use?, translations
-			GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+			GUI::show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+				" To recover these files, incompatible values were changed to default values."
+				" But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
 		}
 		GUI::wxGetApp().load_current_presets();
 		p->has_waiting_updates = false;

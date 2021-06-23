@@ -871,14 +871,14 @@ bool GUI_App::on_init_inner()
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
     std::string change_message;
+    bool show_change_dialog = false;
     try {
         preset_bundle->load_presets(*app_config, change_message);
     } catch (const std::exception &ex) {
         show_error(nullptr, ex.what());
     }
     if (!change_message.empty()) {
-        //TODO: what type of dialog to use?, translations
-        show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+        show_change_dialog = true;
     }
 
 #ifdef WIN32
@@ -919,6 +919,13 @@ bool GUI_App::on_init_inner()
     obj_list()->set_min_height();
 
     update_mode(); // update view mode after fix of the object_list size
+
+    if (show_change_dialog)
+    {
+        show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+            " To recover these files, incompatible values were changed to default values."
+            " But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
+    } 
 
 #ifdef __APPLE__
     other_instance_message_handler()->bring_instance_forward();
@@ -1691,8 +1698,9 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                         std::string change_message;
                         preset_bundle->load_presets(*app_config, change_message);
                         if (!change_message.empty()) {
-                            //TODO: what type of dialog to use?, translations
-                            GUI::show_info(nullptr, GUI::format("Loading profiles found following incompatibilities: %1%", change_message));
+                            show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+                                " To recover these files, incompatible values were changed to default values."
+                                " But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
                         }
                         // Load the currently selected preset into the GUI, update the preset selection box.
                         load_current_presets();

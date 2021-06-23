@@ -522,15 +522,15 @@ DeserializeResult ConfigBase::set_deserialize_raw(const t_config_option_key &opt
         for (const t_config_option_key &shortcut : optdef->shortcut)
             // Recursive call.
             if (! this->set_deserialize_raw(shortcut, value, change_message, append))
-                return DeserializeResult::DR_FAIL;
-        return DeserializeResult::DR_SUCCESS;
+                return DeserializeResult::Fail;
+        return DeserializeResult::Success;
     }
     
     ConfigOption *opt = this->option(opt_key, true);
     assert(opt != nullptr);
     DeserializeResult res = opt->deserialize(value, append);
-    if (res == DeserializeResult::DR_CHANGE)
-        change_message = (change_message.empty() ? "" : change_message + "\n") + "Option " + opt_key + " was changed to " + opt->serialize();
+    if (res == DeserializeResult::Change)
+        change_message += "\nOption " + opt_key + " was changed to " + opt->serialize();
     return res;
 }
 
@@ -590,12 +590,13 @@ void ConfigBase::setenv_() const
     }
 }
 
-void ConfigBase::load(const std::string &file)
+void ConfigBase::load(const std::string &file, std::string& change_message)
 {
     if (is_gcode_file(file))
-        this->load_from_gcode_file(file);
-    else
-        this->load_from_ini(file, std::string());
+        this->load_from_gcode_file(file, change_message);
+    else {
+        this->load_from_ini(file, change_message);
+    }
 }
 
 void ConfigBase::load_from_ini(const std::string &file, std::string& change_message)
@@ -606,7 +607,7 @@ void ConfigBase::load_from_ini(const std::string &file, std::string& change_mess
     std::string local_change_message;
     this->load(tree, local_change_message);
     if (!local_change_message.empty()) {
-        change_message += format("\nIn file %1%:\n%2%", file, local_change_message);
+        change_message += format("\nIn file %1%:%2%", file, local_change_message);
     }
 }
 
@@ -623,7 +624,7 @@ void ConfigBase::load(const boost::property_tree::ptree &tree, std::string& chan
 }
 
 // Load the config keys from the tail of a G-code file.
-void ConfigBase::load_from_gcode_file(const std::string &file)
+void ConfigBase::load_from_gcode_file(const std::string &file, std::string& change_message)
 {
     // Read a 64k block from the end of the G-code.
 	boost::nowide::ifstream ifs(file);
@@ -644,13 +645,13 @@ void ConfigBase::load_from_gcode_file(const std::string &file)
     ifs.read(data.data(), data_length);
     ifs.close();
 
-    size_t key_value_pairs = load_from_gcode_string(data.data());
+    size_t key_value_pairs = load_from_gcode_string(data.data(), change_message);
     if (key_value_pairs < 80)
         throw Slic3r::RuntimeError(format("Suspiciously low number of configuration values extracted from %1%: %2%", file, key_value_pairs));
 }
 
 // Load the config keys from the given string.
-size_t ConfigBase::load_from_gcode_string(const char* str)
+size_t ConfigBase::load_from_gcode_string(const char* str, std::string change_message)
 {
     if (str == nullptr)
         return 0;
@@ -695,7 +696,7 @@ size_t ConfigBase::load_from_gcode_string(const char* str)
         if (key == nullptr)
             break;
         try {
-            this->set_deserialize(std::string(key, key_end), std::string(value, end), std::string());
+            this->set_deserialize(std::string(key, key_end), std::string(value, end), change_message);
             ++num_key_value_pairs;
         }
         catch (UnknownOptionException & /* e */) {
@@ -888,11 +889,15 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
             // Do not unescape single string values, the unescaping is left to the calling shell.
             static_cast<ConfigOptionString*>(opt_base)->value = value;
         } else {
+            std::string change_message;
             // Any scalar value of a type different from Bool and String.
-            if (! this->set_deserialize_nothrow(opt_key, value, std::string(), false)) {
+            if (! this->set_deserialize_nothrow(opt_key, value, change_message, false)) {
 				boost::nowide::cerr << "Invalid value supplied for --" << token.c_str() << std::endl;
 				return false;
 			}
+            if (!change_message.empty())
+                // TODO: throw exception?
+                boost::nowide::cerr << "Incompatible config value supplied for --"<< token.c_str() << ":" << change_message << std::endl;
         }
     }
     return true;

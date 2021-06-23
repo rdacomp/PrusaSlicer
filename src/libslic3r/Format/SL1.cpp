@@ -290,7 +290,13 @@ std::vector<ExPolygons> extract_slices_from_sla_archive(
 void import_sla_archive(const std::string &zipfname, DynamicPrintConfig &out)
 {
     ArchiveData arch = extract_sla_archive(zipfname, "png");
-    out.load(arch.profile, std::string());
+    std::string change_message;
+    out.load(arch.profile, change_message);
+    if (!change_message.empty()) {
+        //TODO: Stop importing or show message to user?
+        BOOST_LOG_TRIVIAL(error) << "Imporiting SLA archive found and changed incompabilities:" << change_message; 
+        throw Slic3r::RuntimeError(std::string("Invalid configuration in imported SLA archive. Error message:") + change_message);
+    }
 }
 
 void import_sla_archive(
@@ -305,7 +311,12 @@ void import_sla_archive(
     windowsize.y() = std::max(2, windowsize.y());
 
     ArchiveData arch = extract_sla_archive(zipfname, "thumbnail");
-    profile.load(arch.profile, std::string());
+    std::string change_message;
+    profile.load(arch.profile, change_message);
+    if (!change_message.empty()) {
+        //TODO: Stop importing or show message to user?
+        BOOST_LOG_TRIVIAL(error) << "Imporiting SLA archive found and changed incompabilities:" << change_message;
+    }
 
     RasterParams rstp = get_raster_params(profile);
     rstp.win          = {windowsize.y(), windowsize.x()};

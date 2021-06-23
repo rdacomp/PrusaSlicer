@@ -699,8 +699,15 @@ void AMFParserContext::endElement(const char * /* name */)
         }
 
     case NODE_TYPE_METADATA:
-        if ((m_config != nullptr) && strncmp(m_value[0].c_str(), SLIC3R_CONFIG_TYPE, strlen(SLIC3R_CONFIG_TYPE)) == 0)
-            m_config->load_from_gcode_string(m_value[1].c_str());
+        if ((m_config != nullptr) && strncmp(m_value[0].c_str(), SLIC3R_CONFIG_TYPE, strlen(SLIC3R_CONFIG_TYPE)) == 0) {
+            std::string change_message;
+            m_config->load_from_gcode_string(m_value[1].c_str(), change_message);
+            if (!change_message.empty()) {
+                // TODO: throw exception?
+                //BOOST_LOG_TRIVIAL(error) << "AMF parser found and changed incompabilities:" << change_message;
+                throw Slic3r::RuntimeError(std::string("Invalid configuration found. Error message:") + change_message);
+            }
+        }
         else if (strncmp(m_value[0].c_str(), "slic3r.", 7) == 0) {
             const char *opt_key = m_value[0].c_str() + 7;
             if (print_config_def.options.find(opt_key) != print_config_def.options.end()) {

@@ -669,8 +669,14 @@ void PresetBundle::load_config_file(const std::string &path)
 {
 	if (is_gcode_file(path)) {
 		DynamicPrintConfig config;
+        std::string change_message;
 		config.apply(FullPrintConfig::defaults());
-        config.load_from_gcode_file(path);
+        config.load_from_gcode_file(path, change_message);
+        if (!change_message.empty()) {
+            // TODO throw exception?
+            //BOOST_LOG_TRIVIAL(error) << "Loading from Gcode file found and changed incompabilities:"<< change_message;
+            throw Slic3r::RuntimeError(std::string("Invalid configuration in Gcode file: ") + path + ". Error message:" + change_message);
+        }
         Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
 		return;
@@ -701,8 +707,13 @@ void PresetBundle::load_config_file(const std::string &path)
 	{
 		// Initialize a config from full defaults.
 		DynamicPrintConfig config;
+        std::string change_message;
 		config.apply(FullPrintConfig::defaults());
-		config.load(tree, std::string());
+		config.load(tree, change_message);
+        if (!change_message.empty()) {
+            // TODO: elavate message instead?
+            throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path + ". Error message:" + change_message);
+        }
 		Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
 		break;
@@ -1234,7 +1245,12 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
 			                    section.first << "\" contains invalid \"renamed_from\" key, which is being ignored.";
                    		}
                 	}
-                    config.set_deserialize(kvp.first, kvp.second.data(), std::string());
+                    std::string change_message;
+                    config.set_deserialize(kvp.first, kvp.second.data(), change_message);
+                    if (!change_message.empty()) {
+                        // TODO throw exception or elevate to user?
+                        throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path + ". Error message:" + change_message);
+                    }
                 }
             };
             if (presets == &this->printers) {
@@ -1351,8 +1367,14 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
             const DynamicPrintConfig& default_config = ph_printers->default_config();
             DynamicPrintConfig        config = default_config;
 
+            std::string change_message;
             for (auto& kvp : section.second)
-                config.set_deserialize(kvp.first, kvp.second.data(), std::string());
+                config.set_deserialize(kvp.first, kvp.second.data(), change_message);
+
+            if (!change_message.empty()) {
+                // TODO throw exception or elevate to user?
+                throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path + ". Error message:" + change_message);
+            }
 
             // Report configuration fields, which are misplaced into a wrong group.
             std::string incorrect_keys = Preset::remove_invalid_keys(config, default_config);

@@ -839,7 +839,13 @@ namespace Slic3r {
                 add_error("Error while reading config data to buffer");
                 return;
             }
-            config.load_from_gcode_string(buffer.data());
+            std::string change_message;
+            config.load_from_gcode_string(buffer.data(), change_message);
+            if (!change_message.empty()) {
+                // TODO: throw exception?
+                //BOOST_LOG_TRIVIAL(error) << "Extracting print config from archive found and changed incompabilities:" << change_message;
+                throw Slic3r::RuntimeError(std::string("Invalid configuration in archive: ") + archive_filename + ". Error message:" + change_message);
+            }
         }
     }
 
@@ -963,8 +969,13 @@ namespace Slic3r {
                             continue;
                         std::string opt_key = option.second.get<std::string>("<xmlattr>.opt_key");
                         std::string value = option.second.data();
-
-                        config.set_deserialize(opt_key, value, std::string());
+                        std::string change_message;
+                        config.set_deserialize(opt_key, value, change_message);
+                        if (!change_message.empty()) {
+                            // TODO: Elavate message or throw error?
+                            //BOOST_LOG_TRIVIAL(error) << "Importing 3mf found and changed incompabilities:" << change_message;
+                            throw Slic3r::RuntimeError(std::string("Invalid configuration in archive. Error message:") + change_message);
+                        }
                     }
 
                     config_ranges[{ min_z, max_z }].assign_config(std::move(config));
