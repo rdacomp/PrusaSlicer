@@ -26,7 +26,7 @@ class Model;
 class ModelObject;
 class ModelInstance;
 #if ENABLE_TEXTURED_VOLUMES
-class TextureMetadata;
+struct TextureMetadata;
 #endif // ENABLE_TEXTURED_VOLUMES
 class Print;
 class SLAPrint;

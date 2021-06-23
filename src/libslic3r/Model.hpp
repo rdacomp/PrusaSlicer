@@ -12,6 +12,10 @@
 #include "TriangleMesh.hpp"
 #include "Arrange.hpp"
 #include "CustomGCode.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "TexturesManager.hpp"
+#include "TextureMetadata.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 
 #include <map>
 #include <memory>
@@ -225,143 +229,6 @@ enum class ModelVolumeType : int {
     SUPPORT_BLOCKER,
     SUPPORT_ENFORCER,
 };
-
-#if ENABLE_TEXTURED_VOLUMES
-class TextureMetadata
-{
-public:
-    enum class EMapping
-    {
-        Cubic,
-        Cylindrical,
-        Spherical
-    };
-
-    enum class EWrapping
-    {
-        Repeat,
-        Mirror,
-        ClampToEdge,
-        ClampToBorder
-    };
-
-private:
-    // Type of mapping
-    EMapping m_mapping{ EMapping::Cubic };
-    // Type of wrapping
-    EWrapping m_wrapping{ EWrapping::Repeat };
-
-    // Offset in u direction, [0..1] in percent
-    float m_offset_u{ 0.0f };
-    // Offset in v direction, [0..1] in percent
-    float m_offset_v{ 0.0f };
-
-    // Repeat factor in u direction
-    float m_repeat_u{ 1.0f };
-    // Repeat factor in v direction
-    float m_repeat_v{ 1.0f };
-
-    // rotation, [0..360] in degrees
-    float m_rotation{ 0.0f };
-
-    // Texture name
-    std::string m_name;
-
-public:
-    TextureMetadata() = default;
-    ~TextureMetadata() = default;
-
-    TextureMetadata(const TextureMetadata& rhs)
-        : m_mapping(rhs.m_mapping)
-        , m_wrapping(rhs.m_wrapping)
-        , m_offset_u(rhs.m_offset_u)
-        , m_offset_v(rhs.m_offset_v)
-        , m_repeat_u(rhs.m_repeat_u)
-        , m_repeat_v(rhs.m_repeat_v)
-        , m_rotation(rhs.m_rotation)
-        , m_name(rhs.m_name)
-    {
-    }
-
-    TextureMetadata& operator = (const TextureMetadata& rhs) {
-        m_mapping = rhs.m_mapping;
-        m_wrapping = rhs.m_wrapping;
-        m_offset_u = rhs.m_offset_u;
-        m_offset_v = rhs.m_offset_v;
-        m_repeat_u = rhs.m_repeat_u;
-        m_repeat_v = rhs.m_repeat_v;
-        m_rotation = rhs.m_rotation;
-        m_name = rhs.m_name;
-        return *this;
-    }
-
-    bool operator == (const TextureMetadata& rhs) const {
-        if (m_mapping != rhs.m_mapping)
-            return false;
-        if (m_wrapping != rhs.m_wrapping)
-            return false;
-        if (m_offset_u != rhs.m_offset_u)
-            return false;
-        if (m_offset_v != rhs.m_offset_v)
-            return false;
-        if (m_repeat_u != rhs.m_repeat_u)
-            return false;
-        if (m_repeat_v != rhs.m_repeat_v)
-            return false;
-        if (m_rotation != rhs.m_rotation)
-            return false;
-        if (m_name != rhs.m_name)
-            return false;
-
-        return true;
-    }
-
-    bool operator != (const TextureMetadata& rhs) const {
-        return !operator==(rhs);
-    }
-
-    void reset() {
-        m_mapping = EMapping::Cubic;
-        m_wrapping = EWrapping::Repeat;
-        m_offset_u = 0.0f;
-        m_offset_v = 0.0f;
-        m_repeat_u = 1.0f;
-        m_repeat_v = 1.0f;
-        m_rotation = 0.0f;
-        m_name.clear();
-    }
-
-    EMapping get_mapping() const { return m_mapping; }
-    void set_mapping(EMapping mapping) { m_mapping = mapping; }
-
-    EWrapping get_wrapping() const { return m_wrapping; }
-    void set_wrapping(EWrapping wrapping) { m_wrapping = wrapping; }
-
-    float get_offset_u() const { return m_offset_u; }
-    void set_offset_u(float u) { m_offset_u = u; }
-
-    float get_offset_v() const { return m_offset_v; }
-    void set_offset_v(float v) { m_offset_v = v; }
-
-    float get_repeat_u() const { return m_repeat_u; }
-    void set_repeat_u(float u) { m_repeat_u = u; }
-
-    float get_repeat_v() const { return m_repeat_v; }
-    void set_repeat_v(float v) { m_repeat_v = v; }
-
-    float get_rotation() const { return m_rotation; }
-    void set_rotation(float rot_deg) { m_rotation = rot_deg; }
-
-    const std::string& get_name() const { return m_name; }
-    void set_name(const std::string& name) { m_name = name; }
-
-    template<class Archive> void serialize(Archive& ar) {
-        ar(m_mapping, m_wrapping, m_offset_u, m_offset_v, m_repeat_u, m_repeat_v, m_rotation, m_name);
-    }
-
-    static const TextureMetadata DUMMY;
-};
-#endif // ENABLE_TEXTURED_VOLUMES
 
 // A printable object, possibly having multiple print volumes (each with its own set of parameters and materials),
 // and possibly having multiple modifier volumes, each modifier volume with its set of parameters and materials.
@@ -1178,6 +1045,10 @@ public:
     // Extensions for color print
     CustomGCode::Info custom_gcode_per_print_z;
     
+#if ENABLE_TEXTURED_VOLUMES
+    TexturesManager textures_manager;
+#endif // ENABLE_TEXTURED_VOLUMES
+
     // Default constructor assigns a new ID to the model.
     Model() { assert(this->id().valid()); }
     ~Model() { this->clear_objects(); this->clear_materials(); }
@@ -1224,6 +1095,13 @@ public:
     void 		  translate(coordf_t x, coordf_t y, coordf_t z) { for (ModelObject *o : this->objects) o->translate(x, y, z); }
     TriangleMesh  mesh() const;
     
+#if ENABLE_TEXTURED_VOLUMES
+    std::string add_object_texture(const std::string& filename) { return textures_manager.add_texture(filename); }
+    void remove_object_texture(const std::string& name) { textures_manager.remove_texture(name); }
+    void remove_all_object_textures() { textures_manager.remove_all_textures(); }
+    unsigned int get_object_texture_id(const std::string& name) const { return textures_manager.get_texture_id(name); }
+#endif // ENABLE_TEXTURED_VOLUMES
+
     // Croaks if the duplicated objects do not fit the print bed.
     void duplicate_objects_grid(size_t x, size_t y, coordf_t dist);
 

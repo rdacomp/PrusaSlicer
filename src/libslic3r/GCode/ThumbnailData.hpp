@@ -3,14 +3,20 @@
 
 #include <vector>
 #include "libslic3r/Point.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "libslic3r/TextureData.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 
 namespace Slic3r {
 
+#if ENABLE_TEXTURED_VOLUMES
+    using ThumbnailsList = std::vector<TextureData>;
+#else
 struct ThumbnailData
 {
     unsigned int width;
     unsigned int height;
-    std::vector<unsigned char> pixels;
+    std::vector<unsigned char> data;
 
     ThumbnailData() { reset(); }
     void set(unsigned int w, unsigned int h);
@@ -20,6 +26,7 @@ struct ThumbnailData
 };
 
 using ThumbnailsList = std::vector<ThumbnailData>;
+#endif // ENABLE_TEXTURED_VOLUMES
 
 struct ThumbnailsParams
 {

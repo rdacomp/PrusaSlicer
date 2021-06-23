@@ -5,7 +5,11 @@
 #include "../LocalesUtils.hpp"
 #include "../GCode.hpp"
 #include "../Geometry.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "../TextureData.hpp"
+#else
 #include "../GCode/ThumbnailData.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 #include "../Time.hpp"
 
 #include "../I18N.hpp"
@@ -146,7 +150,7 @@ public:
 
 const char* get_attribute_value_charptr(const char** attributes, unsigned int attributes_size, const char* attribute_key)
 {
-    if ((attributes == nullptr) || (attributes_size == 0) || (attributes_size % 2 != 0) || (attribute_key == nullptr))
+    if (attributes == nullptr || attributes_size == 0 || attributes_size % 2 != 0 || attribute_key == nullptr)
         return nullptr;
 
     for (unsigned int a = 0; a < attributes_size; a += 2) {
@@ -2039,15 +2043,28 @@ namespace Slic3r {
         bool m_zip64 { true };
 
     public:
+#if ENABLE_TEXTURED_VOLUMES
+        bool save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, bool fullpath_sources, const TextureData* thumbnail_data, bool zip64);
+#else
         bool save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, bool fullpath_sources, const ThumbnailData* thumbnail_data, bool zip64);
+#endif // ENABLE_TEXTURED_VOLUMES
 
     private:
+#if ENABLE_TEXTURED_VOLUMES
+        bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const TextureData* thumbnail_data);
+#else
         bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const ThumbnailData* thumbnail_data);
+#endif // ENABLE_TEXTURED_VOLUMES
         bool _add_content_types_file_to_archive(mz_zip_archive& archive);
+#if ENABLE_TEXTURED_VOLUMES
+        bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const TextureData& thumbnail_data);
+#else
         bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data);
+#endif // ENABLE_TEXTURED_VOLUMES
         bool _add_relationships_file_to_archive(mz_zip_archive& archive);
 #if ENABLE_TEXTURED_VOLUMES
         bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const Model& model);
+        bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model);
 #endif // ENABLE_TEXTURED_VOLUMES
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
         bool _add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
@@ -2062,7 +2079,11 @@ namespace Slic3r {
         bool _add_custom_gcode_per_print_z_file_to_archive(mz_zip_archive& archive, Model& model, const DynamicPrintConfig* config);
     };
 
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, bool fullpath_sources, const TextureData* thumbnail_data, bool zip64)
+#else
     bool _3MF_Exporter::save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, bool fullpath_sources, const ThumbnailData* thumbnail_data, bool zip64)
+#endif // ENABLE_TEXTURED_VOLUMES
     {
         clear_errors();
         m_fullpath_sources = fullpath_sources;
@@ -2070,7 +2091,11 @@ namespace Slic3r {
         return _save_model_to_file(filename, model, config, thumbnail_data);
     }
 
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::_save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const TextureData* thumbnail_data)
+#else
     bool _3MF_Exporter::_save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const ThumbnailData* thumbnail_data)
+#endif // ENABLE_TEXTURED_VOLUMES
     {
         mz_zip_archive archive;
         mz_zip_zero_struct(&archive);
@@ -2107,13 +2132,21 @@ namespace Slic3r {
         }
 
 #if ENABLE_TEXTURED_VOLUMES
-        // Adds relationships file ("3D/_rels/3dmodel.model.rels"). 
-        // This relationshis file contains a reference to the texture files used by "3D/3dmodel.model"
-        // and it is added only if any texture is used
-        if (!_add_model_relationships_file_to_archive(archive, model)) {
-            close_zip_writer(&archive);
-            boost::filesystem::remove(filename);
-            return false;
+        if (model.has_any_texture()) {
+            // Adds relationships file ("3D/_rels/3dmodel.model.rels"). 
+            // This relationshis file contains a reference to the texture files used by "3D/3dmodel.model"
+            if (!_add_model_relationships_file_to_archive(archive, model)) {
+                close_zip_writer(&archive);
+                boost::filesystem::remove(filename);
+                return false;
+            }
+
+            // Adds texture files ("3D/Texture/*.png"). 
+            if (!_add_texture_files_to_archive(archive, model)) {
+                close_zip_writer(&archive);
+                boost::filesystem::remove(filename);
+                return false;
+            }
         }
 #endif // ENABLE_TEXTURED_VOLUMES
 
@@ -2220,12 +2253,16 @@ namespace Slic3r {
         return true;
     }
 
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::_add_thumbnail_file_to_archive(mz_zip_archive& archive, const TextureData& thumbnail_data)
+#else
     bool _3MF_Exporter::_add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data)
+#endif // ENABLE_TEXTURED_VOLUMES
     {
         bool res = false;
 
         size_t png_size = 0;
-        void* png_data = tdefl_write_image_to_png_file_in_memory_ex((const void*)thumbnail_data.pixels.data(), thumbnail_data.width, thumbnail_data.height, 4, &png_size, MZ_DEFAULT_LEVEL, 1);
+        void* png_data = tdefl_write_image_to_png_file_in_memory_ex((const void*)thumbnail_data.data.data(), thumbnail_data.width, thumbnail_data.height, 4, &png_size, MZ_DEFAULT_LEVEL, 1);
         if (png_data != nullptr) {
             res = mz_zip_writer_add_mem(&archive, THUMBNAIL_FILE.c_str(), (const void*)png_data, png_size, MZ_DEFAULT_COMPRESSION);
             mz_free(png_data);
@@ -2257,25 +2294,24 @@ namespace Slic3r {
     }
 
 #if ENABLE_TEXTURED_VOLUMES
+    std::string format_texture_name(const std::string& name)
+    {
+        std::string mod_name = name;
+        boost::replace_all(mod_name, " ", "%20"); // Microsoft 3DBuilder does this, is it really needed ?
+        return TEXTURES_PATH + mod_name + ".texture.png";// Microsoft 3DBuilder uses this composed extension, is it really needed ?
+    }
+
     bool _3MF_Exporter::_add_model_relationships_file_to_archive(mz_zip_archive& archive, const Model& model)
     {
-        if (!model.has_any_texture())
-            return true;
-
         std::stringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
         stream << "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n";
 
-        std::set<std::string> added;
-        for (const ModelObject* model_object : model.objects) {
-            std::string name = model_object->texture.get_name();
-            if (!name.empty()) {
-                boost::replace_all(name, " ", "%20"); // Microsoft 3DBuilder does this, is it really needed ?
-                if (added.find(name) == added.end()) {
-                    added.insert(name);
-                    stream << " <Relationship Target=\"/" << TEXTURES_PATH << name << ".texture.png\" Id=\"rel-model-" << added.size() << "\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture\"/>\n";
-                }
-            }
+        std::vector<std::string> names = model.textures_manager.get_texture_names();
+        unsigned int count = 1;
+        for (std::string& name : names) {
+            stream << " <Relationship Target=\"/" << format_texture_name(name) << "\" Id=\"rel-model-" << count << "\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture\"/>\n";
+            ++count;
         }
 
         stream << "</Relationships>";
@@ -2288,6 +2324,20 @@ namespace Slic3r {
         }
 
         return true;
+    }
+
+    bool _3MF_Exporter::_add_texture_files_to_archive(mz_zip_archive& archive, const Model& model)
+    {
+        bool res = false;
+
+        std::vector<std::string> names = model.textures_manager.get_texture_names();
+        for (std::string& name : names) {
+            const TextureData& data = model.textures_manager.get_texture_data(name);
+            if (data.is_valid())
+                res |= mz_zip_writer_add_mem(&archive, format_texture_name(name).c_str(), (const void*)data.data.data(), data.data.size(), MZ_DEFAULT_COMPRESSION) == 1;
+        }
+
+        return res;
     }
 #endif // ENABLE_TEXTURED_VOLUMES
 
@@ -3020,7 +3070,11 @@ bool load_3mf(const char* path, DynamicPrintConfig* config, Model* model, bool c
     return res;
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+bool store_3mf(const char* path, Model* model, const DynamicPrintConfig* config, bool fullpath_sources, const TextureData* thumbnail_data, bool zip64)
+#else
 bool store_3mf(const char* path, Model* model, const DynamicPrintConfig* config, bool fullpath_sources, const ThumbnailData* thumbnail_data, bool zip64)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     // All export should use "C" locales for number formatting.
     CNumericLocalesSetter locales_setter;

@@ -1,4 +1,3 @@
-#include "libslic3r.h"
 #include "Exception.hpp"
 #include "Model.hpp"
 #include "ModelArrange.hpp"
@@ -544,14 +543,12 @@ std::string Model::propose_export_file_name_and_path(const std::string &new_exte
 bool Model::has_any_texture() const
 {
     for (const ModelObject* model_object : objects) {
-        if (!model_object->texture.get_name().empty())
+        if (!model_object->texture.name.empty())
             return true;
     }
     return false;
 }
 #endif // ENABLE_TEXTURED_VOLUMES
-
-const TextureMetadata TextureMetadata::DUMMY = TextureMetadata();
 
 ModelObject::~ModelObject()
 {

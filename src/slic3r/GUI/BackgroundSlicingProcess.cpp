@@ -211,12 +211,15 @@ void BackgroundSlicingProcess::process_fff()
 	}
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+static void write_thumbnail(Zipper& zipper, const TextureData& data)
+#else
 static void write_thumbnail(Zipper& zipper, const ThumbnailData& data)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     size_t png_size = 0;
-    void* png_data = tdefl_write_image_to_png_file_in_memory_ex((const void*)data.pixels.data(), data.width, data.height, 4, &png_size, MZ_DEFAULT_LEVEL, 1);
-    if (png_data != nullptr)
-    {
+	void* png_data = tdefl_write_image_to_png_file_in_memory_ex((const void*)data.data.data(), data.width, data.height, 4, &png_size, MZ_DEFAULT_LEVEL, 1);
+	if (png_data != nullptr) {
         zipper.add_entry("thumbnail/thumbnail" + std::to_string(data.width) + "x" + std::to_string(data.height) + ".png", (const std::uint8_t*)png_data, png_size);
         mz_free(png_data);
     }
@@ -237,8 +240,12 @@ void BackgroundSlicingProcess::process_sla()
 
             Zipper zipper(export_path);
             m_sla_archive.export_print(zipper, *m_sla_print);																											         // true, false, true, true); // renders also supports and pad
+#if ENABLE_TEXTURED_VOLUMES
+			for (const TextureData& data : thumbnails)
+#else
 			for (const ThumbnailData& data : thumbnails)
-                if (data.is_valid())
+#endif // ENABLE_TEXTURED_VOLUMES
+				if (data.is_valid())
                     write_thumbnail(zipper, data);
             zipper.finalize();
 
@@ -614,8 +621,12 @@ void BackgroundSlicingProcess::prepare_upload()
 																												 // true, false, true, true); // renders also supports and pad
         Zipper zipper{source_path.string()};
         m_sla_archive.export_print(zipper, *m_sla_print, m_upload_job.upload_data.upload_path.string());
-        for (const ThumbnailData& data : thumbnails)
-	        if (data.is_valid())
+#if ENABLE_TEXTURED_VOLUMES
+		for (const TextureData& data : thumbnails)
+#else
+		for (const ThumbnailData& data : thumbnails)
+#endif // ENABLE_TEXTURED_VOLUMES
+			if (data.is_valid())
 	            write_thumbnail(zipper, data);
         zipper.finalize();
     }

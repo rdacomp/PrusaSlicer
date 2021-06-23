@@ -926,14 +926,15 @@ namespace DoExport {
 	    {
 	        const size_t max_row_length = 78;
 	        ThumbnailsList thumbnails = thumbnail_cb(ThumbnailsParams{ sizes, true, true, true, true });
-	        for (const ThumbnailData& data : thumbnails)
-	        {
-	            if (data.is_valid())
-	            {
+#if ENABLE_TEXTURED_VOLUMES
+            for (const TextureData& data : thumbnails) {
+#else
+            for (const ThumbnailData& data : thumbnails) {
+#endif // ENABLE_TEXTURED_VOLUMES
+                if (data.is_valid()) {
 	                size_t png_size = 0;
-	                void* png_data = tdefl_write_image_to_png_file_in_memory_ex((const void*)data.pixels.data(), data.width, data.height, 4, &png_size, MZ_DEFAULT_LEVEL, 1);
-	                if (png_data != nullptr)
-	                {
+                    void* png_data = tdefl_write_image_to_png_file_in_memory_ex((const void*)data.data.data(), data.width, data.height, 4, &png_size, MZ_DEFAULT_LEVEL, 1);
+                    if (png_data != nullptr) {
 	                    std::string encoded;
 	                    encoded.resize(boost::beast::detail::base64::encoded_size(png_size));
 	                    encoded.resize(boost::beast::detail::base64::encode((void*)&encoded[0], (const void*)png_data, png_size));
@@ -941,8 +942,7 @@ namespace DoExport {
 	                    output((boost::format("\n;\n; thumbnail begin %dx%d %d\n") % data.width % data.height % encoded.size()).str().c_str());
 
 	                    unsigned int row_count = 0;
-	                    while (encoded.size() > max_row_length)
-	                    {
+	                    while (encoded.size() > max_row_length) {
 	                        output((boost::format("; %s\n") % encoded.substr(0, max_row_length)).str().c_str());
 	                        encoded = encoded.substr(max_row_length);
 	                        ++row_count;

@@ -5,7 +5,11 @@
 
 #include "libslic3r/ClipperUtils.hpp"
 #include "libslic3r/PrintConfig.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "libslic3r/TextureData.hpp"
+#else
 #include "libslic3r/GCode/ThumbnailData.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 #include "libslic3r/Geometry.hpp"
 #include "libslic3r/ExtrusionEntity.hpp"
 #include "libslic3r/Layer.hpp"
@@ -1589,7 +1593,11 @@ void GLCanvas3D::render()
 #endif // ENABLE_RENDER_STATISTICS
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+void GLCanvas3D::render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#else
 void GLCanvas3D::render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     switch (OpenGLManager::get_framebuffers_type())
     {
@@ -3915,7 +3923,7 @@ void GLCanvas3D::update_volumes_texture_from_objects()
     for (GLVolume* volume : m_volumes.volumes) {
         int obj_idx = volume->object_idx();
         volume->texture = (0 <= obj_idx && obj_idx < static_cast<int>(m_model->objects.size())) ?
-            m_model->objects[obj_idx]->texture.get_name() : "";
+            m_model->objects[obj_idx]->texture.name : "";
     }
 }
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -4119,7 +4127,11 @@ static void debug_output_thumbnail(const ThumbnailData& thumbnail_data)
 }
 #endif // ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT
 
+#if ENABLE_TEXTURED_VOLUMES
+void GLCanvas3D::_render_thumbnail_internal(TextureData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#else
 void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     auto is_visible = [](const GLVolume& v) {
         bool ret = v.printable;
@@ -4235,7 +4247,11 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
         glsafe(::glClearColor(1.0f, 1.0f, 1.0f, 1.0f));
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+void GLCanvas3D::_render_thumbnail_framebuffer(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#else
 void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     thumbnail_data.set(w, h);
     if (!thumbnail_data.is_valid())
@@ -4308,14 +4324,14 @@ void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, un
                 glsafe(::glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR));
 
                 glsafe(::glBindFramebuffer(GL_READ_FRAMEBUFFER, resolve_fbo));
-                glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.pixels.data()));
+                glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.data.data()));
             }
 
             glsafe(::glDeleteTextures(1, &resolve_tex));
             glsafe(::glDeleteFramebuffers(1, &resolve_fbo));
         }
         else
-            glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.pixels.data()));
+            glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.data.data()));
 
 #if ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT
         debug_output_thumbnail(thumbnail_data);
@@ -4334,7 +4350,11 @@ void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, un
         glsafe(::glDisable(GL_MULTISAMPLE));
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+void GLCanvas3D::_render_thumbnail_framebuffer_ext(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#else
 void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     thumbnail_data.set(w, h);
     if (!thumbnail_data.is_valid())
@@ -4407,14 +4427,14 @@ void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data
                 glsafe(::glBlitFramebufferEXT(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR));
 
                 glsafe(::glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, resolve_fbo));
-                glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.pixels.data()));
+                glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.data.data()));
             }
 
             glsafe(::glDeleteTextures(1, &resolve_tex));
             glsafe(::glDeleteFramebuffersEXT(1, &resolve_fbo));
         }
         else
-            glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.pixels.data()));
+            glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.data.data()));
 
 #if ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT
         debug_output_thumbnail(thumbnail_data);
@@ -4433,7 +4453,11 @@ void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data
         glsafe(::glDisable(GL_MULTISAMPLE));
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+void GLCanvas3D::_render_thumbnail_legacy(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#else
 void GLCanvas3D::_render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     // check that thumbnail size does not exceed the default framebuffer size
     const Size& cnv_size = get_canvas_size();
@@ -4451,7 +4475,7 @@ void GLCanvas3D::_render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigne
 
     _render_thumbnail_internal(thumbnail_data, printable_only, parts_only, show_bed, transparent_background);
 
-    glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.pixels.data()));
+    glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.data.data()));
 #if ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT
     debug_output_thumbnail(thumbnail_data);
 #endif // ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT

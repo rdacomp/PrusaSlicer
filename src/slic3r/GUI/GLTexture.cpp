@@ -785,32 +785,32 @@ bool GLIdeaMakerTexture::load_from_ideamaker_texture_file(const std::string& fil
         boost::optional<std::string> version = root.get_optional<std::string>("version");
 
         m_source = filename;
-        m_metadata.set_name(boost::filesystem::path(filename).stem().string());
+        m_metadata.name = boost::filesystem::path(filename).stem().string();
 
         if (id.has_value())
             m_imaker_id = id.value();
         if (border_color.has_value())
             m_border_color = border_color.value();
         if (repeat_x.has_value())
-            m_metadata.set_repeat_u(repeat_x.value());
+            m_metadata.repeat_u = repeat_x.value();
         if (repeat_y.has_value())
-            m_metadata.set_repeat_v(repeat_y.value());
+            m_metadata.repeat_v = repeat_y.value();
         if (rotation_z.has_value())
-            m_metadata.set_rotation(rotation_z.value());
+            m_metadata.rotation = rotation_z.value();
         if (translation_x.has_value())
-            m_metadata.set_offset_u(translation_x.value());
+            m_metadata.offset_u = translation_x.value();
         if (translation_y.has_value())
-            m_metadata.set_offset_v(translation_y.value());
+            m_metadata.offset_v = translation_y.value();
         if (wrapping.has_value()) {
             std::string value = wrapping.value();
             if (value == "repeat")
-                m_metadata.set_wrapping(TextureMetadata::EWrapping::Repeat);
+                m_metadata.wrapping = TextureMetadata::EWrapping::Repeat;
             else if (value == "mirror")
-                m_metadata.set_wrapping(TextureMetadata::EWrapping::Mirror);
+                m_metadata.wrapping = TextureMetadata::EWrapping::Mirror;
             else if (value == "clamptoedge")
-                m_metadata.set_wrapping(TextureMetadata::EWrapping::ClampToEdge);
+                m_metadata.wrapping = TextureMetadata::EWrapping::ClampToEdge;
             else if (value == "clamptoborder")
-                m_metadata.set_wrapping(TextureMetadata::EWrapping::ClampToBorder);
+                m_metadata.wrapping= TextureMetadata::EWrapping::ClampToBorder;
         }
         if (version.has_value())
             m_version = version.value();

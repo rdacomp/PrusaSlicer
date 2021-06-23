@@ -546,14 +546,14 @@ bool GLVolume::is_below_printbed() const
 #endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
-std::string TexturesManager::decode_name(const std::string& name)
+std::string TexturesManager2::decode_name(const std::string& name)
 {
     std::string::size_type pos = name.find(':');
     return (pos == name.npos) ? name : name.substr(0, pos);
 }
 
 // add new trailing ":id" to the given name string
-std::string TexturesManager::encode_name(const std::string& name)
+std::string TexturesManager2::encode_name(const std::string& name)
 {
     unsigned int count = 0;
     for (TexItem& item : m_textures) {
@@ -565,7 +565,7 @@ std::string TexturesManager::encode_name(const std::string& name)
     return (count == 0) ? name : TexturesManager::decode_name(name) + ":" + std::to_string(count);
 }
 
-std::string TexturesManager::add_texture(const std::string& filename)
+std::string TexturesManager2::add_texture(const std::string& filename)
 {
     // check if the texture from the given filename is already in cache
     for (TexItem& item : m_textures) {
@@ -573,9 +573,9 @@ std::string TexturesManager::add_texture(const std::string& filename)
             // increment reference count
             ++item.count;
 
-#if ENABLE_TEXTURES_MANAGER_DEBUG
+#if ENABLE_TEXTURES_MANAGER2_DEBUG
             output_content();
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
 
             // return texture name
             return item.texture->get_name();
@@ -589,9 +589,9 @@ std::string TexturesManager::add_texture(const std::string& filename)
         TexItem item = { texture, (unsigned int)1 };
         m_textures.emplace_back(item);
 
-#if ENABLE_TEXTURES_MANAGER_DEBUG
+#if ENABLE_TEXTURES_MANAGER2_DEBUG
         output_content();
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
 
         // return texture name
         return m_textures.back().texture->get_name();
@@ -600,7 +600,7 @@ std::string TexturesManager::add_texture(const std::string& filename)
     return "";
 }
 
-void TexturesManager::remove_texture(const std::string& name)
+void TexturesManager2::remove_texture(const std::string& name)
 {
     for (size_t i = 0; i < m_textures.size(); ++i) {
         TexItem& item = m_textures[i];
@@ -613,28 +613,28 @@ void TexturesManager::remove_texture(const std::string& name)
                 m_textures.erase(m_textures.begin() + i);
             }
 
-#if ENABLE_TEXTURES_MANAGER_DEBUG
+#if ENABLE_TEXTURES_MANAGER2_DEBUG
             output_content();
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
 
             return;
         }
     }
 }
 
-void TexturesManager::remove_all_textures()
+void TexturesManager2::remove_all_textures()
 {
     m_textures.clear();
-#if ENABLE_TEXTURES_MANAGER_DEBUG
+#if ENABLE_TEXTURES_MANAGER2_DEBUG
     output_content();
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
 }
 
-#if ENABLE_TEXTURES_MANAGER_DEBUG
-void TexturesManager::output_content() const
+#if ENABLE_TEXTURES_MANAGER2_DEBUG
+void TexturesManager2::output_content() const
 {
-    std::cout << "\nTEXTURES LIST\n";
-    std::cout << "=============\n";
+    std::cout << "\nTEXTURES LIST 2\n";
+    std::cout << "===============\n";
 
     if (m_textures.empty()) {
         std::cout << "empty\n";
@@ -645,11 +645,11 @@ void TexturesManager::output_content() const
         std::cout << item.texture->get_name() << " - " << item.count << "\n";
     }
 
-    std::cout << "=============\n";
+    std::cout << "===============\n";
 }
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
 
-unsigned int TexturesManager::get_texture_id(const std::string& name) const
+unsigned int TexturesManager2::get_texture_id(const std::string& name) const
 {
     for (const TexItem& item : m_textures) {
         if (name == item.texture->get_name())
@@ -658,7 +658,7 @@ unsigned int TexturesManager::get_texture_id(const std::string& name) const
     return 0;
 }
 
-const TextureMetadata& TexturesManager::get_texture_metadata(const std::string& name) const
+const TextureMetadata& TexturesManager2::get_texture_metadata(const std::string& name) const
 {
     for (const TexItem& item : m_textures) {
         if (name == item.texture->get_name())
@@ -960,7 +960,7 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
                 shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
                 shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
                 const ModelObject* model_object = GUI::wxGetApp().model().objects[volume.first->object_idx()];
-                shader->set_uniform("proj_texture.projection", static_cast<int>(model_object->texture.get_mapping()));
+                shader->set_uniform("proj_texture.projection", static_cast<int>(model_object->texture.mapping));
                 shader->set_uniform("projection_tex", 0);
 #if ENABLE_ENVIRONMENT_MAP
                 glsafe(::glActiveTexture(GL_TEXTURE0));

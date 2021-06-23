@@ -39,7 +39,11 @@ namespace Slic3r {
 
 struct Camera;
 class BackgroundSlicingProcess;
+#if ENABLE_TEXTURED_VOLUMES
+struct TextureData;
+#else
 struct ThumbnailData;
+#endif // ENABLE_TEXTURED_VOLUMES
 class ModelObject;
 class ModelInstance;
 class PrintObject;
@@ -622,7 +626,11 @@ public:
     void render();
     // printable_only == false -> render also non printable volumes as grayed
     // parts_only == false -> render also sla support and pad
+#if ENABLE_TEXTURED_VOLUMES
+    void render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+#else
     void render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+#endif // ENABLE_TEXTURED_VOLUMES
 
     void select_all();
     void deselect_all();
@@ -856,6 +864,15 @@ private:
     bool _render_undo_redo_stack(const bool is_undo, float pos_x);
     bool _render_search_list(float pos_x);
     bool _render_arrange_menu(float pos_x);
+#if ENABLE_TEXTURED_VOLUMES
+    void _render_thumbnail_internal(TextureData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    // render thumbnail using an off-screen framebuffer
+    void _render_thumbnail_framebuffer(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    // render thumbnail using an off-screen framebuffer when GLEW_EXT_framebuffer_object is supported
+    void _render_thumbnail_framebuffer_ext(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    // render thumbnail using the default framebuffer
+    void _render_thumbnail_legacy(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+#else
     void _render_thumbnail_internal(ThumbnailData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
     // render thumbnail using an off-screen framebuffer
     void _render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
@@ -863,6 +880,7 @@ private:
     void _render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
     // render thumbnail using the default framebuffer
     void _render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+#endif // ENABLE_TEXTURED_VOLUMES
 
     void _update_volumes_hover_state();
 

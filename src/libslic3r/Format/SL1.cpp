@@ -1,5 +1,9 @@
 #include "SL1.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "TextureData.hpp"
+#else
 #include "GCode/ThumbnailData.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 #include "libslic3r/Time.hpp"
 
 #include <boost/log/trivial.hpp>

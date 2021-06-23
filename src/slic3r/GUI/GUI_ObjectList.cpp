@@ -2388,13 +2388,13 @@ wxDataViewItem ObjectList::add_settings_item(wxDataViewItem parent_item, const D
 wxDataViewItem ObjectList::add_texture_item(const wxDataViewItem obj_item, bool force_creation)
 {
     const int obj_idx = m_objects_model->GetIdByItem(obj_item);
-    if (obj_idx < 0 || printer_technology() == ptSLA || (!force_creation && object(obj_idx)->texture.get_name().empty()))
+    if (obj_idx < 0 || printer_technology() == ptSLA || (!force_creation && object(obj_idx)->texture.name.empty()))
         return wxDataViewItem(nullptr);
 
     // create Texture item
     wxDataViewItem texture_item = m_objects_model->AddTextureChild(obj_item);
     ObjectDataViewModelNode* node = static_cast<ObjectDataViewModelNode*>(texture_item.GetID());
-    node->SetBitmap(object(obj_idx)->texture.get_name().empty() ? wxBitmap() : create_scaled_bitmap("edit_texture"));
+    node->SetBitmap(object(obj_idx)->texture.name.empty() ? wxBitmap() : create_scaled_bitmap("edit_texture"));
 
     return texture_item;
 }

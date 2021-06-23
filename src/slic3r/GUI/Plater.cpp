@@ -32,7 +32,11 @@
 #include "libslic3r/Format/STL.hpp"
 #include "libslic3r/Format/AMF.hpp"
 #include "libslic3r/Format/3mf.hpp"
+#if ENABLE_TEXTURED_VOLUMES
+#include "libslic3r/TextureData.hpp"
+#else
 #include "libslic3r/GCode/ThumbnailData.hpp"
+#endif // ENABLE_TEXTURED_VOLUMES
 #include "libslic3r/Model.hpp"
 #include "libslic3r/SLA/Hollowing.hpp"
 #include "libslic3r/SLA/SupportPoint.hpp"
@@ -1805,7 +1809,11 @@ struct Plater::priv
     bool can_replace_with_stl() const;
     bool can_split(bool to_objects) const;
 
+#if ENABLE_TEXTURED_VOLUMES
+    void generate_thumbnail(TextureData& data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+#else
     void generate_thumbnail(ThumbnailData& data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+#endif // ENABLE_TEXTURED_VOLUMES
     ThumbnailsList generate_thumbnails(const ThumbnailsParams& params);
 
     void bring_instance_forward() const;
@@ -2791,7 +2799,7 @@ void Plater::priv::remove(size_t obj_idx)
         view3D->enable_layers_editing(false);
 
 #if ENABLE_TEXTURED_VOLUMES
-    q->remove_object_texture(model.objects[obj_idx]->texture.get_name());
+    q->remove_object_texture(model.objects[obj_idx]->texture.name);
 #endif // ENABLE_TEXTURED_VOLUMES
     model.delete_object(obj_idx);
     update();
@@ -2808,7 +2816,7 @@ void Plater::priv::delete_object_from_model(size_t obj_idx)
         snapshot_label += ": " + wxString::FromUTF8(model.objects[obj_idx]->name.c_str());
     Plater::TakeSnapshot snapshot(q, snapshot_label);
 #if ENABLE_TEXTURED_VOLUMES
-    q->remove_object_texture(model.objects[obj_idx]->texture.get_name());
+    q->remove_object_texture(model.objects[obj_idx]->texture.name);
 #endif // ENABLE_TEXTURED_VOLUMES
     model.delete_object(obj_idx);
     update();
@@ -4091,7 +4099,11 @@ void Plater::priv::on_3dcanvas_mouse_dragging_finished(SimpleEvent&)
     }
 }
 
+#if ENABLE_TEXTURED_VOLUMES
+void Plater::priv::generate_thumbnail(TextureData& data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#else
 void Plater::priv::generate_thumbnail(ThumbnailData& data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+#endif // ENABLE_TEXTURED_VOLUMES
 {
     view3D->get_canvas3d()->render_thumbnail(data, w, h, printable_only, parts_only, show_bed, transparent_background);
 }
@@ -4100,7 +4112,11 @@ ThumbnailsList Plater::priv::generate_thumbnails(const ThumbnailsParams& params)
 {
     ThumbnailsList thumbnails;
     for (const Vec2d& size : params.sizes) {
+#if ENABLE_TEXTURED_VOLUMES
+        thumbnails.push_back(TextureData());
+#else
         thumbnails.push_back(ThumbnailData());
+#endif // ENABLE_TEXTURED_VOLUMES
         Point isize(size); // round to ints
         generate_thumbnail(thumbnails.back(), isize.x(), isize.y(), params.printable_only, params.parts_only, params.show_bed, params.transparent_background);
         if (!thumbnails.back().is_valid())
@@ -5674,7 +5690,11 @@ void Plater::export_3mf(const boost::filesystem::path& output_path)
     const std::string path_u8 = into_u8(path);
     wxBusyCursor wait;
     bool full_pathnames = wxGetApp().app_config->get("export_sources_full_pathnames") == "1";
+#if ENABLE_TEXTURED_VOLUMES
+    TextureData thumbnail_data;
+#else
     ThumbnailData thumbnail_data;
+#endif // ENABLE_TEXTURED_VOLUMES
     p->generate_thumbnail(thumbnail_data, THUMBNAIL_SIZE_3MF.first, THUMBNAIL_SIZE_3MF.second, false, true, true, true);
 #if ENABLE_PROJECT_DIRTY_STATE
     bool ret = Slic3r::store_3mf(path_u8.c_str(), &p->model, export_config ? &cfg : nullptr, full_pathnames, &thumbnail_data);
@@ -6644,22 +6664,30 @@ void Plater::bring_instance_forward()
 #if ENABLE_TEXTURED_VOLUMES
 std::string Plater::add_object_texture(const std::string& filename)
 {
-    return canvas3D()->add_object_texture(filename);
+    std::string res1 = p->model.add_object_texture(filename); // <<<<< FIXME
+    std::string res2 = canvas3D()->add_object_texture(filename); // <<<<< FIXME
+    assert(res1 == res2); // <<<<< FIXME
+    return res2; // <<<<< FIXME
 }
 
 void Plater::remove_object_texture(const std::string& name)
 {
+    p->model.remove_object_texture(name);
     canvas3D()->remove_object_texture(name);
 }
 
 void Plater::remove_all_object_textures()
 {
+    p->model.remove_all_object_textures();
     canvas3D()->remove_all_object_textures();
 }
 
 unsigned int Plater::get_object_texture_id(const std::string& name) const
 {
-    return canvas3D()->get_object_texture_id(name);
+    unsigned int res1 = p->model.get_object_texture_id(name); // <<<<< FIXME
+    unsigned int res2 = canvas3D()->get_object_texture_id(name); // <<<<< FIXME
+    assert(res1 == res2); // <<<<< FIXME
+    return res2; // <<<<< FIXME
 }
 
 const TextureMetadata& Plater::get_object_texture_metadata(const std::string& name) const

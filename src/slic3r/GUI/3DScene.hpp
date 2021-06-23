@@ -483,8 +483,8 @@ typedef std::pair<GLVolume*, std::pair<unsigned int, double>> GLVolumeWithIdAndZ
 typedef std::vector<GLVolumeWithIdAndZ> GLVolumeWithIdAndZList;
 
 #if ENABLE_TEXTURED_VOLUMES
-#define ENABLE_TEXTURES_MANAGER_DEBUG 0
-class TexturesManager
+#define ENABLE_TEXTURES_MANAGER2_DEBUG 0
+class TexturesManager2
 {
     struct TexItem
     {
@@ -503,9 +503,9 @@ public:
     unsigned int get_texture_id(const std::string& name) const;
     const TextureMetadata& get_texture_metadata(const std::string& name) const;
 
-#if ENABLE_TEXTURES_MANAGER_DEBUG
+#if ENABLE_TEXTURES_MANAGER2_DEBUG
     void output_content() const;
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+#endif // ENABLE_TEXTURES_MANAGER2_DEBUG
 
     // remove the trailing ":id" from the given name string, if present
     static std::string decode_name(const std::string& name);
@@ -547,7 +547,7 @@ private:
     Slope m_slope;
 
 #if ENABLE_TEXTURED_VOLUMES
-    mutable TexturesManager m_textures_manager;
+    mutable TexturesManager2 m_textures_manager;
 #endif // ENABLE_TEXTURED_VOLUMES
 
 public:
