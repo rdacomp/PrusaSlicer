@@ -26,15 +26,14 @@ public:
     float min_value = 0.1f;
     float max_value = 10.f;
     bool allow_render_normals = false;
+
     float angle = 120; // [in deg] in range from 1 to 179
     size_t count_samples = 60; // count samples on half sphere
 
     float normal_width = 0.1f;
     float normal_length = .5f;
 
-    // filtration of rays
-    float allowed_angle = -1.f; //static_cast<float>(M_PI_2) + std::numeric_limits<float>::epsilon();
-    float allowed_deviation = 1.5f;
+    ShapeDiameterFunction::Config sdf_config;
 
     bool allow_divide_triangle = true;
     float max_triangle_size = 1.f;
@@ -48,7 +47,6 @@ public:
 
     void set_enabled(bool enable) { enabled = enable; };
     bool is_enabled() const { return enabled; };
-    size_t get_ray_count() const { return unit_z_rays.size(); }
     const indexed_triangle_set &get_triangle_set() const { return tree.vertices_indices; }
     
     void draw() const;
@@ -86,7 +84,6 @@ public:
     // draw information
     size_t indices_count = 0;
 
-    ShapeDiameterFunction::Directions unit_z_rays;
     // normals for each vertex of mesh
     ShapeDiameterFunction::IndexTriangleNormals triangles;
 

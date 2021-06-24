@@ -181,7 +181,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             sdf.initialize_width();
         }
         ImGui::SameLine();
-        m_imgui->text(("=" + std::to_string(sdf.get_ray_count())));
+        m_imgui->text(("=" + std::to_string(sdf.sdf_config.dirs.size())));
         ImGui::SameLine();
         if (m_imgui->slider_float("angle", &sdf.angle, 1.f, 179.f)) {
             sdf.initialize_width();            
@@ -189,36 +189,35 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
 
         m_imgui->text("filter:");
         ImGui::SameLine();
-        bool allowed_angle = sdf.allowed_angle > 0.f;
+        bool allowed_angle = sdf.sdf_config.is_angle_filtering();
         if (m_imgui->checkbox("angl", allowed_angle)) { 
             if (allowed_angle) { 
-                sdf.allowed_angle = M_PI_2;
+                sdf.sdf_config.allowed_angle = M_PI_2;
             } else {
-                sdf.allowed_angle = -1.f;
+                sdf.sdf_config.set_no_angle_filtering();
             }
             sdf.initialize_width();
         }
         if (allowed_angle) {
             ImGui::SameLine();
-            if (m_imgui->slider_float("#angle", &sdf.allowed_angle, 0.f,
-                                      (float) M_PI)) {
+            if (m_imgui->slider_float("#angle", &sdf.sdf_config.allowed_angle, 0.f, (float) M_PI)) {
                 sdf.initialize_width();
             }
         }
 
         ImGui::SameLine();
-        bool allowed_deviation = sdf.allowed_deviation > 0.f;
+        bool allowed_deviation = sdf.sdf_config.is_deviation_filtering();
         if (m_imgui->checkbox("dev", allowed_deviation)) {
             if (allowed_deviation) {
-                sdf.allowed_deviation = 1.f;
+                sdf.sdf_config.allowed_deviation = 1.f;
             } else {
-                sdf.allowed_deviation = -1.f;
+                sdf.sdf_config.set_no_deviation_filtering();
             }
             sdf.initialize_width();
         }
         if (allowed_deviation) {
             ImGui::SameLine();
-            if (m_imgui->slider_float("#deviation", &sdf.allowed_deviation, 0.5f, 2.f)) {
+            if (m_imgui->slider_float("#deviation", &sdf.sdf_config.allowed_deviation, 0.5f, 2.f)) {
                 sdf.initialize_width();
             }
         }

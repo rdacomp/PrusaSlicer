@@ -101,12 +101,9 @@ bool GLShapeDiameterFunction::initialize_normals()
 }
 
 bool GLShapeDiameterFunction::initialize_width() {
-    unit_z_rays = ShapeDiameterFunction::create_fibonacci_sphere_samples(angle, count_samples);
-    std::vector<float> widths =
-        ShapeDiameterFunction::calc_widths(triangles.vertices,
-                                           triangles.vertex_normals,
-                                           unit_z_rays, tree,
-                                           allowed_deviation, allowed_angle);
+    sdf_config.dirs = ShapeDiameterFunction::create_fibonacci_sphere_samples(angle, count_samples);
+    std::vector<float> widths = ShapeDiameterFunction::calc_widths(
+        triangles.vertices, triangles.vertex_normals, tree, sdf_config);
 
     // merge vertices normal and width together for GPU
     std::vector<Vertex> buffer = {};
@@ -209,7 +206,7 @@ void GLShapeDiameterFunction::render_rays() const {
     shader->start_using();
     shader->set_uniform("uniform_color", color);
     Vec3f z_one(0.f, 0.f, 1.f);
-    for (const auto& ray: unit_z_rays) {
+    for (const auto& ray: sdf_config.dirs) {
         GLModel arrow_to_z = create_arrow(1.f, 10.f * ray.weight);
         const Vec3f &normal = ray.dir;
         Vec3f       axis  = z_one.cross(normal);

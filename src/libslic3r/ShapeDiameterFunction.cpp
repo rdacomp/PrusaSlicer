@@ -8,10 +8,8 @@ using namespace Slic3r;
 
 float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                         const Vec3f &     normal,
-                                        const Directions &dirs,
                                         const AABBTree &  tree,
-                                        float             allowed_deviation,
-                                        float             allowed_angle)
+                                        const Config &  config)
 {
     // safe against ray intersection with origin trinagle made by source vertex
     const double safe_move = 1e-5;
@@ -25,6 +23,7 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
     Vec3f       axis  = z_axe.cross(ray_dir);
     float       angle = std::acos(z_axe.dot(ray_dir));
 
+    const Directions &dirs = config.dirs;
     auto  tr_mat     = Eigen::AngleAxis<float>(angle, axis).matrix();
     std::vector<float> widths;
     widths.reserve(dirs.size());
@@ -45,7 +44,7 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                                        ray_point, ray_trd, hit))
             continue;
 
-        if (allowed_angle > 0) {
+        if (config.is_angle_filtering()) {
             // check angle ray of hitted traingle
             Vec3f hit_normal = tree.triangle_normals[hit.id];
             float dot        = ray_dir.dot(hit_normal);
@@ -55,7 +54,7 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
             // when angle between ray direction and hitted triangle normal
             // is more than 90deg that means the face is hitted from BAD side
             
-            if (angle > allowed_angle) continue; 
+            if (angle > config.allowed_angle) continue; 
             // face is propably inside of model or
             // ray fly throw edge of triangles - numeric issue
         }
@@ -72,13 +71,14 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
     // statistics of widths - mean and standart deviation
     float mean = sum_width / widths.size();
     float standard_deviation = std::sqrt(sq_sum_width / widths.size() - mean * mean);
-    float threshold_deviation = standard_deviation * allowed_deviation;
+    float threshold_deviation = standard_deviation * config.allowed_deviation;
     sum_width = 0.f;
     float sum_weight = 0.f;
     for (size_t i = 0; i < widths.size(); i++) {
         const float &width = widths[i];
         // skip values out of standart deviation
-        if (fabs(width - mean) > threshold_deviation) continue;
+        if (config.is_deviation_filtering() && 
+            fabs(width - mean) > threshold_deviation) continue;
         const float &weight = weights[i];
         sum_width += width * weight;
         sum_weight += weight;
@@ -90,16 +90,14 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
 std::vector<float> ShapeDiameterFunction::calc_widths(
     const std::vector<Vec3f> &points,
     const std::vector<Vec3f> &normals,
-    const Directions &        dirs,
     const AABBTree &          tree,
-    float                     allowed_deviation,
-    float                     allowed_angle)
+    const Config &config)
 {
     // check input
     assert(!points.empty());
-    assert(!dirs.empty());
+    assert(!config.dirs.empty());
     assert(points.size() == normals.size());
-    if (points.empty() || dirs.empty() ||
+    if (points.empty() || config.dirs.empty() ||
         points.size() != normals.size()) return {};
 
     static constexpr size_t granularity = 64;
@@ -111,8 +109,7 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
             index < range.end(); ++index) {
             const Vec3f &vertex = points[index];
             const Vec3f &normal = normals[index];
-            widths[index] = calc_width(vertex, normal, dirs, tree,
-                                        allowed_deviation, allowed_angle);
+            widths[index] = calc_width(vertex, normal, tree, config);
         }
     });
     return widths;

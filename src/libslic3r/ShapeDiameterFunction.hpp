@@ -44,6 +44,36 @@ public:
     };
 
     /// <summary>
+    /// DTO with valus for calculate width by SDF
+    /// </summary>
+    struct Config
+    {
+        // Multiplicator of standart deviation to be result of ray counted,
+        // negative number means no filtration by deviation
+        // be carefull with value close 1. Standart deviation and means are calculated with float precision only.
+        // when use only 2 values non of them needs to be in deviation
+        float allowed_deviation = 1.5f; // [in std dev multiplication]
+
+        // Maximal angle between normal and hitted triangle normal[in Radians]
+        // negative number means no filtration by angle
+        float allowed_angle = -1.f; 
+        //for no oposit direction use value: static_cast<float>(M_PI_2) + std::numeric_limits<float>::epsilon();
+
+        // Direction to cast rays with unit size
+        // Before use z direction is rotated to negative normal of point
+        Directions dirs =
+            ShapeDiameterFunction::create_fibonacci_sphere_samples(120., 60);
+
+        // create config with default values
+        Config() = default;
+
+        void set_no_deviation_filtering() { allowed_deviation = -1.f; }
+        bool is_deviation_filtering() const { return allowed_deviation > 0; }
+        void set_no_angle_filtering() { allowed_angle = -1.f; }
+        bool is_angle_filtering() const { return allowed_angle > 0; }
+    };
+
+    /// <summary>
     /// Only static functions
     /// </summary>
     ShapeDiameterFunction() = delete;
@@ -53,21 +83,13 @@ public:
     /// </summary>
     /// <param name="point">Surface point of model</param>
     /// <param name="normal">Normal in surface point</param>
-    /// <param name="dirs">Direction to cast rays</param>
-    /// <param name="its">Needed by tree function</param>
     /// <param name="tree">AABB tree to fast detect first intersection</param>
-    /// <param name="allowed_deviation">Multiplicator of standart deviation to be result of ray counted,
-    /// negative number means no filtration by deviation, 
-    /// be carefull with value 1. std_dev and means are calculated with float precision</param>
-    /// <param name="allowed_angle">Maximal angle between normal and hitted triangle normal [in Radians]
-    /// negative number means no filtration by angle</param>
+    /// <param name="config">Calculation configuration</param>
     /// <returns>Width of model for surface point</returns>
     static float calc_width(const Vec3f &     point,
                             const Vec3f &     normal,
-                            const Directions &dirs,
                             const AABBTree &  tree,
-                            float             allowed_deviation,
-                            float             allowed_angle);
+                            const Config &config);
 
     /// <summary>
     /// Concurrent calculation of width for each vertex
@@ -75,25 +97,28 @@ public:
     /// <param name="triangles">Vertices, indices and normals</param>
     /// <param name="dirs">Direction to cast rays</param>
     /// <param name="tree">AABB tree to fast detect first intersection</param>
-    /// <param name="allowed_deviation">Multiplicator of standart deviation to be result of ray counted,
-    /// negative number means no filtration by deviation, 
-    /// be carefull with value 1. std_dev and means are calculated with float precision</param>
-    /// <param name="allowed_angle">Maximal angle between normal and hitted triangle normal [in Radians]
-    /// negative number means no filtration by angle</param>
     /// <returns>Width for each vertex</returns>
     static std::vector<float> calc_widths(const std::vector<Vec3f> &points,
                                           const std::vector<Vec3f> &normals,
-                                          const Directions &        dirs,
                                           const AABBTree &          tree,
-                                          float allowed_deviation = 1.5f,
-                                          float allowed_angle     = M_PI_2);
+                                          const Config &            config);
+
+    struct SampleConfig
+    {
+
+
+    };
+
+    static std::vector<Vec3d> generate_support_points(
+        const indexed_triangle_set &its, const std::vector<float> &widths,
+        const SampleConfig& cfg);
 
     /// <summary>
     /// Create points on unit sphere surface. with weight by z value
     /// </summary>
-    /// <param name="angle"></param>
-    /// <param name="count_samples"></param>
-    /// <returns></returns>
+    /// <param name="angle">Cone angle in DEG, filtrate uniform sample of half sphere</param>
+    /// <param name="count_samples">Count samples for half sphere</param>
+    /// <returns>Unit vectors lay inside cone with direction to Z axis</returns>
     static Directions create_fibonacci_sphere_samples(double angle, size_t count_samples);
 
     /// <summary>
