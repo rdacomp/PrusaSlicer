@@ -529,8 +529,11 @@ DeserializeResult ConfigBase::set_deserialize_raw(const t_config_option_key &opt
     ConfigOption *opt = this->option(opt_key, true);
     assert(opt != nullptr);
     DeserializeResult res = opt->deserialize(value, append);
-    if (res == DeserializeResult::Change)
+    if (res == DeserializeResult::Change) {
+        // set value to default
+        opt->set(optdef->default_value.get());
         change_message += "\nOption " + opt_key + " was changed to " + opt->serialize();
+    }
     return res;
 }
 
