@@ -2055,10 +2055,11 @@ namespace Slic3r {
     private:
 #if ENABLE_TEXTURED_VOLUMES
         bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const TextureData* thumbnail_data);
+        bool _add_content_types_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
 #else
         bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const ThumbnailData* thumbnail_data);
-#endif // ENABLE_TEXTURED_VOLUMES
         bool _add_content_types_file_to_archive(mz_zip_archive& archive);
+#endif // ENABLE_TEXTURED_VOLUMES
 #if ENABLE_TEXTURED_VOLUMES
         bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const TextureData& thumbnail_data);
 #else
@@ -2066,12 +2067,16 @@ namespace Slic3r {
 #endif // ENABLE_TEXTURED_VOLUMES
         bool _add_relationships_file_to_archive(mz_zip_archive& archive);
 #if ENABLE_TEXTURED_VOLUMES
-        bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const Model& model);
-        bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model);
+        bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
+        bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model, const std::vector<std::string>& textures_names);
 #endif // ENABLE_TEXTURED_VOLUMES
-        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
 #if ENABLE_TEXTURED_VOLUMES
-        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model);
+        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data, const std::vector<std::string>& textures_names);
+#else
+        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
+#endif // ENABLE_TEXTURED_VOLUMES
+#if ENABLE_TEXTURED_VOLUMES
+        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const std::vector<std::string>& textures_names);
 #endif // ENABLE_TEXTURED_VOLUMES
         bool _add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
         bool _add_mesh_to_object_stream(mz_zip_writer_staged_context &context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
@@ -2111,9 +2116,17 @@ namespace Slic3r {
             return false;
         }
 
+#if ENABLE_TEXTURED_VOLUMES
+        std::vector<std::string> textures_names = model.textures_manager.get_texture_names();
+#endif // ENABLE_TEXTURED_VOLUMES
+
         // Adds content types file ("[Content_Types].xml";).
         // The content of this file is the same for each PrusaSlicer 3mf.
+#if ENABLE_TEXTURED_VOLUMES
+        if (!_add_content_types_file_to_archive(archive, textures_names)) {
+#else
         if (!_add_content_types_file_to_archive(archive)) {
+#endif // ENABLE_TEXTURED_VOLUMES
             close_zip_writer(&archive);
             boost::filesystem::remove(filename);
             return false;
@@ -2138,17 +2151,17 @@ namespace Slic3r {
         }
 
 #if ENABLE_TEXTURED_VOLUMES
-        if (model.has_any_texture()) {
+        if (!textures_names.empty()) {
             // Adds relationships file ("3D/_rels/3dmodel.model.rels"). 
             // This relationshis file contains a reference to the texture files used by "3D/3dmodel.model"
-            if (!_add_model_relationships_file_to_archive(archive, model)) {
+            if (!_add_model_relationships_file_to_archive(archive, textures_names)) {
                 close_zip_writer(&archive);
                 boost::filesystem::remove(filename);
                 return false;
             }
 
-            // Adds texture files ("3D/Texture/*.png"). 
-            if (!_add_texture_files_to_archive(archive, model)) {
+            // Adds texture files ("3D/Texture/*.png").
+            if (!_add_texture_files_to_archive(archive, model, textures_names)) {
                 close_zip_writer(&archive);
                 boost::filesystem::remove(filename);
                 return false;
@@ -2159,7 +2172,11 @@ namespace Slic3r {
         // Adds model file ("3D/3dmodel.model").
         // This is the one and only file that contains all the geometry (vertices and triangles) of all ModelVolumes.
         IdToObjectDataMap objects_data;
+#if ENABLE_TEXTURED_VOLUMES
+        if (!_add_model_file_to_archive(filename, archive, model, objects_data, textures_names)) {
+#else
         if (!_add_model_file_to_archive(filename, archive, model, objects_data)) {
+#endif // ENABLE_TEXTURED_VOLUMES
             close_zip_writer(&archive);
             boost::filesystem::remove(filename);
             return false;
@@ -2239,14 +2256,27 @@ namespace Slic3r {
         return true;
     }
 
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::_add_content_types_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names)
+#else
     bool _3MF_Exporter::_add_content_types_file_to_archive(mz_zip_archive& archive)
+#endif // ENABLE_TEXTURED_VOLUMES
     {
         std::stringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
         stream << "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n";
         stream << " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n";
         stream << " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n";
-        stream << " <Default Extension=\"png\" ContentType=\"image/png\"/>\n";
+#if ENABLE_TEXTURED_VOLUMES
+        if (textures_names.empty())
+#endif // ENABLE_TEXTURED_VOLUMES
+            stream << " <Default Extension=\"png\" ContentType=\"image/png\"/>\n";
+#if ENABLE_TEXTURED_VOLUMES
+        else {
+            stream << " <Default Extension=\"png\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodeltexture\"/>\n";
+            stream << " <Override PartName=\"/Metadata/thumbnail.png\" ContentType=\"image/png\"/>\n";
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
         stream << "</Types>";
 
         std::string out = stream.str();
@@ -2307,15 +2337,14 @@ namespace Slic3r {
         return TEXTURES_PATH + mod_name + ".texture.png";// Microsoft 3DBuilder uses this composed extension, is it really needed ?
     }
 
-    bool _3MF_Exporter::_add_model_relationships_file_to_archive(mz_zip_archive& archive, const Model& model)
+    bool _3MF_Exporter::_add_model_relationships_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names)
     {
         std::stringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
         stream << "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n";
 
-        std::vector<std::string> names = model.textures_manager.get_texture_names();
         unsigned int count = 1;
-        for (std::string& name : names) {
+        for (const std::string& name : textures_names) {
             stream << " <Relationship Target=\"/" << format_texture_name(name) << "\" Id=\"rel-model-" << count << "\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture\"/>\n";
             ++count;
         }
@@ -2332,12 +2361,11 @@ namespace Slic3r {
         return true;
     }
 
-    bool _3MF_Exporter::_add_texture_files_to_archive(mz_zip_archive& archive, const Model& model)
+    bool _3MF_Exporter::_add_texture_files_to_archive(mz_zip_archive& archive, const Model& model, const std::vector<std::string>& textures_names)
     {
         bool res = false;
 
-        std::vector<std::string> names = model.textures_manager.get_texture_names();
-        for (std::string& name : names) {
+        for (const std::string& name : textures_names) {
             const TextureData& data = model.textures_manager.get_texture_data(name);
             if (data.is_valid())
                 res |= mz_zip_writer_add_mem(&archive, format_texture_name(name).c_str(), (const void*)data.data.data(), data.data.size(), MZ_DEFAULT_COMPRESSION) == 1;
@@ -2358,7 +2386,11 @@ namespace Slic3r {
         stream << std::setprecision(std::numeric_limits<float>::max_digits10);
     }
 
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data, const std::vector<std::string>& textures_names)
+#else
     bool _3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data)
+#endif // ENABLE_TEXTURED_VOLUMES
     {
         mz_zip_writer_staged_context context;
         if (!mz_zip_writer_add_staged_open(&archive, &context, MODEL_FILE.c_str(), 
@@ -2402,7 +2434,7 @@ namespace Slic3r {
         }
 
 #if ENABLE_TEXTURED_VOLUMES
-        if (!_add_textures_to_model_stream(context, model)) {
+        if (!_add_textures_to_model_stream(context, textures_names)) {
             add_error("Unable to add textures to archive");
             mz_zip_writer_add_staged_finish(&context);
             return false;
@@ -2460,16 +2492,15 @@ namespace Slic3r {
     }
 
 #if ENABLE_TEXTURED_VOLUMES
-    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model)
+    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const std::vector<std::string>& textures_names)
     {
         bool ret = true;
 
-        std::vector<std::string> names = model.textures_manager.get_texture_names();
-        if (!names.empty()) {
+        if (!textures_names.empty()) {
             std::stringstream stream;
 
             unsigned int id = 1;
-            for (std::string& name : names) {
+            for (const std::string& name : textures_names) {
                 stream << "  <" << TEXTURE2D_TAG << " id=\"" << id++ << "\" path=\"/" << format_texture_name(name) << "\" contenttype=\"image/png\"/>\n"; // FIXME: missing attributes
             }
 
