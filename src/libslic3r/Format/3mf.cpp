@@ -2056,27 +2056,20 @@ namespace Slic3r {
 #if ENABLE_TEXTURED_VOLUMES
         bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const TextureData* thumbnail_data);
         bool _add_content_types_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
+        bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const TextureData& thumbnail_data);
 #else
         bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const ThumbnailData* thumbnail_data);
         bool _add_content_types_file_to_archive(mz_zip_archive& archive);
-#endif // ENABLE_TEXTURED_VOLUMES
-#if ENABLE_TEXTURED_VOLUMES
-        bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const TextureData& thumbnail_data);
-#else
         bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data);
 #endif // ENABLE_TEXTURED_VOLUMES
         bool _add_relationships_file_to_archive(mz_zip_archive& archive);
 #if ENABLE_TEXTURED_VOLUMES
         bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
         bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model, const std::vector<std::string>& textures_names);
-#endif // ENABLE_TEXTURED_VOLUMES
-#if ENABLE_TEXTURED_VOLUMES
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data, const std::vector<std::string>& textures_names);
+        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const std::vector<std::string>& textures_names);
 #else
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
-#endif // ENABLE_TEXTURED_VOLUMES
-#if ENABLE_TEXTURED_VOLUMES
-        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const std::vector<std::string>& textures_names);
 #endif // ENABLE_TEXTURED_VOLUMES
         bool _add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
         bool _add_mesh_to_object_stream(mz_zip_writer_staged_context &context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
@@ -2121,7 +2114,7 @@ namespace Slic3r {
 #endif // ENABLE_TEXTURED_VOLUMES
 
         // Adds content types file ("[Content_Types].xml";).
-        // The content of this file is the same for each PrusaSlicer 3mf.
+        // The content of this file may change if the model contains textures.
 #if ENABLE_TEXTURED_VOLUMES
         if (!_add_content_types_file_to_archive(archive, textures_names)) {
 #else
