@@ -898,9 +898,10 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
 				boost::nowide::cerr << "Invalid value supplied for --" << token.c_str() << std::endl;
 				return false;
 			}
-            if (!change_message.empty())
-                // TODO: throw exception?
+            if (!change_message.empty()) {
                 boost::nowide::cerr << "Incompatible config value supplied for --"<< token.c_str() << ":" << change_message << std::endl;
+                return false;
+            }
         }
     }
     return true;
