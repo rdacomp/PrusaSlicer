@@ -84,6 +84,9 @@ static constexpr const char* COMPONENT_TAG = "component";
 static constexpr const char* BUILD_TAG = "build";
 static constexpr const char* ITEM_TAG = "item";
 static constexpr const char* METADATA_TAG = "metadata";
+#if ENABLE_TEXTURED_VOLUMES
+static constexpr const char* TEXTURE2D_TAG = "m:texture2d";
+#endif // ENABLE_TEXTURED_VOLUMES
 
 static constexpr const char* CONFIG_TAG = "config";
 static constexpr const char* VOLUME_TAG = "volume";
@@ -2067,6 +2070,9 @@ namespace Slic3r {
         bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model);
 #endif // ENABLE_TEXTURED_VOLUMES
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
+#if ENABLE_TEXTURED_VOLUMES
+        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model);
+#endif // ENABLE_TEXTURED_VOLUMES
         bool _add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
         bool _add_mesh_to_object_stream(mz_zip_writer_staged_context &context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
         bool _add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items);
@@ -2395,6 +2401,14 @@ namespace Slic3r {
             }
         }
 
+#if ENABLE_TEXTURED_VOLUMES
+        if (!_add_textures_to_model_stream(context, model)) {
+            add_error("Unable to add textures to archive");
+            mz_zip_writer_add_staged_finish(&context);
+            return false;
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
+
         // Instance transformations, indexed by the 3MF object ID (which is a linear serialization of all instances of all ModelObjects).
         BuildItemsList build_items;
 
@@ -2444,6 +2458,28 @@ namespace Slic3r {
 
         return true;
     }
+
+#if ENABLE_TEXTURED_VOLUMES
+    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model)
+    {
+        bool ret = true;
+
+        std::vector<std::string> names = model.textures_manager.get_texture_names();
+        if (!names.empty()) {
+            std::stringstream stream;
+
+            unsigned int id = 1;
+            for (std::string& name : names) {
+                stream << "  <" << TEXTURE2D_TAG << " id=\"" << id++ << "\" path=\"/" << format_texture_name(name) << "\" contenttype=\"image/png\"/>\n"; // FIXME: missing attributes
+            }
+
+            std::string buf = stream.str();
+            ret &= mz_zip_writer_add_staged_data(&context, buf.data(), buf.size()) == 1;
+        }
+
+        return ret;
+    }
+#endif // ENABLE_TEXTURED_VOLUMES
 
     bool _3MF_Exporter::_add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets)
     {
