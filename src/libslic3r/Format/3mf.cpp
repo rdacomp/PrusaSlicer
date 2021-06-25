@@ -2032,17 +2032,28 @@ namespace Slic3r {
 
         struct ObjectData
         {
+#if ENABLE_TEXTURED_VOLUMES
+            const ModelObject* object;
+#else
             ModelObject* object;
+#endif // ENABLE_TEXTURED_VOLUMES
             VolumeToOffsetsMap volumes_offsets;
 
+#if ENABLE_TEXTURED_VOLUMES
+            explicit ObjectData(const ModelObject* object)
+#else
             explicit ObjectData(ModelObject* object)
-                : object(object)
+#endif // ENABLE_TEXTURED_VOLUMES
+        : object(object)
             {
             }
         };
 
         typedef std::vector<BuildItem> BuildItemsList;
         typedef std::map<int, ObjectData> IdToObjectDataMap;
+#if ENABLE_TEXTURED_VOLUMES
+        typedef std::vector<std::pair<unsigned int, unsigned int>> TextureToGroupMap;
+#endif // ENABLE_TEXTURED_VOLUMES
 
         bool m_fullpath_sources{ true };
         bool m_zip64 { true };
@@ -2064,41 +2075,36 @@ namespace Slic3r {
         bool _save_model_to_file(const std::string& filename, const Model& model, const DynamicPrintConfig* config, const TextureData* thumbnail_data);
         bool _add_content_types_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
         bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const TextureData& thumbnail_data);
-#else
-        bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const ThumbnailData* thumbnail_data);
-        bool _add_content_types_file_to_archive(mz_zip_archive& archive);
-        bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data);
-#endif // ENABLE_TEXTURED_VOLUMES
         bool _add_relationships_file_to_archive(mz_zip_archive& archive);
-#if ENABLE_TEXTURED_VOLUMES
         bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
         bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model, const std::vector<std::string>& textures_names);
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data, const std::vector<std::string>& textures_names);
-        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names);
-        bool _add_object_to_model_stream(mz_zip_writer_staged_context& context, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
-        bool _add_mesh_to_object_stream(mz_zip_writer_staged_context& context, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
-#else
-        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
-        bool _add_object_to_model_stream(mz_zip_writer_staged_context& context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
-        bool _add_mesh_to_object_stream(mz_zip_writer_staged_context& context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
-#endif // ENABLE_TEXTURED_VOLUMES
+        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names, TextureToGroupMap& textures_map);
+        bool _add_object_to_model_stream(mz_zip_writer_staged_context& context, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets, int texgroup_id);
+        bool _add_mesh_to_object_stream(mz_zip_writer_staged_context& context, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets, int texgroup_id);
         bool _add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items);
-#if ENABLE_TEXTURED_VOLUMES
         bool _add_layer_height_profile_file_to_archive(mz_zip_archive& archive, const Model& model);
         bool _add_layer_config_ranges_file_to_archive(mz_zip_archive& archive, const Model& model);
         bool _add_sla_support_points_file_to_archive(mz_zip_archive& archive, const Model& model);
         bool _add_sla_drain_holes_file_to_archive(mz_zip_archive& archive, const Model& model);
+        bool _add_print_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig& config);
+        bool _add_model_config_file_to_archive(mz_zip_archive& archive, const Model& model, const IdToObjectDataMap& objects_data);
+        bool _add_custom_gcode_per_print_z_file_to_archive(mz_zip_archive& archive, const Model& model, const DynamicPrintConfig* config);
 #else
+        bool _save_model_to_file(const std::string& filename, Model& model, const DynamicPrintConfig* config, const ThumbnailData* thumbnail_data);
+        bool _add_content_types_file_to_archive(mz_zip_archive& archive);
+        bool _add_thumbnail_file_to_archive(mz_zip_archive& archive, const ThumbnailData& thumbnail_data);
+        bool _add_relationships_file_to_archive(mz_zip_archive& archive);
+        bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data);
+        bool _add_object_to_model_stream(mz_zip_writer_staged_context& context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets);
+        bool _add_mesh_to_object_stream(mz_zip_writer_staged_context& context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets);
+        bool _add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items);
         bool _add_layer_height_profile_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_layer_config_ranges_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_sla_support_points_file_to_archive(mz_zip_archive& archive, Model& model);
         bool _add_sla_drain_holes_file_to_archive(mz_zip_archive& archive, Model& model);
-#endif // ENABLE_TEXTURED_VOLUMES
-        bool _add_print_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig &config);
-        bool _add_model_config_file_to_archive(mz_zip_archive& archive, const Model& model, const IdToObjectDataMap &objects_data);
-#if ENABLE_TEXTURED_VOLUMES
-        bool _add_custom_gcode_per_print_z_file_to_archive(mz_zip_archive& archive, const Model& model, const DynamicPrintConfig* config);
-#else
+        bool _add_print_config_file_to_archive(mz_zip_archive& archive, const DynamicPrintConfig& config);
+        bool _add_model_config_file_to_archive(mz_zip_archive& archive, const Model& model, const IdToObjectDataMap& objects_data);
         bool _add_custom_gcode_per_print_z_file_to_archive(mz_zip_archive& archive, Model& model, const DynamicPrintConfig* config);
 #endif // ENABLE_TEXTURED_VOLUMES
     };
@@ -2400,6 +2406,16 @@ namespace Slic3r {
     }
 
 #if ENABLE_TEXTURED_VOLUMES
+    static int get_texture_id(const std::vector<std::string>& textures_names, const std::string& name)
+    {
+        for (size_t i = 0; i < textures_names.size(); ++i) {
+            if (textures_names[i] == name) {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    }
+
     bool _3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data, const std::vector<std::string>& textures_names)
 #else
     bool _3MF_Exporter::_add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data)
@@ -2423,7 +2439,14 @@ namespace Slic3r {
             std::stringstream stream;
             reset_stream(stream);
             stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+#if ENABLE_TEXTURED_VOLUMES
+            if (textures_names.empty())
+                stream << "<" << MODEL_TAG << " unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:slic3rpe=\"http://schemas.slic3r.org/3mf/2017/06\">\n";
+            else
+                stream << "<" << MODEL_TAG << " unit=\"millimeter\" xml:lang=\"en-US\" xmlns:m=\"http://schemas.microsoft.com/3dmanufacturing/material/2015/02\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:slic3rpe=\"http://schemas.slic3r.org/3mf/2017/06\">\n";
+#else
             stream << "<" << MODEL_TAG << " unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:slic3rpe=\"http://schemas.slic3r.org/3mf/2017/06\">\n";
+#endif // ENABLE_TEXTURED_VOLUMES
             stream << " <" << METADATA_TAG << " name=\"" << SLIC3RPE_3MF_VERSION << "\">" << VERSION_3MF << "</" << METADATA_TAG << ">\n";
             std::string name = xml_escape(boost::filesystem::path(filename).stem().string());
             stream << " <" << METADATA_TAG << " name=\"Title\">" << name << "</" << METADATA_TAG << ">\n";
@@ -2449,7 +2472,9 @@ namespace Slic3r {
 #if ENABLE_TEXTURED_VOLUMES
         m_resource_id = 1;
 
-        if (!_add_textures_to_model_stream(context, model, textures_names)) {
+        TextureToGroupMap textures_map;
+
+        if (!_add_textures_to_model_stream(context, model, textures_names, textures_map)) {
             add_error("Unable to add textures to archive");
             mz_zip_writer_add_staged_finish(&context);
             return false;
@@ -2459,13 +2484,15 @@ namespace Slic3r {
         // Instance transformations, indexed by the 3MF object ID (which is a linear serialization of all instances of all ModelObjects).
         BuildItemsList build_items;
 
-#if !ENABLE_TEXTURED_VOLUMES
+#if ENABLE_TEXTURED_VOLUMES
+        for (const ModelObject* obj : model.objects) {
+#else
         // The object_id here is a one based identifier of the first instance of a ModelObject in the 3MF file, where
         // all the object instances of all ModelObjects are stored and indexed in a 1 based linear fashion.
         // Therefore the list of object_ids here may not be continuous.
         unsigned int object_id = 1;
-#endif // !ENABLE_TEXTURED_VOLUMES
         for (ModelObject* obj : model.objects) {
+#endif // ENABLE_TEXTURED_VOLUMES
             if (obj == nullptr)
                 continue;
 
@@ -2479,7 +2506,15 @@ namespace Slic3r {
             // Store geometry of all ModelVolumes contained in a single ModelObject into a single 3MF indexed triangle set object.
             // object_it->second.volumes_offsets will contain the offsets of the ModelVolumes in that single indexed triangle set.
 #if ENABLE_TEXTURED_VOLUMES
-            if (!_add_object_to_model_stream(context, *obj, build_items, object_it->second.volumes_offsets)) {
+            int tex_id = 1 + get_texture_id(textures_names, obj->texture.name);
+            int texgroup_id = -1;
+            if (tex_id > 0) {
+                auto it = std::find_if(textures_map.begin(), textures_map.end(), [tex_id](const std::pair<unsigned int, unsigned int>& item) {return item.first == tex_id; });
+                if (it != textures_map.end())
+                    texgroup_id = static_cast<int>(it->second);
+            }
+
+            if (!_add_object_to_model_stream(context, *obj, build_items, object_it->second.volumes_offsets, texgroup_id)) {
 #else
             // object_id will be increased to point to the 1st instance of the next ModelObject.
             if (!_add_object_to_model_stream(context, object_id, *obj, build_items, object_it->second.volumes_offsets)) {
@@ -2517,7 +2552,7 @@ namespace Slic3r {
     }
 
 #if ENABLE_TEXTURED_VOLUMES
-    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names)
+    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names, TextureToGroupMap& textures_map)
     {
         bool ret = true;
 
@@ -2540,15 +2575,11 @@ namespace Slic3r {
 
                 for (const ModelObject* model_object : model.objects) {
                     if (!model_object->texture.name.empty()) {
-                        int tex_id = -1;
-                        for (size_t i = 0; i < textures_names.size(); ++i) {
-                            if (textures_names[i] == model_object->texture.name) {
-                                tex_id = static_cast<int>(i);
-                                break;
-                            }
-                        }
+                        int tex_id = get_texture_id(textures_names, model_object->texture.name);
                         if (tex_id != -1) {
-                            stream << "  <" << TEXTURE2DGROUP_TAG << " id=\"" << m_resource_id++ << "\" texid=\"" << first_texture_id + tex_id << "\">\n";
+                            textures_map.push_back({ first_texture_id + tex_id, m_resource_id++ });
+                            const auto& [texture2d_id, texture2dgroup_id] = textures_map.back();
+                            stream << "  <" << TEXTURE2DGROUP_TAG << " id=\"" << texture2dgroup_id << "\" texid=\"" << texture2d_id << "\">\n";
                             // dummy uvs
                             stream << "   <" << TEX2COORD_TAG << " u=\"0\" v=\"0\"/>\n";
                             stream << "  </" << TEXTURE2DGROUP_TAG << ">\n";
@@ -2566,7 +2597,7 @@ namespace Slic3r {
 #endif // ENABLE_TEXTURED_VOLUMES
 
 #if ENABLE_TEXTURED_VOLUMES
-    bool _3MF_Exporter::_add_object_to_model_stream(mz_zip_writer_staged_context& context, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets)
+    bool _3MF_Exporter::_add_object_to_model_stream(mz_zip_writer_staged_context& context, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets, int texgroup_id)
 #else
     bool _3MF_Exporter::_add_object_to_model_stream(mz_zip_writer_staged_context &context, unsigned int& object_id, ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets)
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -2598,7 +2629,11 @@ namespace Slic3r {
                 std::string buf = stream.str();
                 reset_stream(stream);
                 if ((! buf.empty() && ! mz_zip_writer_add_staged_data(&context, buf.data(), buf.size())) ||
+#if ENABLE_TEXTURED_VOLUMES
+                    !_add_mesh_to_object_stream(context, object, volumes_offsets, texgroup_id)) {
+#else
                     ! _add_mesh_to_object_stream(context, object, volumes_offsets)) {
+#endif // ENABLE_TEXTURED_VOLUMES
                     add_error("Unable to add mesh to archive");
                     return false;
                 }
@@ -2653,7 +2688,7 @@ namespace Slic3r {
 #endif // EXPORT_3MF_USE_SPIRIT_KARMA_FP
 
 #if ENABLE_TEXTURED_VOLUMES
-    bool _3MF_Exporter::_add_mesh_to_object_stream(mz_zip_writer_staged_context& context, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets)
+    bool _3MF_Exporter::_add_mesh_to_object_stream(mz_zip_writer_staged_context& context, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets, int texgroup_id)
 #else
     bool _3MF_Exporter::_add_mesh_to_object_stream(mz_zip_writer_staged_context &context, ModelObject& object, VolumeToOffsetsMap& volumes_offsets)
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -2781,6 +2816,15 @@ namespace Slic3r {
                     *ptr = '\0';
                     output_buffer += buf;
                 }
+
+#if ENABLE_TEXTURED_VOLUMES
+                if (!object.texture.name.empty() && texgroup_id != -1) {
+                    output_buffer += " pid=\"";
+                    output_buffer += std::to_string(texgroup_id);
+                    // use dummy uv
+                    output_buffer += "\" p1=\"0\" p2=\"0\" p3=\"0\"";
+                }
+#endif // ENABLE_TEXTURED_VOLUMES
 
                 std::string custom_supports_data_string = volume->supported_facets.get_triangle_as_string(i);
                 if (! custom_supports_data_string.empty()) {
