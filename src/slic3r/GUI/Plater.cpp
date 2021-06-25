@@ -5254,12 +5254,16 @@ void Plater::increase_instances(size_t num)
 
     p->update();
 
+#if ENABLE_TEXTURED_VOLUMES
+    update_volumes_texture_from_objects();
+#endif // ENABLE_TEXTURED_VOLUMES
+
     p->get_selection().add_instance(obj_idx, (int)model_object->instances.size() - 1);
 
     sidebar().obj_list()->increase_object_instances(obj_idx, was_one_instance ? num + 1 : num);
 
     p->selection_changed();
-    this->p->schedule_background_process();
+    p->schedule_background_process();
 }
 
 void Plater::decrease_instances(size_t num)
