@@ -821,13 +821,14 @@ void GCodeProcessor::process_file(const std::string& filename, bool apply_postpr
         // extract the config from it
         if (m_producer == EProducer::PrusaSlicer || m_producer == EProducer::Slic3rPE || m_producer == EProducer::Slic3r) {
             DynamicPrintConfig config;
-            std::string change_message;
+            FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, filename);
             config.apply(FullPrintConfig::defaults());
-            config.load_from_gcode_file(filename, change_message);
-            if (!change_message.empty())
+            config.load_from_gcode_file(filename, file_conf_subs);
+            if (!file_conf_subs.substitutions.empty()) {
                 // TODO: throw exception?
-               BOOST_LOG_TRIVIAL(error) << "Gcode proccessor found and changed incompabilities in config:" << change_message;
-               throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + filename + ". Error message:" + change_message);
+               //BOOST_LOG_TRIVIAL(error) << "Gcode proccessor found and changed incompabilities in config:" << change_message;
+               //throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + filename + ". Error message:" + change_message);
+            }
             apply_config(config);
         }
     }

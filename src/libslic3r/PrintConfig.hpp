@@ -1421,7 +1421,11 @@ public:
     template<typename T>
     void         set(const std::string &opt_key, T value) { m_data.set(opt_key, value, true); this->touch(); }
     void         set_deserialize(const t_config_option_key &opt_key, const std::string &str, bool append = false)
-        { m_data.set_deserialize(opt_key, str, std::string(), append); this->touch(); }
+    { 
+        // TODO: Get rule as argument? return context?
+        ConfigSubstitutionContext context(ForwardCompatibilitySubstitutionRule::Disable);
+        m_data.set_deserialize(opt_key, str, context, append); this->touch(); 
+    }
     bool         erase(const t_config_option_key &opt_key) { bool out = m_data.erase(opt_key); if (out) this->touch(); return out; }
 
     // Getters are thread safe.

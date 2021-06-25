@@ -2458,7 +2458,12 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
         }
     }
 
-    preset_bundle->load_presets(*app_config, preferred_model);
+    AllFilesConfigSubstitutions substitutions;
+    preset_bundle->load_presets(*app_config, substitutions, ForwardCompatibilitySubstitutionRule::Disable, preferred_model);
+    if (!substitutions.empty())
+    {
+        //TODO:
+    }
 
     if (page_custom->custom_wanted()) {
         page_firmware->apply_custom_config(*custom_config);

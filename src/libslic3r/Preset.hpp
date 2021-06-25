@@ -280,7 +280,7 @@ public:
     void            add_default_preset(const std::vector<std::string> &keys, const Slic3r::StaticPrintConfig &defaults, const std::string &preset_name);
 
     // Load ini files of the particular type from the provided directory path.
-    void            load_presets(const std::string &dir_path, const std::string &subdir, std::string& change_message);
+    void            load_presets(const std::string &dir_path, const std::string &subdir, AllFilesConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule);
 
     // Load a preset from an already parsed config file, insert it into the sorted sequence of presets
     // and select it, losing previous modifications.
@@ -652,7 +652,7 @@ public:
     const std::deque<PhysicalPrinter>& operator()() const { return m_printers; }
 
     // Load ini files of the particular type from the provided directory path.
-    void            load_printers(const std::string& dir_path, const std::string& subdir, std::string& change_message);
+    void            load_printers(const std::string& dir_path, const std::string& subdir, AllFilesConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule);
     void            load_printers_from_presets(PrinterPresetCollection &printer_presets);
     // Load printer from the loaded configuration
     void            load_printer(const std::string& path, const std::string& name, DynamicPrintConfig&& config, bool select, bool save=false);

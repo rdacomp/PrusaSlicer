@@ -123,15 +123,16 @@ int CLI::run(int argc, char **argv)
             }
         }
         DynamicPrintConfig config;
-        std::string change_message;
+        FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, file);
         try {
-            config.load(file, change_message);
+            config.load(file, file_conf_subs);
         } catch (std::exception &ex) {
             boost::nowide::cerr << "Error while reading config file: " << ex.what() << std::endl;
             return 1;
         }
-        if (!change_message.empty()) {
-            boost::nowide::cerr << "Incompabilities found in files loaded via --load option:" << change_message << std::endl;
+        if (!file_conf_subs.substitutions.empty()) {
+            // TODO:
+            boost::nowide::cerr << "Incompabilities found in files loaded via --load option:" << std::endl;
         }
         config.normalize_fdm();
         PrinterTechnology other_printer_technology = Slic3r::printer_technology(config);

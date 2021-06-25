@@ -786,12 +786,13 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 
 				// Reload global configuration
 				auto* app_config = GUI::wxGetApp().app_config;
-				std::string change_message;
-				GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
-				if (!change_message.empty()) {
+				AllFilesConfigSubstitutions all_substitutions;
+				GUI::wxGetApp().preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
+				if (!all_substitutions.empty()) {
+					// TODO:
 					GUI::show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
 						" To recover these files, incompatible values were changed to default values."
-						" But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
+						" But data in files won't be changed until you save them in PrusaSlicer.")));
 				}
 				GUI::wxGetApp().load_current_presets();
 				GUI::wxGetApp().plater()->set_bed_shape();
@@ -822,12 +823,13 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver& old_slic3
 
 				// Reload global configuration
 				auto* app_config = GUI::wxGetApp().app_config;
-				std::string change_message;
-				GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
-				if (!change_message.empty()) {
+				AllFilesConfigSubstitutions all_substitutions;
+				GUI::wxGetApp().preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
+				if (!all_substitutions.empty()) {
+					// TODO:
 					GUI::show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
 						" To recover these files, incompatible values were changed to default values."
-						" But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
+						" But data in files won't be changed until you save them in PrusaSlicer.")));
 				}
 				GUI::wxGetApp().load_current_presets();
 				return R_UPDATE_INSTALLED;
@@ -885,12 +887,13 @@ void PresetUpdater::on_update_notification_confirm()
 
 		// Reload global configuration
 		auto* app_config = GUI::wxGetApp().app_config;
-		std::string change_message;
-		GUI::wxGetApp().preset_bundle->load_presets(*app_config, change_message);
-		if (!change_message.empty()) {
+		AllFilesConfigSubstitutions all_substitutions;
+		GUI::wxGetApp().preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
+		if (!all_substitutions.empty()) {
+			// TODO:
 			GUI::show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
 				" To recover these files, incompatible values were changed to default values."
-				" But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
+				" But data in files won't be changed until you save them in PrusaSlicer.")));
 		}
 		GUI::wxGetApp().load_current_presets();
 		p->has_waiting_updates = false;

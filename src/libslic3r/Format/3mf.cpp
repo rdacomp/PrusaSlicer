@@ -839,12 +839,11 @@ namespace Slic3r {
                 add_error("Error while reading config data to buffer");
                 return;
             }
-            std::string change_message;
-            config.load_from_gcode_string(buffer.data(), change_message);
-            if (!change_message.empty()) {
+            ConfigSubstitutionContext context(ForwardCompatibilitySubstitutionRule::Disable);
+            config.load_from_gcode_string(buffer.data(), context);
+            if (!context.substitutions.empty()) {
                 // TODO: throw exception?
-                //BOOST_LOG_TRIVIAL(error) << "Extracting print config from archive found and changed incompabilities:" << change_message;
-                throw Slic3r::RuntimeError(std::string("Invalid configuration in archive: ") + archive_filename + ". Error message:" + change_message);
+                throw Slic3r::RuntimeError(std::string("Invalid configuration in archive: ") + archive_filename); //+ ". Error message:" + change_message);
             }
         }
     }
@@ -969,12 +968,11 @@ namespace Slic3r {
                             continue;
                         std::string opt_key = option.second.get<std::string>("<xmlattr>.opt_key");
                         std::string value = option.second.data();
-                        std::string change_message;
-                        config.set_deserialize(opt_key, value, change_message);
-                        if (!change_message.empty()) {
+                        ConfigSubstitutionContext context(ForwardCompatibilitySubstitutionRule::Disable);
+                        config.set_deserialize(opt_key, value, context);
+                        if (!context.substitutions.empty()) {
                             // TODO: Elavate message or throw error?
-                            //BOOST_LOG_TRIVIAL(error) << "Importing 3mf found and changed incompabilities:" << change_message;
-                            throw Slic3r::RuntimeError(std::string("Invalid configuration in archive. Error message:") + change_message);
+                            throw Slic3r::RuntimeError(std::string("Invalid configuration in archive."));
                         }
                     }
 

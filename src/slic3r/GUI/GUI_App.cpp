@@ -870,16 +870,13 @@ bool GUI_App::on_init_inner()
 
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
-    std::string change_message;
-    bool show_change_dialog = false;
+    AllFilesConfigSubstitutions all_substitutions;
     try {
-        preset_bundle->load_presets(*app_config, change_message);
+        preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
     } catch (const std::exception &ex) {
         show_error(nullptr, ex.what());
     }
-    if (!change_message.empty()) {
-        show_change_dialog = true;
-    }
+    bool show_change_dialog = !all_substitutions.empty();
 
 #ifdef WIN32
 #if !wxVERSION_EQUAL_OR_GREATER_THAN(3,1,3)
@@ -922,9 +919,10 @@ bool GUI_App::on_init_inner()
 
     if (show_change_dialog)
     {
+        // TODO: Add list of changes from all_substitutions
         show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
             " To recover these files, incompatible values were changed to default values."
-            " But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
+            " But data in files won't be changed until you save them in PrusaSlicer.")));
     } 
 
 #ifdef __APPLE__
@@ -1695,12 +1693,13 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                         Config::SnapshotDB::singleton().take_snapshot(*app_config, Config::Snapshot::SNAPSHOT_BEFORE_ROLLBACK);
                     try {
                         app_config->set("on_snapshot", Config::SnapshotDB::singleton().restore_snapshot(dlg.snapshot_to_activate(), *app_config).id);
-                        std::string change_message;
-                        preset_bundle->load_presets(*app_config, change_message);
-                        if (!change_message.empty()) {
+                        AllFilesConfigSubstitutions all_substitutions;
+                        preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
+                        if (!all_substitutions.empty()) {
+                            // TODO:
                             show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
                                 " To recover these files, incompatible values were changed to default values."
-                                " But data in files won't be changed until you save them in PrusaSlicer. %1%"), change_message));
+                                " But data in files won't be changed until you save them in PrusaSlicer.")));
                         }
                         // Load the currently selected preset into the GUI, update the preset selection box.
                         load_current_presets();

@@ -647,7 +647,7 @@ void PresetCollection::add_default_preset(const std::vector<std::string> &keys, 
 
 // Load all presets found in dir_path.
 // Throws an exception on error.
-void PresetCollection::load_presets(const std::string &dir_path, const std::string &subdir, std::string& change_message)
+void PresetCollection::load_presets(const std::string &dir_path, const std::string &subdir, AllFilesConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule)
 {
     // Don't use boost::filesystem::canonical() on Windows, it is broken in regard to reparse points, 
     // see https://github.com/prusa3d/PrusaSlicer/issues/732
@@ -674,7 +674,11 @@ void PresetCollection::load_presets(const std::string &dir_path, const std::stri
                 // Load the preset file, apply preset values on top of defaults.
                 try {
                     DynamicPrintConfig config;
-                    config.load_from_ini(preset.file, change_message);
+                    FileConfigSubstitutions file_conf_subs(rule, preset.file);
+                    config.load_from_ini(preset.file, file_conf_subs);
+                    if (!file_conf_subs.substitutions.empty()) {
+                        substitutions.emplace_back(std::move(file_conf_subs));
+                    }
                     // Find a default preset for the config. The PrintPresetCollection provides different default preset based on the "printer_technology" field.
                     const Preset &default_preset = this->default_preset_for(config);
                     preset.config = default_preset.config;
@@ -1546,7 +1550,7 @@ PhysicalPrinterCollection::PhysicalPrinterCollection( const std::vector<std::str
 
 // Load all printers found in dir_path.
 // Throws an exception on error.
-void PhysicalPrinterCollection::load_printers(const std::string& dir_path, const std::string& subdir, std::string& change_message)
+void PhysicalPrinterCollection::load_printers(const std::string& dir_path, const std::string& subdir, AllFilesConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule)
 {
     // Don't use boost::filesystem::canonical() on Windows, it is broken in regard to reparse points, 
     // see https://github.com/prusa3d/PrusaSlicer/issues/732
@@ -1572,7 +1576,11 @@ void PhysicalPrinterCollection::load_printers(const std::string& dir_path, const
                 // Load the preset file, apply preset values on top of defaults.
                 try {
                     DynamicPrintConfig config;
-                    config.load_from_ini(printer.file, change_message);
+                    FileConfigSubstitutions file_conf_subs(rule, printer.file);
+                    config.load_from_ini(printer.file, file_conf_subs);
+                    if (!file_conf_subs.substitutions.empty()) {
+                        substitutions.emplace_back(std::move(file_conf_subs));
+                    }
                     printer.update_from_config(config);
                     printer.loaded = true;
                 }

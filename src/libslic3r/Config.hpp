@@ -120,12 +120,46 @@ enum PrinterTechnology : unsigned char
     ptAny
 };
 
+/*
 enum DeserializeResult : int
 {
     Fail = 0,
     Success = 1,
     Change
 };
+*/
+enum ForwardCompatibilitySubstitutionRule
+{
+    Disable,
+    Enable,
+    EnableSilent,
+};
+class ConfigOption;
+struct ConfigSubstitution {
+    //std::unique_ptr<ConfigOption> 	old_config_option;
+    //std::unique_ptr<ConfigOption> 	new_config_option;
+    std::string old_config_option;
+    std::string new_config_option;
+};
+using ConfigSubstitutions = std::vector<ConfigSubstitution>;
+// filled in ConfigBase::set_deserialize_raw
+struct ConfigSubstitutionContext
+{
+    ForwardCompatibilitySubstitutionRule 	rule;
+    ConfigSubstitutions					    substitutions;
+    ConfigSubstitutionContext(ForwardCompatibilitySubstitutionRule rl) : rule(rl) {}
+};
+
+
+struct FileConfigSubstitutions {
+    ForwardCompatibilitySubstitutionRule 	rule;
+    std::string 			                file;
+    ConfigSubstitutions		                substitutions;
+    FileConfigSubstitutions(ForwardCompatibilitySubstitutionRule rl, const std::string& fl) : rule(rl) ,file(fl) {}
+};
+
+using AllFilesConfigSubstitutions = std::vector<FileConfigSubstitutions>;
+
 
 // A generic value of a configuration option.
 class ConfigOption {
@@ -134,7 +168,7 @@ public:
 
     virtual ConfigOptionType    type() const = 0;
     virtual std::string         serialize() const = 0;
-    virtual DeserializeResult   deserialize(const std::string &str, bool append = false) = 0;
+    virtual bool                deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) = 0;
     virtual ConfigOption*       clone() const = 0;
     // Set a value from a ConfigOption. The two options should be compatible.
     virtual void                set(const ConfigOption *option) = 0;
@@ -429,12 +463,12 @@ public:
         return ss.str();
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
+        return !iss.fail();
     }
 
     ConfigOptionFloat& operator=(const ConfigOption *opt)
@@ -499,7 +533,7 @@ public:
         return vv;
     }
 
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -519,7 +553,7 @@ public:
 	            this->values.push_back(value);
 	        }
         }
-        return DeserializeResult::Success;
+        return true;
     }
 
     ConfigOptionFloatsTempl& operator=(const ConfigOption *opt)
@@ -582,12 +616,12 @@ public:
         return ss.str();
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
+        return !iss.fail();
     }
 
     ConfigOptionInt& operator=(const ConfigOption *opt) 
@@ -645,7 +679,7 @@ public:
         return vv;
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -665,7 +699,7 @@ public:
 	            this->values.push_back(value);
 	        }
         }
-        return DeserializeResult::Success;
+        return true;
     }
 
 private:
@@ -704,10 +738,10 @@ public:
         return escape_string_cstyle(this->value); 
     }
 
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
-        return unescape_string_cstyle(str, this->value) ? DeserializeResult::Success : DeserializeResult::Fail;
+        return unescape_string_cstyle(str, this->value);
     }
 
 private:
@@ -742,11 +776,11 @@ public:
         return this->values;
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         if (! append)
             this->values.clear();
-        return unescape_strings_cstyle(str, this->values) ? DeserializeResult::Success : DeserializeResult::Fail;
+        return unescape_strings_cstyle(str, this->values);
     }
 
 private:
@@ -776,13 +810,13 @@ public:
         return s;
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         // don't try to parse the trailing % since it's optional
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
+        return !iss.fail();
     }
 
 private:
@@ -884,13 +918,13 @@ public:
         return s;
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         this->percent = str.find_first_of("%") != std::string::npos;
         std::istringstream iss(str);
         iss >> this->value;
-        return !iss.fail() ? DeserializeResult::Success : DeserializeResult::Fail;
+        return !iss.fail();
     }
 
 private:
@@ -970,7 +1004,7 @@ public:
         return vv;
     }
 
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -991,7 +1025,7 @@ public:
                 this->values.push_back({ value, percent });
             }
         }
-        return DeserializeResult::Success;
+        return true;
     }
 
     ConfigOptionFloatsOrPercentsTempl& operator=(const ConfigOption *opt)
@@ -1056,13 +1090,12 @@ public:
         return ss.str();
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         char dummy;
         return (sscanf(str.data(), " %lf , %lf %c", &this->value(0), &this->value(1), &dummy) == 2 ||
-                sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2)
-               ? DeserializeResult::Success : DeserializeResult::Fail;
+                sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2);
     }
 
 private:
@@ -1108,7 +1141,7 @@ public:
         return vv;
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1126,7 +1159,7 @@ public:
             }
             this->values.push_back(point);
         }
-        return DeserializeResult::Success;
+        return true;
     }
 
 private:
@@ -1167,13 +1200,12 @@ public:
         return ss.str();
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         char dummy;
         return (sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
-                sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2)
-                ? DeserializeResult::Success : DeserializeResult::Fail;
+                sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2);
     }
 
 private:
@@ -1199,11 +1231,11 @@ public:
         return std::string(this->value ? "1" : "0");
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         this->value = (str.compare("1") == 0);
-        return DeserializeResult::Success;
+        return true;
     }
 
 private:
@@ -1265,7 +1297,7 @@ public:
         return vv;
     }
     
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1281,7 +1313,7 @@ public:
         	} else
         		this->values.push_back(item_str.compare("1") == 0);	
         }
-        return DeserializeResult::Success;
+        return true;
     }
 
 protected:
@@ -1345,10 +1377,10 @@ public:
         return names[static_cast<int>(this->value)];
     }
 
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
-        return from_string(str, this->value) ? DeserializeResult::Success : DeserializeResult::Fail;
+        return from_string(str, this->value);
     }
 
     static bool has(T value) 
@@ -1430,16 +1462,16 @@ public:
         return std::string();
     }
 
-    DeserializeResult deserialize(const std::string &str, bool append = false) override
+    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
     {
         UNUSED(append);
         auto it = this->keys_map->find(str);
         if (it == this->keys_map->end()) {
-            this->value = keys_map->begin()->second;
-            return DeserializeResult::Change;
+            //this->value = keys_map->begin()->second;
+            return false;
         }            
         this->value = it->second;
-        return DeserializeResult::Success;
+        return true;
     }
 
 private:
@@ -1779,9 +1811,9 @@ public:
 
     // Set a configuration value from a string, it will call an overridable handle_legacy() 
     // to resolve renamed and removed configuration keys.
-    bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, std::string& change_message, bool append = false);
+    bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, ConfigSubstitutionContext& subs_context, bool append = false);
 	// May throw BadOptionTypeException() if the operation fails.
-    void set_deserialize(const t_config_option_key &opt_key, const std::string &str, std::string& change_message, bool append = false);
+    void set_deserialize(const t_config_option_key &opt_key, const std::string &str, ConfigSubstitutionContext& subs_context, bool append = false);
     struct SetDeserializeItem {
     	SetDeserializeItem(const char *opt_key, const char *opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
     	SetDeserializeItem(const std::string &opt_key, const std::string &opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
@@ -1796,17 +1828,17 @@ public:
     	std::string opt_key; std::string opt_value; bool append = false;
     };
 	// May throw BadOptionTypeException() if the operation fails.
-    void set_deserialize(std::initializer_list<SetDeserializeItem> items, std::string& change_message);
+    void set_deserialize(std::initializer_list<SetDeserializeItem> items, ConfigSubstitutionContext& subs_context);
 
     double get_abs_value(const t_config_option_key &opt_key) const;
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
     void setenv_() const;
-    void load(const std::string &file, std::string& change_message);
-    void load_from_ini(const std::string &file, std::string& change_message);
-    void load_from_gcode_file(const std::string &file, std::string& change_message);
+    void load(const std::string &file, FileConfigSubstitutions& substitutions);
+    void load_from_ini(const std::string &file, FileConfigSubstitutions& substitutions);
+    void load_from_gcode_file(const std::string &file, FileConfigSubstitutions& substitutions);
     // Returns number of key/value pairs extracted.
-    size_t load_from_gcode_string(const char* str, std::string change_message);
-    void load(const boost::property_tree::ptree &tree, std::string& change_message);
+    size_t load_from_gcode_string(const char* str, ConfigSubstitutionContext& substitutions);
+    void load(const boost::property_tree::ptree &tree, FileConfigSubstitutions& substitutions);
     void save(const std::string &file) const;
 
 	// Set all the nullable values to nils.
@@ -1815,7 +1847,7 @@ public:
 private:
     // Set a configuration value from a string.
     //bool set_deserialize_raw(const t_config_option_key &opt_key_src, const std::string &str, bool append);
-    DeserializeResult set_deserialize_raw(const t_config_option_key& opt_key_src, const std::string& str, std::string& change_message, bool append);
+    bool set_deserialize_raw(const t_config_option_key& opt_key_src, const std::string& str, ConfigSubstitutionContext& subs_context, bool append);
 };
 
 // Configuration store with dynamic number of configuration values.

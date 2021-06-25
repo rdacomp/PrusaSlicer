@@ -10,8 +10,8 @@ SCENARIO("lift() is not ignored after unlift() at normal values of Z", "[GCodeWr
     GIVEN("A config from a file and a single extruder.") {
         GCodeWriter writer;
         GCodeConfig &config = writer.config;
-        std::string change_message;
-        config.load(std::string(TEST_DATA_DIR) + "/fff_print_tests/test_gcodewriter/config_lift_unlift.ini", change_message);
+        FileConfigSubstitutions substitutions(ForwardCompatibilitySubstitutionRule::Disable, std::string(TEST_DATA_DIR) + "/fff_print_tests/test_gcodewriter/config_lift_unlift.ini");
+        config.load(std::string(TEST_DATA_DIR) + "/fff_print_tests/test_gcodewriter/config_lift_unlift.ini", substitutions);
 
         std::vector<unsigned int> extruder_ids {0};
         writer.set_extruders(extruder_ids);

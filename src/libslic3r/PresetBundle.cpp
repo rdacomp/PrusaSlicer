@@ -162,7 +162,7 @@ void PresetBundle::setup_directories()
     }
 }
 
-void PresetBundle::load_presets(AppConfig &config, std::string& change_message, const std::string &preferred_model_id)
+void PresetBundle::load_presets(AppConfig &config, AllFilesConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule, const std::string &preferred_model_id)
 {
     // First load the vendor specific system presets.
     std::string errors_cummulative = this->load_system_presets();
@@ -176,32 +176,32 @@ void PresetBundle::load_presets(AppConfig &config, std::string& change_message, 
 #endif
         ;
     try {
-        this->prints.load_presets(dir_user_presets, "print", change_message);
+        this->prints.load_presets(dir_user_presets, "print", substitutions, rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->sla_prints.load_presets(dir_user_presets, "sla_print", change_message);
+        this->sla_prints.load_presets(dir_user_presets, "sla_print", substitutions, rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->filaments.load_presets(dir_user_presets, "filament", change_message);
+        this->filaments.load_presets(dir_user_presets, "filament", substitutions, rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->sla_materials.load_presets(dir_user_presets, "sla_material", change_message);
+        this->sla_materials.load_presets(dir_user_presets, "sla_material", substitutions, rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->printers.load_presets(dir_user_presets, "printer", change_message);
+        this->printers.load_presets(dir_user_presets, "printer", substitutions, rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->physical_printers.load_printers(dir_user_presets, "physical_printer", change_message);
+        this->physical_printers.load_printers(dir_user_presets, "physical_printer", substitutions, rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
@@ -669,13 +669,12 @@ void PresetBundle::load_config_file(const std::string &path)
 {
 	if (is_gcode_file(path)) {
 		DynamicPrintConfig config;
-        std::string change_message;
+        FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, path);
 		config.apply(FullPrintConfig::defaults());
-        config.load_from_gcode_file(path, change_message);
-        if (!change_message.empty()) {
+        config.load_from_gcode_file(path, file_conf_subs);
+        if (!file_conf_subs.substitutions.empty()) {
             // TODO throw exception?
-            //BOOST_LOG_TRIVIAL(error) << "Loading from Gcode file found and changed incompabilities:"<< change_message;
-            throw Slic3r::RuntimeError(std::string("Invalid configuration in Gcode file: ") + path + ". Error message:" + change_message);
+            throw Slic3r::RuntimeError(std::string("Invalid configuration in Gcode file: ") + path);
         }
         Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
@@ -707,12 +706,12 @@ void PresetBundle::load_config_file(const std::string &path)
 	{
 		// Initialize a config from full defaults.
 		DynamicPrintConfig config;
-        std::string change_message;
+        FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, path);
 		config.apply(FullPrintConfig::defaults());
-		config.load(tree, change_message);
-        if (!change_message.empty()) {
-            // TODO: elavate message instead?
-            throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path + ". Error message:" + change_message);
+		config.load(tree, file_conf_subs);
+        if (!file_conf_subs.substitutions.empty()) {
+            // TODO:
+            throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path);
         }
 		Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
@@ -1245,11 +1244,11 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
 			                    section.first << "\" contains invalid \"renamed_from\" key, which is being ignored.";
                    		}
                 	}
-                    std::string change_message;
-                    config.set_deserialize(kvp.first, kvp.second.data(), change_message);
-                    if (!change_message.empty()) {
-                        // TODO throw exception or elevate to user?
-                        throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path + ". Error message:" + change_message);
+                    ConfigSubstitutionContext context(ForwardCompatibilitySubstitutionRule::Disable);
+                    config.set_deserialize(kvp.first, kvp.second.data(), context);
+                    if (!context.substitutions.empty()) {
+                        // TODO:
+                        throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path);
                     }
                 }
             };
@@ -1367,13 +1366,13 @@ size_t PresetBundle::load_configbundle(const std::string &path, unsigned int fla
             const DynamicPrintConfig& default_config = ph_printers->default_config();
             DynamicPrintConfig        config = default_config;
 
-            std::string change_message;
+            ConfigSubstitutionContext context(ForwardCompatibilitySubstitutionRule::Disable);
             for (auto& kvp : section.second)
-                config.set_deserialize(kvp.first, kvp.second.data(), change_message);
+                config.set_deserialize(kvp.first, kvp.second.data(), context);
 
-            if (!change_message.empty()) {
-                // TODO throw exception or elevate to user?
-                throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path + ". Error message:" + change_message);
+            if (!context.substitutions.empty()) {
+                // TODO:
+                throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + path);
             }
 
             // Report configuration fields, which are misplaced into a wrong group.
