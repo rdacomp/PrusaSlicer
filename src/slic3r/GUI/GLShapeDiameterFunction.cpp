@@ -15,8 +15,8 @@ void GLShapeDiameterFunction::draw() const
     GLShaderProgram *shader = wxGetApp().get_shader("sdf");
     assert(shader != nullptr);
     shader->start_using();
-    shader->set_uniform("min_width", min_value);
-    shader->set_uniform("width_range", fabs(max_value - min_value));
+    shader->set_uniform("min_width", sample_config.min_width);
+    shader->set_uniform("width_range", fabs(sample_config.max_width - sample_config.min_width));
     shader->set_uniform("draw_normals", allow_render_normals);
 
     unsigned int stride = Vertex::size();
@@ -53,6 +53,7 @@ void GLShapeDiameterFunction::draw() const
 
     shader->stop_using();   
     if (allow_render_normals) render_normals();
+    else if (allow_render_points) render_points();
     render_rays();
 }
 
@@ -102,8 +103,7 @@ bool GLShapeDiameterFunction::initialize_normals()
 
 bool GLShapeDiameterFunction::initialize_width() {
     sdf_config.dirs = ShapeDiameterFunction::create_fibonacci_sphere_samples(angle, count_samples);
-    std::vector<float> widths = ShapeDiameterFunction::calc_widths(
-        triangles.vertices, triangles.vertex_normals, tree, sdf_config);
+    widths = ShapeDiameterFunction::calc_widths(triangles.vertices, triangles.vertex_normals, tree, sdf_config);
 
     // merge vertices normal and width together for GPU
     std::vector<Vertex> buffer = {};
@@ -126,7 +126,12 @@ bool GLShapeDiameterFunction::initialize_width() {
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
     
     initialized = true;
+    if (allow_render_points) sample_surface();
     return true;
+}
+
+void GLShapeDiameterFunction::sample_surface() {
+    points = ShapeDiameterFunction::generate_support_points(triangles, widths, sample_config);
 }
 
 bool GLShapeDiameterFunction::initialize_indices()
@@ -193,6 +198,45 @@ void GLShapeDiameterFunction::render_normals() const {
             Eigen::AngleAxis<float>(angle, axis)
         );
         render_normal(tr);
+    }
+    shader->stop_using();
+}
+
+GLModel create_tetrahedron(float size) {
+    indexed_triangle_set its;
+    float s_2 = size / 2.f;
+    its.vertices = {
+        Vec3f(0.f, 0.f, size), 
+        Vec3f(-s_2, -s_2, 0.f), 
+        Vec3f(s_2, -s_2, 0.f),
+        Vec3f(0.f, s_2, 0.f)
+    };
+    its.indices = {
+        Vec3crd(0, 1, 2), 
+        Vec3crd(0, 2, 3), 
+        Vec3crd(0, 3, 1),
+        Vec3crd(3, 2, 1)
+    };
+    TriangleMesh tm(its);
+    GLModel      model;
+    model.init_from(tm);
+    return model;
+}
+
+void GLShapeDiameterFunction::render_points() const
+{
+    GLModel tetrahedron  = create_tetrahedron(1.f);
+    GLShaderProgram *shader = wxGetApp().get_shader("gouraud_light");
+    if (shader == nullptr) return;
+    // normal color
+    std::array<float, 4> color = {.2f, .2f, .8f, 1.f};
+    shader->start_using();
+    shader->set_uniform("uniform_color", color);
+    for (const Vec3f &point : points) {
+        glsafe(::glPushMatrix());
+        glsafe(::glTranslatef(point.x(), point.y(), point.z()));
+        tetrahedron.render();
+        glsafe(::glPopMatrix());
     }
     shader->stop_using();
 }

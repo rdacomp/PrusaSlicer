@@ -1,5 +1,4 @@
 #include "ShapeDiameterFunction.hpp"
-#include <random>
 #include <tbb/parallel_for.h>
 #include "TriangleMesh.hpp"
 #include "SimplifyMesh.hpp" // reduction by edge size
@@ -113,6 +112,80 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
         }
     });
     return widths;
+}
+
+std::vector<Vec3f> ShapeDiameterFunction::generate_support_points(
+    const indexed_triangle_set &its,
+    const std::vector<float> &  widths,
+    const SampleConfig &        cfg)
+{
+    assert(its.vertices.size() == widths.size());
+
+    float width_range = cfg.max_width - cfg.min_width;
+    float area_range  = cfg.max_area_support - cfg.min_area_support;
+    auto  width_to_count = [&](float width) -> float { 
+        if (width < cfg.min_width) return cfg.max_area_support;
+        return (width - cfg.min_width) / width_range * area_range + cfg.min_area_support;        
+    };
+
+    // random generator
+    std::mt19937        random_generator;
+    std::random_device rd;
+    random_generator.seed(rd());
+
+    std::uniform_real_distribution<float> xDist(0.f, 1.f);
+    std::uniform_real_distribution<float> yDist(0.f, 1.f);
+    // probability to generate one more or not -- instead of round area
+    std::uniform_real_distribution<float> generate_point(0.f, 1.f); 
+
+    float sample_area = cfg.max_area_support;
+
+    // random sample triangle
+    std::vector<Vec3f> sPts;
+    for (const Vec3crd &triangle_indices : its.indices) {
+        bool is_full_in_needs = true;
+        float count_per_mm2 = 0;
+        for (int i = 0; i < 3; ++i) {
+            float width = widths[triangle_indices[i]];
+            if (width > cfg.max_width) {
+                is_full_in_needs = false;
+                break;
+            }
+            count_per_mm2 += width_to_count(width);
+        }
+        if (!is_full_in_needs) continue;
+        count_per_mm2 /= 3.f;
+
+        float  area   = triangle_area(triangle_indices, its.vertices);
+        float  countf   = area / count_per_mm2;
+        float              int_part_of_count;
+        float fraction = modf(countf, &int_part_of_count);
+        int   count    = static_cast<int>(int_part_of_count);
+        float              generate = generate_point(random_generator);
+        if (generate < fraction) ++count;
+        if (count == 0) continue;
+
+        const Vec3f &v0 = its.vertices[triangle_indices[0]];
+        const Vec3f &v1 = its.vertices[triangle_indices[1]];
+        const Vec3f &v2 = its.vertices[triangle_indices[2]];
+        for (int c = 0; c < count; c++) {
+            // barycentric coordinate
+            Vec3f b;
+            b[0] = xDist(random_generator);
+            b[1] = yDist(random_generator);
+            if ((b[0] + b[1]) > 1.f) {
+                b[0] = 1.f - b[0];
+                b[1] = 1.f - b[1];
+            }
+            b[2] = 1.f - b[0] - b[1];
+            Vec3f pos;
+            for (int i = 0; i < 3; i++) {
+                pos[i] = b[0] * v0[i] + b[1] * v1[i] + b[2] * v2[i];
+            }
+            sPts.emplace_back(pos);
+        }
+    }
+    return sPts;
 }
 
 // create points on unit sphere surface

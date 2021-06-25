@@ -5,6 +5,8 @@
 #include "Model.hpp"
 #include "AABBTreeIndirect.hpp"
 
+#include <random> // sampling
+
 namespace Slic3r {
 
 class ShapeDiameterFunction
@@ -105,11 +107,28 @@ public:
 
     struct SampleConfig
     {
+        // range of width to support for linear distributiion of count supports
+        float min_width = 0.1f; 
+        float max_width = 10.f;
+        // range of generated support count
+        float max_area_support = 20.f; // [in mm^2]
+        float min_area_support = 2.f; // [in mm^2]
 
+        // min_width is supported by max_area_support
+        // max_width is supported by min_area_support
 
+        SampleConfig() = default;
     };
 
-    static std::vector<Vec3d> generate_support_points(
+    /// <summary>
+    /// Generate surface points on tiny part of model
+    /// Traingle should have normalized size of side
+    /// </summary>
+    /// <param name="its">Define vertices and indices of triangle mesh</param>
+    /// <param name="widths">Width for each vertex(same size as its::vetices)</param>
+    /// <param name="cfg">configuration where to generate support</param>
+    /// <returns>Vector of surface points</returns>
+    static std::vector<Vec3f> generate_support_points(
         const indexed_triangle_set &its, const std::vector<float> &widths,
         const SampleConfig& cfg);
 

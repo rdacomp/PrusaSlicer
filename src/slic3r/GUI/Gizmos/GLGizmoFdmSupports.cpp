@@ -169,9 +169,11 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
 
         m_imgui->text("color range:");
         ImGui::SameLine();
-        m_imgui->slider_float("min", &sdf.min_value, 0.001f, 100.f);
+        if(m_imgui->slider_float("min", &sdf.sample_config.min_width, 0.001f, 100.f))
+            if (sdf.allow_render_points) sdf.sample_surface();
         ImGui::SameLine();
-        m_imgui->slider_float("max", &sdf.max_value, 0.001f, 100.f);
+        if(m_imgui->slider_float("max", &sdf.sample_config.max_width, 0.001f, 100.f))
+            if (sdf.allow_render_points) sdf.sample_surface();
 
         m_imgui->text("rays:");
         ImGui::SameLine();
@@ -251,6 +253,18 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             ", triangles " + std::to_string(sdf.tree.vertices_indices.indices.size()) +
             "(v=" + std::to_string(sdf.tree.vertices_indices.vertices.size()) + ") "
         );
+
+        if (m_imgui->checkbox("sample", sdf.allow_render_points)) {
+            if (sdf.allow_render_points) sdf.sample_surface();
+        }
+        if (sdf.allow_render_points) {
+            ImGui::SameLine();
+            if(m_imgui->slider_float("max a", &sdf.sample_config.max_area_support, 0.001f, 100.f))
+                sdf.sample_surface();
+            ImGui::SameLine();
+            if(m_imgui->slider_float("min a", &sdf.sample_config.min_area_support, 0.001f, 100.f))
+                sdf.sample_surface();
+        }
     }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
             m_parent.sdf = std::make_unique<GLShapeDiameterFunction>();

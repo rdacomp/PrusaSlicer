@@ -23,8 +23,6 @@ class GLShapeDiameterFunction
 public:
     NormalUtils::VertexNormalType normal_type =
         NormalUtils::VertexNormalType::NelsonMaxWeighted;
-    float min_value = 0.1f;
-    float max_value = 10.f;
     bool allow_render_normals = false;
 
     float angle = 120; // [in deg] in range from 1 to 179
@@ -41,6 +39,13 @@ public:
     float max_thr      = 0.5f;
     float min_triangle_size = 0.5f;
     bool allow_remesh = true;
+
+    // support points sampling
+    std::vector<float> widths;
+    ShapeDiameterFunction::SampleConfig sample_config;
+    std::vector<Vec3f> points;
+    bool allow_render_points = false;
+
 public:
     GLShapeDiameterFunction() = default; // set default values
     ~GLShapeDiameterFunction() = default; // needed by PIMPL in GLCanvas3D.hpp
@@ -59,9 +64,12 @@ public:
     bool initialize_normals();
     // calculate width(tree and normals are already calculated)
     bool initialize_width();
+
+    void sample_surface();
 private:
     bool initialize_indices();
     void render_normals() const;
+    void render_points() const;
     void render_rays() const;
 
     // structure uploaded to GPU
