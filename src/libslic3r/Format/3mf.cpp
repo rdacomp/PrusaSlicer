@@ -2052,7 +2052,7 @@ namespace Slic3r {
         typedef std::vector<BuildItem> BuildItemsList;
         typedef std::map<int, ObjectData> IdToObjectDataMap;
 #if ENABLE_TEXTURED_VOLUMES
-        typedef std::vector<std::pair<unsigned int, unsigned int>> TextureToGroupMap;
+        typedef std::vector<int> ObjectToTextureGroupMap;
 #endif // ENABLE_TEXTURED_VOLUMES
 
         bool m_fullpath_sources{ true };
@@ -2079,7 +2079,7 @@ namespace Slic3r {
         bool _add_model_relationships_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names);
         bool _add_texture_files_to_archive(mz_zip_archive& archive, const Model& model, const std::vector<std::string>& textures_names);
         bool _add_model_file_to_archive(const std::string& filename, mz_zip_archive& archive, const Model& model, IdToObjectDataMap& objects_data, const std::vector<std::string>& textures_names);
-        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names, TextureToGroupMap& textures_map);
+        bool _add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names, ObjectToTextureGroupMap& texgroups_map);
         bool _add_object_to_model_stream(mz_zip_writer_staged_context& context, const ModelObject& object, BuildItemsList& build_items, VolumeToOffsetsMap& volumes_offsets, int texgroup_id);
         bool _add_mesh_to_object_stream(mz_zip_writer_staged_context& context, const ModelObject& object, VolumeToOffsetsMap& volumes_offsets, int texgroup_id);
         bool _add_build_to_model_stream(std::stringstream& stream, const BuildItemsList& build_items);
@@ -2472,9 +2472,9 @@ namespace Slic3r {
 #if ENABLE_TEXTURED_VOLUMES
         m_resource_id = 1;
 
-        TextureToGroupMap textures_map;
+        ObjectToTextureGroupMap texgroups_map(model.objects.size(), -1);
 
-        if (!_add_textures_to_model_stream(context, model, textures_names, textures_map)) {
+        if (!_add_textures_to_model_stream(context, model, textures_names, texgroups_map)) {
             add_error("Unable to add textures to archive");
             mz_zip_writer_add_staged_finish(&context);
             return false;
@@ -2485,7 +2485,8 @@ namespace Slic3r {
         BuildItemsList build_items;
 
 #if ENABLE_TEXTURED_VOLUMES
-        for (const ModelObject* obj : model.objects) {
+        for (size_t i = 0; i < model.objects.size(); ++i) {
+            const ModelObject* obj = model.objects[i];
 #else
         // The object_id here is a one based identifier of the first instance of a ModelObject in the 3MF file, where
         // all the object instances of all ModelObjects are stored and indexed in a 1 based linear fashion.
@@ -2506,15 +2507,7 @@ namespace Slic3r {
             // Store geometry of all ModelVolumes contained in a single ModelObject into a single 3MF indexed triangle set object.
             // object_it->second.volumes_offsets will contain the offsets of the ModelVolumes in that single indexed triangle set.
 #if ENABLE_TEXTURED_VOLUMES
-            int tex_id = 1 + get_texture_id(textures_names, obj->texture.name);
-            int texgroup_id = -1;
-            if (tex_id > 0) {
-                auto it = std::find_if(textures_map.begin(), textures_map.end(), [tex_id](const std::pair<unsigned int, unsigned int>& item) {return item.first == tex_id; });
-                if (it != textures_map.end())
-                    texgroup_id = static_cast<int>(it->second);
-            }
-
-            if (!_add_object_to_model_stream(context, *obj, build_items, object_it->second.volumes_offsets, texgroup_id)) {
+            if (!_add_object_to_model_stream(context, *obj, build_items, object_it->second.volumes_offsets, texgroups_map[i])) {
 #else
             // object_id will be increased to point to the 1st instance of the next ModelObject.
             if (!_add_object_to_model_stream(context, object_id, *obj, build_items, object_it->second.volumes_offsets)) {
@@ -2552,7 +2545,7 @@ namespace Slic3r {
     }
 
 #if ENABLE_TEXTURED_VOLUMES
-    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names, TextureToGroupMap& textures_map)
+    bool _3MF_Exporter::_add_textures_to_model_stream(mz_zip_writer_staged_context& context, const Model& model, const std::vector<std::string>& textures_names, ObjectToTextureGroupMap& texgroups_map)
     {
         bool ret = true;
 
@@ -2573,17 +2566,19 @@ namespace Slic3r {
             {
                 std::stringstream stream;
 
-                for (const ModelObject* model_object : model.objects) {
+                for (size_t i = 0; i < model.objects.size(); ++i) {
+                    const ModelObject* model_object = model.objects[i];
                     if (!model_object->texture.name.empty()) {
                         int tex_id = get_texture_id(textures_names, model_object->texture.name);
                         if (tex_id != -1) {
-                            textures_map.push_back({ first_texture_id + tex_id, m_resource_id++ });
-                            const auto& [texture2d_id, texture2dgroup_id] = textures_map.back();
-                            stream << "  <" << TEXTURE2DGROUP_TAG << " id=\"" << texture2dgroup_id << "\" texid=\"" << texture2d_id << "\">\n";
+                            texgroups_map[i] = static_cast<int>(m_resource_id++);
+                            stream << "  <" << TEXTURE2DGROUP_TAG << " id=\"" << texgroups_map[i] << "\" texid=\"" << first_texture_id + tex_id << "\">\n";
                             // dummy uvs
                             stream << "   <" << TEX2COORD_TAG << " u=\"0\" v=\"0\"/>\n";
                             stream << "  </" << TEXTURE2DGROUP_TAG << ">\n";
                         }
+                        else
+                            texgroups_map.push_back(-1);
                     }
                 }
 
