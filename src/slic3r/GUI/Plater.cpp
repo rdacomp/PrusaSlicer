@@ -2342,7 +2342,8 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                 DynamicPrintConfig config;
                 {
                     DynamicPrintConfig config_loaded;
-                    model = Slic3r::Model::read_from_archive(path.string(), &config_loaded, false, load_config);
+                    ConfigSubstitutionContext config_substitutions{ ForwardCompatibilitySubstitutionRule::Enable };
+                    model = Slic3r::Model::read_from_archive(path.string(), &config_loaded, &config_substitutions, only_if(load_config, Model::LoadAttribute::CheckVersion));
                     if (load_config && !config_loaded.empty()) {
                         // Based on the printer technology field found in the loaded config, select the base for the config,
                         PrinterTechnology printer_technology = Preset::printer_technology(config_loaded);
@@ -2368,6 +2369,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                         // and place the loaded config over the base.
                         config += std::move(config_loaded);
                     }
+                    if (! config_substitutions.empty()) {
+                        // TODO:
+                        show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+                            " To recover these files, incompatible values were changed to default values."
+                            " But data in files won't be changed until you save them in PrusaSlicer.")));
+                    }
 
                     this->model.custom_gcode_per_print_z = model.custom_gcode_per_print_z;
                 }
@@ -2387,7 +2394,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                 }
             }
             else {
-                model = Slic3r::Model::read_from_file(path.string(), nullptr, false, load_config);
+                model = Slic3r::Model::read_from_file(path.string(), nullptr, nullptr, only_if(load_config, Model::LoadAttribute::CheckVersion));
                 for (auto obj : model.objects)
                     if (obj->name.empty())
                         obj->name = fs::path(obj->input_file).filename().string();
@@ -3233,7 +3240,7 @@ void Plater::priv::reload_from_disk()
         Model new_model;
         try
         {
-            new_model = Model::read_from_file(path, nullptr, true, false);
+            new_model = Model::read_from_file(path, nullptr, nullptr, Model::LoadAttribute::AddDefaultInstances);
             for (ModelObject* model_object : new_model.objects)
             {
                 model_object->center_around_origin();

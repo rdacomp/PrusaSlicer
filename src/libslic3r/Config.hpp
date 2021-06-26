@@ -120,22 +120,16 @@ enum PrinterTechnology : unsigned char
     ptAny
 };
 
-/*
-enum DeserializeResult : int
-{
-    Fail = 0,
-    Success = 1,
-    Change
-};
-*/
 enum ForwardCompatibilitySubstitutionRule
 {
     Disable,
     Enable,
     EnableSilent,
 };
+
 class ConfigOption;
 struct ConfigSubstitution {
+    std::string     opt_key;
     //std::unique_ptr<ConfigOption> 	old_config_option;
     //std::unique_ptr<ConfigOption> 	new_config_option;
     std::string old_config_option;
@@ -148,6 +142,7 @@ struct ConfigSubstitutionContext
     ForwardCompatibilitySubstitutionRule 	rule;
     ConfigSubstitutions					    substitutions;
     ConfigSubstitutionContext(ForwardCompatibilitySubstitutionRule rl) : rule(rl) {}
+    bool empty() const throw() { return substitutions.empty(); }
 };
 
 
@@ -1813,7 +1808,7 @@ public:
     // to resolve renamed and removed configuration keys.
     bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, ConfigSubstitutionContext& subs_context, bool append = false);
 	// May throw BadOptionTypeException() if the operation fails.
-    void set_deserialize(const t_config_option_key &opt_key, const std::string &str, ConfigSubstitutionContext& subs_context, bool append = false);
+    void set_deserialize(const t_config_option_key &opt_key, const std::string &str, ConfigSubstitutionContext& config_substitutions, bool append = false);
     struct SetDeserializeItem {
     	SetDeserializeItem(const char *opt_key, const char *opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
     	SetDeserializeItem(const std::string &opt_key, const std::string &opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}

@@ -538,7 +538,8 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
         {
             // set value to default, log substitution, return as success
             ConfigSubstitution config_substitution;
-            config_substitution.old_config_option = opt_key;//std::unique_ptr<ConfigOption>(opt);
+            config_substitution.opt_key = opt_key;
+            config_substitution.old_config_option = value;//std::unique_ptr<ConfigOption>(opt);
 
             opt->set(optdef->default_value.get());
 

@@ -1311,6 +1311,7 @@ void MainFrame::update_menubar()
     m_changeable_menu_items[miPrinterTab]   ->SetBitmap(create_scaled_bitmap(is_fff ? "printer" : "sla_printer"));
 }
 
+#if 0
 // To perform the "Quck Slice", "Quick Slice and Save As", "Repeat last Quick Slice" and "Slice to SVG".
 void MainFrame::quick_slice(const int qs)
 {
@@ -1433,6 +1434,7 @@ void MainFrame::quick_slice(const int qs)
 //     };
 //     Slic3r::GUI::catch_error(this, []() { if (m_progress_dialog) m_progress_dialog->Destroy(); });
 }
+#endif
 
 void MainFrame::reslice_now()
 {
