@@ -16,6 +16,7 @@
 #include "Exception.hpp"
 #include "Point.hpp"
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/format/format_fwd.hpp>
 #include <boost/property_tree/ptree_fwd.hpp>
@@ -129,33 +130,43 @@ enum ForwardCompatibilitySubstitutionRule
 
 class ConfigOption;
 class ConfigOptionDef;
-// To keep the definition of Octree opaque, we have to define a custom deleter.
+// For forward definition of ConfigOption in ConfigOptionUniquePtr, we have to define a custom deleter.
 struct ConfigOptionDeleter { void operator()(ConfigOption* p); };
 using  ConfigOptionUniquePtr = std::unique_ptr<ConfigOption, ConfigOptionDeleter>;
 
+// When parsing a configuration value, if the old_value is not understood by this PrusaSlicer version,
+// it is being substituted with some default value that this PrusaSlicer could work with.
+// This structure serves to inform the user about the substitutions having been done during file import.
 struct ConfigSubstitution {
     const ConfigOptionDef   *opt_def { nullptr };
     std::string              old_value;
     ConfigOptionUniquePtr    new_value;
 };
+
 using ConfigSubstitutions = std::vector<ConfigSubstitution>;
-// filled in ConfigBase::set_deserialize_raw
+
+// Filled in by ConfigBase::set_deserialize_raw(), which based on "rule" either bails out
+// or performs substitutions when encountering an unknown configuration value.
 struct ConfigSubstitutionContext
 {
-    ForwardCompatibilitySubstitutionRule 	rule;
-    ConfigSubstitutions					    substitutions;
     ConfigSubstitutionContext(ForwardCompatibilitySubstitutionRule rl) : rule(rl) {}
     bool empty() const throw() { return substitutions.empty(); }
+
+    ForwardCompatibilitySubstitutionRule 	rule;
+    ConfigSubstitutions					    substitutions;
 };
 
-
+// Substitutions having been performed during parsing a single configuration file.
 struct FileConfigSubstitutions {
+    FileConfigSubstitutions(ForwardCompatibilitySubstitutionRule rl, const std::string& fl) : rule(rl), file(fl) {}
+
     ForwardCompatibilitySubstitutionRule 	rule;
     std::string 			                file;
     ConfigSubstitutions		                substitutions;
-    FileConfigSubstitutions(ForwardCompatibilitySubstitutionRule rl, const std::string& fl) : rule(rl) ,file(fl) {}
 };
 
+// Substitutions having been performed during parsing a set of configuration files, for example when starting up
+// PrusaSlicer and reading the user Print / Filament / Printer profiles.
 using AllFilesConfigSubstitutions = std::vector<FileConfigSubstitutions>;
 
 
@@ -1092,8 +1103,8 @@ public:
     {
         UNUSED(append);
         char dummy;
-        return (sscanf(str.data(), " %lf , %lf %c", &this->value(0), &this->value(1), &dummy) == 2 ||
-                sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2);
+        return sscanf(str.data(), " %lf , %lf %c", &this->value(0), &this->value(1), &dummy) == 2 ||
+               sscanf(str.data(), " %lf x %lf %c", &this->value(0), &this->value(1), &dummy) == 2;
     }
 
 private:
@@ -1202,8 +1213,8 @@ public:
     {
         UNUSED(append);
         char dummy;
-        return (sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
-                sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2);
+        return sscanf(str.data(), " %lf , %lf , %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2 ||
+               sscanf(str.data(), " %lf x %lf x %lf %c", &this->value(0), &this->value(1), &this->value(2), &dummy) == 2;
     }
 
 private:
@@ -1232,8 +1243,15 @@ public:
     bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
-        this->value = (str.compare("1") == 0);
-        return true;
+        if (str == "1" || boost::iequals(str, "enabled") || boost::iequals(str, "on")) {
+            this->value = true;
+            return true;
+        }
+        if (str == "0" || boost::iequals(str, "disabled") || boost::iequals(str, "off")) {
+            this->value = false;
+            return true;
+        }
+        return false;
     }
 
 private:
@@ -1464,10 +1482,8 @@ public:
     {
         UNUSED(append);
         auto it = this->keys_map->find(str);
-        if (it == this->keys_map->end()) {
-            //this->value = keys_map->begin()->second;
+        if (it == this->keys_map->end())
             return false;
-        }            
         this->value = it->second;
         return true;
     }
@@ -1809,7 +1825,7 @@ public:
 
     // Set a configuration value from a string, it will call an overridable handle_legacy() 
     // to resolve renamed and removed configuration keys.
-    bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, ConfigSubstitutionContext& subs_context, bool append = false);
+    bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, ConfigSubstitutionContext& substitutions, bool append = false);
 	// May throw BadOptionTypeException() if the operation fails.
     void set_deserialize(const t_config_option_key &opt_key, const std::string &str, ConfigSubstitutionContext& config_substitutions, bool append = false);
     void set_deserialize_strict(const t_config_option_key &opt_key, const std::string &str, bool append = false)
@@ -1828,7 +1844,7 @@ public:
     	std::string opt_key; std::string opt_value; bool append = false;
     };
 	// May throw BadOptionTypeException() if the operation fails.
-    void set_deserialize(std::initializer_list<SetDeserializeItem> items, ConfigSubstitutionContext& subs_context);
+    void set_deserialize(std::initializer_list<SetDeserializeItem> items, ConfigSubstitutionContext& substitutions);
     void set_deserialize_strict(std::initializer_list<SetDeserializeItem> items)
         { ConfigSubstitutionContext ctxt{ ForwardCompatibilitySubstitutionRule::Disable }; this->set_deserialize(items, ctxt); }
 
@@ -1848,8 +1864,7 @@ public:
 
 private:
     // Set a configuration value from a string.
-    //bool set_deserialize_raw(const t_config_option_key &opt_key_src, const std::string &str, bool append);
-    bool set_deserialize_raw(const t_config_option_key& opt_key_src, const std::string& str, ConfigSubstitutionContext& subs_context, bool append);
+    bool set_deserialize_raw(const t_config_option_key& opt_key_src, const std::string& value, ConfigSubstitutionContext& substitutions, bool append);
 };
 
 // Configuration store with dynamic number of configuration values.
