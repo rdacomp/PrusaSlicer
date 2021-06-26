@@ -55,7 +55,8 @@
         %code%{
             auto config = new DynamicPrintConfig();
             try {
-                config->load(path);
+                FileConfigSubstitutions substitutions{ ForwardCompatibilitySubstitutionRule::Disable };
+                config->load(path, substitutions);
                 RETVAL = config;
             } catch (std::exception& e) {
                 delete config;
@@ -119,7 +120,8 @@
         %code%{
             auto config = new FullPrintConfig();
             try {
-                config->load(path);
+                FileConfigSubstitutions substitutions{ ForwardCompatibilitySubstitutionRule::Disable };
+                config->load(path, substitutions);
                 RETVAL = static_cast<GCodeConfig*>(config);
             } catch (std::exception& e) {
                 delete config;
