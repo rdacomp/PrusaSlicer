@@ -359,7 +359,8 @@ std::ostream& ConfigDef::print_cli_help(std::ostream& out, bool show_defaults, s
             
             // right: option description
             std::string descr = def.tooltip;
-            if (show_defaults && def.default_value && def.type != coBool
+            bool show_defaults_this = show_defaults || def.opt_key == "config_compatibility";
+            if (show_defaults_this && def.default_value && def.type != coBool
                 && (def.type != coString || !def.default_value->serialize().empty())) {
                 descr += " (";
                 if (!def.sidetext.empty()) {
