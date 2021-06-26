@@ -128,12 +128,15 @@ enum ForwardCompatibilitySubstitutionRule
 };
 
 class ConfigOption;
+class ConfigOptionDef;
+// To keep the definition of Octree opaque, we have to define a custom deleter.
+struct ConfigOptionDeleter { void operator()(ConfigOption* p); };
+using  ConfigOptionUniquePtr = std::unique_ptr<ConfigOption, ConfigOptionDeleter>;
+
 struct ConfigSubstitution {
-    std::string     opt_key;
-    //std::unique_ptr<ConfigOption> 	old_config_option;
-    //std::unique_ptr<ConfigOption> 	new_config_option;
-    std::string old_config_option;
-    std::string new_config_option;
+    const ConfigOptionDef   *opt_def { nullptr };
+    std::string              old_value;
+    ConfigOptionUniquePtr    new_value;
 };
 using ConfigSubstitutions = std::vector<ConfigSubstitution>;
 // filled in ConfigBase::set_deserialize_raw
@@ -163,7 +166,7 @@ public:
 
     virtual ConfigOptionType    type() const = 0;
     virtual std::string         serialize() const = 0;
-    virtual bool                deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) = 0;
+    virtual bool                deserialize(const std::string &str, bool append = false) = 0;
     virtual ConfigOption*       clone() const = 0;
     // Set a value from a ConfigOption. The two options should be compatible.
     virtual void                set(const ConfigOption *option) = 0;
@@ -458,7 +461,7 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         std::istringstream iss(str);
@@ -528,7 +531,7 @@ public:
         return vv;
     }
 
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -611,7 +614,7 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         std::istringstream iss(str);
@@ -674,7 +677,7 @@ public:
         return vv;
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -733,7 +736,7 @@ public:
         return escape_string_cstyle(this->value); 
     }
 
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         return unescape_string_cstyle(str, this->value);
@@ -771,7 +774,7 @@ public:
         return this->values;
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -805,7 +808,7 @@ public:
         return s;
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         // don't try to parse the trailing % since it's optional
@@ -913,7 +916,7 @@ public:
         return s;
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         this->percent = str.find_first_of("%") != std::string::npos;
@@ -999,7 +1002,7 @@ public:
         return vv;
     }
 
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1085,7 +1088,7 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         char dummy;
@@ -1136,7 +1139,7 @@ public:
         return vv;
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1195,7 +1198,7 @@ public:
         return ss.str();
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         char dummy;
@@ -1226,7 +1229,7 @@ public:
         return std::string(this->value ? "1" : "0");
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         this->value = (str.compare("1") == 0);
@@ -1292,7 +1295,7 @@ public:
         return vv;
     }
     
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         if (! append)
             this->values.clear();
@@ -1372,7 +1375,7 @@ public:
         return names[static_cast<int>(this->value)];
     }
 
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         return from_string(str, this->value);
@@ -1457,7 +1460,7 @@ public:
         return std::string();
     }
 
-    bool deserialize(const std::string &str, ForwardCompatibilitySubstitutionRule rule, bool append = false) override
+    bool deserialize(const std::string &str, bool append = false) override
     {
         UNUSED(append);
         auto it = this->keys_map->find(str);

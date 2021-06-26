@@ -209,6 +209,10 @@ std::string escape_ampersand(const std::string& str)
     return std::string(out.data(), outptr - out.data());
 }
 
+void ConfigOptionDeleter::operator()(ConfigOption* p) {
+    delete p;
+}
+
 std::vector<std::string> ConfigOptionDef::cli_args(const std::string &key) const
 {
 	std::vector<std::string> args;
@@ -529,7 +533,7 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
     
     ConfigOption *opt = this->option(opt_key, true);
     assert(opt != nullptr);
-    if (!opt->deserialize(value, subs_context.rule, append)) {
+    if (!opt->deserialize(value, append)) {
         // Deserialize fail - decide what to do according to the substitution rule
         switch (subs_context.rule) {
         case ForwardCompatibilitySubstitutionRule::Disable:
@@ -539,13 +543,13 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
         {
             // set value to default, log substitution, return as success
             ConfigSubstitution config_substitution;
-            config_substitution.opt_key = opt_key;
-            config_substitution.old_config_option = value;//std::unique_ptr<ConfigOption>(opt);
+            config_substitution.opt_def = optdef;
+            config_substitution.old_value = value;//std::unique_ptr<ConfigOption>(opt);
 
             opt->set(optdef->default_value.get());
 
-            config_substitution.new_config_option = opt->serialize();//std::unique_ptr<ConfigOption>(this->option(opt_key, true));
-            subs_context.substitutions.emplace_back(config_substitution);
+            config_substitution.new_value = ConfigOptionUniquePtr(this->option(opt_key, true)->clone());
+            subs_context.substitutions.emplace_back(std::move(config_substitution));
             return true;
         }
         case ForwardCompatibilitySubstitutionRule::EnableSilent:
@@ -907,7 +911,7 @@ bool DynamicConfig::read_cli(int argc, const char* const argv[], t_config_option
                 // they get deserialized from an .ini file. For ConfigOptionStrings, that means that the C-style unescape
                 // will be applied for values enclosed in quotes, while values non-enclosed in quotes are left to be
                 // unescaped by the calling shell.
-				opt_vector->deserialize(value, ForwardCompatibilitySubstitutionRule::Disable, true);
+				opt_vector->deserialize(value, true);
         } else if (opt_base->type() == coBool) {
             static_cast<ConfigOptionBool*>(opt_base)->value = !no;
         } else if (opt_base->type() == coString) {

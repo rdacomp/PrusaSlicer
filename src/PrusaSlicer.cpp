@@ -134,7 +134,7 @@ int CLI::run(int argc, char **argv)
         if (!file_conf_substitutions.substitutions.empty()) {
             boost::nowide::cout << "The following configuration values were substituted when loading \" << file << \":\n";
             for (const ConfigSubstitution& subst : file_conf_substitutions.substitutions)
-                boost::nowide::cout << "\tkey = \"" << subst.opt_key << "\"\t loaded = \"" << subst.old_config_option << "\tsubstituted = \"" << subst.new_config_option << "\"\n";
+                boost::nowide::cout << "\tkey = \"" << subst.opt_def->opt_key << "\"\t loaded = \"" << subst.old_value << "\tsubstituted = \"" << subst.new_value->serialize() << "\"\n";
         }
         config.normalize_fdm();
         PrinterTechnology other_printer_technology = Slic3r::printer_technology(config);
@@ -187,7 +187,7 @@ int CLI::run(int argc, char **argv)
                 if (! config_substitutions.substitutions.empty()) {
                     boost::nowide::cout << "The following configuration values were substituted when loading \" << file << \":\n";
                     for (const ConfigSubstitution& subst : config_substitutions.substitutions)
-                        boost::nowide::cout << "\tkey = \"" << subst.opt_key << "\"\t loaded = \"" << subst.old_config_option << "\tsubstituted = \"" << subst.new_config_option << "\"\n";
+                        boost::nowide::cout << "\tkey = \"" << subst.opt_def->opt_key << "\"\t loaded = \"" << subst.old_value << "\tsubstituted = \"" << subst.new_value->serialize() << "\"\n";
                 }
                 // config is applied to m_print_config before the current m_config values.
                 config += std::move(m_print_config);

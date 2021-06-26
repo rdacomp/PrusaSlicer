@@ -821,14 +821,12 @@ void GCodeProcessor::process_file(const std::string& filename, bool apply_postpr
         // extract the config from it
         if (m_producer == EProducer::PrusaSlicer || m_producer == EProducer::Slic3rPE || m_producer == EProducer::Slic3r) {
             DynamicPrintConfig config;
-            FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, filename);
+            // Silently substitute unknown values by new ones for loading configurations from PrusaSlicer's own G-code.
+            // Showing substitution log or errors may make sense, but we are not really reading many values from the G-code config,
+            // thus a probability of incorrect substitution is low and the G-code viewer is a consumer-only anyways.
+            FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::EnableSilent, filename);
             config.apply(FullPrintConfig::defaults());
             config.load_from_gcode_file(filename, file_conf_subs);
-            if (!file_conf_subs.substitutions.empty()) {
-                // TODO: throw exception?
-               //BOOST_LOG_TRIVIAL(error) << "Gcode proccessor found and changed incompabilities in config:" << change_message;
-               //throw Slic3r::RuntimeError(std::string("Invalid configuration in file: ") + filename + ". Error message:" + change_message);
-            }
             apply_config(config);
         }
     }
