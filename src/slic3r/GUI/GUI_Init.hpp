@@ -12,6 +12,9 @@ struct GUI_InitParams
 	int		                    argc;
 	char	                  **argv;
 
+	// Substitutions of unknown configuration values done during loading of user presets.
+	AllFilesConfigSubstitutions preset_substitutions;
+
     std::vector<std::string>    load_configs;
     DynamicPrintConfig          extra_config;
     std::vector<std::string>    input_files;

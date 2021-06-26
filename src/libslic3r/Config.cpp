@@ -21,6 +21,10 @@
 #include <boost/format.hpp>
 #include <string.h>
 
+//FIXME for GCodeFlavor and gcfMarlin (for forward-compatibility conversion)
+// This is not nice, likely it would be better to pass the ConfigSubstitutionContext to handle_legacy().
+#include "PrintConfig.hpp"
+
 namespace Slic3r {
 
 // Escape \n, \r and backslash
@@ -543,7 +547,7 @@ bool ConfigBase::set_deserialize_raw(const t_config_option_key &opt_key_src, con
         assert(substitutions_ctxt.rule == ForwardCompatibilitySubstitutionRule::Enable || substitutions_ctxt.rule == ForwardCompatibilitySubstitutionRule::EnableSilent);
 
         if (opt_key == "gcode_flavor" && value == "marlinfirmware")
-            static_cast<ConfigOptionEnum<GCodeFlavor>>(opt)->value = gcfMarlin;
+            static_cast<ConfigOptionEnum<GCodeFlavor>*>(opt)->value = gcfMarlin;
         else
             opt->set(optdef->default_value.get());
 
