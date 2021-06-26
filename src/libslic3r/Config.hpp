@@ -1809,6 +1809,8 @@ public:
     bool set_deserialize_nothrow(const t_config_option_key &opt_key_src, const std::string &value_src, ConfigSubstitutionContext& subs_context, bool append = false);
 	// May throw BadOptionTypeException() if the operation fails.
     void set_deserialize(const t_config_option_key &opt_key, const std::string &str, ConfigSubstitutionContext& config_substitutions, bool append = false);
+    void set_deserialize_strict(const t_config_option_key &opt_key, const std::string &str, bool append = false)
+        { this->set_deserialize(opt_key, str, ConfigSubstitutionContext{ ForwardCompatibilitySubstitutionRule::Disable }, append); }
     struct SetDeserializeItem {
     	SetDeserializeItem(const char *opt_key, const char *opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
     	SetDeserializeItem(const std::string &opt_key, const std::string &opt_value, bool append = false) : opt_key(opt_key), opt_value(opt_value), append(append) {}
@@ -1824,6 +1826,8 @@ public:
     };
 	// May throw BadOptionTypeException() if the operation fails.
     void set_deserialize(std::initializer_list<SetDeserializeItem> items, ConfigSubstitutionContext& subs_context);
+    void set_deserialize_strict(std::initializer_list<SetDeserializeItem> items)
+        { this->set_deserialize(items, ConfigSubstitutionContext{ ForwardCompatibilitySubstitutionRule::Disable }); }
 
     double get_abs_value(const t_config_option_key &opt_key) const;
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
