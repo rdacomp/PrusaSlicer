@@ -620,26 +620,24 @@ void ConfigBase::setenv_() const
     }
 }
 
-void ConfigBase::load(const std::string &file, FileConfigSubstitutions& substitutions)
+ConfigSubstitutions ConfigBase::load(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
-    if (is_gcode_file(file))
-        this->load_from_gcode_file(file, substitutions);
-    else {
-        this->load_from_ini(file, substitutions);
-    }
+    return is_gcode_file(file) ? 
+        this->load_from_gcode_file(file, compatibility_rule) :
+        this->load_from_ini(file, compatibility_rule);
 }
 
-void ConfigBase::load_from_ini(const std::string &file, FileConfigSubstitutions& substitutions)
+ConfigSubstitutions ConfigBase::load_from_ini(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
     boost::property_tree::ptree tree;
     boost::nowide::ifstream ifs(file);
     boost::property_tree::read_ini(ifs, tree);
-    this->load(tree, substitutions);
+    return this->load(tree, compatibility_rule);
 }
 
-void ConfigBase::load(const boost::property_tree::ptree &tree, FileConfigSubstitutions& substitutions)
+ConfigSubstitutions ConfigBase::load(const boost::property_tree::ptree &tree, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
-    ConfigSubstitutionContext substitutions_ctxt(substitutions.rule);
+    ConfigSubstitutionContext substitutions_ctxt(compatibility_rule);
     for (const boost::property_tree::ptree::value_type &v : tree) {
         try {
             t_config_option_key opt_key = v.first;
@@ -648,11 +646,11 @@ void ConfigBase::load(const boost::property_tree::ptree &tree, FileConfigSubstit
             // ignore
         }
     }
-    substitutions.substitutions = std::move(substitutions_ctxt.substitutions);
+    return std::move(substitutions_ctxt.substitutions);
 }
 
 // Load the config keys from the tail of a G-code file.
-void ConfigBase::load_from_gcode_file(const std::string &file, FileConfigSubstitutions& substitutions)
+ConfigSubstitutions ConfigBase::load_from_gcode_file(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
     // Read a 64k block from the end of the G-code.
 	boost::nowide::ifstream ifs(file);
@@ -673,11 +671,11 @@ void ConfigBase::load_from_gcode_file(const std::string &file, FileConfigSubstit
     ifs.read(data.data(), data_length);
     ifs.close();
 
-    ConfigSubstitutionContext substitutions_ctxt(substitutions.rule);
+    ConfigSubstitutionContext substitutions_ctxt(compatibility_rule);
     size_t key_value_pairs = load_from_gcode_string(data.data(), substitutions_ctxt);
     if (key_value_pairs < 80)
         throw Slic3r::RuntimeError(format("Suspiciously low number of configuration values extracted from %1%: %2%", file, key_value_pairs));
-    substitutions.substitutions = std::move(substitutions_ctxt.substitutions);
+    return std::move(substitutions_ctxt.substitutions);
 }
 
 // Load the config keys from the given string.

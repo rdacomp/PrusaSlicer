@@ -194,8 +194,7 @@ SCENARIO("Config ini load/save interface", "[Config]") {
     WHEN("new_from_ini is called") {
 		Slic3r::DynamicPrintConfig config;
 		std::string path = std::string(TEST_DATA_DIR) + "/test_config/new_from_ini.ini";
-        FileConfigSubstitutions substitutions(ForwardCompatibilitySubstitutionRule::Disable, path);
-		config.load_from_ini(path, substitutions);
+		config.load_from_ini(path, ForwardCompatibilitySubstitutionRule::Disable);
         THEN("Config object contains ini file options.") {
 			REQUIRE(config.option_throw<ConfigOptionStrings>("filament_colour", false)->values.size() == 1);
 			REQUIRE(config.option_throw<ConfigOptionStrings>("filament_colour", false)->values.front() == "#ABCD");

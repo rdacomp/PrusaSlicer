@@ -83,7 +83,7 @@ public:
     // Instead of a config file, a G-code may be loaded containing the full set of parameters.
     // In the future the configuration will likely be read from an AMF file as well.
     // If the file is loaded successfully, its print / filament / printer profiles will be activated.
-    FileConfigSubstitutions     load_config_file(const std::string &path, ForwardCompatibilitySubstitutionRule compatibility_rule);
+    ConfigSubstitutions         load_config_file(const std::string &path, ForwardCompatibilitySubstitutionRule compatibility_rule);
 
     // Load a config bundle file, into presets and store the loaded presets into separate files
     // of the local configuration directory.
@@ -102,7 +102,7 @@ public:
     using LoadConfigBundleAttributes = enum_bitmask<LoadConfigBundleAttribute>;
     // Load the config bundle based on the flags.
     // Don't do any config substitutions when loading a system profile, perform and report substitutions otherwise.
-    std::pair<ConfigSubstitutionContext, size_t> load_configbundle(const std::string &path, LoadConfigBundleAttributes flags);
+    std::pair<ConfigSubstitutions, size_t> load_configbundle(const std::string &path, LoadConfigBundleAttributes flags);
 
     // Export a config bundle file containing all the presets and the names of the active presets.
     void                        export_configbundle(const std::string &path, bool export_system_settings = false, bool export_physical_printers = false);
@@ -158,7 +158,7 @@ private:
     // and the external config is just referenced, not stored into user profile directory.
     // If it is not an external config, then the config will be stored into the user profile directory.
     void                        load_config_file_config(const std::string &name_or_path, bool is_external, DynamicPrintConfig &&config);
-    void                        load_config_file_config_bundle(const std::string &path, const boost::property_tree::ptree &tree, FileConfigSubstitutions &config_substitutions);
+    ConfigSubstitutions         load_config_file_config_bundle(const std::string &path, const boost::property_tree::ptree &tree);
 
     DynamicPrintConfig          full_fff_config() const;
     DynamicPrintConfig          full_sla_config() const;

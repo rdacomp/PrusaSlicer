@@ -158,10 +158,8 @@ struct ConfigSubstitutionContext
 
 // Substitutions having been performed during parsing a single configuration file.
 struct FileConfigSubstitutions {
-    FileConfigSubstitutions(ForwardCompatibilitySubstitutionRule rl, const std::string& fl) : rule(rl), file(fl) {}
     bool empty() const throw() { return substitutions.empty(); }
 
-    ForwardCompatibilitySubstitutionRule 	rule;
     std::string 			                file;
     ConfigSubstitutions		                substitutions;
 };
@@ -1852,12 +1850,12 @@ public:
     double get_abs_value(const t_config_option_key &opt_key) const;
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
     void setenv_() const;
-    void load(const std::string &file, FileConfigSubstitutions& substitutions);
-    void load_from_ini(const std::string &file, FileConfigSubstitutions& substitutions);
-    void load_from_gcode_file(const std::string &file, FileConfigSubstitutions& substitutions);
+    ConfigSubstitutions load(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule);
+    ConfigSubstitutions load_from_ini(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule);
+    ConfigSubstitutions load_from_gcode_file(const std::string &file, ForwardCompatibilitySubstitutionRule compatibility_rule);
     // Returns number of key/value pairs extracted.
     size_t load_from_gcode_string(const char* str, ConfigSubstitutionContext& substitutions);
-    void load(const boost::property_tree::ptree &tree, FileConfigSubstitutions& substitutions);
+    ConfigSubstitutions load(const boost::property_tree::ptree &tree, ForwardCompatibilitySubstitutionRule compatibility_rule);
     void save(const std::string &file) const;
 
 	// Set all the nullable values to nils.

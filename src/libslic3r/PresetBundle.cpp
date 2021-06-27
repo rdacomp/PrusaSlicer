@@ -665,14 +665,12 @@ DynamicPrintConfig PresetBundle::full_sla_config() const
 // Instead of a config file, a G-code may be loaded containing the full set of parameters.
 // In the future the configuration will likely be read from an AMF file as well.
 // If the file is loaded successfully, its print / filament / printer profiles will be activated.
-FileConfigSubstitutions PresetBundle::load_config_file(const std::string &path, ForwardCompatibilitySubstitutionRule compatibility_rule)
+ConfigSubstitutions PresetBundle::load_config_file(const std::string &path, ForwardCompatibilitySubstitutionRule compatibility_rule)
 {
-    FileConfigSubstitutions config_substitutions(compatibility_rule, path);
-
 	if (is_gcode_file(path)) {
 		DynamicPrintConfig config;
 		config.apply(FullPrintConfig::defaults());
-        config.load_from_gcode_file(path, config_substitutions);
+        ConfigSubstitutions config_substitutions = config.load_from_gcode_file(path, compatibility_rule);
         Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
 		return config_substitutions;
@@ -694,6 +692,7 @@ FileConfigSubstitutions PresetBundle::load_config_file(const std::string &path, 
 
     // 2) Continue based on the type of the configuration file.
     ConfigFileType config_file_type = guess_config_file_type(tree);
+    ConfigSubstitutions config_substitutions;
     switch (config_file_type) {
     case CONFIG_FILE_TYPE_UNKNOWN:
         throw Slic3r::RuntimeError(std::string("Unknown configuration file type: ") + path);   
@@ -704,17 +703,18 @@ FileConfigSubstitutions PresetBundle::load_config_file(const std::string &path, 
 		// Initialize a config from full defaults.
 		DynamicPrintConfig config;
 		config.apply(FullPrintConfig::defaults());
-		config.load(tree, config_substitutions);
+        config_substitutions = config.load(tree, compatibility_rule);
 		Preset::normalize(config);
 		load_config_file_config(path, true, std::move(config));
-		break;
-	}
+        return config_substitutions;
+    }
     case CONFIG_FILE_TYPE_CONFIG_BUNDLE:
-		load_config_file_config_bundle(path, tree, config_substitutions);
-        break;
+        return load_config_file_config_bundle(path, tree);
     }
 
-    return config_substitutions;
+    // This shall never happen. Suppres compiler warnings.
+    assert(false);
+    return ConfigSubstitutions{};
 }
 
 // Load a config file from a boost property_tree. This is a private method called from load_config_file.
@@ -886,18 +886,14 @@ void PresetBundle::load_config_file_config(const std::string &name_or_path, bool
 }
 
 // Load the active configuration of a config bundle from a boost property_tree. This is a private method called from load_config_file.
-void PresetBundle::load_config_file_config_bundle(const std::string &path, const boost::property_tree::ptree &tree, FileConfigSubstitutions &file_config_substitutions)
+ConfigSubstitutions PresetBundle::load_config_file_config_bundle(const std::string &path, const boost::property_tree::ptree &tree)
 {
     // 1) Load the config bundle into a temp data.
     PresetBundle tmp_bundle;
     // Load the config bundle, but don't save the loaded presets to user profile directory, as only the presets marked as active in the loaded preset bundle
     // will be loaded into the master PresetBundle and activated.
     auto [config_substitutions, presets_imported] = tmp_bundle.load_configbundle(path, {});
-    if (! config_substitutions.empty()) {
-        file_config_substitutions.file = path;
-        file_config_substitutions.substitutions = std::move(config_substitutions.substitutions);
-    }
-            
+
     std::string bundle_name = std::string(" - ") + boost::filesystem::path(path).filename().string();
 
     // 2) Extract active configs from the config bundle, copy them and activate them in this bundle.
@@ -951,6 +947,8 @@ void PresetBundle::load_config_file_config_bundle(const std::string &path, const
         this->filament_presets[i] = load_one(this->filaments, tmp_bundle.filaments, tmp_bundle.filament_presets[i], false);
 
     this->update_compatible(PresetSelectCompatibleType::Never);
+
+    return std::move(config_substitutions);
 }
 
 // Process the Config Bundle loaded as a Boost property tree.
@@ -1095,7 +1093,7 @@ static void flatten_configbundle_hierarchy(boost::property_tree::ptree &tree, co
 
 // Load a config bundle file, into presets and store the loaded presets into separate files
 // of the local configuration directory.
-std::pair<ConfigSubstitutionContext, size_t> PresetBundle::load_configbundle(const std::string &path, LoadConfigBundleAttributes flags)
+std::pair<ConfigSubstitutions, size_t> PresetBundle::load_configbundle(const std::string &path, LoadConfigBundleAttributes flags)
 {
     // Enable substitutions for user config bundle, throw an exception when loading a system profile.
     ConfigSubstitutionContext substitution_context {
@@ -1123,16 +1121,16 @@ std::pair<ConfigSubstitutionContext, size_t> PresetBundle::load_configbundle(con
         auto vp = VendorProfile::from_ini(tree, path);
         if (vp.models.size() == 0) {
             BOOST_LOG_TRIVIAL(error) << boost::format("Vendor bundle: `%1%`: No printer model defined.") % path;
-            return std::make_pair(std::move(substitution_context), 0);
+            return std::make_pair(ConfigSubstitutions{}, 0);
         } else if (vp.num_variants() == 0) {
             BOOST_LOG_TRIVIAL(error) << boost::format("Vendor bundle: `%1%`: No printer variant defined") % path;
-            return std::make_pair(std::move(substitution_context), 0);
+            return std::make_pair(ConfigSubstitutions{}, 0);
         }
         vendor_profile = &this->vendors.insert({vp.id, vp}).first->second;
     }
 
     if (flags.has(LoadConfigBundleAttribute::LoadVendorOnly))
-        return std::make_pair(std::move(substitution_context), 0);
+        return std::make_pair(ConfigSubstitutions{}, 0);
 
     // 1.5) Flatten the config bundle by applying the inheritance rules. Internal profiles (with names starting with '*') are removed.
     // If loading a user config bundle, do not flatten with the system profiles, but keep the "inherits" flag intact.
@@ -1428,7 +1426,7 @@ std::pair<ConfigSubstitutionContext, size_t> PresetBundle::load_configbundle(con
         this->update_compatible(PresetSelectCompatibleType::Never);
     }
 
-    return std::make_pair(std::move(substitution_context), presets_loaded + ph_printers_loaded);
+    return std::make_pair(std::move(substitution_context.substitutions), presets_loaded + ph_printers_loaded);
 }
 
 void PresetBundle::update_multi_material_filament_presets()

@@ -287,18 +287,13 @@ std::vector<ExPolygons> extract_slices_from_sla_archive(
 
 } // namespace
 
-void import_sla_archive(const std::string &zipfname, DynamicPrintConfig &out)
+ConfigSubstitutions import_sla_archive(const std::string &zipfname, DynamicPrintConfig &out)
 {
     ArchiveData arch = extract_sla_archive(zipfname, "png");
-    FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, zipfname);
-    out.load(arch.profile, file_conf_subs);
-    if (!file_conf_subs.substitutions.empty()) {
-        //TODO: Stop importing, throw?
-        throw Slic3r::RuntimeError(std::string("Invalid configuration in imported SLA archive"));
-    }
+    return out.load(arch.profile, ForwardCompatibilitySubstitutionRule::Enable);
 }
 
-void import_sla_archive(
+ConfigSubstitutions import_sla_archive(
     const std::string &      zipfname,
     Vec2i                    windowsize,
     TriangleMesh &           out,
@@ -310,12 +305,7 @@ void import_sla_archive(
     windowsize.y() = std::max(2, windowsize.y());
 
     ArchiveData arch = extract_sla_archive(zipfname, "thumbnail");
-    FileConfigSubstitutions file_conf_subs(ForwardCompatibilitySubstitutionRule::Disable, zipfname);
-    profile.load(arch.profile, file_conf_subs);
-    if (!file_conf_subs.substitutions.empty()) {
-        //TODO: Stop importing or show message to user?
-        BOOST_LOG_TRIVIAL(error) << "Imporiting SLA archive found and changed incompabilities";
-    }
+    ConfigSubstitutions config_substitutions = profile.load(arch.profile, ForwardCompatibilitySubstitutionRule::Enable);
 
     RasterParams rstp = get_raster_params(profile);
     rstp.win          = {windowsize.y(), windowsize.x()};
@@ -327,6 +317,8 @@ void import_sla_archive(
 
     if (!slices.empty())
         out = slices_to_triangle_mesh(slices, 0, slicp.layerh, slicp.initial_layerh);
+
+    return config_substitutions;
 }
 
 using ConfMap = std::map<std::string, std::string>;

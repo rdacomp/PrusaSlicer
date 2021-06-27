@@ -123,17 +123,17 @@ int CLI::run(int argc, char **argv)
                 return 1;
             }
         }
-        DynamicPrintConfig config;
-        FileConfigSubstitutions file_conf_substitutions(config_substitution_rule, file);
+        DynamicPrintConfig  config;
+        ConfigSubstitutions config_substitutions;
         try {
-            config.load(file, file_conf_substitutions);
+            config_substitutions = config.load(file, config_substitution_rule);
         } catch (std::exception &ex) {
             boost::nowide::cerr << "Error while reading config file \"" << file << "\": " << ex.what() << std::endl;
             return 1;
         }
-        if (!file_conf_substitutions.substitutions.empty()) {
+        if (! config_substitutions.empty()) {
             boost::nowide::cout << "The following configuration values were substituted when loading \" << file << \":\n";
-            for (const ConfigSubstitution& subst : file_conf_substitutions.substitutions)
+            for (const ConfigSubstitution &subst : config_substitutions)
                 boost::nowide::cout << "\tkey = \"" << subst.opt_def->opt_key << "\"\t loaded = \"" << subst.old_value << "\tsubstituted = \"" << subst.new_value->serialize() << "\"\n";
         }
         config.normalize_fdm();

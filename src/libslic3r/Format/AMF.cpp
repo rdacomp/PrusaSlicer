@@ -703,12 +703,7 @@ void AMFParserContext::endElement(const char * /* name */)
 
     case NODE_TYPE_METADATA:
         if ((m_config != nullptr) && strncmp(m_value[0].c_str(), SLIC3R_CONFIG_TYPE, strlen(SLIC3R_CONFIG_TYPE)) == 0) {
-            ConfigSubstitutionContext context(ForwardCompatibilitySubstitutionRule::Disable);
-            m_config->load_from_gcode_string(m_value[1].c_str(), context);
-            if (!context.substitutions.empty()) {
-                // TODO: throw exception?
-                throw Slic3r::RuntimeError(std::string("Invalid configuration found"));
-            }
+            m_config->load_from_gcode_string(m_value[1].c_str(), *m_config_substitutions);
         }
         else if (strncmp(m_value[0].c_str(), "slic3r.", 7) == 0) {
             const char *opt_key = m_value[0].c_str() + 7;
