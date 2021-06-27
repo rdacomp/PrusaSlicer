@@ -896,7 +896,7 @@ bool GUI_App::on_init_inner()
     // Suppress the '- default -' presets.
     preset_bundle->set_default_suppressed(app_config->get("no_defaults") == "1");
     try {
-        preset_bundle->load_presets(*app_config, init_params->preset_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
+        init_params->preset_substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::Enable);
     } catch (const std::exception &ex) {
         show_error(nullptr, ex.what());
     }
@@ -1680,9 +1680,8 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                         Config::SnapshotDB::singleton().take_snapshot(*app_config, Config::Snapshot::SNAPSHOT_BEFORE_ROLLBACK);
                     try {
                         app_config->set("on_snapshot", Config::SnapshotDB::singleton().restore_snapshot(dlg.snapshot_to_activate(), *app_config).id);
-                        AllFilesConfigSubstitutions all_substitutions;
-                        preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::Enable);
-                        if (!all_substitutions.empty()) {
+                        if (AllFilesConfigSubstitutions all_substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::Enable);
+                            ! all_substitutions.empty()) {
                             // TODO:
                             show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
                                 " To recover these files, incompatible values were changed to default values."

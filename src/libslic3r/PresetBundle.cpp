@@ -162,7 +162,7 @@ void PresetBundle::setup_directories()
     }
 }
 
-void PresetBundle::load_presets(AppConfig &config, AllFilesConfigSubstitutions& substitutions, ForwardCompatibilitySubstitutionRule rule, const std::string &preferred_model_id)
+AllFilesConfigSubstitutions PresetBundle::load_presets(AppConfig &config, ForwardCompatibilitySubstitutionRule substitution_rule, const std::string &preferred_model_id)
 {
     // First load the vendor specific system presets.
     std::string errors_cummulative = this->load_system_presets();
@@ -175,33 +175,35 @@ void PresetBundle::load_presets(AppConfig &config, AllFilesConfigSubstitutions& 
         // Store the print/filament/printer presets at the same location as the upstream Slic3r.
 #endif
         ;
+
+    AllFilesConfigSubstitutions substitutions;
     try {
-        this->prints.load_presets(dir_user_presets, "print", substitutions, rule);
+        this->prints.load_presets(dir_user_presets, "print", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->sla_prints.load_presets(dir_user_presets, "sla_print", substitutions, rule);
+        this->sla_prints.load_presets(dir_user_presets, "sla_print", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->filaments.load_presets(dir_user_presets, "filament", substitutions, rule);
+        this->filaments.load_presets(dir_user_presets, "filament", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->sla_materials.load_presets(dir_user_presets, "sla_material", substitutions, rule);
+        this->sla_materials.load_presets(dir_user_presets, "sla_material", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->printers.load_presets(dir_user_presets, "printer", substitutions, rule);
+        this->printers.load_presets(dir_user_presets, "printer", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
     try {
-        this->physical_printers.load_printers(dir_user_presets, "physical_printer", substitutions, rule);
+        this->physical_printers.load_printers(dir_user_presets, "physical_printer", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
         errors_cummulative += err.what();
     }
@@ -211,6 +213,8 @@ void PresetBundle::load_presets(AppConfig &config, AllFilesConfigSubstitutions& 
         throw Slic3r::RuntimeError(errors_cummulative);
 
     this->load_selections(config, preferred_model_id);
+
+    return substitutions;
 }
 
 // Load system presets into this PresetBundle.

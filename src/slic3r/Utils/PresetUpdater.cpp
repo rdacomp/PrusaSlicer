@@ -715,8 +715,7 @@ static void reload_configs_update_gui()
 	auto* app_config = GUI::wxGetApp().app_config;
 	// System profiles should not trigger any substitutions, user profiles may trigger substitutions, but these substitutions
 	// were already presented to the user on application start up. Just do substitutions now and keep quiet about it.
-	AllFilesConfigSubstitutions all_substitutions;
-	GUI::wxGetApp().preset_bundle->load_presets(*app_config, all_substitutions, ForwardCompatibilitySubstitutionRule::EnableSilent);
+	GUI::wxGetApp().preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSilent);
 	GUI::wxGetApp().load_current_presets();
 	GUI::wxGetApp().plater()->set_bed_shape();
 }

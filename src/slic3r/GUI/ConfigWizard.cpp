@@ -2463,8 +2463,7 @@ void ConfigWizard::priv::apply_config(AppConfig *app_config, PresetBundle *prese
     // Reloading the configs after some modifications were done to PrusaSlicer.ini.
     // Just perform the substitutions silently, as the substitutions were already presented to the user on application start-up
     // and the Wizard shall not create any new values that would require substitution.
-    AllFilesConfigSubstitutions substitutions;
-    preset_bundle->load_presets(*app_config, substitutions, ForwardCompatibilitySubstitutionRule::EnableSilent, preferred_model);
+    AllFilesConfigSubstitutions substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::EnableSilent, preferred_model);
 
     if (page_custom->custom_wanted()) {
         page_firmware->apply_custom_config(*custom_config);
