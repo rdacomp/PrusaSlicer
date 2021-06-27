@@ -1,6 +1,7 @@
 #ifndef slic3r_GUI_Init_hpp_
 #define slic3r_GUI_Init_hpp_
 
+#include <libslic3r/Preset.hpp>
 #include <libslic3r/PrintConfig.hpp>
 
 namespace Slic3r {
@@ -13,7 +14,7 @@ struct GUI_InitParams
 	char	                  **argv;
 
 	// Substitutions of unknown configuration values done during loading of user presets.
-	AllFilesConfigSubstitutions preset_substitutions;
+	PresetsConfigSubstitutions  preset_substitutions;
 
     std::vector<std::string>    load_configs;
     DynamicPrintConfig          extra_config;

@@ -128,8 +128,8 @@ enum ForwardCompatibilitySubstitutionRule
     EnableSilent,
 };
 
-class ConfigOption;
-class ConfigOptionDef;
+class  ConfigOption;
+class  ConfigOptionDef;
 // For forward definition of ConfigOption in ConfigOptionUniquePtr, we have to define a custom deleter.
 struct ConfigOptionDeleter { void operator()(ConfigOption* p); };
 using  ConfigOptionUniquePtr = std::unique_ptr<ConfigOption, ConfigOptionDeleter>;
@@ -143,7 +143,7 @@ struct ConfigSubstitution {
     ConfigOptionUniquePtr    new_value;
 };
 
-using ConfigSubstitutions = std::vector<ConfigSubstitution>;
+using  ConfigSubstitutions = std::vector<ConfigSubstitution>;
 
 // Filled in by ConfigBase::set_deserialize_raw(), which based on "rule" either bails out
 // or performs substitutions when encountering an unknown configuration value.
@@ -155,19 +155,6 @@ struct ConfigSubstitutionContext
     ForwardCompatibilitySubstitutionRule 	rule;
     ConfigSubstitutions					    substitutions;
 };
-
-// Substitutions having been performed during parsing a single configuration file.
-struct FileConfigSubstitutions {
-    bool empty() const throw() { return substitutions.empty(); }
-
-    std::string 			                file;
-    ConfigSubstitutions		                substitutions;
-};
-
-// Substitutions having been performed during parsing a set of configuration files, for example when starting up
-// PrusaSlicer and reading the user Print / Filament / Printer profiles.
-using AllFilesConfigSubstitutions = std::vector<FileConfigSubstitutions>;
-
 
 // A generic value of a configuration option.
 class ConfigOption {

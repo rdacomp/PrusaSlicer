@@ -162,7 +162,7 @@ void PresetBundle::setup_directories()
     }
 }
 
-AllFilesConfigSubstitutions PresetBundle::load_presets(AppConfig &config, ForwardCompatibilitySubstitutionRule substitution_rule, const std::string &preferred_model_id)
+PresetsConfigSubstitutions PresetBundle::load_presets(AppConfig &config, ForwardCompatibilitySubstitutionRule substitution_rule, const std::string &preferred_model_id)
 {
     // First load the vendor specific system presets.
     std::string errors_cummulative = this->load_system_presets();
@@ -176,7 +176,7 @@ AllFilesConfigSubstitutions PresetBundle::load_presets(AppConfig &config, Forwar
 #endif
         ;
 
-    AllFilesConfigSubstitutions substitutions;
+    PresetsConfigSubstitutions substitutions;
     try {
         this->prints.load_presets(dir_user_presets, "print", substitutions, substitution_rule);
     } catch (const std::runtime_error &err) {
@@ -896,6 +896,7 @@ ConfigSubstitutions PresetBundle::load_config_file_config_bundle(const std::stri
     PresetBundle tmp_bundle;
     // Load the config bundle, but don't save the loaded presets to user profile directory, as only the presets marked as active in the loaded preset bundle
     // will be loaded into the master PresetBundle and activated.
+    //FIXME Substitutions will be collected even for those presets, that will not be activated, but thrown away.
     auto [config_substitutions, presets_imported] = tmp_bundle.load_configbundle(path, {});
 
     std::string bundle_name = std::string(" - ") + boost::filesystem::path(path).filename().string();

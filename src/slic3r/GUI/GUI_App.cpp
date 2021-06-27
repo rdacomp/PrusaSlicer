@@ -1680,7 +1680,7 @@ void GUI_App::add_config_menu(wxMenuBar *menu)
                         Config::SnapshotDB::singleton().take_snapshot(*app_config, Config::Snapshot::SNAPSHOT_BEFORE_ROLLBACK);
                     try {
                         app_config->set("on_snapshot", Config::SnapshotDB::singleton().restore_snapshot(dlg.snapshot_to_activate(), *app_config).id);
-                        if (AllFilesConfigSubstitutions all_substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::Enable);
+                        if (PresetsConfigSubstitutions all_substitutions = preset_bundle->load_presets(*app_config, ForwardCompatibilitySubstitutionRule::Enable);
                             ! all_substitutions.empty()) {
                             // TODO:
                             show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
