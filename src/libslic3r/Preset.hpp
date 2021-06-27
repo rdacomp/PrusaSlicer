@@ -263,7 +263,7 @@ struct PresetConfigSubstitutions {
         ConfigBundle,
     };
     Source                                  preset_source;
-    // Source of the preset. It may be empty in case of the system config bundle.
+    // Source of the preset. It may be empty in case of a ConfigBundle being loaded.
     std::string                             preset_file;
     // What config value has been substituted with what.
     ConfigSubstitutions                     substitutions;
