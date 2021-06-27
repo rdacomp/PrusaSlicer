@@ -611,7 +611,7 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			update.install();
 
 			PresetBundle bundle;
-			bundle.load_configbundle(update.source.string(), PresetBundle::LOAD_CFGBNDLE_SYSTEM);
+			bundle.load_configbundle(update.source.string(), PresetBundle::LoadConfigBundleAttribute::LoadSystem);
 
 			BOOST_LOG_TRIVIAL(info) << format("Deleting %1% conflicting presets", bundle.prints.size() + bundle.filaments.size() + bundle.printers.size());
 

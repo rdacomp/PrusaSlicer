@@ -1517,7 +1517,13 @@ void MainFrame::load_config_file()
 bool MainFrame::load_config_file(const std::string &path)
 {
     try {
-        wxGetApp().preset_bundle->load_config_file(path); 
+        FileConfigSubstitutions config_substitutions = wxGetApp().preset_bundle->load_config_file(path, ForwardCompatibilitySubstitutionRule::Enable);
+        if (! config_substitutions.empty()) {
+            // TODO: Add list of changes from all_substitutions
+            show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+                " To recover these files, incompatible values were changed to default values."
+                " But data in files won't be changed until you save them in PrusaSlicer.")));
+        }
     } catch (const std::exception &ex) {
         show_error(this, ex.what());
         return false;
@@ -1573,12 +1579,20 @@ void MainFrame::load_configbundle(wxString file/* = wxEmptyString, const bool re
 
     wxGetApp().app_config->update_config_dir(get_dir_name(file));
 
-    auto presets_imported = 0;
+    size_t presets_imported = 0;
+    ConfigSubstitutionContext config_substitutions { ForwardCompatibilitySubstitutionRule::Disable };
     try {
-        presets_imported = wxGetApp().preset_bundle->load_configbundle(file.ToUTF8().data());
+        std::tie(config_substitutions, presets_imported) = wxGetApp().preset_bundle->load_configbundle(file.ToUTF8().data(), PresetBundle::LoadConfigBundleAttribute::SaveImported);
     } catch (const std::exception &ex) {
         show_error(this, ex.what());
         return;
+    }
+
+    if (! config_substitutions.empty()) {
+        // TODO: Add list of changes from all_substitutions
+        show_error(nullptr, GUI::format(_L("Loading profiles found following incompatibilities."
+            " To recover these files, incompatible values were changed to default values."
+            " But data in files won't be changed until you save them in PrusaSlicer.")));
     }
 
     // Load the currently selected preset into the GUI, update the preset selection box.

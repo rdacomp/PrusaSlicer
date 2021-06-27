@@ -95,7 +95,7 @@ void Model::update_links_bottom_up_recursive()
 }
 
 // Loading model from a file, it may be a simple geometry file as STL or OBJ, however it may be a project file as well.
-Model Model::read_from_file(const std::string& input_file, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, enum_bitmask<LoadAttribute> options)
+Model Model::read_from_file(const std::string& input_file, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, LoadAttributes options)
 {
     Model model;
 
@@ -140,7 +140,7 @@ Model Model::read_from_file(const std::string& input_file, DynamicPrintConfig* c
 }
 
 // Loading model from a file (3MF or AMF), not from a simple geometry file (STL or OBJ).
-Model Model::read_from_archive(const std::string& input_file, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, enum_bitmask<LoadAttribute> options)
+Model Model::read_from_archive(const std::string& input_file, DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions, LoadAttributes options)
 {
     assert(config != nullptr);
     assert(config_substitutions != nullptr);

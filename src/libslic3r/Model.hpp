@@ -984,15 +984,16 @@ public:
         AddDefaultInstances,
         CheckVersion
     };
+    using LoadAttributes = enum_bitmask<LoadAttribute>;
 
     static Model read_from_file(
         const std::string& input_file, 
         DynamicPrintConfig* config = nullptr, ConfigSubstitutionContext* config_substitutions = nullptr,
-        enum_bitmask<LoadAttribute> options = LoadAttribute::AddDefaultInstances);
+        LoadAttributes options = LoadAttribute::AddDefaultInstances);
     static Model read_from_archive(
         const std::string& input_file, 
         DynamicPrintConfig* config, ConfigSubstitutionContext* config_substitutions,
-        enum_bitmask<LoadAttribute> options = LoadAttribute::AddDefaultInstances);
+        LoadAttributes options = LoadAttribute::AddDefaultInstances);
 
     // Add a new ModelObject to this Model, generate a new ID for this ModelObject.
     ModelObject* add_object();

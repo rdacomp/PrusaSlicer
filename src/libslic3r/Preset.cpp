@@ -676,9 +676,8 @@ void PresetCollection::load_presets(const std::string &dir_path, const std::stri
                     DynamicPrintConfig config;
                     FileConfigSubstitutions file_conf_subs(rule, preset.file);
                     config.load_from_ini(preset.file, file_conf_subs);
-                    if (!file_conf_subs.substitutions.empty()) {
+                    if (!file_conf_subs.empty())
                         substitutions.emplace_back(std::move(file_conf_subs));
-                    }
                     // Find a default preset for the config. The PrintPresetCollection provides different default preset based on the "printer_technology" field.
                     const Preset &default_preset = this->default_preset_for(config);
                     preset.config = default_preset.config;
@@ -1578,9 +1577,8 @@ void PhysicalPrinterCollection::load_printers(const std::string& dir_path, const
                     DynamicPrintConfig config;
                     FileConfigSubstitutions file_conf_subs(rule, printer.file);
                     config.load_from_ini(printer.file, file_conf_subs);
-                    if (!file_conf_subs.substitutions.empty()) {
+                    if (!file_conf_subs.empty())
                         substitutions.emplace_back(std::move(file_conf_subs));
-                    }
                     printer.update_from_config(config);
                     printer.loaded = true;
                 }

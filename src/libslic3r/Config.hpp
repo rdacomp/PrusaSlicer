@@ -159,6 +159,7 @@ struct ConfigSubstitutionContext
 // Substitutions having been performed during parsing a single configuration file.
 struct FileConfigSubstitutions {
     FileConfigSubstitutions(ForwardCompatibilitySubstitutionRule rl, const std::string& fl) : rule(rl), file(fl) {}
+    bool empty() const throw() { return substitutions.empty(); }
 
     ForwardCompatibilitySubstitutionRule 	rule;
     std::string 			                file;
