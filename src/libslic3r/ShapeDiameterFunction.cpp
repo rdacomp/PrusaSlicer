@@ -10,13 +10,11 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                         const AABBTree &  tree,
                                         const Config &  config)
 {
-    // safe against ray intersection with origin trinagle made by source vertex
-    const double safe_move = 1e-5;
     // value for width when no intersection
     const float no_width = -1.;
 
     Vec3f ray_dir   = -normal;
-    Vec3d ray_point = (point + ray_dir * safe_move).cast<double>();
+    Vec3d ray_point = (point + ray_dir * config.safe_move).cast<double>();
 
     const Vec3f z_axe(0.f, 0.f, 1.f);
     Vec3f       axis  = z_axe.cross(ray_dir);
@@ -83,7 +81,7 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
         sum_weight += weight;
     }
     if (sum_weight <= 0.) return mean;
-    return sum_width / sum_weight + safe_move;
+    return sum_width / sum_weight + config.safe_move;
 }
 
 std::vector<float> ShapeDiameterFunction::calc_widths(
@@ -117,7 +115,8 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
 std::vector<Vec3f> ShapeDiameterFunction::generate_support_points(
     const indexed_triangle_set &its,
     const std::vector<float> &  widths,
-    const SampleConfig &        cfg)
+    const SampleConfig &        cfg,
+    std::mt19937&   random_generator)
 {
     assert(its.vertices.size() == widths.size());
 
@@ -127,52 +126,49 @@ std::vector<Vec3f> ShapeDiameterFunction::generate_support_points(
         if (width < cfg.min_width) return cfg.max_area_support;
         return (width - cfg.min_width) / width_range * area_range + cfg.min_area_support;        
     };
-
-    // random generator
-    std::mt19937        random_generator;
-    std::random_device rd;
-    random_generator.seed(rd());
-
     std::uniform_real_distribution<float> xDist(0.f, 1.f);
     std::uniform_real_distribution<float> yDist(0.f, 1.f);
     // probability to generate one more or not -- instead of round area
     std::uniform_real_distribution<float> generate_point(0.f, 1.f); 
 
-    float sample_area = cfg.max_area_support;
-
     // random sample triangle
     std::vector<Vec3f> sPts;
     for (const Vec3crd &triangle_indices : its.indices) {
         bool is_full_in_needs = true;
-        float count_per_mm2 = 0;
+        float area_for_one_support = 0.f;
         for (int i = 0; i < 3; ++i) {
             float width = widths[triangle_indices[i]];
             if (width > cfg.max_width) {
                 is_full_in_needs = false;
                 break;
             }
-            count_per_mm2 += width_to_count(width);
+            area_for_one_support += width_to_count(width);
         }
         if (!is_full_in_needs) continue;
-        count_per_mm2 /= 3.f;
+        area_for_one_support /= 3.f;
 
         float  area   = triangle_area(triangle_indices, its.vertices);
-        float  countf   = area / count_per_mm2;
+        float  countf   = area / area_for_one_support;
         float              int_part_of_count;
         float fraction = modf(countf, &int_part_of_count);
         int   count    = static_cast<int>(int_part_of_count);
         float              generate = generate_point(random_generator);
+        // IMPROVE: distribute fraction into neighbors
         if (generate < fraction) ++count;
         if (count == 0) continue;
 
         const Vec3f &v0 = its.vertices[triangle_indices[0]];
         const Vec3f &v1 = its.vertices[triangle_indices[1]];
         const Vec3f &v2 = its.vertices[triangle_indices[2]];
+
+        // Filtrate top side triangles
+        Vec3f n = (v1 - v0).cross(v2 - v0);
+        n.normalize();
+        if (n.z() > cfg.normal_z_max) continue;
+
         for (int c = 0; c < count; c++) {
             // barycentric coordinate
-            Vec3f b;
-            b[0] = xDist(random_generator);
-            b[1] = yDist(random_generator);
+            Vec3f b(xDist(random_generator), yDist(random_generator), 0.f);
             if ((b[0] + b[1]) > 1.f) {
                 b[0] = 1.f - b[0];
                 b[1] = 1.f - b[1];

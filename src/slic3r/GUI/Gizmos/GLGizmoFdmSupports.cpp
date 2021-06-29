@@ -264,6 +264,8 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             ImGui::SameLine();
             if(m_imgui->slider_float("min a", &sdf.sample_config.min_area_support, 0.001f, 100.f))
                 sdf.sample_surface();
+            if(m_imgui->slider_float("n.z", &sdf.sample_config.normal_z_max, 0.5f, 1.f))
+                sdf.sample_surface();
         }
     }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {

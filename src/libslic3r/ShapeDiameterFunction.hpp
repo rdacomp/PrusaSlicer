@@ -66,6 +66,9 @@ public:
         Directions dirs =
             ShapeDiameterFunction::create_fibonacci_sphere_samples(120., 60);
 
+        // safe against ray intersection with origin trinagle made by source vertex
+        float safe_move = 1e-3f;
+
         // create config with default values
         Config() = default;
 
@@ -117,6 +120,9 @@ public:
         // min_width is supported by max_area_support
         // max_width is supported by min_area_support
 
+        // filter top side triangles, acos(0.3) = 72.5 DEG
+        float normal_z_max = 0.3f;
+
         SampleConfig() = default;
     };
 
@@ -130,7 +136,7 @@ public:
     /// <returns>Vector of surface points</returns>
     static std::vector<Vec3f> generate_support_points(
         const indexed_triangle_set &its, const std::vector<float> &widths,
-        const SampleConfig& cfg);
+        const SampleConfig& cfg, std::mt19937& random_generator);
 
     /// <summary>
     /// Create points on unit sphere surface. with weight by z value

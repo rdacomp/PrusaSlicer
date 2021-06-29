@@ -131,7 +131,11 @@ bool GLShapeDiameterFunction::initialize_width() {
 }
 
 void GLShapeDiameterFunction::sample_surface() {
-    points = ShapeDiameterFunction::generate_support_points(triangles, widths, sample_config);
+    std::mt19937       random_generator;
+    std::random_device rd;
+    random_generator.seed(rd());
+    points = ShapeDiameterFunction::generate_support_points(
+        triangles, widths, sample_config, random_generator);
 }
 
 bool GLShapeDiameterFunction::initialize_indices()

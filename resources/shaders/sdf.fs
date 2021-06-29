@@ -3,7 +3,7 @@
 // cant create array
 //uniform vec3 colors[9] = vec3[9]( 
 float colors_size = 9.;
-const vec3 c8 = vec3(0.0, 0.0, 0.5);
+const vec3 c8 = vec3(0.0, 0.0, 0.5); 
 const vec3 c7 = vec3(0.0, 0.0, 1.0);
 const vec3 c6 = vec3(0.0, 0.5, 1.0);
 const vec3 c5 = vec3(0.0, 1.0, 1.0);
@@ -14,7 +14,8 @@ const vec3 c1 = vec3(1.0, 0.0, 0.0);
 const vec3 c0 = vec3(0.5, 0.0, 0.0);
 
 // color for place without calculated width
-const vec3 no_width = vec3(1.0, 1.0, 1.0);
+const vec3 no_width = vec3(1.0, 1.0, 1.0);   // WHITE
+const vec3 over_width = vec3(0.5, 0.5, 0.5); // GRAY
 
 uniform float min_width;
 uniform float width_range;
@@ -37,14 +38,15 @@ vec3 get_color(int index){
     if(index == 5) return c5;
     if(index == 6) return c6;
     if(index == 7) return c7;
-    return c8;
+    if(index == 8) return c8;
+    return over_width;
 }
 
 vec3 width_to_color3(float width){
     if(width < 0.) return no_width;
     float index_val = color_index(width); 
     if(index_val <= 0.) return get_color(0);
-    if(index_val >= 8.) return get_color(8);
+    if(index_val >= 8.) return over_width;
     float index_f = floor(index_val);
     int index = int(index_f);
     float ratio = index_val - index_f;    
