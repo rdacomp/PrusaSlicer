@@ -337,16 +337,14 @@ void ObjectTexture::update()
             m_parent->Layout();
         }
 
-        if (m_main_sizer->IsShown(m_metadata_sizer)) {
-            // update widgets data
-            m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.mapping));
-            m_move_u_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.offset_u));
-            m_move_v_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.offset_v));
-            m_repeat_u_spin->SetValue(static_cast<double>(model_object.second->texture.repeat_u));
-            m_repeat_v_spin->SetValue(static_cast<double>(model_object.second->texture.repeat_v));
-            m_rotation_spin->SetValue(static_cast<double>(model_object.second->texture.rotation));
-            m_wrap_choices->SetSelection(static_cast<int>(model_object.second->texture.wrapping));
-        }
+        // update widgets data
+        m_map_choices->SetSelection(static_cast<int>(model_object.second->texture.mapping));
+        m_move_u_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.offset_u));
+        m_move_v_spin->SetValue(100.0 * static_cast<double>(model_object.second->texture.offset_v));
+        m_repeat_u_spin->SetValue(static_cast<double>(model_object.second->texture.repeat_u));
+        m_repeat_v_spin->SetValue(static_cast<double>(model_object.second->texture.repeat_v));
+        m_rotation_spin->SetValue(static_cast<double>(model_object.second->texture.rotation));
+        m_wrap_choices->SetSelection(static_cast<int>(model_object.second->texture.wrapping));
     }
     else {
         if (m_main_sizer->GetItem(m_metadata_sizer) != nullptr) {
