@@ -62,7 +62,7 @@ const std::string RELATIONSHIPS_FILE = "_rels/.rels";
 #if ENABLE_TEXTURED_VOLUMES
 const std::string MODEL_RELATIONSHIPS_FILE = "3D/_rels/3dmodel.model.rels";
 const std::string TEXTURES_PATH = "3D/Texture/";
-const std::string TEXTURES_EXTENSION = ".texture.png";
+const std::string TEXTURES_EXTENSION = "png";
 #endif // ENABLE_TEXTURED_VOLUMES
 const std::string THUMBNAIL_FILE = "Metadata/thumbnail.png";
 const std::string PRINT_CONFIG_FILE = "Metadata/Slic3r_PE.config";
@@ -291,7 +291,7 @@ namespace Slic3r {
 
     std::string encode_texture_filename(const std::string& name)
     {
-        return TEXTURES_PATH + encode_texture_name(name) + TEXTURES_EXTENSION; // Microsoft 3DBuilder uses this composed extension, is it really needed ?
+        return TEXTURES_PATH + encode_texture_name(name) + "." + TEXTURES_EXTENSION;
     }
 #endif // ENABLE_TEXTURED_VOLUMES
 
@@ -712,7 +712,7 @@ namespace Slic3r {
                     _extract_custom_gcode_per_print_z_from_archive(archive, stat);
                 }
 #if ENABLE_TEXTURED_VOLUMES
-                else if (boost::algorithm::istarts_with(name, TEXTURES_PATH) && boost::algorithm::iends_with(name, TEXTURES_EXTENSION)) {
+                else if (boost::algorithm::istarts_with(name, TEXTURES_PATH) && boost::algorithm::iends_with(name, std::string(".") + TEXTURES_EXTENSION)) {
                     std::string tex_name = decode_texture_name(_extract_texture_from_archive(archive, stat));
                     if (!tex_name.empty())
                         // collect texture filenames for later use
@@ -1386,14 +1386,7 @@ namespace Slic3r {
                 return "";
             }
 
-            std::string stem = boost::algorithm::iends_with(stat.m_filename, TEXTURES_EXTENSION) ?
-                // this is because TEXTURES_EXTENSION contains a composed extension (".texture.png")
-                boost::filesystem::path(stat.m_filename).stem().stem().string() : 
-                boost::filesystem::path(stat.m_filename).stem().string();
-
-            std::string filename = boost::filesystem::path(stat.m_filename).parent_path().string() + "/" + stem + ".png";
-
-            return m_model->textures_manager.add_texture_from_png_buffer(decode_texture_name(filename), buffer);
+            return m_model->textures_manager.add_texture_from_png_buffer(decode_texture_name(stat.m_filename), buffer);
         }
         return "";
     }
