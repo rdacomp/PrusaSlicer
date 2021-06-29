@@ -127,17 +127,15 @@ void GLTexture::Compressor::compress()
 
 GLTexture::Quad_UVs GLTexture::FullTextureUVs = { { 0.0f, 1.0f }, { 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 0.0f } };
 
-bool GLTexture::load_from_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
+bool GLTexture::load_from_png_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
 {
     reset();
 
     if (!boost::filesystem::exists(filename))
         return false;
 
-    if (boost::algorithm::iends_with(filename, ".png"))
-        return load_from_png(filename, use_mipmaps, compression_type, apply_anisotropy);
-    else
-        return false;
+    return boost::algorithm::iends_with(filename, ".png") ? 
+        load_from_png_file_internal(filename, use_mipmaps, compression_type, apply_anisotropy) : false;
 }
 
 bool GLTexture::load_from_svg_file(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px)
@@ -147,10 +145,8 @@ bool GLTexture::load_from_svg_file(const std::string& filename, bool use_mipmaps
     if (!boost::filesystem::exists(filename))
         return false;
 
-    if (boost::algorithm::iends_with(filename, ".svg"))
-        return load_from_svg(filename, use_mipmaps, compress, apply_anisotropy, max_size_px);
-    else
-        return false;
+    return boost::algorithm::iends_with(filename, ".svg") ?
+        load_from_svg_file_internal(filename, use_mipmaps, compress, apply_anisotropy, max_size_px) : false;
 }
 
 bool GLTexture::load_from_svg_files_as_sprites_array(const std::vector<std::string>& filenames, const std::vector<std::pair<int, bool>>& states, unsigned int sprite_size_px, bool compress)
@@ -307,7 +303,7 @@ bool GLTexture::load_from_svg_files_as_sprites_array(const std::vector<std::stri
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-bool GLTexture::load_from_png_memory(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
+bool GLTexture::load_from_png_buffer(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
 {
     reset();
 
@@ -551,7 +547,7 @@ void GLTexture::render_sub_texture(unsigned int tex_id, float left, float right,
     glsafe(::glDisable(GL_BLEND));
 }
 
-bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
+bool GLTexture::load_from_png_file_internal(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
 {
     const bool compression_enabled = (compression_type != ECompressionType::None) && GLEW_EXT_texture_compression_s3tc;
 
@@ -610,7 +606,7 @@ bool GLTexture::load_from_png(const std::string& filename, bool use_mipmaps, ECo
     return true;
 }
 
-bool GLTexture::load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px)
+bool GLTexture::load_from_svg_file_internal(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px)
 {
     const bool compression_enabled = compress && GLEW_EXT_texture_compression_s3tc;
 

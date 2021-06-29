@@ -7,6 +7,7 @@
 #include "../Geometry.hpp"
 #if ENABLE_TEXTURED_VOLUMES
 #include "../TextureData.hpp"
+#include "../TextureMetadata.hpp"
 #else
 #include "../GCode/ThumbnailData.hpp"
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -61,6 +62,7 @@ const std::string RELATIONSHIPS_FILE = "_rels/.rels";
 #if ENABLE_TEXTURED_VOLUMES
 const std::string MODEL_RELATIONSHIPS_FILE = "3D/_rels/3dmodel.model.rels";
 const std::string TEXTURES_PATH = "3D/Texture/";
+const std::string TEXTURES_EXTENSION = ".texture.png";
 #endif // ENABLE_TEXTURED_VOLUMES
 const std::string THUMBNAIL_FILE = "Metadata/thumbnail.png";
 const std::string PRINT_CONFIG_FILE = "Metadata/Slic3r_PE.config";
@@ -85,6 +87,7 @@ static constexpr const char* BUILD_TAG = "build";
 static constexpr const char* ITEM_TAG = "item";
 static constexpr const char* METADATA_TAG = "metadata";
 #if ENABLE_TEXTURED_VOLUMES
+static constexpr const char* TEXTURE_TAG = "texture";
 static constexpr const char* TEXTURE2D_TAG = "m:texture2d";
 static constexpr const char* TEXTURE2DGROUP_TAG = "m:texture2dgroup";
 static constexpr const char* TEX2COORD_TAG = "m:tex2coord";
@@ -118,6 +121,9 @@ static constexpr const char* LAST_TRIANGLE_ID_ATTR = "lastid";
 
 static constexpr const char* OBJECT_TYPE = "object";
 static constexpr const char* VOLUME_TYPE = "volume";
+#if ENABLE_TEXTURED_VOLUMES
+static constexpr const char* TEXTURE_TYPE = "texture";
+#endif // ENABLE_TEXTURED_VOLUMES
 
 static constexpr const char* NAME_KEY = "name";
 static constexpr const char* MODIFIER_KEY = "modifier";
@@ -131,6 +137,15 @@ static constexpr const char* SOURCE_OFFSET_Y_KEY = "source_offset_y";
 static constexpr const char* SOURCE_OFFSET_Z_KEY = "source_offset_z";
 static constexpr const char* SOURCE_IN_INCHES    = "source_in_inches";
 static constexpr const char* SOURCE_IN_METERS    = "source_in_meters";
+#if ENABLE_TEXTURED_VOLUMES
+static constexpr const char* MAPPING_KEY = "mapping";
+static constexpr const char* WRAPPING_KEY = "wrapping";
+static constexpr const char* OFFSET_U_KEY = "offset_u";
+static constexpr const char* OFFSET_V_KEY = "offset_v";
+static constexpr const char* REPEAT_U_KEY = "repeat_u";
+static constexpr const char* REPEAT_V_KEY = "repeat_u";
+static constexpr const char* ROTATION_KEY = "rotation";
+#endif // ENABLE_TEXTURED_VOLUMES
 
 const unsigned int VALID_OBJECT_TYPES_COUNT = 1;
 const char* VALID_OBJECT_TYPES[] =
@@ -259,6 +274,27 @@ namespace Slic3r {
 #define L(s) (s)
 #define _(s) Slic3r::I18N::translate(s)
 
+#if ENABLE_TEXTURED_VOLUMES
+    std::string encode_texture_name(const std::string& name)
+    {
+        std::string mod_name = name;
+        boost::replace_all(mod_name, " ", "%20"); // Microsoft 3DBuilder does this, is it really needed ?
+        return xml_escape(mod_name);
+    }
+
+    std::string decode_texture_name(const std::string& name)
+    {
+        std::string mod_name = name;
+        boost::replace_all(mod_name, "%20", " ");
+        return mod_name;
+    }
+
+    std::string encode_texture_filename(const std::string& name)
+    {
+        return TEXTURES_PATH + encode_texture_name(name) + TEXTURES_EXTENSION; // Microsoft 3DBuilder uses this composed extension, is it really needed ?
+    }
+#endif // ENABLE_TEXTURED_VOLUMES
+
     // Base class with error messages management
     class _3MF_Base
     {
@@ -385,10 +421,14 @@ namespace Slic3r {
                 }
             };
 
+
             typedef std::vector<VolumeMetadata> VolumeMetadataList;
 
             MetadataList metadata;
             VolumeMetadataList volumes;
+#if ENABLE_TEXTURED_VOLUMES
+            MetadataList texture;
+#endif // ENABLE_TEXTURED_VOLUMES
         };
 
         // Map from a 1 based 3MF object ID to a 0 based ModelObject index inside m_model->objects.
@@ -403,16 +443,16 @@ namespace Slic3r {
         typedef std::map<int, std::vector<sla::DrainHole>> IdToSlaDrainHolesMap;
 
         // Version of the 3mf file
-        unsigned int m_version;
-        bool m_check_version;
+        unsigned int m_version{ 0 };
+        bool m_check_version{ false };
 
-        XML_Parser m_xml_parser;
+        XML_Parser m_xml_parser{ nullptr };
         // Error code returned by the application side of the parser. In that case the expat may not reliably deliver the error state
         // after returning from XML_Parse() function, thus we keep the error state here.
         bool m_parse_error { false };
         std::string m_parse_error_message;
-        Model* m_model;
-        float m_unit_factor;
+        Model* m_model{ nullptr };
+        float m_unit_factor{ 1.0f };
         CurrentObject m_curr_object;
         IdToModelObjectMap m_objects;
         IdToAliasesMap m_objects_aliases;
@@ -428,8 +468,19 @@ namespace Slic3r {
         std::string m_curr_characters;
         std::string m_name;
 
+#if ENABLE_TEXTURED_VOLUMES
+        struct Texture
+        {
+            std::string filename;
+            std::string name;
+            bool used{ false };
+        };
+
+        std::vector<Texture> m_textures;
+#endif // ENABLE_TEXTURED_VOLUMES
+
     public:
-        _3MF_Importer();
+        _3MF_Importer() = default;
         ~_3MF_Importer();
 
         bool load_model_from_file(const std::string& filename, Model& model, DynamicPrintConfig& config, ConfigSubstitutionContext& config_substitutions, bool check_version);
@@ -455,6 +506,9 @@ namespace Slic3r {
         void _extract_sla_drain_holes_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat);
 
         void _extract_custom_gcode_per_print_z_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat);
+#if ENABLE_TEXTURED_VOLUMES
+        std::string _extract_texture_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat);
+#endif // ENABLE_TEXTURED_VOLUMES
 
         void _extract_print_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, DynamicPrintConfig& config, ConfigSubstitutionContext& subs_context, const std::string& archive_filename);
         bool _extract_model_config_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat, Model& model);
@@ -535,18 +589,6 @@ namespace Slic3r {
         static void XMLCALL _handle_end_config_xml_element(void* userData, const char* name);
     };
 
-    _3MF_Importer::_3MF_Importer()
-        : m_version(0)
-        , m_check_version(false)
-        , m_xml_parser(nullptr)
-        , m_model(nullptr)   
-        , m_unit_factor(1.0f)
-        , m_curr_metadata_name("")
-        , m_curr_characters("")
-        , m_name("")
-    {
-    }
-
     _3MF_Importer::~_3MF_Importer()
     {
         _destroy_xml_parser();
@@ -571,6 +613,9 @@ namespace Slic3r {
         m_sla_support_points.clear();
         m_curr_metadata_name.clear();
         m_curr_characters.clear();
+#if ENABLE_TEXTURED_VOLUMES
+        m_textures.clear();
+#endif // ENABLE_TEXTURED_VOLUMES
         clear_errors();
 
         return _load_model_from_file(filename, model, config, config_substitutions);
@@ -666,6 +711,14 @@ namespace Slic3r {
                     // extract slic3r layer config ranges file
                     _extract_custom_gcode_per_print_z_from_archive(archive, stat);
                 }
+#if ENABLE_TEXTURED_VOLUMES
+                else if (boost::algorithm::istarts_with(name, TEXTURES_PATH) && boost::algorithm::iends_with(name, TEXTURES_EXTENSION)) {
+                    std::string tex_name = decode_texture_name(_extract_texture_from_archive(archive, stat));
+                    if (!tex_name.empty())
+                        // collect texture filenames for later use
+                        m_textures.push_back({ name, tex_name, false});
+                }
+#endif // ENABLE_TEXTURED_VOLUMES
                 else if (boost::algorithm::iequals(name, MODEL_CONFIG_FILE)) {
                     // extract slic3r model config file
                     if (!_extract_model_config_from_archive(archive, stat, model)) {
@@ -769,7 +822,7 @@ namespace Slic3r {
 
                 // apply object's name and config data
                 for (const Metadata& metadata : obj_metadata->second.metadata) {
-                    if (metadata.key == "name")
+                    if (metadata.key == NAME_KEY)
                         model_object->name = metadata.value;
                     else
                         model_object->config.set_deserialize(metadata.key, metadata.value, config_substitutions);
@@ -777,6 +830,40 @@ namespace Slic3r {
 
                 // select object's detected volumes
                 volumes_ptr = &obj_metadata->second.volumes;
+
+#if ENABLE_TEXTURED_VOLUMES
+                // apply object's texture data
+                for (const Metadata& metadata : obj_metadata->second.texture) {
+                    if (metadata.key == NAME_KEY) {
+                        std::string value = decode_texture_name(metadata.value);
+                        auto it = std::find_if(m_textures.begin(), m_textures.end(), [&value](const Texture& texture) { return texture.name == value; });
+                        if (it != m_textures.end()) {
+                            it->used = true;
+                            model_object->texture.name = value;
+                        }
+                    }
+                    else if (metadata.key == MAPPING_KEY) {
+                        int value = std::stoi(metadata.value);
+                        if (static_cast<int>(TextureMetadata::EMapping::Cubic) <= value && value <= static_cast<int>(TextureMetadata::EMapping::Spherical))
+                            model_object->texture.mapping = static_cast<TextureMetadata::EMapping>(value);
+                    }
+                    else if (metadata.key == WRAPPING_KEY) {
+                        int value = std::stoi(metadata.value);
+                        if (static_cast<int>(TextureMetadata::EWrapping::Repeat) <= value && value <= static_cast<int>(TextureMetadata::EWrapping::ClampToBorder))
+                            model_object->texture.wrapping = static_cast<TextureMetadata::EWrapping>(value);
+                    }
+                    else if (metadata.key == OFFSET_U_KEY)
+                        model_object->texture.offset_u = std::stof(metadata.value);
+                    else if (metadata.key == OFFSET_V_KEY) 
+                        model_object->texture.offset_v = std::stof(metadata.value);
+                    else if (metadata.key == REPEAT_U_KEY) 
+                        model_object->texture.repeat_u = std::stof(metadata.value);
+                    else if (metadata.key == REPEAT_V_KEY)
+                        model_object->texture.repeat_v = std::stof(metadata.value);
+                    else if (metadata.key == ROTATION_KEY)
+                        model_object->texture.rotation = std::stof(metadata.value);
+                }
+#endif // ENABLE_TEXTURED_VOLUMES
             }
             else {
                 // config data not found, this model was not saved using slic3r pe
@@ -812,6 +899,13 @@ namespace Slic3r {
 
 //        // fixes the min z of the model if negative
 //        model.adjust_min_z();
+
+#if ENABLE_TEXTURED_VOLUMES
+        for (const Texture& texture : m_textures) {
+            if (!texture.used)
+                m_model->textures_manager.remove_texture(texture.name);
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
 
         return true;
     }
@@ -1280,6 +1374,30 @@ namespace Slic3r {
             }
         }
     }
+
+#if ENABLE_TEXTURED_VOLUMES
+    std::string _3MF_Importer::_extract_texture_from_archive(mz_zip_archive& archive, const mz_zip_archive_file_stat& stat)
+    {
+        if (stat.m_uncomp_size > 0) {
+            std::vector<unsigned char> buffer((size_t)stat.m_uncomp_size, 0);
+            mz_bool res = mz_zip_reader_extract_file_to_mem(&archive, stat.m_filename, (void*)buffer.data(), (size_t)stat.m_uncomp_size, 0);
+            if (res == 0) {
+                add_error("Error while reading texture");
+                return "";
+            }
+
+            std::string stem = boost::algorithm::iends_with(stat.m_filename, TEXTURES_EXTENSION) ?
+                // this is because TEXTURES_EXTENSION contains a composed extension (".texture.png")
+                boost::filesystem::path(stat.m_filename).stem().stem().string() : 
+                boost::filesystem::path(stat.m_filename).stem().string();
+
+            std::string filename = boost::filesystem::path(stat.m_filename).parent_path().string() + "/" + stem + ".png";
+
+            return m_model->textures_manager.add_texture_from_png_buffer(decode_texture_name(filename), buffer);
+        }
+        return "";
+    }
+#endif // ENABLE_TEXTURED_VOLUMES
 
     void _3MF_Importer::_handle_start_model_xml_element(const char* name, const char** attributes)
     {
@@ -1828,6 +1946,10 @@ namespace Slic3r {
             if (size_t(m_curr_config.volume_id) < object->second.volumes.size())
                 object->second.volumes[m_curr_config.volume_id].metadata.emplace_back(key, value);
         }
+#if ENABLE_TEXTURED_VOLUMES
+        else if (type == TEXTURE_TYPE)
+            object->second.texture.emplace_back(key, value);
+#endif // ENABLE_TEXTURED_VOLUMES
         else {
             add_error("Found invalid metadata type");
             return false;
@@ -2351,13 +2473,6 @@ namespace Slic3r {
     }
 
 #if ENABLE_TEXTURED_VOLUMES
-    std::string format_texture_name(const std::string& name)
-    {
-        std::string mod_name = name;
-        boost::replace_all(mod_name, " ", "%20"); // Microsoft 3DBuilder does this, is it really needed ?
-        return TEXTURES_PATH + mod_name + ".texture.png";// Microsoft 3DBuilder uses this composed extension, is it really needed ?
-    }
-
     bool _3MF_Exporter::_add_model_relationships_file_to_archive(mz_zip_archive& archive, const std::vector<std::string>& textures_names)
     {
         std::stringstream stream;
@@ -2366,7 +2481,7 @@ namespace Slic3r {
 
         unsigned int count = 1;
         for (const std::string& name : textures_names) {
-            stream << " <Relationship Target=\"/" << format_texture_name(name) << "\" Id=\"rel-model-" << count << "\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture\"/>\n";
+            stream << " <Relationship Target=\"/" << encode_texture_filename(name) << "\" Id=\"rel-model-" << count << "\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture\"/>\n";
             ++count;
         }
 
@@ -2389,7 +2504,7 @@ namespace Slic3r {
         for (const std::string& name : textures_names) {
             const TextureData& data = model.textures_manager.get_texture_data(name);
             if (data.is_valid())
-                res |= mz_zip_writer_add_mem(&archive, format_texture_name(name).c_str(), (const void*)data.data.data(), data.data.size(), MZ_DEFAULT_COMPRESSION) == 1;
+                res |= mz_zip_writer_add_mem(&archive, encode_texture_filename(name).c_str(), (const void*)data.data.data(), data.data.size(), MZ_DEFAULT_COMPRESSION) == 1;
         }
 
         return res;
@@ -2558,7 +2673,7 @@ namespace Slic3r {
                 std::stringstream stream;
 
                 for (const std::string& name : textures_names) {
-                    stream << "  <" << TEXTURE2D_TAG << " id=\"" << m_resource_id++ << "\" path=\"/" << format_texture_name(name) << "\" contenttype=\"image/png\"/>\n"; // FIXME: add missing attributes ?
+                    stream << "  <" << TEXTURE2D_TAG << " id=\"" << m_resource_id++ << "\" path=\"/" << encode_texture_filename(name) << "\" contenttype=\"image/png\"/>\n"; // FIXME: add missing attributes ?
                 }
 
                 std::string buf = stream.str();
@@ -3125,7 +3240,23 @@ namespace Slic3r {
 
                 // stores object's name
                 if (!obj->name.empty())
-                    stream << "  <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << OBJECT_TYPE << "\" " << KEY_ATTR << "=\"name\" " << VALUE_ATTR << "=\"" << xml_escape(obj->name) << "\"/>\n";
+                    stream << "  <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << OBJECT_TYPE << "\" " << KEY_ATTR << "=\"" << NAME_KEY << "\" " << VALUE_ATTR << "=\"" << xml_escape(obj->name) << "\"/>\n";
+
+#if ENABLE_TEXTURED_VOLUMES
+                // stored texture data
+                if (!obj->texture.name.empty()) {
+                    stream << "  <" << TEXTURE_TAG << ">\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << NAME_KEY << "\" " << VALUE_ATTR << "=\"" << xml_escape(encode_texture_name(obj->texture.name)) << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << MAPPING_KEY << "\" " << VALUE_ATTR << "=\"" << static_cast<int>(obj->texture.mapping) << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << WRAPPING_KEY << "\" " << VALUE_ATTR << "=\"" << static_cast<int>(obj->texture.wrapping) << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << OFFSET_U_KEY << "\" " << VALUE_ATTR << "=\"" << obj->texture.offset_u << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << OFFSET_V_KEY << "\" " << VALUE_ATTR << "=\"" << obj->texture.offset_v << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << REPEAT_U_KEY << "\" " << VALUE_ATTR << "=\"" << obj->texture.repeat_u << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << REPEAT_V_KEY << "\" " << VALUE_ATTR << "=\"" << obj->texture.repeat_v << "\"/>\n";
+                    stream << "   <" << METADATA_TAG << " " << TYPE_ATTR << "=\"" << TEXTURE_TYPE << "\" " << KEY_ATTR << "=\"" << ROTATION_KEY << "\" " << VALUE_ATTR << "=\"" << obj->texture.rotation << "\"/>\n";
+                    stream << "  </" << TEXTURE_TAG << ">\n";
+                }
+#endif // ENABLE_TEXTURED_VOLUMES
 
                 // stores object's config data
                 for (const std::string& key : obj->config.keys()) {

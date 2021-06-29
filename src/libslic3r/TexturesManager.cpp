@@ -13,7 +13,7 @@
 
 namespace Slic3r {
 
-std::string TexturesManager::add_texture(const std::string& filename)
+std::string TexturesManager::add_texture_from_file(const std::string& filename)
 {
     // check if the texture from the given filename is already in cache
     for (TextureItem& item : m_textures) {
@@ -48,89 +48,6 @@ std::string TexturesManager::add_texture(const std::string& filename)
     }
 
     return "";
-}
-
-void TexturesManager::remove_texture(const std::string& name)
-{
-    for (size_t i = 0; i < m_textures.size(); ++i) {
-        TextureItem& item = m_textures[i];
-        if (name == item.name) {
-            // decrement reference count
-            --item.count;
-            if (item.count == 0) {
-                // remove texture from the cache if count == 0
-                item.texture.reset();
-                m_textures.erase(m_textures.begin() + i);
-            }
-
-#if ENABLE_TEXTURES_MANAGER_DEBUG
-            output_content();
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
-
-            return;
-        }
-    }
-}
-
-void TexturesManager::remove_all_textures()
-{
-    m_textures.clear();
-#if ENABLE_TEXTURES_MANAGER_DEBUG
-    output_content();
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
-}
-
-#if ENABLE_TEXTURES_MANAGER_DEBUG
-void TexturesManager::output_content() const
-{
-    std::cout << "\nTexturesManager content\n";
-    std::cout << "=======================\n";
-
-    if (m_textures.empty())
-        std::cout << "empty\n";
-    else {
-        for (const TextureItem& item : m_textures) {
-            std::cout << item.name << " (" << item.count << ")\n";
-        }
-    }
-
-    std::cout << "=======================\n\n";
-}
-#endif // ENABLE_TEXTURES_MANAGER_DEBUG
-
-std::vector<std::string> TexturesManager::get_texture_names() const
-{
-    std::vector<std::string> ret;
-    for (const TextureItem& item : m_textures) {
-        ret.push_back(item.name);
-    }
-    return ret;
-}
-
-const TextureData& TexturesManager::get_texture_data(const std::string& name) const
-{
-    for (const TextureItem& item : m_textures) {
-        if (name == item.name)
-            return *item.texture;
-    }
-    return TextureData::DUMMY;
-}
-
-std::string TexturesManager::decode_name(const std::string& name)
-{
-    std::string::size_type pos = name.find(':');
-    return (pos == name.npos) ? name : name.substr(0, pos);
-}
-
-std::string TexturesManager::encode_name(const std::string& name)
-{
-    unsigned int count = 0;
-    for (TextureItem& item : m_textures) {
-        if (item.name == name || boost::istarts_with(item.name, name + ":"))
-            ++count;
-    }
-
-    return (count == 0) ? name : TexturesManager::decode_name(name) + ":" + std::to_string(count);
 }
 
 static std::pair<unsigned int, unsigned int> extract_size_from_png_buffer(const std::vector<unsigned char>& png_data)
@@ -216,6 +133,143 @@ static std::pair<unsigned int, unsigned int> extract_size_from_png_buffer(const 
     ret.second = height;
 
     return ret;
+}
+
+std::string TexturesManager::add_texture_from_png_buffer(const std::string& filename, const std::vector<unsigned char>& png_data)
+{
+    // check if the texture from the given filename is already in cache
+    for (TextureItem& item : m_textures) {
+        if (filename == item.source) {
+            // increment reference count
+            ++item.count;
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+            output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+            // return texture name
+            return item.name;
+        }
+    }
+
+    // extract the texture from the buffer and add it to the cache
+    std::shared_ptr<TextureData> texture = std::make_shared<TextureData>();
+    TextureItem item;
+    item.texture = std::make_shared<TextureData>();
+    item.texture->format = TextureData::EFormat::png;
+    item.source = filename;
+    item.name = encode_name(boost::filesystem::path(filename).stem().string());    
+    item.texture->data = png_data;
+    const auto& [width, height] = extract_size_from_png_buffer(item.texture->data);
+    if (width > 0 && height > 0) {
+        item.texture->width = width;
+        item.texture->height = height;
+        if (item.texture->is_valid()) {
+            item.count = 1;
+            m_textures.emplace_back(item);
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+            output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+            // return texture name
+            return m_textures.back().name;
+        }
+    }
+    return "";
+}
+
+void TexturesManager::merge(const TexturesManager& other)
+{
+    // FIXME : check for duplicates
+    m_textures.insert(m_textures.end(), other.m_textures.begin(), other.m_textures.end());
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+    output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+}
+
+void TexturesManager::remove_texture(const std::string& name)
+{
+    for (size_t i = 0; i < m_textures.size(); ++i) {
+        TextureItem& item = m_textures[i];
+        if (name == item.name) {
+            // decrement reference count
+            --item.count;
+            if (item.count == 0) {
+                // remove texture from the cache if count == 0
+                item.texture.reset();
+                m_textures.erase(m_textures.begin() + i);
+            }
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+            output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+            return;
+        }
+    }
+}
+
+void TexturesManager::remove_all_textures()
+{
+    m_textures.clear();
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+    output_content();
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+}
+
+#if ENABLE_TEXTURES_MANAGER_DEBUG
+void TexturesManager::output_content() const
+{
+    std::cout << "\nTexturesManager content\n";
+    std::cout << "=======================\n";
+
+    if (m_textures.empty())
+        std::cout << "empty\n";
+    else {
+        for (const TextureItem& item : m_textures) {
+            std::cout << item.name << " (" << item.count << ")\n";
+        }
+    }
+
+    std::cout << "=======================\n\n";
+}
+#endif // ENABLE_TEXTURES_MANAGER_DEBUG
+
+std::vector<std::string> TexturesManager::get_texture_names() const
+{
+    std::vector<std::string> ret;
+    for (const TextureItem& item : m_textures) {
+        ret.push_back(item.name);
+    }
+    return ret;
+}
+
+const TextureData& TexturesManager::get_texture_data(const std::string& name) const
+{
+    for (const TextureItem& item : m_textures) {
+        if (name == item.name)
+            return *item.texture;
+    }
+    return TextureData::DUMMY;
+}
+
+std::string TexturesManager::decode_name(const std::string& name)
+{
+    std::string::size_type pos = name.find(':');
+    return (pos == name.npos) ? name : name.substr(0, pos);
+}
+
+std::string TexturesManager::encode_name(const std::string& name)
+{
+    unsigned int count = 0;
+    for (TextureItem& item : m_textures) {
+        if (item.name == name || boost::istarts_with(item.name, name + ":"))
+            ++count;
+    }
+
+    return (count == 0) ? name : TexturesManager::decode_name(name) + ":" + std::to_string(count);
 }
 
 bool TexturesManager::load_from_ideamaker_texture_file(const std::string& filename, TextureItem& out)

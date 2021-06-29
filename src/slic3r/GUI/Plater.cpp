@@ -2306,7 +2306,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                             " But data in files won't be changed until you save them in PrusaSlicer.")));
                     }
 
-                    this->model.custom_gcode_per_print_z = model.custom_gcode_per_print_z;
+                    model.custom_gcode_per_print_z = model.custom_gcode_per_print_z;
                 }
 
                 if (load_config) {
@@ -2471,6 +2471,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                     }
             }
 
+#if ENABLE_TEXTURED_VOLUMES
+            if (type_3mf)
+                // merge textures
+                this->model.textures_manager.merge(model.textures_manager);
+#endif // ENABLE_TEXTURED_VOLUMES
+
             if (one_by_one) {
 #if ENABLE_ALLOW_NEGATIVE_Z
                 auto loaded_idxs = load_model_objects(model.objects, is_project_file);
@@ -2523,6 +2529,12 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
             // this is required because the selected object changed and the flatten on face an sla support gizmos need to be updated accordingly
             view3D->get_canvas3d()->update_gizmos_on_off_state();
     }
+
+#if ENABLE_TEXTURED_VOLUMES
+    // update textures
+    view3D->get_canvas3d()->update_object_textures_from_model();
+    view3D->get_canvas3d()->update_volumes_texture_from_objects();
+#endif // ENABLE_TEXTURED_VOLUMES
 
     return obj_idxs;
 }
@@ -6674,21 +6686,21 @@ void Plater::bring_instance_forward()
 #if ENABLE_TEXTURED_VOLUMES
 std::string Plater::add_object_texture(const std::string& filename)
 {
-    std::string ret = p->model.textures_manager.add_texture(filename);
-    canvas3D()->update_object_textures_from_model(p->model);
+    std::string ret = p->model.textures_manager.add_texture_from_file(filename);
+    canvas3D()->update_object_textures_from_model();
     return ret;
 }
 
 void Plater::remove_object_texture(const std::string& name)
 {
     p->model.textures_manager.remove_texture(name);
-    canvas3D()->update_object_textures_from_model(p->model);
+    canvas3D()->update_object_textures_from_model();
 }
 
 void Plater::remove_all_object_textures()
 {
     p->model.textures_manager.remove_all_textures();
-    canvas3D()->update_object_textures_from_model(p->model);
+    canvas3D()->update_object_textures_from_model();
 }
 
 unsigned int Plater::get_object_texture_id(const std::string& name) const

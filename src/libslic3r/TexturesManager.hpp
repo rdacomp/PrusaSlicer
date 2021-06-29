@@ -6,6 +6,8 @@
 
 #include "TextureData.hpp"
 
+#include <memory>
+
 namespace Slic3r {
 
 class TexturesManager
@@ -25,7 +27,19 @@ class TexturesManager
     std::vector<TextureItem> m_textures;
 
 public:
-    std::string add_texture(const std::string& filename);
+    TexturesManager& operator = (const TexturesManager& other) {
+        m_textures = other.m_textures;
+        return *this;
+    }
+
+    TexturesManager& operator = (TexturesManager&& other) {
+        m_textures = std::move(other.m_textures);
+        return *this;
+    }
+
+    std::string add_texture_from_file(const std::string& filename);
+    std::string add_texture_from_png_buffer(const std::string& filename, const std::vector<unsigned char>& png_data);
+    void merge(const TexturesManager& other);
     void remove_texture(const std::string& name);
     void remove_all_textures();
 

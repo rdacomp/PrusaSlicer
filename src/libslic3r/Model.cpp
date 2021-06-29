@@ -46,7 +46,10 @@ Model& Model::assign_copy(const Model &rhs)
         mo->set_model(this);
 		this->objects.emplace_back(mo);
     }
-
+#if ENABLE_TEXTURED_VOLUMES
+    // copy textures
+    this->textures_manager = rhs.textures_manager;
+#endif // ENABLE_TEXTURED_VOLUMES
     // copy custom code per height
     this->custom_gcode_per_print_z = rhs.custom_gcode_per_print_z;
     return *this;
@@ -67,7 +70,10 @@ Model& Model::assign_copy(Model &&rhs)
     for (ModelObject *model_object : this->objects)
         model_object->set_model(this);
     rhs.objects.clear();
-
+#if ENABLE_TEXTURED_VOLUMES
+    // copy textures
+    this->textures_manager = std::move(rhs.textures_manager);
+#endif // ENABLE_TEXTURED_VOLUMES
     // copy custom code per height
     this->custom_gcode_per_print_z = std::move(rhs.custom_gcode_per_print_z);
     return *this;
@@ -163,8 +169,7 @@ Model Model::read_from_archive(const std::string& input_file, DynamicPrintConfig
     if (model.objects.empty())
         throw Slic3r::RuntimeError("The supplied file couldn't be read because it's empty");
 
-    for (ModelObject *o : model.objects)
-    {
+    for (ModelObject *o : model.objects) {
 //        if (boost::algorithm::iends_with(input_file, ".zip.amf"))
 //        {
 //            // we remove the .zip part of the extension to avoid it be added to filenames when exporting

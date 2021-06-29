@@ -93,9 +93,8 @@ bool GLGizmosManager::init()
     m_background_texture.metadata.right = 16;
     m_background_texture.metadata.bottom = 16;
 
-    if (!m_background_texture.metadata.filename.empty())
-    {
-        if (!m_background_texture.texture.load_from_file(resources_dir() + "/icons/" + m_background_texture.metadata.filename, false, GLTexture::ECompressionType::SingleThreaded, false))
+    if (!m_background_texture.metadata.filename.empty()) {
+        if (!m_background_texture.texture.load_from_png_file(resources_dir() + "/icons/" + m_background_texture.metadata.filename, false, GLTexture::ECompressionType::SingleThreaded, false))
             return false;
     }
 
@@ -129,8 +128,7 @@ bool GLGizmosManager::init()
 
 void GLGizmosManager::set_overlay_icon_size(float size)
 {
-    if (m_layout.icons_size != size)
-    {
+    if (m_layout.icons_size != size) {
         m_layout.icons_size = size;
         m_icons_texture_dirty = true;
     }
@@ -138,8 +136,7 @@ void GLGizmosManager::set_overlay_icon_size(float size)
 
 void GLGizmosManager::set_overlay_scale(float scale)
 {
-    if (m_layout.scale != scale)
-    {
+    if (m_layout.scale != scale) {
         m_layout.scale = scale;
         m_icons_texture_dirty = true;
     }

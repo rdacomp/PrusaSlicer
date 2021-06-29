@@ -175,7 +175,7 @@ bool GLToolbar::init(const BackgroundTexture::Metadata& background_texture)
     bool res = false;
 
     if (!background_texture.filename.empty())
-        res = m_background_texture.texture.load_from_file(path + background_texture.filename, false, GLTexture::ECompressionType::SingleThreaded, false);
+        res = m_background_texture.texture.load_from_png_file(path + background_texture.filename, false, GLTexture::ECompressionType::SingleThreaded, false);
 
     if (res)
         m_background_texture.metadata = background_texture;

@@ -91,7 +91,7 @@ namespace GUI {
         GLTexture() : m_compressor(*this) {}
         virtual ~GLTexture() { reset(); }
 
-        bool load_from_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
+        bool load_from_png_file(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
         bool load_from_svg_file(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
         // meanings of states: (std::pair<int, bool>)
         // first field (int):
@@ -104,7 +104,7 @@ namespace GUI {
         bool load_from_svg_files_as_sprites_array(const std::vector<std::string>& filenames, const std::vector<std::pair<int, bool>>& states, unsigned int sprite_size_px, bool compress);
 
 #if ENABLE_TEXTURED_VOLUMES
-        bool load_from_png_memory(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
+        bool load_from_png_buffer(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
 #endif // ENABLE_TEXTURED_VOLUMES
 
         void reset();
@@ -127,8 +127,8 @@ namespace GUI {
 #else
     private:
 #endif // ENABLE_TEXTURED_VOLUMES
-        bool load_from_png(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
-        bool load_from_svg(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
+        bool load_from_png_file_internal(const std::string& filename, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy);
+        bool load_from_svg_file_internal(const std::string& filename, bool use_mipmaps, bool compress, bool apply_anisotropy, unsigned int max_size_px);
         bool adjust_size_for_compression();
         void send_to_gpu(std::vector<unsigned char>& data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy,
             std::function<void(int, int, std::vector<unsigned char>&)> resampler);
