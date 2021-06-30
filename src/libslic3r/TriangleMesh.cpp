@@ -1133,14 +1133,15 @@ TriangleMesh make_sphere(double radius, double fa)
 
 void its_merge(indexed_triangle_set &A, const indexed_triangle_set &B)
 {
-    auto N   = int(A.vertices.size());
-    auto N_f = A.indices.size();
+    int count_vetices = static_cast<int>(A.vertices.size());
+    size_t count_indices = A.indices.size();
 
     A.vertices.insert(A.vertices.end(), B.vertices.begin(), B.vertices.end());
     A.indices.insert(A.indices.end(), B.indices.begin(), B.indices.end());
 
-    for(size_t n = N_f; n < A.indices.size(); n++)
-        A.indices[n] += Vec3i{N, N, N};
+    Vec3i add{count_vetices, count_vetices, count_vetices};
+    for(size_t n = count_indices; n < A.indices.size(); n++)
+        A.indices[n] += add;
 }
 
 void its_merge(indexed_triangle_set &A, const std::vector<Vec3f> &triangles)

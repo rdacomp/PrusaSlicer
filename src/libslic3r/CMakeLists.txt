@@ -151,6 +151,8 @@ add_library(libslic3r STATIC
     Platform.hpp
     Point.cpp
     Point.hpp
+    PointGrid3D.cpp
+    PointGrid3D.hpp
     Polygon.cpp
     Polygon.hpp
     MutablePolygon.cpp

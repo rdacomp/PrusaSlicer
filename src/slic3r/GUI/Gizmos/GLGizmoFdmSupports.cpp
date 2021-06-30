@@ -259,13 +259,23 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
         if (sdf.allow_render_points) {
             ImGui::SameLine();
-            if(m_imgui->slider_float("max a", &sdf.sample_config.max_area_support, 0.001f, 100.f))
+            if(m_imgui->slider_float("min r", &sdf.sample_config.min_radius, 0.001f, 100.f))
                 sdf.sample_surface();
             ImGui::SameLine();
-            if(m_imgui->slider_float("min a", &sdf.sample_config.min_area_support, 0.001f, 100.f))
+            if(m_imgui->slider_float("max r", &sdf.sample_config.max_radius, 0.001f, 100.f))
                 sdf.sample_surface();
-            if(m_imgui->slider_float("n.z", &sdf.sample_config.normal_z_max, 0.5f, 1.f))
+            ImGui::SameLine();
+            if(m_imgui->slider_float("max n.z", &sdf.sample_config.normal_z_max, 0.f, 1.f)){
                 sdf.sample_surface();
+                sdf.sdf_config.normal_z_max = sdf.sample_config.normal_z_max;
+            }
+            if(m_imgui->slider_float("multi", &sdf.sample_config.multiplicator, 1.f, 100.f))
+                sdf.sample_surface();
+            ImGui::SameLine();
+            m_imgui->text(
+                "Pts gen: " + std::to_string(sdf.count_generated_points) +
+                ", pts rest: " + std::to_string(sdf.points.size()));
+
         }
     }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {

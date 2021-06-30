@@ -231,9 +231,8 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
 #endif /* SLA_SUPPORTPOINTGEN_DEBUG */
 
     std::vector<SupportPointGenerator::MyLayer> layers = make_layers(slices, heights, m_throw_on_cancel);
-
-    PointGrid3D point_grid;
-    point_grid.cell_size = Vec3f(10.f, 10.f, 10.f);
+    Vec3f cell_size(10.f, 10.f, 10.f);
+    PointGrid3D point_grid(cell_size);
 
     double increment = 100.0 / layers.size();
     double status    = 0;
@@ -294,7 +293,7 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
     }
 }
 
-void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure &s, SupportPointGenerator::PointGrid3D &grid3d)
+void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure &s, PointGrid3D &grid3d)
 {
     // Select each type of surface (overrhang, dangling, slope), derive the support
     // force deficit for it and call uniformly conver with the right params
@@ -503,10 +502,10 @@ static inline std::vector<Vec2f> poisson_disk_from_samples(const std::vector<Vec
             const Vec2i          &cell_id   = it.first;
             PoissonDiskGridEntry &cell_data = it.second;
             // This cell's raw sample points start at first_sample_idx.  On trial 0, try the first one. On trial 1, try first_sample_idx + 1.
-            int next_sample_idx = cell_data.first_sample_idx + trial;
             if (trial >= cell_data.sample_cnt)
                 // There are no more points to try for this cell.
                 continue;
+            int next_sample_idx = cell_data.first_sample_idx + trial;
             const RawSample &candidate = raw_samples_sorted[next_sample_idx];
             // See if this point conflicts with any other points in this cell, or with any points in
             // neighboring cells.  Note that it's possible to have more than one point in the same cell.
@@ -587,7 +586,7 @@ void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure
     for (size_t iter = 0; iter < 4; ++ iter) {
         poisson_samples = poisson_disk_from_samples(raw_samples, poisson_radius,
             [&structure, &grid3d, min_spacing](const Vec2f &pos) {
-                return grid3d.collides_with(pos, structure.layer->print_z, min_spacing);
+                return grid3d.collides_with_lower_z(structure.create_pos3d(pos), min_spacing);
             });
         if (poisson_samples.size() >= poisson_samples_target || m_config.minimal_distance > poisson_radius-EPSILON)
             break;
@@ -619,7 +618,7 @@ void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure
     for (const Vec2f &pt : poisson_samples) {
         m_output.emplace_back(float(pt(0)), float(pt(1)), structure.zlevel, m_config.head_diameter/2.f, flags & icfIsNew);
         structure.supports_force_this_layer += m_config.support_force();
-        grid3d.insert(pt, &structure);
+        grid3d.insert(structure.create_pos3d(pt));
     }
 }
 

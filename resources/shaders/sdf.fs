@@ -19,6 +19,7 @@ const vec3 over_width = vec3(0.5, 0.5, 0.5); // GRAY
 
 uniform float min_width;
 uniform float width_range;
+uniform float normal_z_max;
 uniform bool draw_normals;
 
 varying vec3 normal;
@@ -60,5 +61,8 @@ void main()
     if(draw_normals){
         color = (normal + 1. ) / 2.;
     }
+    if(normal.z > normal_z_max) // out of allowed normal
+        for(int i=0; i<3 ;++i) 
+            color[i] = (6.*0.5 + color[i])/7.;
     gl_FragColor = vec4(vec3(intensity.y) + color * intensity.x, 1.);
 }

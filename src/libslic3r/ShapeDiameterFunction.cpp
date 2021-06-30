@@ -13,6 +13,8 @@ float ShapeDiameterFunction::calc_width(const Vec3f &     point,
     // value for width when no intersection
     const float no_width = -1.;
 
+    if(normal.z() > config.normal_z_max) return no_width;
+
     Vec3f ray_dir   = -normal;
     Vec3d ray_point = (point + ray_dir * config.safe_move).cast<double>();
 
@@ -112,19 +114,19 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     return widths;
 }
 
-std::vector<Vec3f> ShapeDiameterFunction::generate_support_points(
+void ShapeDiameterFunction::generate_support_points(
     const indexed_triangle_set &its,
     const std::vector<float> &  widths,
+    std::function<bool(Vec3f, float)> add_point,
     const SampleConfig &        cfg,
     std::mt19937&   random_generator)
 {
     assert(its.vertices.size() == widths.size());
 
     float width_range = cfg.max_width - cfg.min_width;
-    float area_range  = cfg.max_area_support - cfg.min_area_support;
-    auto  width_to_count = [&](float width) -> float { 
-        if (width < cfg.min_width) return cfg.max_area_support;
-        return (width - cfg.min_width) / width_range * area_range + cfg.min_area_support;        
+    float radius_range  = cfg.max_radius - cfg.min_radius;
+    auto  width_to_radius = [&](float width) -> float { 
+        return (width - cfg.min_width) / width_range * radius_range + cfg.min_radius;
     };
     std::uniform_real_distribution<float> xDist(0.f, 1.f);
     std::uniform_real_distribution<float> yDist(0.f, 1.f);
@@ -132,27 +134,30 @@ std::vector<Vec3f> ShapeDiameterFunction::generate_support_points(
     std::uniform_real_distribution<float> generate_point(0.f, 1.f); 
 
     // random sample triangle
-    std::vector<Vec3f> sPts;
     for (const Vec3crd &triangle_indices : its.indices) {
         bool is_full_in_needs = true;
         float area_for_one_support = 0.f;
+        Vec3f radiuses;
         for (int i = 0; i < 3; ++i) {
             float width = widths[triangle_indices[i]];
-            if (width > cfg.max_width) {
+            if (width > cfg.max_width || 
+                width < 0.) {
                 is_full_in_needs = false;
                 break;
             }
-            area_for_one_support += width_to_count(width);
+            radiuses[i] = width_to_radius(width);
+            float area  = radiuses[i] * radiuses[i] * M_PI;
+            area_for_one_support += area;
         }
         if (!is_full_in_needs) continue;
         area_for_one_support /= 3.f;
 
-        float  area   = triangle_area(triangle_indices, its.vertices);
-        float  countf   = area / area_for_one_support;
-        float              int_part_of_count;
+        float  area    = triangle_area(triangle_indices, its.vertices);
+        float countf   = area / area_for_one_support * cfg.multiplicator;
+        float int_part_of_count;
         float fraction = modf(countf, &int_part_of_count);
         int   count    = static_cast<int>(int_part_of_count);
-        float              generate = generate_point(random_generator);
+        float generate = generate_point(random_generator);
         // IMPROVE: distribute fraction into neighbors
         if (generate < fraction) ++count;
         if (count == 0) continue;
@@ -175,13 +180,14 @@ std::vector<Vec3f> ShapeDiameterFunction::generate_support_points(
             }
             b[2] = 1.f - b[0] - b[1];
             Vec3f pos;
+            float radius = 0.f;
             for (int i = 0; i < 3; i++) {
                 pos[i] = b[0] * v0[i] + b[1] * v1[i] + b[2] * v2[i];
+                radius += b[i] * radiuses[i];
             }
-            sPts.emplace_back(pos);
+            add_point(pos, radius);
         }
     }
-    return sPts;
 }
 
 // create points on unit sphere surface

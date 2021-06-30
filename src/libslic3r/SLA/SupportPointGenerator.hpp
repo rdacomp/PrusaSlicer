@@ -9,6 +9,7 @@
 #include <libslic3r/BoundingBox.hpp>
 #include <libslic3r/ClipperUtils.hpp>
 #include <libslic3r/Point.hpp>
+#include <libslic3r/PointGrid3D.hpp>
 
 #include <boost/container/small_vector.hpp>
 
@@ -128,6 +129,7 @@ public:
         }
         // Positive deficit of the supports. If negative, this area is well supported. If positive, more supports need to be added.
         float support_force_deficit(const float tear_pressure) const { return this->area * tear_pressure - this->supports_force_total(); }
+        Vec3f create_pos3d(const Vec2f &position2d) const { return Vec3f(position2d.x(),position2d.y(), static_cast<float>(layer->print_z));}
     };
     
     struct MyLayer {
@@ -135,64 +137,6 @@ public:
         size_t                  layer_id;
         coordf_t                print_z;
         std::vector<Structure>  islands;
-    };
-    
-    struct RichSupportPoint {
-        Vec3f        position;
-        Structure   *island;
-    };
-    
-    struct PointGrid3D {
-        struct GridHash {
-            std::size_t operator()(const Vec3i &cell_id) const {
-                return std::hash<int>()(cell_id.x()) ^ std::hash<int>()(cell_id.y() * 593) ^ std::hash<int>()(cell_id.z() * 7919);
-            }
-        };
-        typedef std::unordered_multimap<Vec3i, RichSupportPoint, GridHash> Grid;
-        
-        Vec3f   cell_size;
-        Grid    grid;
-        
-        Vec3i cell_id(const Vec3f &pos) {
-            return Vec3i(int(floor(pos.x() / cell_size.x())),
-                         int(floor(pos.y() / cell_size.y())),
-                         int(floor(pos.z() / cell_size.z())));
-        }
-        
-        void insert(const Vec2f &pos, Structure *island) {
-            RichSupportPoint pt;
-            pt.position = Vec3f(pos.x(), pos.y(), float(island->layer->print_z));
-            pt.island   = island;
-            grid.emplace(cell_id(pt.position), pt);
-        }
-        
-        bool collides_with(const Vec2f &pos, float print_z, float radius) {
-            Vec3f pos3d(pos.x(), pos.y(), print_z);
-            Vec3i cell = cell_id(pos3d);
-            std::pair<Grid::const_iterator, Grid::const_iterator> it_pair = grid.equal_range(cell);
-            if (collides_with(pos3d, radius, it_pair.first, it_pair.second))
-                return true;
-            for (int i = -1; i < 2; ++ i)
-                for (int j = -1; j < 2; ++ j)
-                    for (int k = -1; k < 1; ++ k) {
-                        if (i == 0 && j == 0 && k == 0)
-                            continue;
-                        it_pair = grid.equal_range(cell + Vec3i(i, j, k));
-                        if (collides_with(pos3d, radius, it_pair.first, it_pair.second))
-                            return true;
-                    }
-            return false;
-        }
-        
-    private:
-        bool collides_with(const Vec3f &pos, float radius, Grid::const_iterator it_begin, Grid::const_iterator it_end) {
-            for (Grid::const_iterator it = it_begin; it != it_end; ++ it) {
-                float dist2 = (it->second.position - pos).squaredNorm();
-                if (dist2 < radius * radius)
-                    return true;
-            }
-            return false;
-        }
     };
     
     void execute(const std::vector<ExPolygons> &slices,

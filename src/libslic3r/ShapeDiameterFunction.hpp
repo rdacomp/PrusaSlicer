@@ -69,6 +69,11 @@ public:
         // safe against ray intersection with origin trinagle made by source vertex
         float safe_move = 1e-3f;
 
+        // Filtration parameter for speed up
+        // Do not calculate Width from top of model
+        // Must be less or equal to SampleConfig::normal_z_max
+        float normal_z_max = 0.3f;
+
         // create config with default values
         Config() = default;
 
@@ -113,15 +118,23 @@ public:
         // range of width to support for linear distributiion of count supports
         float min_width = 0.1f; 
         float max_width = 10.f;
-        // range of generated support count
-        float max_area_support = 20.f; // [in mm^2]
-        float min_area_support = 2.f; // [in mm^2]
 
-        // min_width is supported by max_area_support
-        // max_width is supported by min_area_support
+        // range of alone support radius - for filtration of generated support points
+        float min_radius = 1.5f;
+        float max_radius = 10.f;
 
-        // filter top side triangles, acos(0.3) = 72.5 DEG
+        // at min_width is min_radius
+        // at max_width is max_radius
+
+        // filter top side triangles, 
+        // minimal angle to z Axis = acos(0.3) = 72.5 DEG 
+        // recommend value greater than zero to support vertical walls
         float normal_z_max = 0.3f;
+
+        // multiply count of generated samples(before Poisson filtration) for radius
+        // cover error of random generator
+        // recommend value in range(2 - 10)
+        float multiplicator = 5;
 
         SampleConfig() = default;
     };
@@ -134,8 +147,8 @@ public:
     /// <param name="widths">Width for each vertex(same size as its::vetices)</param>
     /// <param name="cfg">configuration where to generate support</param>
     /// <returns>Vector of surface points</returns>
-    static std::vector<Vec3f> generate_support_points(
-        const indexed_triangle_set &its, const std::vector<float> &widths,
+    static void generate_support_points(
+        const indexed_triangle_set &its, const std::vector<float> &widths, std::function<bool(Vec3f, float)> add_point,
         const SampleConfig& cfg, std::mt19937& random_generator);
 
     /// <summary>

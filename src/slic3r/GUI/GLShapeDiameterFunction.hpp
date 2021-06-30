@@ -43,7 +43,15 @@ public:
     // support points sampling
     std::vector<float> widths;
     ShapeDiameterFunction::SampleConfig sample_config;
-    std::vector<Vec3f> points;
+
+    struct PointRadius {
+        Vec3f point;
+        float radius;
+        PointRadius(Vec3f point, float radius) : point(point), radius(radius){}
+    };
+    using PointRadiuses = std::vector<PointRadius>;
+    size_t        count_generated_points;
+    PointRadiuses points;
     bool allow_render_points = false;
 
 public:
