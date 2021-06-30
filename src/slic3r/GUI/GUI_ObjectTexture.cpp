@@ -78,12 +78,12 @@ wxBoxSizer* ObjectTexture::init_tex_sizer()
     m_tex_delete_btn->SetBitmapDisabled_(m_bmp_delete_disabled);
 
     browse_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent& evt) {
-        wxFileDialog dialog(m_parent, _L("Choose a texture file:"), "", "", "Texture files (*.texture)|*.texture", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+        wxFileDialog dialog(m_parent, _L("Choose a texture file:"), "", "", file_wildcards(FT_OBJ_TEX), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
         if (dialog.ShowModal() != wxID_OK)
             return;
 
         std::string filename = dialog.GetPath().ToUTF8().data();
-        if (!boost::algorithm::iends_with(filename, ".texture"))
+        if (!boost::algorithm::iends_with(filename, ".png") && !boost::algorithm::iends_with(filename, ".texture"))
             return;
 
         const auto& [obj_idx, model_object] = get_model_object();

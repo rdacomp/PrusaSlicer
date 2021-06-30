@@ -57,7 +57,9 @@ private:
     // add a trailing ":id" to the given name string, if already in use
     std::string encode_name(const std::string& name);
 
-    bool load_from_ideamaker_texture_file(const std::string& filename, TextureItem& out);
+    bool load_texture_from_ideamaker_file(const std::string& filename, TextureItem& out);
+    bool load_texture_from_png_file(const std::string& filename, TextureItem& out);
+    bool load_texture_from_png_buffer(const std::string& filename, const std::vector<unsigned char>& png_data, TextureItem& out);
 };
 
 } // namespace Slic3r

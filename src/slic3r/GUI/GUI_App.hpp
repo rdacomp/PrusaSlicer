@@ -67,6 +67,9 @@ enum FileType
     FT_SVG,
 
     FT_TEX,
+#if ENABLE_TEXTURED_VOLUMES
+    FT_OBJ_TEX,
+#endif // ENABLE_TEXTURED_VOLUMES
 
     FT_PNGZIP,
 

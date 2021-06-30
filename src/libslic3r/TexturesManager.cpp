@@ -35,7 +35,14 @@ std::string TexturesManager::add_texture_from_file(const std::string& filename)
     TextureItem item;
     item.texture = std::make_shared<TextureData>();
     item.texture->format = TextureData::EFormat::png;
-    if (load_from_ideamaker_texture_file(filename, item)) {
+    bool res = false;
+
+    if (boost::algorithm::iends_with(filename, ".png"))
+        res = load_texture_from_png_file(filename, item);
+    else if (boost::algorithm::iends_with(filename, ".texture"))
+        res = load_texture_from_ideamaker_file(filename, item);
+
+    if (res) {
         item.count = 1;
         m_textures.emplace_back(item);
 
@@ -157,25 +164,18 @@ std::string TexturesManager::add_texture_from_png_buffer(const std::string& file
     TextureItem item;
     item.texture = std::make_shared<TextureData>();
     item.texture->format = TextureData::EFormat::png;
-    item.source = filename;
-    item.name = encode_name(boost::filesystem::path(filename).stem().string());    
-    item.texture->data = png_data;
-    const auto& [width, height] = extract_size_from_png_buffer(item.texture->data);
-    if (width > 0 && height > 0) {
-        item.texture->width = width;
-        item.texture->height = height;
-        if (item.texture->is_valid()) {
-            item.count = 1;
-            m_textures.emplace_back(item);
+    if (load_texture_from_png_buffer(filename, png_data, item)) {
+        item.count = 1;
+        m_textures.emplace_back(item);
 
 #if ENABLE_TEXTURES_MANAGER_DEBUG
-            output_content();
+        output_content();
 #endif // ENABLE_TEXTURES_MANAGER_DEBUG
 
-            // return texture name
-            return m_textures.back().name;
-        }
+        // return texture name
+        return m_textures.back().name;
     }
+
     return "";
 }
 
@@ -272,52 +272,95 @@ std::string TexturesManager::encode_name(const std::string& name)
     return (count == 0) ? name : TexturesManager::decode_name(name) + ":" + std::to_string(count);
 }
 
-bool TexturesManager::load_from_ideamaker_texture_file(const std::string& filename, TextureItem& out)
+bool TexturesManager::load_texture_from_ideamaker_file(const std::string& filename, TextureItem& out)
 {
     if (!boost::filesystem::exists(filename))
         return false;
 
-    if (boost::algorithm::iends_with(filename, ".texture")) {
-        boost::nowide::ifstream file(filename, boost::nowide::ifstream::binary);
-        if (!file.good())
-            return false;
+    if (!boost::algorithm::iends_with(filename, ".texture"))
+        return false;
 
-        boost::property_tree::ptree root;
-        boost::property_tree::read_json(file, root);
+    boost::nowide::ifstream file(filename, boost::nowide::ifstream::binary);
+    if (!file.good())
+        return false;
 
-        file.close();
+    boost::property_tree::ptree root;
+    boost::property_tree::read_json(file, root);
 
-        // http://www.cochoy.fr/boost-property-tree/
-//        boost::optional<std::string> id = root.get_optional<std::string>("header.texture_id");
-        boost::optional<std::string> name = root.get_optional<std::string>("header.texture_name");
-        boost::optional<std::string> image_data = root.get_optional<std::string>("image_data");
-//        boost::optional<std::string> border_color = root.get_optional<std::string>("settings.texture_border_color");
-//        boost::optional<float> repeat_x = root.get_optional<float>("settings.texture_repeat_x");
-//        boost::optional<float> repeat_y = root.get_optional<float>("settings.texture_repeat_y");
-//        boost::optional<float> rotation_z = root.get_optional<float>("settings.texture_rotation_z");
-//        boost::optional<float> translation_x = root.get_optional<float>("settings.texture_translation_x");
-//        boost::optional<float> translation_y = root.get_optional<float>("settings.texture_translation_y");
-//        boost::optional<std::string> wrapping = root.get_optional<std::string>("settings.texture_wrapping");
-//        boost::optional<std::string> version = root.get_optional<std::string>("version");
+    file.close();
 
-        out.source = filename;
-        out.name = encode_name(boost::filesystem::path(filename).stem().string());
+    // http://www.cochoy.fr/boost-property-tree/
+//    boost::optional<std::string> id = root.get_optional<std::string>("header.texture_id");
+    boost::optional<std::string> name = root.get_optional<std::string>("header.texture_name");
+    boost::optional<std::string> image_data = root.get_optional<std::string>("image_data");
+//    boost::optional<std::string> border_color = root.get_optional<std::string>("settings.texture_border_color");
+//    boost::optional<float> repeat_x = root.get_optional<float>("settings.texture_repeat_x");
+//    boost::optional<float> repeat_y = root.get_optional<float>("settings.texture_repeat_y");
+//    boost::optional<float> rotation_z = root.get_optional<float>("settings.texture_rotation_z");
+//    boost::optional<float> translation_x = root.get_optional<float>("settings.texture_translation_x");
+//    boost::optional<float> translation_y = root.get_optional<float>("settings.texture_translation_y");
+//    boost::optional<std::string> wrapping = root.get_optional<std::string>("settings.texture_wrapping");
+//    boost::optional<std::string> version = root.get_optional<std::string>("version");
 
-        if (image_data.has_value()) {
-            const std::string src = image_data.value();
-            std::string decoded;
-            decoded.resize(boost::beast::detail::base64::decoded_size(src.length()));
-            decoded.resize(boost::beast::detail::base64::decode((void*)&decoded[0], src.data(), src.length()).first);
-            out.texture->data = std::vector<unsigned char>(decoded.length());
-            ::memcpy((void*)out.texture->data.data(), (const void*)decoded.data(), decoded.length());
-            const auto& [width, height] = extract_size_from_png_buffer(out.texture->data);
-            if (width > 0 && height > 0) {
-                out.texture->width = width;
-                out.texture->height = height;
-                return out.texture->is_valid();
-            }
+    out.source = filename;
+    out.name = encode_name(boost::filesystem::path(filename).stem().string());
+
+    if (image_data.has_value()) {
+        const std::string src = image_data.value();
+        std::string decoded;
+        decoded.resize(boost::beast::detail::base64::decoded_size(src.length()));
+        decoded.resize(boost::beast::detail::base64::decode((void*)&decoded[0], src.data(), src.length()).first);
+        out.texture->data = std::vector<unsigned char>(decoded.length());
+        ::memcpy((void*)out.texture->data.data(), (const void*)decoded.data(), decoded.length());
+        const auto& [width, height] = extract_size_from_png_buffer(out.texture->data);
+        if (width > 0 && height > 0) {
+            out.texture->width = width;
+            out.texture->height = height;
+            return out.texture->is_valid();
         }
     }
+
+    return false;
+}
+
+bool TexturesManager::load_texture_from_png_file(const std::string& filename, TextureItem& out)
+{
+    if (!boost::filesystem::exists(filename))
+        return false;
+
+    if (!boost::algorithm::iends_with(filename, ".png"))
+        return false;
+
+    boost::nowide::ifstream file(filename, boost::nowide::ifstream::binary);
+    if (!file.good())
+        return false;
+
+    file.seekg(0, std::ios::end);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<unsigned char> buffer(size);
+    file.read((char*)buffer.data(), size);
+    if (!file.good())
+        return false;
+
+    file.close();
+
+    return load_texture_from_png_buffer(filename, buffer, out);
+}
+
+bool TexturesManager::load_texture_from_png_buffer(const std::string& filename, const std::vector<unsigned char>& png_data, TextureItem& out)
+{
+    out.source = filename;
+    out.name = encode_name(boost::filesystem::path(filename).stem().string());
+    out.texture->data = png_data;
+    const auto& [width, height] = extract_size_from_png_buffer(out.texture->data);
+    if (width > 0 && height > 0) {
+        out.texture->width = width;
+        out.texture->height = height;
+        return out.texture->is_valid();
+    }
+
     return false;
 }
 

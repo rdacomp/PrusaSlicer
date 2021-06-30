@@ -432,6 +432,9 @@ wxString file_wildcards(FileType file_type, const std::string &custom_extension)
         /* FT_SVG */     "SVG files (*.svg)|*.svg;*.SVG",
 
         /* FT_TEX */     "Texture (*.png, *.svg)|*.png;*.PNG;*.svg;*.SVG",
+#if ENABLE_TEXTURED_VOLUMES
+        /* FT_OBJ_TEX */ "Texture (*.png, *.texture)|*.png;*.PNG;*.texture",
+#endif // ENABLE_TEXTURED_VOLUMES
 
         /* FT_PNGZIP */  "Masked SLA files (*.sl1)|*.sl1;*.SL1",
     };
