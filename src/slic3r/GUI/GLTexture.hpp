@@ -114,6 +114,7 @@ namespace GUI {
         int get_height() const { return m_height; }
 
         const std::string& get_source() const { return m_source; }
+        void set_source(const std::string& source) { m_source = source; }
 
         bool unsent_compressed_data_available() const { return m_compressor.unsent_compressed_data_available(); }
         void send_compressed_data_to_gpu() { m_compressor.send_compressed_data_to_gpu(); }

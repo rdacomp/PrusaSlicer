@@ -556,6 +556,7 @@ void GLTexturesManager::update_from_model(const Model& model)
         if (it == m_textures.end()) {
             std::shared_ptr<GUI::GLTexture> texture = std::make_shared<GUI::GLTexture>();
             const TextureData& data = model.textures_manager.get_texture_data(name);
+            texture->set_source(model.textures_manager.get_texture_source(name));
             if (data.is_valid()) {
                 bool res = texture->load_from_png_buffer(data.data, true, GUI::GLTexture::ECompressionType::SingleThreaded, true);
                 if (res) {

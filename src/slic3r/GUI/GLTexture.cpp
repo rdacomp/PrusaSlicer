@@ -305,7 +305,8 @@ bool GLTexture::load_from_svg_files_as_sprites_array(const std::vector<std::stri
 #if ENABLE_TEXTURED_VOLUMES
 bool GLTexture::load_from_png_buffer(const std::vector<unsigned char>& png_data, bool use_mipmaps, ECompressionType compression_type, bool apply_anisotropy)
 {
-    reset();
+    if (m_id != 0)
+        reset();
 
     bool compression_enabled = (compression_type != ECompressionType::None) && GLEW_EXT_texture_compression_s3tc;
 

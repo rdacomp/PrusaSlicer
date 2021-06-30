@@ -45,6 +45,7 @@ public:
 
     std::vector<std::string> get_texture_names() const;
     const TextureData& get_texture_data(const std::string& name) const;
+    std::string get_texture_source(const std::string& name) const;
 
 #if ENABLE_TEXTURES_MANAGER_DEBUG
     void output_content() const;

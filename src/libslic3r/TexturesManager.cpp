@@ -255,6 +255,15 @@ const TextureData& TexturesManager::get_texture_data(const std::string& name) co
     return TextureData::DUMMY;
 }
 
+std::string TexturesManager::get_texture_source(const std::string& name) const
+{
+    for (const TextureItem& item : m_textures) {
+        if (name == item.name)
+            return item.source;
+    }
+    return "";
+}
+
 std::string TexturesManager::decode_name(const std::string& name)
 {
     std::string::size_type pos = name.find(':');
