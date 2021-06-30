@@ -133,8 +133,8 @@ public:
 
         // multiply count of generated samples(before Poisson filtration) for radius
         // cover error of random generator
-        // recommend value in range(2 - 10)
-        float multiplicator = 5;
+        // recommend value in range(2 - 12)
+        float multiplicator = 6;
 
         SampleConfig() = default;
     };

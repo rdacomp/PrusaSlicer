@@ -135,21 +135,21 @@ bool GLShapeDiameterFunction::initialize_width() {
 #include <libslic3r/PointGrid3D.hpp>
 void poisson_sphere_from_samples(
     GLShapeDiameterFunction::PointRadiuses & samples,
-    float                                          r_mult,
     const PointGrid3D &grid)
 {
-    float max_r = 0;
-    Vec3f min_corner = samples.front().point;
-    for (const auto &sample : samples) {
-        float r = sample.radius * r_mult;
-        if (max_r < r) max_r = r;
-    }
+    // first fill place with bigger needs to support than rest
+    std::sort(samples.begin(), samples.end(),
+              [](const GLShapeDiameterFunction::PointRadius &lhs,
+                 const GLShapeDiameterFunction::PointRadius &rhs){
+                  return lhs.radius < rhs.radius;
+    });
     GLShapeDiameterFunction::PointRadiuses result;
     result.reserve(samples.size());
+    float max_r = samples.back().radius;
     Vec3f cell_size(max_r, max_r, max_r);
     PointGrid3D actGrid(cell_size);
     for (const auto &sample : samples) { 
-        float r = sample.radius * r_mult;
+        float r = sample.radius;
         if (actGrid.collides_with(sample.point, r)) continue;
         if (grid.collides_with(sample.point, r)) continue;
         actGrid.insert(sample.point);
@@ -177,15 +177,7 @@ void GLShapeDiameterFunction::sample_surface() {
         triangles, widths, add_point, sample_config, random_generator);
 
     count_generated_points = points.size();
-    // for radius multiplicator
-    for (float r_mult : {
-        1/5.f,
-        1/3.f,
-        1/2.f,
-        1.f // last one should be one
-    }) {
-        poisson_sphere_from_samples(points, r_mult, grid);
-    }
+    poisson_sphere_from_samples(points, grid);
 }
 
 bool GLShapeDiameterFunction::initialize_indices()
