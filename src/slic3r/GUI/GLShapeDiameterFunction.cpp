@@ -15,10 +15,10 @@ void GLShapeDiameterFunction::draw() const
     GLShaderProgram *shader = wxGetApp().get_shader("sdf");
     assert(shader != nullptr);
     shader->start_using();
-    shader->set_uniform("min_width", sample_config.min_width);
-    shader->set_uniform("width_range", fabs(sample_config.max_width - sample_config.min_width));
+    shader->set_uniform("min_width", cfg.sample.min_width);
+    shader->set_uniform("width_range", fabs(cfg.sample.max_width - cfg.sample.min_width));
     shader->set_uniform("draw_normals", allow_render_normals);
-    shader->set_uniform("normal_z_max", sample_config.normal_z_max);
+    shader->set_uniform("normal_z_max", cfg.sample.normal_z_max);
 
     unsigned int stride = Vertex::size();
     GLint position_id = shader->get_attrib_location("v_position");
@@ -66,12 +66,13 @@ bool GLShapeDiameterFunction::initialize_model(const ModelObject *mo)
     
     Transform3d tr_mat = mo->instances.front()->get_matrix();
     // Transform mesh - scale and scew could change width on model
+    // rotation(not Y) could change top faces
     for (auto &vertex : its.vertices) {
         vertex = (tr_mat*vertex.cast<double>()).cast<float>();
     }
 
     if (allow_remesh)
-        ShapeDiameterFunction::connect_small_triangles(its, min_triangle_size, max_thr);
+        ShapeDiameterFunction::connect_small_triangles(its, cfg.min_length, cfg.max_error);
 
     // create tree
     tree.vertices_indices = its; // copy
@@ -88,7 +89,7 @@ bool GLShapeDiameterFunction::divide() {
         triangles.vertices = its.vertices; // copy
     } else {
         indexed_triangle_set divided =
-            ShapeDiameterFunction::subdivide(its, max_triangle_size);
+            ShapeDiameterFunction::subdivide(its, cfg.max_length);
         triangles.indices  = divided.indices;  // copy
         triangles.vertices = divided.vertices; // copy
     }
@@ -98,13 +99,13 @@ bool GLShapeDiameterFunction::divide() {
 
 bool GLShapeDiameterFunction::initialize_normals()
 { 
-    triangles.vertex_normals  = NormalUtils::create_normals(triangles, normal_type);
+    triangles.vertex_normals  = NormalUtils::create_normals(triangles, cfg.normal_type);
     return initialize_width();
 }
 
 bool GLShapeDiameterFunction::initialize_width() {
-    sdf_config.dirs = ShapeDiameterFunction::create_fibonacci_sphere_samples(angle, count_samples);
-    widths = ShapeDiameterFunction::calc_widths(triangles.vertices, triangles.vertex_normals, tree, sdf_config);
+    cfg.rays.dirs = ShapeDiameterFunction::create_fibonacci_sphere_samples(angle, count_samples);
+    widths = ShapeDiameterFunction::calc_widths(triangles.vertices, triangles.vertex_normals, tree, cfg.rays);
 
     // merge vertices normal and width together for GPU
     std::vector<Vertex> buffer = {};
@@ -131,53 +132,22 @@ bool GLShapeDiameterFunction::initialize_width() {
     return true;
 }
 
-
-#include <libslic3r/PointGrid3D.hpp>
-void poisson_sphere_from_samples(
-    GLShapeDiameterFunction::PointRadiuses & samples,
-    const PointGrid3D &grid)
-{
-    // first fill place with bigger needs to support than rest
-    std::sort(samples.begin(), samples.end(),
-              [](const GLShapeDiameterFunction::PointRadius &lhs,
-                 const GLShapeDiameterFunction::PointRadius &rhs){
-                  return lhs.radius < rhs.radius;
-    });
-    GLShapeDiameterFunction::PointRadiuses result;
-    result.reserve(samples.size());
-    float max_r = samples.back().radius;
-    Vec3f cell_size(max_r, max_r, max_r);
-    PointGrid3D actGrid(cell_size);
-    for (const auto &sample : samples) { 
-        float r = sample.radius;
-        if (actGrid.collides_with(sample.point, r)) continue;
-        if (grid.collides_with(sample.point, r)) continue;
-        actGrid.insert(sample.point);
-        result.emplace_back(sample);
-    }
-    samples = result;
-}
-
 void GLShapeDiameterFunction::sample_surface() {
     std::mt19937       random_generator;
     std::random_device rd;
     random_generator.seed(rd());
-    points.clear();
-    points.reserve(triangles.vertices.size());
     
-    // SupportPointGenerator::process
-    float c = sample_config.max_radius; // cell size
-    PointGrid3D grid(Vec3f(c, c, c)); // other support points
 
-    std::function<bool(Vec3f, float)> add_point = [&](Vec3f point, float alone_radius){
-        points.emplace_back(point, alone_radius);
-        return true;
-    };
-    ShapeDiameterFunction::generate_support_points(
-        triangles, widths, add_point, sample_config, random_generator);
+    points.clear();
+    points = ShapeDiameterFunction::generate_support_points(
+        triangles, widths, cfg.sample, random_generator);
 
     count_generated_points = points.size();
-    poisson_sphere_from_samples(points, grid);
+
+    // SupportPointGenerator::process
+    float c = cfg.sample.max_radius; // cell size
+    PointGrid3D grid(Vec3f(c, c, c)); // other support points
+    ShapeDiameterFunction::poisson_sphere_from_samples(points, grid);
 }
 
 bool GLShapeDiameterFunction::initialize_indices()
@@ -281,7 +251,7 @@ void GLShapeDiameterFunction::render_points() const
     std::array<float, 4> color = {.2f, .2f, .8f, 1.f};
     shader->start_using();
     shader->set_uniform("uniform_color", color);
-    for (const PointRadius &pr : points) {
+    for (const auto &pr : points) {
         const Vec3f &point = pr.point;
         float        scale = pr.radius / 2.;
         glsafe(::glPushMatrix());
@@ -302,7 +272,7 @@ void GLShapeDiameterFunction::render_rays() const {
     shader->start_using();
     shader->set_uniform("uniform_color", color);
     Vec3f z_one(0.f, 0.f, 1.f);
-    for (const auto& ray: sdf_config.dirs) {
+    for (const auto &ray : cfg.rays.dirs) {
         GLModel arrow_to_z = create_arrow(1.f, 10.f * ray.weight);
         const Vec3f &normal = ray.dir;
         Vec3f       axis  = z_one.cross(normal);

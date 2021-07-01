@@ -21,42 +21,22 @@ class GLShapeDiameterFunction
     unsigned int m_vbo_id      = 0;
     unsigned int m_vbo_indices_id = 0;
 public:
-    NormalUtils::VertexNormalType normal_type =
-        NormalUtils::VertexNormalType::NelsonMaxWeighted;
-    bool allow_render_normals = false;
+    ShapeDiameterFunction::Config cfg;
 
+    // create ray directions
     float angle = 120; // [in deg] in range from 1 to 179
     size_t count_samples = 60; // count samples on half sphere
 
+    // visualization of normal
+    bool allow_render_normals = false;
     float normal_width = 0.1f;
     float normal_length = .5f;
 
-    ShapeDiameterFunction::Config sdf_config;
-
     bool allow_divide_triangle = true;
-    float max_triangle_size = 1.f;
-
-    float max_thr      = 0.5f;
-    float min_triangle_size = 0.5f;
     bool allow_remesh = true;
-
-    // support points sampling
-    std::vector<float> widths;
-    ShapeDiameterFunction::SampleConfig sample_config;
-
-    struct PointRadius {
-        Vec3f point;
-        float radius;
-        PointRadius(Vec3f point, float radius) : point(point), radius(radius){}
-    };
-    using PointRadiuses = std::vector<PointRadius>;
-    size_t        count_generated_points;
-    PointRadiuses points;
     bool allow_render_points = false;
-
 public:
     GLShapeDiameterFunction() = default; // set default values
-    ~GLShapeDiameterFunction() = default; // needed by PIMPL in GLCanvas3D.hpp
 
     void set_enabled(bool enable) { enabled = enable; };
     bool is_enabled() const { return enabled; };
@@ -105,6 +85,15 @@ public:
 
     // tree for ray cast
     ShapeDiameterFunction::AABBTree tree;
+
+    // results of SDF
+    std::vector<float> widths;
+
+    // sampled points
+    ShapeDiameterFunction::PointRadiuses points;
+
+    // for show information about count of generated samples
+    size_t count_generated_points = 0; 
 };
 
 } // namespace Slic3r::GUI

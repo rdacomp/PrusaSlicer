@@ -15,6 +15,8 @@
 #include "MinAreaBoundingBox.hpp"
 #include "libslic3r.h"
 
+#include <libslic3r/ShapeDiameterFunction.hpp>
+
 #include <iostream>
 #include <random>
 
@@ -282,7 +284,6 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
 
         status += increment;
         m_statusfn(int(std::round(status)));
-
 #ifdef SLA_SUPPORTPOINTGEN_DEBUG
         /*std::string layer_num_str = std::string((i<10 ? "0" : "")) + std::string((i<100 ? "0" : "")) + std::to_string(i);
         output_expolygons(expolys_top, "top" + layer_num_str + ".svg");
@@ -291,6 +292,9 @@ void SupportPointGenerator::process(const std::vector<ExPolygons>& slices, const
             output_expolygons(islands, "islands" + layer_num_str + ".svg");*/
 #endif /* SLA_SUPPORTPOINTGEN_DEBUG */
     }
+        
+    // TODO: FIX status increment and checking throw_on_cancel
+    if (m_config.use_SDF) support_tiny_parts(point_grid);
 }
 
 void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure &s, PointGrid3D &grid3d)
@@ -330,10 +334,22 @@ void SupportPointGenerator::add_support_points(SupportPointGenerator::Structure 
     }
 }
 
+void SupportPointGenerator::support_tiny_parts(PointGrid3D &grid3d)
+{
+    using namespace ::Slic3r;
+    ShapeDiameterFunction::Config config; // create default configuration 
+    const indexed_triangle_set& its = *m_emesh.get_triangle_mesh();
+    std::vector<Vec3f>            support_points =
+        ShapeDiameterFunction::sample_tiny_parts(its, grid3d, config, m_rng);
+    for (const Vec3f &support_point : support_points) {
+        m_output.emplace_back(support_point, m_config.head_diameter / 2.f, false);
+    }
+}
+
 std::vector<Vec2f> sample_expolygon(const ExPolygon &expoly, float samples_per_mm2, std::mt19937 &rng)
 {
     // Triangulate the polygon with holes into triplets of 3D points.
-    std::vector<Vec2f> triangles = Slic3r::triangulate_expolygon_2f(expoly);
+    std::vector<Vec2f> triangles = ::Slic3r::triangulate_expolygon_2f(expoly);
 
     std::vector<Vec2f> out;
     if (! triangles.empty())
@@ -616,9 +632,10 @@ void SupportPointGenerator::uniformly_cover(const ExPolygons& islands, Structure
         poisson_samples.erase(poisson_samples.begin() + poisson_samples_target, poisson_samples.end());
     }
     for (const Vec2f &pt : poisson_samples) {
-        m_output.emplace_back(float(pt(0)), float(pt(1)), structure.zlevel, m_config.head_diameter/2.f, flags & icfIsNew);
+        Vec3f support_point = structure.create_pos3d(pt);
+        m_output.emplace_back(support_point, m_config.head_diameter / 2.f, flags & icfIsNew);
         structure.supports_force_this_layer += m_config.support_force();
-        grid3d.insert(structure.create_pos3d(pt));
+        grid3d.insert(support_point);
     }
 }
 

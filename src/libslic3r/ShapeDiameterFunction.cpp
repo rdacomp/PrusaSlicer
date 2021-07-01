@@ -5,10 +5,43 @@
 
 using namespace Slic3r;
 
+std::vector<Vec3f> ShapeDiameterFunction::sample_tiny_parts(
+    const indexed_triangle_set &its,
+    const PointGrid3D &         grid,
+    const Config &              config,
+    std::mt19937 &              random_generator)
+{
+    
+    AABBTree tree; // tree for ray cast
+    tree.vertices_indices = its; // copy
+    connect_small_triangles(tree.vertices_indices, config.min_length, config.max_error);
+    tree.triangle_normals = NormalUtils::create_triangle_normals(its);
+    tree.tree = AABBTreeIndirect::build_aabb_tree_over_indexed_triangle_set(its.vertices, its.indices);
+        
+    // normals for each vertex of mesh
+    ShapeDiameterFunction::IndexTriangleNormals triangles;
+    indexed_triangle_set divided = subdivide(tree.vertices_indices, config.max_length);
+    triangles.indices  = std::move(divided.indices);
+    triangles.vertices = std::move(divided.vertices);
+    triangles.vertex_normals = NormalUtils::create_normals(triangles, config.normal_type);
+
+    std::vector<float> widths = calc_widths(
+        triangles.vertices, triangles.vertex_normals, tree, config.rays);
+
+    PointRadiuses points = generate_support_points(triangles, widths, config.sample, random_generator);
+    poisson_sphere_from_samples(points, grid);
+
+    std::vector<Vec3f> result;
+    result.reserve(points.size());
+    std::transform(points.begin(), points.end(), std::back_inserter(result),
+                   [](const PointRadius &pr) { return pr.point; });
+    return result;
+}
+
 float ShapeDiameterFunction::calc_width(const Vec3f &     point,
                                         const Vec3f &     normal,
                                         const AABBTree &  tree,
-                                        const Config &  config)
+                                        const RaysConfig &config)
 {
     // value for width when no intersection
     const float no_width = -1.;
@@ -90,7 +123,7 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     const std::vector<Vec3f> &points,
     const std::vector<Vec3f> &normals,
     const AABBTree &          tree,
-    const Config &config)
+    const RaysConfig &        config)
 {
     // check input
     assert(!points.empty());
@@ -114,10 +147,10 @@ std::vector<float> ShapeDiameterFunction::calc_widths(
     return widths;
 }
 
-void ShapeDiameterFunction::generate_support_points(
+ShapeDiameterFunction::PointRadiuses
+ShapeDiameterFunction::generate_support_points(
     const indexed_triangle_set &its,
     const std::vector<float> &  widths,
-    std::function<bool(Vec3f, float)> add_point,
     const SampleConfig &        cfg,
     std::mt19937&   random_generator)
 {
@@ -131,8 +164,9 @@ void ShapeDiameterFunction::generate_support_points(
     std::uniform_real_distribution<float> xDist(0.f, 1.f);
     std::uniform_real_distribution<float> yDist(0.f, 1.f);
     // probability to generate one more or not -- instead of round area
-    std::uniform_real_distribution<float> generate_point(0.f, 1.f); 
+    std::uniform_real_distribution<float> generate_point(0.f, 1.f);
 
+    PointRadiuses result;
     // random sample triangle
     for (const Vec3crd &triangle_indices : its.indices) {
         bool is_full_in_needs = true;
@@ -149,6 +183,7 @@ void ShapeDiameterFunction::generate_support_points(
             float area  = radiuses[i] * radiuses[i] * M_PI;
             area_for_one_support += area;
         }
+        // TODO: solve partialy triangles
         if (!is_full_in_needs) continue;
         area_for_one_support /= 3.f;
 
@@ -185,9 +220,34 @@ void ShapeDiameterFunction::generate_support_points(
                 pos[i] = b[0] * v0[i] + b[1] * v1[i] + b[2] * v2[i];
                 radius += b[i] * radiuses[i];
             }
-            add_point(pos, radius);
+            result.emplace_back(pos, radius);
         }
     }
+    return result;
+}
+
+void ShapeDiameterFunction::poisson_sphere_from_samples(
+    PointRadiuses &samples, const PointGrid3D &grid)
+{
+    // first fill place with bigger needs to support than rest
+    std::sort(samples.begin(), samples.end(),
+              [](const ShapeDiameterFunction::PointRadius &lhs,
+                 const ShapeDiameterFunction::PointRadius &rhs) {
+                  return lhs.radius < rhs.radius;
+              });
+    ShapeDiameterFunction::PointRadiuses result;
+    result.reserve(samples.size());
+    float       max_r = samples.back().radius;
+    Vec3f       cell_size(max_r, max_r, max_r);
+    PointGrid3D actGrid(cell_size);
+    for (const auto &sample : samples) {
+        float r = sample.radius;
+        if (actGrid.collides_with(sample.point, r)) continue;
+        if (grid.collides_with(sample.point, r)) continue;
+        actGrid.insert(sample.point);
+        result.emplace_back(sample);
+    }
+    samples = result;
 }
 
 // create points on unit sphere surface

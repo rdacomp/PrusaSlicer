@@ -155,7 +155,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
 
         // using enum NormalUtils::VertexNormalType; since C++20
-        NormalUtils::VertexNormalType &type = sdf.normal_type;
+        NormalUtils::VertexNormalType &type = sdf.cfg.normal_type;
         auto set_type = [&](NormalUtils::VertexNormalType &new_type) {
             type = new_type;
             sdf.initialize_normals();
@@ -169,10 +169,10 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
 
         m_imgui->text("color range:");
         ImGui::SameLine();
-        if(m_imgui->slider_float("min", &sdf.sample_config.min_width, 0.001f, 100.f))
+        if(m_imgui->slider_float("min", &sdf.cfg.sample.min_width, 0.001f, 100.f))
             if (sdf.allow_render_points) sdf.sample_surface();
         ImGui::SameLine();
-        if(m_imgui->slider_float("max", &sdf.sample_config.max_width, 0.001f, 100.f))
+        if(m_imgui->slider_float("max", &sdf.cfg.sample.max_width, 0.001f, 100.f))
             if (sdf.allow_render_points) sdf.sample_surface();
 
         m_imgui->text("rays:");
@@ -183,7 +183,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             sdf.initialize_width();
         }
         ImGui::SameLine();
-        m_imgui->text(("=" + std::to_string(sdf.sdf_config.dirs.size())));
+        m_imgui->text(("=" + std::to_string(sdf.cfg.rays.dirs.size())));
         ImGui::SameLine();
         if (m_imgui->slider_float("angle", &sdf.angle, 1.f, 179.f)) {
             sdf.initialize_width();            
@@ -191,35 +191,35 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
 
         m_imgui->text("filter:");
         ImGui::SameLine();
-        bool allowed_angle = sdf.sdf_config.is_angle_filtering();
+        bool allowed_angle = sdf.cfg.rays.is_angle_filtering();
         if (m_imgui->checkbox("angl", allowed_angle)) { 
             if (allowed_angle) { 
-                sdf.sdf_config.allowed_angle = M_PI_2;
+                sdf.cfg.rays.allowed_angle = static_cast<float>(M_PI_2);
             } else {
-                sdf.sdf_config.set_no_angle_filtering();
+                sdf.cfg.rays.set_no_angle_filtering();
             }
             sdf.initialize_width();
         }
         if (allowed_angle) {
             ImGui::SameLine();
-            if (m_imgui->slider_float("#angle", &sdf.sdf_config.allowed_angle, 0.f, (float) M_PI)) {
+            if (m_imgui->slider_float("#angle", &sdf.cfg.rays.allowed_angle, 0.f, static_cast<float>(M_PI))) {
                 sdf.initialize_width();
             }
         }
 
         ImGui::SameLine();
-        bool allowed_deviation = sdf.sdf_config.is_deviation_filtering();
+        bool allowed_deviation = sdf.cfg.rays.is_deviation_filtering();
         if (m_imgui->checkbox("dev", allowed_deviation)) {
             if (allowed_deviation) {
-                sdf.sdf_config.allowed_deviation = 1.f;
+                sdf.cfg.rays.allowed_deviation = 1.f;
             } else {
-                sdf.sdf_config.set_no_deviation_filtering();
+                sdf.cfg.rays.set_no_deviation_filtering();
             }
             sdf.initialize_width();
         }
         if (allowed_deviation) {
             ImGui::SameLine();
-            if (m_imgui->slider_float("#deviation", &sdf.sdf_config.allowed_deviation, 0.5f, 2.f)) {
+            if (m_imgui->slider_float("#deviation", &sdf.cfg.rays.allowed_deviation, 0.5f, 2.f)) {
                 sdf.initialize_width();
             }
         }
@@ -229,11 +229,11 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         m_imgui->checkbox("re-Mesh", sdf.allow_remesh);
         if (sdf.allow_remesh) {
             ImGui::SameLine();
-            if(m_imgui->slider_float("min_triangle_size", &sdf.min_triangle_size, 5e-1f, 30.f))
+            if(m_imgui->slider_float("min_edge_length", &sdf.cfg.min_length, 5e-1f, 30.f))
                 reInit();
 
             ImGui::SameLine();
-            if(m_imgui->slider_float("max_thr", &sdf.max_thr, 1e-3f, 15.f))
+            if(m_imgui->slider_float("max_err", &sdf.cfg.max_error, 1e-3f, 15.f))
                 reInit();
         }
 
@@ -241,8 +241,7 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
             sdf.divide();
         if (sdf.allow_divide_triangle) {
             ImGui::SameLine();
-            if (m_imgui->slider_float("max_triangle_size",
-                                      &sdf.max_triangle_size, 5e-1f, 15.f)) {
+            if (m_imgui->slider_float("max_triangle_size", &sdf.cfg.max_length, 5e-1f, 15.f)) {
                 sdf.divide();
             }
         }
@@ -259,23 +258,21 @@ void GLGizmoFdmSupports::on_render_input_window(float x, float y, float bottom_l
         }
         if (sdf.allow_render_points) {
             ImGui::SameLine();
-            if(m_imgui->slider_float("min r", &sdf.sample_config.min_radius, 0.001f, 100.f))
+            if(m_imgui->slider_float("min r", &sdf.cfg.sample.min_radius, 0.001f, 100.f))
                 sdf.sample_surface();
             ImGui::SameLine();
-            if(m_imgui->slider_float("max r", &sdf.sample_config.max_radius, 0.001f, 100.f))
+            if(m_imgui->slider_float("max r", &sdf.cfg.sample.max_radius, 0.001f, 100.f))
                 sdf.sample_surface();
             ImGui::SameLine();
-            if(m_imgui->slider_float("max n.z", &sdf.sample_config.normal_z_max, 0.f, 1.f)){
+            if(m_imgui->slider_float("max n.z", &sdf.cfg.sample.normal_z_max, 0.f, 1.f)){
                 sdf.sample_surface();
-                sdf.sdf_config.normal_z_max = sdf.sample_config.normal_z_max;
+                sdf.cfg.sample.normal_z_max = sdf.cfg.sample.normal_z_max;
             }
-            if(m_imgui->slider_float("multi", &sdf.sample_config.multiplicator, 1.f, 100.f))
+            if (m_imgui->slider_float("multi", &sdf.cfg.sample.multiplicator, 1.f, 100.f))
                 sdf.sample_surface();
             ImGui::SameLine();
-            m_imgui->text(
-                "Pts gen: " + std::to_string(sdf.count_generated_points) +
+            m_imgui->text("Pts gen: " + std::to_string(sdf.count_generated_points) +
                 ", pts rest: " + std::to_string(sdf.points.size()));
-
         }
     }else if (m_imgui->button("Activate", 0.f, 0.f)) {
         if (m_parent.sdf == nullptr) {
