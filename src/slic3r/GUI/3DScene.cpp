@@ -142,29 +142,29 @@ void GLIndexedVertexArray::load_mesh_full_shading(const TriangleMesh& mesh)
         smooth_normals_corner(new_mesh, normals);
 //        smooth_normals_vertex(new_mesh, normals);
 
-        this->vertices_and_normals_interleaved.reserve(this->vertices_and_normals_interleaved.size() + 3 * 2 * new_mesh.its.vertices.size());
+        vertices_and_normals_interleaved.reserve(vertices_and_normals_interleaved.size() + 3 * 2 * new_mesh.its.vertices.size());
         for (size_t i = 0; i < new_mesh.its.vertices.size(); ++i) {
             const stl_vertex& v = new_mesh.its.vertices[i];
             const stl_normal& n = normals[i];
-            this->push_geometry(v(0), v(1), v(2), n(0), n(1), n(2));
+            push_geometry(v(0), v(1), v(2), n(0), n(1), n(2));
         }
 
         for (size_t i = 0; i < new_mesh.its.indices.size(); ++i) {
             const stl_triangle_vertex_indices& idx = new_mesh.its.indices[i];
-            this->push_triangle(idx(0), idx(1), idx(2));
+            push_triangle(idx(0), idx(1), idx(2));
         }
     }
     else {
 #endif // ENABLE_SMOOTH_NORMALS
-        this->vertices_and_normals_interleaved.reserve(this->vertices_and_normals_interleaved.size() + 3 * 3 * 2 * mesh.facets_count());
+        this->vertices_and_normals_interleaved.reserve(vertices_and_normals_interleaved.size() + 3 * 3 * 2 * mesh.facets_count());
 
         unsigned int vertices_count = 0;
         for (int i = 0; i < (int)mesh.stl.stats.number_of_facets; ++i) {
             const stl_facet& facet = mesh.stl.facet_start[i];
             for (int j = 0; j < 3; ++j)
-                this->push_geometry(facet.vertex[j](0), facet.vertex[j](1), facet.vertex[j](2), facet.normal(0), facet.normal(1), facet.normal(2));
+                push_geometry(facet.vertex[j](0), facet.vertex[j](1), facet.vertex[j](2), facet.normal(0), facet.normal(1), facet.normal(2));
 
-            this->push_triangle(vertices_count, vertices_count + 1, vertices_count + 2);
+            push_triangle(vertices_count, vertices_count + 1, vertices_count + 2);
             vertices_count += 3;
         }
 #if ENABLE_SMOOTH_NORMALS
@@ -174,62 +174,65 @@ void GLIndexedVertexArray::load_mesh_full_shading(const TriangleMesh& mesh)
 
 void GLIndexedVertexArray::finalize_geometry(bool opengl_initialized)
 {
-    assert(this->vertices_and_normals_interleaved_VBO_id == 0);
-    assert(this->triangle_indices_VBO_id == 0);
-    assert(this->quad_indices_VBO_id == 0);
+    assert(vertices_and_normals_interleaved_VBO_id == 0);
+    assert(triangle_indices_VBO_id == 0);
+    assert(quad_indices_VBO_id == 0);
 
 	if (! opengl_initialized) {
 		// Shrink the data vectors to conserve memory in case the data cannot be transfered to the OpenGL driver yet.
-		this->shrink_to_fit();
+		shrink_to_fit();
 		return;
 	}
 
-    if (! this->vertices_and_normals_interleaved.empty()) {
-        glsafe(::glGenBuffers(1, &this->vertices_and_normals_interleaved_VBO_id));
-        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_and_normals_interleaved_VBO_id));
-        glsafe(::glBufferData(GL_ARRAY_BUFFER, this->vertices_and_normals_interleaved.size() * 4, this->vertices_and_normals_interleaved.data(), GL_STATIC_DRAW));
+    if (! vertices_and_normals_interleaved.empty()) {
+        glsafe(::glGenBuffers(1, &vertices_and_normals_interleaved_VBO_id));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, vertices_and_normals_interleaved_VBO_id));
+        glsafe(::glBufferData(GL_ARRAY_BUFFER, vertices_and_normals_interleaved.size() * 4, vertices_and_normals_interleaved.data(), GL_STATIC_DRAW));
         glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
-        this->vertices_and_normals_interleaved.clear();
+        vertices_and_normals_interleaved.clear();
     }
-    if (! this->triangle_indices.empty()) {
-        glsafe(::glGenBuffers(1, &this->triangle_indices_VBO_id));
-        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_id));
-        glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices.size() * 4, this->triangle_indices.data(), GL_STATIC_DRAW));
+    if (! triangle_indices.empty()) {
+        glsafe(::glGenBuffers(1, &triangle_indices_VBO_id));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triangle_indices_VBO_id));
+        glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangle_indices.size() * 4, triangle_indices.data(), GL_STATIC_DRAW));
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-        this->triangle_indices.clear();
+        triangle_indices.clear();
     }
-    if (! this->quad_indices.empty()) {
-        glsafe(::glGenBuffers(1, &this->quad_indices_VBO_id));
-        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_indices_VBO_id));
-        glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->quad_indices.size() * 4, this->quad_indices.data(), GL_STATIC_DRAW));
+    if (! quad_indices.empty()) {
+        glsafe(::glGenBuffers(1, &quad_indices_VBO_id));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_indices_VBO_id));
+        glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, quad_indices.size() * 4, quad_indices.data(), GL_STATIC_DRAW));
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-        this->quad_indices.clear();
+        quad_indices.clear();
     }
 }
 
 void GLIndexedVertexArray::release_geometry()
 {
-    if (this->vertices_and_normals_interleaved_VBO_id) {
-        glsafe(::glDeleteBuffers(1, &this->vertices_and_normals_interleaved_VBO_id));
-        this->vertices_and_normals_interleaved_VBO_id = 0;
+    if (vertices_and_normals_interleaved_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &vertices_and_normals_interleaved_VBO_id));
+        vertices_and_normals_interleaved_VBO_id = 0;
     }
-    if (this->triangle_indices_VBO_id) {
-        glsafe(::glDeleteBuffers(1, &this->triangle_indices_VBO_id));
-        this->triangle_indices_VBO_id = 0;
+    if (triangle_indices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &triangle_indices_VBO_id));
+        triangle_indices_VBO_id = 0;
     }
-    if (this->quad_indices_VBO_id) {
-        glsafe(::glDeleteBuffers(1, &this->quad_indices_VBO_id));
-        this->quad_indices_VBO_id = 0;
+    if (quad_indices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &quad_indices_VBO_id));
+        quad_indices_VBO_id = 0;
     }
-    this->clear();
+    clear();
 }
 
 void GLIndexedVertexArray::render() const
 {
-    assert(this->vertices_and_normals_interleaved_VBO_id != 0);
-    assert(this->triangle_indices_VBO_id != 0 || this->quad_indices_VBO_id != 0);
+#if ENABLE_TEXTURED_VOLUMES
+    render({ 0, triangle_indices_size }, { 0, quad_indices_size });
+#else
+    assert(vertices_and_normals_interleaved_VBO_id != 0);
+    assert(triangle_indices_VBO_id != 0 || quad_indices_VBO_id != 0);
 
-    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_and_normals_interleaved_VBO_id));
+    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, vertices_and_normals_interleaved_VBO_id));
     glsafe(::glVertexPointer(3, GL_FLOAT, 6 * sizeof(float), (const void*)(3 * sizeof(float))));
     glsafe(::glNormalPointer(GL_FLOAT, 6 * sizeof(float), nullptr));
 
@@ -237,14 +240,14 @@ void GLIndexedVertexArray::render() const
     glsafe(::glEnableClientState(GL_NORMAL_ARRAY));
 
     // Render using the Vertex Buffer Objects.
-    if (this->triangle_indices_size > 0) {
-        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_id));
-        glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(this->triangle_indices_size), GL_UNSIGNED_INT, nullptr));
+    if (triangle_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triangle_indices_VBO_id));
+        glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(triangle_indices_size), GL_UNSIGNED_INT, nullptr));
         glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
-    if (this->quad_indices_size > 0) {
-        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_indices_VBO_id));
-        glsafe(::glDrawElements(GL_QUADS, GLsizei(this->quad_indices_size), GL_UNSIGNED_INT, nullptr));
+    if (quad_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_indices_VBO_id));
+        glsafe(::glDrawElements(GL_QUADS, GLsizei(quad_indices_size), GL_UNSIGNED_INT, nullptr));
         glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
 
@@ -252,31 +255,32 @@ void GLIndexedVertexArray::render() const
     glsafe(::glDisableClientState(GL_NORMAL_ARRAY));
 
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+#endif // ENABLE_TEXTURED_VOLUMES
 }
 
 void GLIndexedVertexArray::render(
     const std::pair<size_t, size_t>& tverts_range,
     const std::pair<size_t, size_t>& qverts_range) const
 {
-    assert(this->vertices_and_normals_interleaved_VBO_id != 0);
-    assert(this->triangle_indices_VBO_id != 0 || this->quad_indices_VBO_id != 0);
+    assert(vertices_and_normals_interleaved_VBO_id != 0);
+    assert(triangle_indices_VBO_id != 0 || quad_indices_VBO_id != 0);
 
     // Render using the Vertex Buffer Objects.
-    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_and_normals_interleaved_VBO_id));
+    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, vertices_and_normals_interleaved_VBO_id));
     glsafe(::glVertexPointer(3, GL_FLOAT, 6 * sizeof(float), (const void*)(3 * sizeof(float))));
     glsafe(::glNormalPointer(GL_FLOAT, 6 * sizeof(float), nullptr));
 
     glsafe(::glEnableClientState(GL_VERTEX_ARRAY));
     glsafe(::glEnableClientState(GL_NORMAL_ARRAY));
 
-    if (this->triangle_indices_size > 0) {
-        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_id));
-        glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(std::min(this->triangle_indices_size, tverts_range.second - tverts_range.first)), GL_UNSIGNED_INT, (const void*)(tverts_range.first * 4)));
+    if (triangle_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triangle_indices_VBO_id));
+        glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(std::min(triangle_indices_size, tverts_range.second - tverts_range.first)), GL_UNSIGNED_INT, (const void*)(tverts_range.first * 4)));
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
-    if (this->quad_indices_size > 0) {
-        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_indices_VBO_id));
-        glsafe(::glDrawElements(GL_QUADS, GLsizei(std::min(this->quad_indices_size, qverts_range.second - qverts_range.first)), GL_UNSIGNED_INT, (const void*)(qverts_range.first * 4)));
+    if (quad_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_indices_VBO_id));
+        glsafe(::glDrawElements(GL_QUADS, GLsizei(std::min(quad_indices_size, qverts_range.second - qverts_range.first)), GL_UNSIGNED_INT, (const void*)(qverts_range.first * 4)));
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
 
@@ -472,33 +476,33 @@ BoundingBoxf3 GLVolume::transformed_convex_hull_bounding_box(const Transform3d &
 
 void GLVolume::set_range(double min_z, double max_z)
 {
-    this->qverts_range.first = 0;
-    this->qverts_range.second = this->indexed_vertex_array.quad_indices_size;
-    this->tverts_range.first = 0;
-    this->tverts_range.second = this->indexed_vertex_array.triangle_indices_size;
-    if (! this->print_zs.empty()) {
+    qverts_range.first = 0;
+    qverts_range.second = indexed_vertex_array.quad_indices_size;
+    tverts_range.first = 0;
+    tverts_range.second = indexed_vertex_array.triangle_indices_size;
+    if (! print_zs.empty()) {
         // The Z layer range is specified.
         // First test whether the Z span of this object is not out of (min_z, max_z) completely.
-        if (this->print_zs.front() > max_z || this->print_zs.back() < min_z) {
-            this->qverts_range.second = 0;
-            this->tverts_range.second = 0;
+        if (print_zs.front() > max_z || print_zs.back() < min_z) {
+            qverts_range.second = 0;
+            tverts_range.second = 0;
         } else {
             // Then find the lowest layer to be displayed.
             size_t i = 0;
-            for (; i < this->print_zs.size() && this->print_zs[i] < min_z; ++ i);
-            if (i == this->print_zs.size()) {
+            for (; i < print_zs.size() && print_zs[i] < min_z; ++ i);
+            if (i == print_zs.size()) {
                 // This shall not happen.
-                this->qverts_range.second = 0;
-                this->tverts_range.second = 0;
+                qverts_range.second = 0;
+                tverts_range.second = 0;
             } else {
                 // Remember start of the layer.
-                this->qverts_range.first = this->offsets[i * 2];
-                this->tverts_range.first = this->offsets[i * 2 + 1];
+                qverts_range.first = offsets[i * 2];
+                tverts_range.first = offsets[i * 2 + 1];
                 // Some layers are above $min_z. Which?
-                for (; i < this->print_zs.size() && this->print_zs[i] <= max_z; ++ i);
-                if (i < this->print_zs.size()) {
-                    this->qverts_range.second = this->offsets[i * 2];
-                    this->tverts_range.second = this->offsets[i * 2 + 1];
+                for (; i < print_zs.size() && print_zs[i] <= max_z; ++ i);
+                if (i < print_zs.size()) {
+                    qverts_range.second = offsets[i * 2];
+                    tverts_range.second = offsets[i * 2 + 1];
                 }
             }
         }
@@ -510,21 +514,21 @@ void GLVolume::render() const
     if (!is_active)
         return;
 
-    if (this->is_left_handed())
+    if (is_left_handed())
         glFrontFace(GL_CW);
     glsafe(::glCullFace(GL_BACK));
     glsafe(::glPushMatrix());
     glsafe(::glMultMatrixd(world_matrix().data()));
 
-    this->indexed_vertex_array.render(this->tverts_range, this->qverts_range);
+    indexed_vertex_array.render(tverts_range, qverts_range);
 
     glsafe(::glPopMatrix());
-    if (this->is_left_handed())
+    if (is_left_handed())
         glFrontFace(GL_CCW);
 }
 
-bool GLVolume::is_sla_support() const { return this->composite_id.volume_id == -int(slaposSupportTree); }
-bool GLVolume::is_sla_pad() const { return this->composite_id.volume_id == -int(slaposPad); }
+bool GLVolume::is_sla_support() const { return composite_id.volume_id == -int(slaposSupportTree); }
+bool GLVolume::is_sla_pad() const { return composite_id.volume_id == -int(slaposPad); }
 
 #if ENABLE_ALLOW_NEGATIVE_Z
 bool GLVolume::is_sinking() const
