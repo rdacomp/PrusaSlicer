@@ -2114,12 +2114,20 @@ static void reserve_new_volume_finalize_old_volume(GLVolume& vol_new, GLVolume& 
 	vol_new.indexed_vertex_array = std::move(vol_old.indexed_vertex_array);
 	// Copy the content back to the old GLVolume.
 	vol_old.indexed_vertex_array = vol_new.indexed_vertex_array;
-	// Clear the buffers, but keep them pre-allocated.
+#if ENABLE_TEXTURED_VOLUMES
+    // Clear the buffers, but keep them pre-allocated.
+    vol_new.indexed_vertex_array.release_cpu_geometry();
+    // Just make sure that clear did not clear the reserved memory.
+    // Reserving number of vertices
+    vol_new.indexed_vertex_array.reserve(prealloc_size / vol_new.indexed_vertex_array.vertex_size_floats());
+#else
+    // Clear the buffers, but keep them pre-allocated.
 	vol_new.indexed_vertex_array.clear();
 	// Just make sure that clear did not clear the reserved memory.
 	// Reserving number of vertices (3x position + 3x color)
 	vol_new.indexed_vertex_array.reserve(prealloc_size / 6);
-	// Finalize the old geometry, possibly move data to the graphics card.
+#endif // ENABLE_TEXTURED_VOLUMES
+    // Finalize the old geometry, possibly move data to the graphics card.
 	vol_old.finalize_geometry(gl_initialized);
 }
 
@@ -5768,8 +5776,12 @@ void GLCanvas3D::_load_print_toolpaths()
             _3DScene::extrusionentity_to_verts(print->brim(), print_zs[i], Point(0, 0), *volume);
         _3DScene::extrusionentity_to_verts(print->skirt(), print_zs[i], Point(0, 0), *volume);
         // Ensure that no volume grows over the limits. If the volume is too large, allocate a new one.
+#if ENABLE_TEXTURED_VOLUMES
+        if (volume->indexed_vertex_array.interleaved_data.size() > MAX_VERTEX_BUFFER_SIZE) {
+#else
         if (volume->indexed_vertex_array.vertices_and_normals_interleaved.size() > MAX_VERTEX_BUFFER_SIZE) {
-        	GLVolume &vol = *volume;
+#endif // ENABLE_TEXTURED_VOLUMES
+            GLVolume &vol = *volume;
             volume = m_volumes.new_toolpath_volume(vol.color);
             reserve_new_volume_finalize_old_volume(*volume, vol, m_initialized);
         }
@@ -6046,8 +6058,12 @@ void GLCanvas3D::_load_print_object_toolpaths(const PrintObject& print_object, c
             // Ensure that no volume grows over the limits. If the volume is too large, allocate a new one.
 	        for (size_t i = 0; i < vols.size(); ++i) {
 	            GLVolume &vol = *vols[i];
-	            if (vol.indexed_vertex_array.vertices_and_normals_interleaved.size() > MAX_VERTEX_BUFFER_SIZE) {
-	                vols[i] = new_volume(vol.color);
+#if ENABLE_TEXTURED_VOLUMES
+                if (vol.indexed_vertex_array.interleaved_data.size() > MAX_VERTEX_BUFFER_SIZE) {
+#else
+                if (vol.indexed_vertex_array.vertices_and_normals_interleaved.size() > MAX_VERTEX_BUFFER_SIZE) {
+#endif // ENABLE_TEXTURED_VOLUMES
+                    vols[i] = new_volume(vol.color);
 	                reserve_new_volume_finalize_old_volume(*vols[i], vol, false);
 	            }
 	        }
@@ -6207,7 +6223,11 @@ void GLCanvas3D::_load_wipe_tower_toolpaths(const std::vector<std::string>& str_
         }
         for (size_t i = 0; i < vols.size(); ++i) {
             GLVolume &vol = *vols[i];
+#if ENABLE_TEXTURED_VOLUMES
+            if (vol.indexed_vertex_array.interleaved_data.size() > MAX_VERTEX_BUFFER_SIZE) {
+#else
             if (vol.indexed_vertex_array.vertices_and_normals_interleaved.size() > MAX_VERTEX_BUFFER_SIZE) {
+#endif // ENABLE_TEXTURED_VOLUMES
                 vols[i] = new_volume(vol.color);
                 reserve_new_volume_finalize_old_volume(*vols[i], vol, false);
             }

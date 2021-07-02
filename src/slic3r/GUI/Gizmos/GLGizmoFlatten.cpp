@@ -323,8 +323,14 @@ void GLGizmoFlatten::update_planes()
     // the vertices in order, so triangulation is trivial.
     for (auto& plane : m_planes) {
         plane.vbo.reserve(plane.vertices.size());
+#if ENABLE_TEXTURED_VOLUMES
+        Vec3f normal = plane.normal.cast<float>();
+        for (const auto& vert : plane.vertices)
+            plane.vbo.push_geometry(vert.cast<float>(), &normal);
+#else
         for (const auto& vert : plane.vertices)
             plane.vbo.push_geometry(vert, plane.normal);
+#endif // ENABLE_TEXTURED_VOLUMES
         for (size_t i=1; i<plane.vertices.size()-1; ++i)
             plane.vbo.push_triangle(0, i, i+1); // triangle fan
         plane.vbo.finalize_geometry(true);

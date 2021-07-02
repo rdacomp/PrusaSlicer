@@ -103,10 +103,19 @@ void MeshClipper::recalculate_triangles()
     height_mesh += 0.001f;
 
     m_vertex_array.release_geometry();
+#if ENABLE_TEXTURED_VOLUMES
+    Vec3f up_f = up.cast<float>();
+#endif // ENABLE_TEXTURED_VOLUMES
     for (auto it=m_triangles2d.cbegin(); it != m_triangles2d.cend(); it=it+3) {
+#if ENABLE_TEXTURED_VOLUMES
+        m_vertex_array.push_geometry((tr * Vec3d((*(it + 0)).x(), (*(it + 0)).y(), height_mesh)).cast<float>(), &up_f);
+        m_vertex_array.push_geometry((tr * Vec3d((*(it + 1)).x(), (*(it + 1)).y(), height_mesh)).cast<float>(), &up_f);
+        m_vertex_array.push_geometry((tr * Vec3d((*(it + 2)).x(), (*(it + 2)).y(), height_mesh)).cast<float>(), &up_f);
+#else
         m_vertex_array.push_geometry(tr * Vec3d((*(it+0))(0), (*(it+0))(1), height_mesh), up);
         m_vertex_array.push_geometry(tr * Vec3d((*(it+1))(0), (*(it+1))(1), height_mesh), up);
         m_vertex_array.push_geometry(tr * Vec3d((*(it+2))(0), (*(it+2))(1), height_mesh), up);
+#endif // ENABLE_TEXTURED_VOLUMES
         size_t idx = it - m_triangles2d.cbegin();
         m_vertex_array.push_triangle(idx, idx+1, idx+2);
     }

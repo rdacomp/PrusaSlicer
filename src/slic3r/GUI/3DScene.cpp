@@ -125,6 +125,280 @@ static void smooth_normals_vertex(TriangleMesh& mesh, std::vector<stl_normal>& n
 }
 #endif // ENABLE_SMOOTH_NORMALS
 
+#if ENABLE_TEXTURED_VOLUMES
+#if ENABLE_SMOOTH_NORMALS
+void GLIndexedVertexArray::load_mesh_full_shading(const TriangleMesh& mesh, bool smooth_normals)
+#else
+void GLIndexedVertexArray::load_mesh_full_shading(const TriangleMesh& mesh)
+#endif // ENABLE_SMOOTH_NORMALS
+{
+    assert(!has_VBOs());
+
+    release_geometry(); // should we allow to add a mesh to an existing one ?
+    format = EFormat::PositionNormal; // at the moment TriangleMesh does not contain uvs
+
+#if ENABLE_SMOOTH_NORMALS
+    if (smooth_normals) {
+        TriangleMesh new_mesh(mesh);
+        std::vector<stl_normal> normals;
+        smooth_normals_corner(new_mesh, normals);
+//        smooth_normals_vertex(new_mesh, normals);
+
+        interleaved_data.reserve(vertex_size_floats() * new_mesh.its.vertices.size());
+
+        for (size_t i = 0; i < new_mesh.its.vertices.size(); ++i) {
+            push_geometry(new_mesh.its.vertices[i], &normals[i]);
+        }
+
+        for (size_t i = 0; i < new_mesh.its.indices.size(); ++i) {
+            const stl_triangle_vertex_indices& idx = new_mesh.its.indices[i];
+            push_triangle(idx(0), idx(1), idx(2));
+        }
+    }
+    else {
+#endif // ENABLE_SMOOTH_NORMALS
+        interleaved_data.reserve(3 * vertex_size_floats() * mesh.facets_count());
+
+        unsigned int vertices_count = 0;
+        for (int i = 0; i < (int)mesh.stl.stats.number_of_facets; ++i) {
+            push_geometry(mesh.stl.facet_start[i]);
+            push_triangle(vertices_count, vertices_count + 1, vertices_count + 2);
+            vertices_count += 3;
+        }
+#if ENABLE_SMOOTH_NORMALS
+    }
+#endif // ENABLE_SMOOTH_NORMALS
+}
+
+void GLIndexedVertexArray::push_geometry(const Vec3f& position, const Vec3f* const normal, const Vec2f* const uv)
+{
+    assert(!has_VBOs());
+    assert(normal == nullptr || (format == EFormat::PositionNormal || format == EFormat::PositionNormalUV));
+    assert(uv == nullptr || (format == EFormat::PositionNormalUV || format == EFormat::PositionUV));
+
+    size_t required_size = interleaved_data.size() + vertex_size_floats();
+    if (required_size > interleaved_data.capacity())
+        interleaved_data.reserve(next_highest_power_of_2(required_size));
+
+    // position
+    interleaved_data.emplace_back(position.x());
+    interleaved_data.emplace_back(position.y());
+    interleaved_data.emplace_back(position.z());
+
+    // normal
+    if (normal != nullptr) {
+        interleaved_data.emplace_back(normal->x());
+        interleaved_data.emplace_back(normal->y());
+        interleaved_data.emplace_back(normal->z());
+    }
+    else if (format == EFormat::PositionNormal || format == EFormat::PositionNormalUV) {
+        // default value for missing input normal
+        interleaved_data.emplace_back(0.0f);
+        interleaved_data.emplace_back(0.0f);
+        interleaved_data.emplace_back(0.1f);
+    }
+
+    // uv
+    if (uv != nullptr) {
+        interleaved_data.emplace_back(uv->x());
+        interleaved_data.emplace_back(uv->y());
+    }
+    else if (format == EFormat::PositionNormalUV || format == EFormat::PositionUV) {
+        // default value for missing input uv
+        interleaved_data.emplace_back(0.0f);
+        interleaved_data.emplace_back(0.0f);
+    }
+
+    m_bounding_box.merge(position.cast<double>());
+}
+
+void GLIndexedVertexArray::push_geometry(const stl_facet& facet)
+{
+    push_geometry(facet.vertex[0], &facet.normal);
+    push_geometry(facet.vertex[1], &facet.normal);
+    push_geometry(facet.vertex[2], &facet.normal);
+}
+
+void GLIndexedVertexArray::push_triangle(unsigned int idx1, unsigned int idx2, unsigned int idx3)
+{
+    assert(!has_VBOs());
+
+    size_t required_size = triangle_indices.size() + 3;
+    if (required_size > triangle_indices.capacity())
+        triangle_indices.reserve(next_highest_power_of_2(required_size));
+
+    triangle_indices.emplace_back(idx1);
+    triangle_indices.emplace_back(idx2);
+    triangle_indices.emplace_back(idx3);
+}
+
+void GLIndexedVertexArray::push_quad(unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4)
+{
+    assert(!has_VBOs());
+
+    size_t required_size = quad_indices.size() + 4;
+    if (required_size > quad_indices.capacity())
+        quad_indices.reserve(next_highest_power_of_2(required_size));
+
+    quad_indices.emplace_back(idx1);
+    quad_indices.emplace_back(idx2);
+    quad_indices.emplace_back(idx3);
+    quad_indices.emplace_back(idx4);
+}
+
+void GLIndexedVertexArray::finalize_geometry(bool opengl_initialized)
+{
+    assert(!has_VBOs());
+
+    if (!opengl_initialized) {
+        // Shrink the data vectors to conserve memory in case the data cannot be transfered to the OpenGL driver yet.
+        shrink_to_fit();
+        return;
+    }
+
+    if (!interleaved_data.empty()) {
+        interleaved_data_size = interleaved_data.size();
+        glsafe(::glGenBuffers(1, &interleaved_data_VBO_id));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, interleaved_data_VBO_id));
+        glsafe(::glBufferData(GL_ARRAY_BUFFER, interleaved_data_size * sizeof(float), interleaved_data.data(), GL_STATIC_DRAW));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+        interleaved_data.clear();
+    }
+    if (!triangle_indices.empty()) {
+        triangle_indices_size = triangle_indices.size();
+        glsafe(::glGenBuffers(1, &triangle_indices_VBO_id));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triangle_indices_VBO_id));
+        glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangle_indices_size * sizeof(unsigned int), triangle_indices.data(), GL_STATIC_DRAW));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+        triangle_indices.clear();
+    }
+    if (!quad_indices.empty()) {
+        quad_indices_size = quad_indices.size();
+        glsafe(::glGenBuffers(1, &quad_indices_VBO_id));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_indices_VBO_id));
+        glsafe(::glBufferData(GL_ELEMENT_ARRAY_BUFFER, quad_indices_size * sizeof(unsigned int), quad_indices.data(), GL_STATIC_DRAW));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+        quad_indices.clear();
+    }
+}
+
+void GLIndexedVertexArray::release_cpu_geometry() {
+    assert(!has_VBOs());
+
+    interleaved_data.clear();
+    triangle_indices.clear();
+    quad_indices.clear();
+    m_bounding_box.reset();
+}
+
+void GLIndexedVertexArray::render() const
+{
+    render({ 0, triangle_indices_size }, { 0, quad_indices_size });
+}
+
+void GLIndexedVertexArray::render(const std::pair<size_t, size_t>& tverts_range, const std::pair<size_t, size_t>& qverts_range) const
+{
+    assert(has_VBOs());
+
+    size_t stride = vertex_size_bytes();
+
+    // Render using the Vertex Buffer Objects.
+    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, interleaved_data_VBO_id));
+    glsafe(::glVertexPointer(3, GL_FLOAT, stride, (const void*)0));
+    glsafe(::glEnableClientState(GL_VERTEX_ARRAY));
+
+    if (has_normal()) {
+        glsafe(::glNormalPointer(GL_FLOAT, stride, (const void*)normal_offset_bytes()));
+        glsafe(::glEnableClientState(GL_NORMAL_ARRAY));
+    }
+
+    if (has_uv()) {
+        glsafe(::glTexCoordPointer(2, GL_FLOAT, stride, (const void*)uv_offset_bytes()));
+        glsafe(::glEnableClientState(GL_TEXTURE_COORD_ARRAY));
+    }
+
+    if (triangle_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triangle_indices_VBO_id));
+        glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(std::min(triangle_indices_size, tverts_range.second - tverts_range.first)), GL_UNSIGNED_INT, (const void*)(tverts_range.first * 3)));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+    }
+    if (quad_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad_indices_VBO_id));
+        glsafe(::glDrawElements(GL_QUADS, GLsizei(std::min(quad_indices_size, qverts_range.second - qverts_range.first)), GL_UNSIGNED_INT, (const void*)(qverts_range.first * 4)));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+    }
+
+    if (has_uv())
+        glsafe(::glDisableClientState(GL_TEXTURE_COORD_ARRAY));
+
+    if (has_normal())
+        glsafe(::glDisableClientState(GL_VERTEX_ARRAY));
+
+    glsafe(::glDisableClientState(GL_NORMAL_ARRAY));
+
+    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+}
+
+size_t GLIndexedVertexArray::vertex_size_floats() const
+{
+    switch (format)
+    {
+    case EFormat::Position:         return 3;
+    default:
+    case EFormat::PositionNormal:   return 6;
+    case EFormat::PositionUV:       return 5;
+    case EFormat::PositionNormalUV: return 8;
+    }
+}
+
+size_t GLIndexedVertexArray::normal_offset_floats() const
+{
+    switch (format)
+    {
+    case EFormat::PositionNormal:
+    case EFormat::PositionNormalUV: return 3;
+    default:
+    {
+        assert(false);
+        return -1;
+    }
+    }
+}
+
+size_t GLIndexedVertexArray::uv_offset_floats() const
+{
+    switch (format)
+    {
+    case EFormat::PositionUV:       return 3;
+    case EFormat::PositionNormalUV: return 6;
+    default:
+    {
+        assert(false);
+        return -1;
+    }
+    }
+}
+
+void GLIndexedVertexArray::release_VBOs()
+{
+    if (interleaved_data_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &interleaved_data_VBO_id));
+        interleaved_data_VBO_id = 0;
+    }
+    if (triangle_indices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &triangle_indices_VBO_id));
+        triangle_indices_VBO_id = 0;
+    }
+    if (quad_indices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &quad_indices_VBO_id));
+        quad_indices_VBO_id = 0;
+    }
+
+    interleaved_data_size = 0;
+    triangle_indices_size = 0;
+    quad_indices_size = 0;
+}
+#else
 #if ENABLE_SMOOTH_NORMALS
 void GLIndexedVertexArray::load_mesh_full_shading(const TriangleMesh& mesh, bool smooth_normals)
 #else
@@ -156,7 +430,7 @@ void GLIndexedVertexArray::load_mesh_full_shading(const TriangleMesh& mesh)
     }
     else {
 #endif // ENABLE_SMOOTH_NORMALS
-        this->vertices_and_normals_interleaved.reserve(vertices_and_normals_interleaved.size() + 3 * 3 * 2 * mesh.facets_count());
+        vertices_and_normals_interleaved.reserve(vertices_and_normals_interleaved.size() + 3 * 3 * 2 * mesh.facets_count());
 
         unsigned int vertices_count = 0;
         for (int i = 0; i < (int)mesh.stl.stats.number_of_facets; ++i) {
@@ -226,9 +500,6 @@ void GLIndexedVertexArray::release_geometry()
 
 void GLIndexedVertexArray::render() const
 {
-#if ENABLE_TEXTURED_VOLUMES
-    render({ 0, triangle_indices_size }, { 0, quad_indices_size });
-#else
     assert(vertices_and_normals_interleaved_VBO_id != 0);
     assert(triangle_indices_VBO_id != 0 || quad_indices_VBO_id != 0);
 
@@ -255,7 +526,6 @@ void GLIndexedVertexArray::render() const
     glsafe(::glDisableClientState(GL_NORMAL_ARRAY));
 
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
-#endif // ENABLE_TEXTURED_VOLUMES
 }
 
 void GLIndexedVertexArray::render(
@@ -289,6 +559,7 @@ void GLIndexedVertexArray::render(
     
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
 }
+#endif // ENABLE_TEXTURED_VOLUMES
 
 const float GLVolume::SELECTED_COLOR[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
 const float GLVolume::HOVER_SELECT_COLOR[4] = { 0.4f, 0.9f, 0.1f, 1.0f };
@@ -458,13 +729,13 @@ const BoundingBoxf3& GLVolume::transformed_bounding_box() const
 
 const BoundingBoxf3& GLVolume::transformed_convex_hull_bounding_box() const
 {
-    BoundingBoxf3* transformed_convex_hull_bounding_box = const_cast<BoundingBoxf3*>(&m_transformed_convex_hull_bounding_box);
-    bool* transformed_convex_hull_bounding_box_dirty = const_cast<bool*>(&m_transformed_convex_hull_bounding_box_dirty);
-    if (*transformed_convex_hull_bounding_box_dirty) {
-        *transformed_convex_hull_bounding_box = this->transformed_convex_hull_bounding_box(world_matrix());
-        *transformed_convex_hull_bounding_box_dirty = false;
+    BoundingBoxf3* transformed_convex_hull_bbox = const_cast<BoundingBoxf3*>(&m_transformed_convex_hull_bounding_box);
+    bool* transformed_convex_hull_bbox_dirty = const_cast<bool*>(&m_transformed_convex_hull_bounding_box_dirty);
+    if (*transformed_convex_hull_bbox_dirty) {
+        *transformed_convex_hull_bbox = transformed_convex_hull_bounding_box(world_matrix());
+        *transformed_convex_hull_bbox_dirty = false;
     }
-    return *transformed_convex_hull_bounding_box;
+    return *transformed_convex_hull_bbox;
 }
 
 BoundingBoxf3 GLVolume::transformed_convex_hull_bounding_box(const Transform3d &trafo) const
@@ -627,7 +898,7 @@ std::vector<int> GLVolumeCollection::load_object(
     std::vector<int> volumes_idx;
     for (int volume_idx = 0; volume_idx < int(model_object->volumes.size()); ++volume_idx)
         for (int instance_idx : instance_idxs)
-            volumes_idx.emplace_back(this->GLVolumeCollection::load_object_volume(model_object, obj_idx, volume_idx, instance_idx, color_by, opengl_initialized));
+            volumes_idx.emplace_back(GLVolumeCollection::load_object_volume(model_object, obj_idx, volume_idx, instance_idx, color_by, opengl_initialized));
     return volumes_idx;
 }
 
@@ -656,8 +927,8 @@ int GLVolumeCollection::load_object_volume(
         }
         color[3] = model_volume->is_model_part() ? 1.f : 0.5f; */
     color[3] = model_volume->is_model_part() ? 1.f : 0.5f;
-    this->volumes.emplace_back(new GLVolume(color));
-    GLVolume& v = *this->volumes.back();
+    volumes.emplace_back(new GLVolume(color));
+    GLVolume& v = *volumes.back();
     v.set_color_from_model_volume(model_volume);
 #if ENABLE_SMOOTH_NORMALS
     v.indexed_vertex_array.load_mesh(mesh, true);
@@ -678,7 +949,7 @@ int GLVolumeCollection::load_object_volume(
     v.set_instance_transformation(instance->get_transformation());
     v.set_volume_transformation(model_volume->get_transformation());
 
-    return int(this->volumes.size() - 1);
+    return int(volumes.size() - 1);
 }
 
 // Load SLA auxiliary GLVolumes (for support trees or pad).
@@ -703,8 +974,8 @@ void GLVolumeCollection::load_object_auxiliary(
     TriangleMesh convex_hull = mesh.convex_hull_3d();
     for (const std::pair<size_t, size_t>& instance_idx : instances) {
         const ModelInstance& model_instance = *print_object->model_object()->instances[instance_idx.first];
-        this->volumes.emplace_back(new GLVolume((milestone == slaposPad) ? GLVolume::SLA_PAD_COLOR : GLVolume::SLA_SUPPORT_COLOR));
-        GLVolume& v = *this->volumes.back();
+        volumes.emplace_back(new GLVolume((milestone == slaposPad) ? GLVolume::SLA_PAD_COLOR : GLVolume::SLA_SUPPORT_COLOR));
+        GLVolume& v = *volumes.back();
 #if ENABLE_SMOOTH_NORMALS
         v.indexed_vertex_array.load_mesh(mesh, true);
 #else
@@ -731,7 +1002,7 @@ int GLVolumeCollection::load_wipe_tower_preview(
     float rotation_angle, bool size_unknown, float brim_width, bool opengl_initialized)
 {
     if (depth < 0.01f)
-        return int(this->volumes.size() - 1);
+        return int(volumes.size() - 1);
     if (height == 0.0f)
         height = 0.1f;
 
@@ -784,8 +1055,8 @@ int GLVolumeCollection::load_wipe_tower_preview(
     brim_mesh.translate(-brim_width, -brim_width, 0.f);
     mesh.merge(brim_mesh);
 
-    this->volumes.emplace_back(new GLVolume(color));
-    GLVolume& v = *this->volumes.back();
+    volumes.emplace_back(new GLVolume(color));
+    GLVolume& v = *volumes.back();
     v.indexed_vertex_array.load_mesh(mesh);
     v.indexed_vertex_array.finalize_geometry(opengl_initialized);
     v.set_volume_offset(Vec3d(pos_x, pos_y, 0.0));
@@ -795,7 +1066,7 @@ int GLVolumeCollection::load_wipe_tower_preview(
     v.geometry_id.second = wipe_tower_instance_id().id;
     v.is_wipe_tower = true;
     v.shader_outside_printer_detection_enabled = !size_unknown;
-    return int(this->volumes.size() - 1);
+    return int(volumes.size() - 1);
 }
 
 GLVolume* GLVolumeCollection::new_toolpath_volume(const float *rgba, size_t reserve_vbo_floats)
@@ -809,9 +1080,13 @@ GLVolume* GLVolumeCollection::new_nontoolpath_volume(const float *rgba, size_t r
 {
 	GLVolume *out = new GLVolume(rgba);
 	out->is_extrusion_path = false;
-	// Reserving number of vertices (3x position + 3x color)
+    // Reserving number of vertices (3x position + 3x color)
+#if ENABLE_TEXTURED_VOLUMES
+    out->indexed_vertex_array.reserve(reserve_vbo_floats / out->indexed_vertex_array.vertex_size_floats());
+#else
 	out->indexed_vertex_array.reserve(reserve_vbo_floats / 6);
-	this->volumes.emplace_back(out);
+#endif // ENABLE_TEXTURED_VOLUMES
+    volumes.emplace_back(out);
 	return out;
 }
 
@@ -820,8 +1095,7 @@ GLVolumeWithIdAndZList volumes_to_render(const GLVolumePtrs& volumes, GLVolumeCo
     GLVolumeWithIdAndZList list;
     list.reserve(volumes.size());
 
-    for (unsigned int i = 0; i < (unsigned int)volumes.size(); ++i)
-    {
+    for (unsigned int i = 0; i < (unsigned int)volumes.size(); ++i) {
         GLVolume* volume = volumes[i];
         bool is_transparent = (volume->render_color[3] < 1.0f);
         if ((((type == GLVolumeCollection::Opaque) && !is_transparent) ||
@@ -831,10 +1105,8 @@ GLVolumeWithIdAndZList volumes_to_render(const GLVolumePtrs& volumes, GLVolumeCo
             list.emplace_back(std::make_pair(volume, std::make_pair(i, 0.0)));
     }
 
-    if ((type == GLVolumeCollection::Transparent) && (list.size() > 1))
-    {
-        for (GLVolumeWithIdAndZ& volume : list)
-        {
+    if (type == GLVolumeCollection::Transparent && list.size() > 1) {
+        for (GLVolumeWithIdAndZ& volume : list) {
             volume.second.second = volume.first->bounding_box().transformed(view_matrix * volume.first->world_matrix()).max(2);
         }
 
@@ -842,8 +1114,7 @@ GLVolumeWithIdAndZList volumes_to_render(const GLVolumePtrs& volumes, GLVolumeCo
             [](const GLVolumeWithIdAndZ& v1, const GLVolumeWithIdAndZ& v2) -> bool { return v1.second.second < v2.second.second; }
         );
     }
-    else if ((type == GLVolumeCollection::Opaque) && (list.size() > 1))
-    {
+    else if (type == GLVolumeCollection::Opaque && list.size() > 1) {
         std::sort(list.begin(), list.end(),
             [](const GLVolumeWithIdAndZ& v1, const GLVolumeWithIdAndZ& v2) -> bool { return v1.first->selected && !v2.first->selected; }
         );
@@ -887,7 +1158,7 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
 #endif // ENABLE_ENVIRONMENT_MAP
     glcheck();
 
-    GLVolumeWithIdAndZList to_render = volumes_to_render(this->volumes, type, view_matrix, filter_func);
+    GLVolumeWithIdAndZList to_render = volumes_to_render(volumes, type, view_matrix, filter_func);
     for (GLVolumeWithIdAndZ& volume : to_render) {
         volume.first->set_render_color();
         shader->set_uniform("uniform_color", volume.first->render_color, 4);
@@ -969,7 +1240,7 @@ bool GLVolumeCollection::check_outside_state(const DynamicPrintConfig* config, M
 
     bool contained_min_one = false;
 
-    for (GLVolume* volume : this->volumes) {
+    for (GLVolume* volume : volumes) {
         if (volume == nullptr || volume->is_modifier || (volume->is_wipe_tower && !volume->shader_outside_printer_detection_enabled) || (volume->composite_id.volume_id < 0 && !volume->shader_outside_printer_detection_enabled))
             continue;
 
@@ -1018,7 +1289,7 @@ bool GLVolumeCollection::check_outside_state(const DynamicPrintConfig* config, b
 
     partlyOut = false;
     fullyOut = false;
-    for (GLVolume* volume : this->volumes) {
+    for (GLVolume* volume : volumes) {
         if (volume == nullptr || volume->is_modifier || (volume->is_wipe_tower && !volume->shader_outside_printer_detection_enabled) || (volume->composite_id.volume_id < 0 && !volume->shader_outside_printer_detection_enabled))
             continue;
 
@@ -1048,8 +1319,7 @@ bool GLVolumeCollection::check_outside_state(const DynamicPrintConfig* config, b
 
 void GLVolumeCollection::reset_outside_state()
 {
-    for (GLVolume* volume : this->volumes)
-    {
+    for (GLVolume* volume : volumes) {
         if (volume != nullptr)
             volume->is_outside = false;
     }
@@ -1064,16 +1334,13 @@ void GLVolumeCollection::update_colors_by_extruder(const DynamicPrintConfig* con
         std::string text;
         unsigned char rgb[3];
 
-        Color()
-            : text("")
-        {
+        Color() {
             rgb[0] = 255;
             rgb[1] = 255;
             rgb[2] = 255;
         }
 
-        void set(const std::string& text, unsigned char* rgb)
-        {
+        void set(const std::string& text, unsigned char* rgb) {
             this->text = text;
             ::memcpy((void*)this->rgb, (const void*)rgb, 3 * sizeof(unsigned char));
         }
@@ -1097,35 +1364,28 @@ void GLVolumeCollection::update_colors_by_extruder(const DynamicPrintConfig* con
     std::vector<Color> colors(colors_count);
 
     unsigned char rgb[3];
-    for (unsigned int i = 0; i < colors_count; ++i)
-    {
+    for (unsigned int i = 0; i < colors_count; ++i) {
         const std::string& txt_color = config->opt_string("extruder_colour", i);
         if (Slic3r::GUI::BitmapCache::parse_color(txt_color, rgb))
-        {
             colors[i].set(txt_color, rgb);
-        }
-        else
-        {
+        else {
             const std::string& txt_color = config->opt_string("filament_colour", i);
             if (Slic3r::GUI::BitmapCache::parse_color(txt_color, rgb))
                 colors[i].set(txt_color, rgb);
         }
     }
 
-    for (GLVolume* volume : volumes)
-    {
-        if ((volume == nullptr) || volume->is_modifier || volume->is_wipe_tower || (volume->volume_idx() < 0))
+    for (GLVolume* volume : volumes) {
+        if (volume == nullptr || volume->is_modifier || volume->is_wipe_tower || volume->volume_idx() < 0)
             continue;
 
         int extruder_id = volume->extruder_id - 1;
-        if ((extruder_id < 0) || ((int)colors.size() <= extruder_id))
+        if (extruder_id < 0 || (int)colors.size() <= extruder_id)
             extruder_id = 0;
 
         const Color& color = colors[extruder_id];
-        if (!color.text.empty())
-        {
-            for (int i = 0; i < 3; ++i)
-            {
+        if (!color.text.empty()) {
+            for (int i = 0; i < 3; ++i) {
                 volume->color[i] = (float)color.rgb[i] * inv_255;
             }
         }
@@ -1136,8 +1396,7 @@ std::vector<double> GLVolumeCollection::get_current_print_zs(bool active_only) c
 {
     // Collect layer top positions of all volumes.
     std::vector<double> print_zs;
-    for (GLVolume *vol : this->volumes)
-    {
+    for (GLVolume *vol : volumes) {
         if (!active_only || vol->is_active)
             append(print_zs, vol->print_zs);
     }
@@ -1161,8 +1420,8 @@ std::vector<double> GLVolumeCollection::get_current_print_zs(bool active_only) c
 
 size_t GLVolumeCollection::cpu_memory_used() const 
 {
-	size_t memsize = sizeof(*this) + this->volumes.capacity() * sizeof(GLVolume);
-	for (const GLVolume *volume : this->volumes)
+	size_t memsize = sizeof(*this) + volumes.capacity() * sizeof(GLVolume);
+	for (const GLVolume *volume : volumes)
 		memsize += volume->cpu_memory_used();
 	return memsize;
 }
@@ -1170,14 +1429,14 @@ size_t GLVolumeCollection::cpu_memory_used() const
 size_t GLVolumeCollection::gpu_memory_used() const 
 {
 	size_t memsize = 0;
-	for (const GLVolume *volume : this->volumes)
+	for (const GLVolume *volume : volumes)
 		memsize += volume->gpu_memory_used();
 	return memsize;
 }
 
 std::string GLVolumeCollection::log_memory_info() const 
 { 
-	return " (GLVolumeCollection RAM: " + format_memsize_MB(this->cpu_memory_used()) + " GPU: " + format_memsize_MB(this->gpu_memory_used()) + " Both: " + format_memsize_MB(this->gpu_memory_used()) + ")";
+	return " (GLVolumeCollection RAM: " + format_memsize_MB(cpu_memory_used()) + " GPU: " + format_memsize_MB(gpu_memory_used()) + " Both: " + format_memsize_MB(gpu_memory_used()) + ")";
 }
 
 // caller is responsible for supplying NO lines with zero length
@@ -1189,6 +1448,10 @@ static void thick_lines_to_indexed_vertex_array(
     double                       top_z,
     GLIndexedVertexArray        &volume)
 {
+#if ENABLE_TEXTURED_VOLUMES
+    assert(volume.format == GLIndexedVertexArray::EFormat::PositionNormal);
+#endif // ENABLE_TEXTURED_VOLUMES
+
     assert(! lines.empty());
     if (lines.empty())
         return;
@@ -1241,48 +1504,70 @@ static void thick_lines_to_indexed_vertex_array(
         }
 
         // calculate new XY normals
+#if ENABLE_TEXTURED_VOLUMES
+        Vec2f xy_right_normal = unscale(line.normal()).normalized().cast<float>();
+        Vec3f right_normal = Vec3f(xy_right_normal.x(), xy_right_normal.y(), 0.0f);
+        Vec3f left_normal = -right_normal;
+        Vec3f top_normal = Vec3f(0.0f, 0.0f, 1.0f);
+        Vec3f bottom_normal = -top_normal;
+#else
         Vec2d xy_right_normal = unscale(line.normal()).normalized();
+#endif // ENABLE_TEXTURED_VOLUMES
 
         int idx_a[4] = { 0, 0, 0, 0 }; // initialized to avoid warnings
         int idx_b[4] = { 0, 0, 0, 0 }; // initialized to avoid warnings
+#if ENABLE_TEXTURED_VOLUMES
+        int idx_last = int(volume.interleaved_data.size() / volume.vertex_size_floats());
+#else
         int idx_last = int(volume.vertices_and_normals_interleaved.size() / 6);
+#endif // ENABLE_TEXTURED_VOLUMES
 
         bool bottom_z_different = bottom_z_prev != bottom_z;
         bottom_z_prev = bottom_z;
 
         if (!is_first && bottom_z_different)
-        {
             // Found a change of the layer thickness -> Add a cap at the end of the previous segment.
             volume.push_quad(idx_b[BOTTOM], idx_b[LEFT], idx_b[TOP], idx_b[RIGHT]);
-        }
 
         // Share top / bottom vertices if possible.
         if (is_first) {
             idx_a[TOP] = idx_last++;
-            volume.push_geometry(a(0), a(1), top_z   , 0., 0.,  1.); 
-        } else {
-            idx_a[TOP] = idx_prev[TOP];
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(Vec3d(a.x(), a.y(), top_z).cast<float>(), &top_normal);
+#else
+            volume.push_geometry(a(0), a(1), top_z   , 0., 0.,  1.);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
+        else
+            idx_a[TOP] = idx_prev[TOP];
 
         if (is_first || bottom_z_different) {
             // Start of the 1st line segment or a change of the layer thickness while maintaining the print_z.
             idx_a[BOTTOM] = idx_last ++;
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(Vec3d(a.x(), a.y(), bottom_z).cast<float>(), &bottom_normal);
+            idx_a[LEFT] = idx_last++;
+            volume.push_geometry(Vec3d(a2.x(), a2.y(), middle_z).cast<float>(), &left_normal);
+            idx_a[RIGHT] = idx_last++;
+            volume.push_geometry(Vec3d(a1.x(), a1.y(), middle_z).cast<float>(), &right_normal);
+#else
             volume.push_geometry(a(0), a(1), bottom_z, 0., 0., -1.);
             idx_a[LEFT ] = idx_last ++;
             volume.push_geometry(a2(0), a2(1), middle_z, -xy_right_normal(0), -xy_right_normal(1), 0.0);
             idx_a[RIGHT] = idx_last ++;
             volume.push_geometry(a1(0), a1(1), middle_z, xy_right_normal(0), xy_right_normal(1), 0.0);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
-        else {
+        else
             idx_a[BOTTOM] = idx_prev[BOTTOM];
-        }
 
         if (is_first) {
             // Start of the 1st line segment.
             width_initial    = width;
             bottom_z_initial = bottom_z;
             memcpy(idx_initial, idx_a, sizeof(int) * 4);
-        } else {
+        }
+        else {
             // Continuing a previous segment.
             // Share left / right vertices if possible.
 			double v_dot    = v_prev.dot(v);
@@ -1293,16 +1578,24 @@ static void thick_lines_to_indexed_vertex_array(
             double len_threshold = 2.5;
 
             // Generate new vertices if the angle between adjacent edges is greater than 45 degrees or thresholds conditions are met
-            bool sharp = (v_dot < 0.707) || (len_prev > len_threshold) || (len > len_threshold);
+            bool sharp = v_dot < 0.707 || len_prev > len_threshold || len > len_threshold;
             if (sharp) {
-                if (!bottom_z_different)
-                {
+                if (!bottom_z_different) {
+#if ENABLE_TEXTURED_VOLUMES
+                    // Allocate new left / right points for the start of this segment as these points will receive their own normals to indicate a sharp turn.
+                    idx_a[RIGHT] = idx_last++;
+                    volume.push_geometry(Vec3d(a1.x(), a1.y(), middle_z).cast<float>(), &right_normal);
+                    idx_a[LEFT] = idx_last++;
+                    volume.push_geometry(Vec3d(a2.x(), a2.y(), middle_z).cast<float>(), &left_normal);
+#else
                     // Allocate new left / right points for the start of this segment as these points will receive their own normals to indicate a sharp turn.
                     idx_a[RIGHT] = idx_last++;
                     volume.push_geometry(a1(0), a1(1), middle_z, xy_right_normal(0), xy_right_normal(1), 0.0);
                     idx_a[LEFT] = idx_last++;
                     volume.push_geometry(a2(0), a2(1), middle_z, -xy_right_normal(0), -xy_right_normal(1), 0.0);
-                    if (cross2(v_prev, v) > 0.) {
+#endif // ENABLE_TEXTURED_VOLUMES
+
+                    if (cross2(v_prev, v) > 0.0) {
                         // Right turn. Fill in the right turn wedge.
                         volume.push_triangle(idx_prev[RIGHT], idx_a[RIGHT], idx_prev[TOP]);
                         volume.push_triangle(idx_prev[RIGHT], idx_prev[BOTTOM], idx_a[RIGHT]);
@@ -1314,10 +1607,8 @@ static void thick_lines_to_indexed_vertex_array(
                     }
                 }
             }
-            else
-            {
-                if (!bottom_z_different)
-                {
+            else {
+                if (!bottom_z_different) {
                     // The two successive segments are nearly collinear.
                     idx_a[LEFT ] = idx_prev[LEFT];
                     idx_a[RIGHT] = idx_prev[RIGHT];
@@ -1325,12 +1616,19 @@ static void thick_lines_to_indexed_vertex_array(
             }
             if (is_closing) {
                 if (!sharp) {
-                    if (!bottom_z_different)
-                    {
+                    if (!bottom_z_different) {
                         // Closing a loop with smooth transition. Unify the closing left / right vertices.
-                        memcpy(volume.vertices_and_normals_interleaved.data() + idx_initial[LEFT ] * 6, volume.vertices_and_normals_interleaved.data() + idx_prev[LEFT ] * 6, sizeof(float) * 6);
-                        memcpy(volume.vertices_and_normals_interleaved.data() + idx_initial[RIGHT] * 6, volume.vertices_and_normals_interleaved.data() + idx_prev[RIGHT] * 6, sizeof(float) * 6);
+#if ENABLE_TEXTURED_VOLUMES
+                        size_t vertex_size_float = volume.vertex_size_floats();
+                        size_t vertex_size_bytes = volume.vertex_size_bytes();
+                        ::memcpy(volume.interleaved_data.data() + idx_initial[LEFT] * vertex_size_float, volume.interleaved_data.data() + idx_prev[LEFT] * vertex_size_float, vertex_size_bytes);
+                        ::memcpy(volume.interleaved_data.data() + idx_initial[RIGHT] * vertex_size_float, volume.interleaved_data.data() + idx_prev[RIGHT] * vertex_size_float, vertex_size_bytes);
+                        volume.interleaved_data.erase(volume.interleaved_data.end() - 2 * vertex_size_float, volume.interleaved_data.end());
+#else
+                        ::memcpy(volume.vertices_and_normals_interleaved.data() + idx_initial[LEFT ] * 6, volume.vertices_and_normals_interleaved.data() + idx_prev[LEFT ] * 6, sizeof(float) * 6);
+                        ::memcpy(volume.vertices_and_normals_interleaved.data() + idx_initial[RIGHT] * 6, volume.vertices_and_normals_interleaved.data() + idx_prev[RIGHT] * 6, sizeof(float) * 6);
                         volume.vertices_and_normals_interleaved.erase(volume.vertices_and_normals_interleaved.end() - 12, volume.vertices_and_normals_interleaved.end());
+#endif // ENABLE_TEXTURED_VOLUMES
                         // Replace the left / right vertex indices to point to the start of the loop. 
                         for (size_t u = volume.quad_indices.size() - 16; u < volume.quad_indices.size(); ++ u) {
                             if (volume.quad_indices[u] == idx_prev[LEFT])
@@ -1346,36 +1644,49 @@ static void thick_lines_to_indexed_vertex_array(
         }
 
         // Only new allocate top / bottom vertices, if not closing a loop.
-        if (is_closing) {
+        if (is_closing)
             idx_b[TOP] = idx_initial[TOP];
-        } else {
+        else {
             idx_b[TOP] = idx_last ++;
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(Vec3d(b.x(), b.y(), top_z).cast<float>(), &top_normal);
+#else
             volume.push_geometry(b(0), b(1), top_z   , 0., 0.,  1.);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
 
-        if (is_closing && (width == width_initial) && (bottom_z == bottom_z_initial)) {
+        if (is_closing && width == width_initial && bottom_z == bottom_z_initial)
             idx_b[BOTTOM] = idx_initial[BOTTOM];
-        } else {
+        else {
             idx_b[BOTTOM] = idx_last ++;
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(Vec3d(b.x(), b.y(), bottom_z).cast<float>(), &bottom_normal);
+#else
             volume.push_geometry(b(0), b(1), bottom_z, 0., 0., -1.);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
         // Generate new vertices for the end of this line segment.
+#if ENABLE_TEXTURED_VOLUMES
+        idx_b[LEFT] = idx_last++;
+        volume.push_geometry(Vec3d(b2.x(), b2.y(), middle_z).cast<float>(), &left_normal);
+        idx_b[RIGHT] = idx_last++;
+        volume.push_geometry(Vec3d(b1.x(), b1.y(), middle_z).cast<float>(), &right_normal);
+#else
         idx_b[LEFT  ] = idx_last ++;
         volume.push_geometry(b2(0), b2(1), middle_z, -xy_right_normal(0), -xy_right_normal(1), 0.0);
         idx_b[RIGHT ] = idx_last ++;
         volume.push_geometry(b1(0), b1(1), middle_z, xy_right_normal(0), xy_right_normal(1), 0.0);
+#endif // ENABLE_TEXTURED_VOLUMES
 
-        memcpy(idx_prev, idx_b, 4 * sizeof(int));
+        ::memcpy(idx_prev, idx_b, 4 * sizeof(int));
         bottom_z_prev = bottom_z;
         b1_prev = b1;
         v_prev = v;
         len_prev = len;
 
         if (bottom_z_different && (closed || (!is_first && !is_last)))
-        {
             // Found a change of the layer thickness -> Add a cap at the beginning of this segment.
             volume.push_quad(idx_a[BOTTOM], idx_a[RIGHT], idx_a[TOP], idx_a[LEFT]);
-        }
 
         if (! closed) {
             // Terminate open paths with caps.
@@ -1410,6 +1721,10 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
     bool closed,
     GLIndexedVertexArray& volume)
 {
+#if ENABLE_TEXTURED_VOLUMES
+    assert(volume.format == GLIndexedVertexArray::EFormat::PositionNormal);
+#endif // ENABLE_TEXTURED_VOLUMES
+
     assert(!lines.empty());
     if (lines.empty())
         return;
@@ -1424,9 +1739,15 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
     int      idx_prev[4] = { -1, -1, -1, -1 };
     double   z_prev = 0.0;
     double   len_prev = 0.0;
+#if ENABLE_TEXTURED_VOLUMES
+    Vec3f    n_right_prev = Vec3f::Zero();
+    Vec3f    n_top_prev = Vec3f::Zero();
+    Vec3f    unit_v_prev = Vec3f::Zero();
+#else
     Vec3d    n_right_prev = Vec3d::Zero();
     Vec3d    n_top_prev = Vec3d::Zero();
     Vec3d    unit_v_prev = Vec3d::Zero();
+#endif // ENABLE_TEXTURED_VOLUMES
     double   width_initial = 0.0;
 
     // new vertices around the line endpoints
@@ -1436,30 +1757,48 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
 
     // loop once more in case of closed loops
     size_t lines_end = closed ? (lines.size() + 1) : lines.size();
-    for (size_t ii = 0; ii < lines_end; ++ii)
-    {
+    for (size_t ii = 0; ii < lines_end; ++ii) {
         size_t i = (ii == lines.size()) ? 0 : ii;
 
         const Line3& line = lines[i];
         double height = heights[i];
         double width = widths[i];
 
-        Vec3d unit_v = unscale(line.vector()).normalized();
         double len = unscale<double>(line.length());
 
+#if ENABLE_TEXTURED_VOLUMES
+        Vec3f unit_v = unscale(line.vector()).normalized().cast<float>();
+        Vec3f top_normal = Vec3f::Zero();
+        Vec3f right_normal = Vec3f::Zero();
+        if (line.a(0) == line.b(0) && line.a(1) == line.b(1)) {
+            // vertical segment
+            top_normal = Vec3f::UnitY();
+            right_normal = Vec3f::UnitX();
+            if (line.a(2) < line.b(2))
+                right_normal = -right_normal;
+        }
+        else {
+            // horizontal segment
+            // horizontal segment
+            right_normal = unit_v.cross(Vec3f::UnitZ()).normalized();
+            top_normal = right_normal.cross(unit_v).normalized();
+        }
+
+        Vec3d rl_displacement = 0.5 * width * right_normal.cast<double>();
+        Vec3d tb_displacement = 0.5 * height * top_normal.cast<double>();
+#else
+        Vec3d unit_v = unscale(line.vector()).normalized();
         Vec3d n_top = Vec3d::Zero();
         Vec3d n_right = Vec3d::Zero();
-        
-        if ((line.a(0) == line.b(0)) && (line.a(1) == line.b(1)))
-        {
+        if (line.a(0) == line.b(0) && line.a(1) == line.b(1)) {
             // vertical segment
             n_top = Vec3d::UnitY();
             n_right = Vec3d::UnitX();
             if (line.a(2) < line.b(2))
                 n_right = -n_right;
         }
-        else
-        {
+        else {
+            // horizontal segment
             // horizontal segment
             n_right = unit_v.cross(Vec3d::UnitZ()).normalized();
             n_top = n_right.cross(unit_v).normalized();
@@ -1467,6 +1806,7 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
 
         Vec3d rl_displacement = 0.5 * width * n_right;
         Vec3d tb_displacement = 0.5 * height * n_top;
+#endif // ENABLE_TEXTURED_VOLUMES
         Vec3d l_a = unscale(line.a);
         Vec3d l_b = unscale(line.b);
 
@@ -1479,46 +1819,64 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
         b[TOP] = l_b + tb_displacement;
         b[BOTTOM] = l_b - tb_displacement;
 
+#if ENABLE_TEXTURED_VOLUMES
+        Vec3f bottom_normal = -top_normal;
+        Vec3f left_normal = -right_normal;
+#else
         Vec3d n_bottom = -n_top;
         Vec3d n_left = -n_right;
+#endif // ENABLE_TEXTURED_VOLUMES
 
         int idx_a[4];
         int idx_b[4];
+#if ENABLE_TEXTURED_VOLUMES
+        int idx_last = int(volume.interleaved_data.size() / volume.vertex_size_floats());
+#else
         int idx_last = int(volume.vertices_and_normals_interleaved.size() / 6);
+#endif // ENABLE_TEXTURED_VOLUMES
 
         bool z_different = (z_prev != l_a(2));
         z_prev = l_b(2);
 
         // Share top / bottom vertices if possible.
-        if (ii == 0)
-        {
+        if (ii == 0) {
             idx_a[TOP] = idx_last++;
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(a[TOP].cast<float>(), &top_normal);
+#else
             volume.push_geometry(a[TOP], n_top);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
         else
             idx_a[TOP] = idx_prev[TOP];
 
-        if ((ii == 0) || z_different)
-        {
+        if (ii == 0 || z_different) {
             // Start of the 1st line segment or a change of the layer thickness while maintaining the print_z.
+#if ENABLE_TEXTURED_VOLUMES
+            idx_a[BOTTOM] = idx_last++;
+            volume.push_geometry(a[BOTTOM].cast<float>(), &bottom_normal);
+            idx_a[LEFT] = idx_last++;
+            volume.push_geometry(a[LEFT].cast<float>(), &left_normal);
+            idx_a[RIGHT] = idx_last++;
+            volume.push_geometry(a[RIGHT].cast<float>(), &right_normal);
+#else
             idx_a[BOTTOM] = idx_last++;
             volume.push_geometry(a[BOTTOM], n_bottom);
             idx_a[LEFT] = idx_last++;
             volume.push_geometry(a[LEFT], n_left);
             idx_a[RIGHT] = idx_last++;
             volume.push_geometry(a[RIGHT], n_right);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
         else
             idx_a[BOTTOM] = idx_prev[BOTTOM];
 
-        if (ii == 0)
-        {
+        if (ii == 0) {
             // Start of the 1st line segment.
             width_initial = width;
             ::memcpy(idx_initial, idx_a, sizeof(int) * 4);
         }
-        else
-        {
+        else {
             // Continuing a previous segment.
             // Share left / right vertices if possible.
             double v_dot = unit_v_prev.dot(unit_v);
@@ -1531,46 +1889,54 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
             double len_threshold = 2.5;
 
             // Generate new vertices if the angle between adjacent edges is greater than 45 degrees or thresholds conditions are met
-            bool is_sharp = (v_dot < 0.707) || (len_prev > len_threshold) || (len > len_threshold);
-            if (is_sharp)
-            {
+            bool is_sharp = v_dot < 0.707 || len_prev > len_threshold || len > len_threshold;
+            if (is_sharp) {
                 // Allocate new left / right points for the start of this segment as these points will receive their own normals to indicate a sharp turn.
+#if ENABLE_TEXTURED_VOLUMES
+                idx_a[RIGHT] = idx_last++;
+                volume.push_geometry(a[RIGHT].cast<float>(), &right_normal);
+                idx_a[LEFT] = idx_last++;
+                volume.push_geometry(a[LEFT].cast<float>(), &left_normal);
+#else
                 idx_a[RIGHT] = idx_last++;
                 volume.push_geometry(a[RIGHT], n_right);
                 idx_a[LEFT] = idx_last++;
                 volume.push_geometry(a[LEFT], n_left);
+#endif // ENABLE_TEXTURED_VOLUMES
 
-                if (is_right_turn)
-                {
+                if (is_right_turn) {
                     // Right turn. Fill in the right turn wedge.
                     volume.push_triangle(idx_prev[RIGHT], idx_a[RIGHT], idx_prev[TOP]);
                     volume.push_triangle(idx_prev[RIGHT], idx_prev[BOTTOM], idx_a[RIGHT]);
                 }
-                else
-                {
+                else {
                     // Left turn. Fill in the left turn wedge.
                     volume.push_triangle(idx_prev[LEFT], idx_prev[TOP], idx_a[LEFT]);
                     volume.push_triangle(idx_prev[LEFT], idx_a[LEFT], idx_prev[BOTTOM]);
                 }
             }
-            else
-            {
+            else {
                 // The two successive segments are nearly collinear.
                 idx_a[LEFT] = idx_prev[LEFT];
                 idx_a[RIGHT] = idx_prev[RIGHT];
             }
 
-            if (ii == lines.size())
-            {
-                if (!is_sharp)
-                {
+            if (ii == lines.size()) {
+                if (!is_sharp) {
                     // Closing a loop with smooth transition. Unify the closing left / right vertices.
+#if ENABLE_TEXTURED_VOLUMES
+                    size_t vertex_size_float = volume.vertex_size_floats();
+                    size_t vertex_size_bytes = volume.vertex_size_bytes();
+                    ::memcpy(volume.interleaved_data.data() + idx_initial[LEFT] * vertex_size_float, volume.interleaved_data.data() + idx_prev[LEFT] * vertex_size_float, vertex_size_bytes);
+                    ::memcpy(volume.interleaved_data.data() + idx_initial[RIGHT] * vertex_size_float, volume.interleaved_data.data() + idx_prev[RIGHT] * vertex_size_float, vertex_size_bytes);
+                    volume.interleaved_data.erase(volume.interleaved_data.end() - 2 * vertex_size_float, volume.interleaved_data.end());
+#else
                     ::memcpy(volume.vertices_and_normals_interleaved.data() + idx_initial[LEFT] * 6, volume.vertices_and_normals_interleaved.data() + idx_prev[LEFT] * 6, sizeof(float) * 6);
                     ::memcpy(volume.vertices_and_normals_interleaved.data() + idx_initial[RIGHT] * 6, volume.vertices_and_normals_interleaved.data() + idx_prev[RIGHT] * 6, sizeof(float) * 6);
                     volume.vertices_and_normals_interleaved.erase(volume.vertices_and_normals_interleaved.end() - 12, volume.vertices_and_normals_interleaved.end());
+#endif // ENABLE_TEXTURED_VOLUMES
                     // Replace the left / right vertex indices to point to the start of the loop. 
-                    for (size_t u = volume.quad_indices.size() - 16; u < volume.quad_indices.size(); ++u)
-                    {
+                    for (size_t u = volume.quad_indices.size() - 16; u < volume.quad_indices.size(); ++u) {
                         if (volume.quad_indices[u] == idx_prev[LEFT])
                             volume.quad_indices[u] = idx_initial[LEFT];
                         else if (volume.quad_indices[u] == idx_prev[RIGHT])
@@ -1584,36 +1950,53 @@ static void thick_lines_to_indexed_vertex_array(const Lines3& lines,
         }
 
         // Only new allocate top / bottom vertices, if not closing a loop.
-        if (closed && (ii + 1 == lines.size()))
+        if (closed && ii + 1 == lines.size())
             idx_b[TOP] = idx_initial[TOP];
-        else
-        {
+        else {
             idx_b[TOP] = idx_last++;
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(b[TOP].cast<float>(), &top_normal);
+#else
             volume.push_geometry(b[TOP], n_top);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
 
-        if (closed && (ii + 1 == lines.size()) && (width == width_initial))
+        if (closed && ii + 1 == lines.size() && width == width_initial)
             idx_b[BOTTOM] = idx_initial[BOTTOM];
-        else
-        {
+        else {
             idx_b[BOTTOM] = idx_last++;
+#if ENABLE_TEXTURED_VOLUMES
+            volume.push_geometry(b[BOTTOM].cast<float>(), &bottom_normal);
+#else
             volume.push_geometry(b[BOTTOM], n_bottom);
+#endif // ENABLE_TEXTURED_VOLUMES
         }
 
         // Generate new vertices for the end of this line segment.
+#if ENABLE_TEXTURED_VOLUMES
+        idx_b[LEFT] = idx_last++;
+        volume.push_geometry(b[LEFT].cast<float>(), &left_normal);
+        idx_b[RIGHT] = idx_last++;
+        volume.push_geometry(b[RIGHT].cast<float>(), &right_normal);
+#else
         idx_b[LEFT] = idx_last++;
         volume.push_geometry(b[LEFT], n_left);
         idx_b[RIGHT] = idx_last++;
         volume.push_geometry(b[RIGHT], n_right);
+#endif // ENABLE_TEXTURED_VOLUMES
 
         ::memcpy(idx_prev, idx_b, 4 * sizeof(int));
+#if ENABLE_TEXTURED_VOLUMES
+        n_right_prev = right_normal;
+        n_top_prev = top_normal;
+#else
         n_right_prev = n_right;
         n_top_prev = n_top;
+#endif // ENABLE_TEXTURED_VOLUMES
         unit_v_prev = unit_v;
         len_prev = len;
 
-        if (!closed)
-        {
+        if (!closed) {
             // Terminate open paths with caps.
             if (i == 0)
                 volume.push_quad(idx_a[BOTTOM], idx_a[RIGHT], idx_a[TOP], idx_a[LEFT]);
@@ -1645,6 +2028,10 @@ static void point_to_indexed_vertex_array(const Vec3crd& point,
     double height,
     GLIndexedVertexArray& volume)
 {
+#if ENABLE_TEXTURED_VOLUMES
+    assert(volume.format == GLIndexedVertexArray::EFormat::PositionNormal);
+#endif // ENABLE_TEXTURED_VOLUMES
+
     // builds a double piramid, with vertices on the local axes, around the point
 
     Vec3d center = unscale(point);
@@ -1654,10 +2041,13 @@ static void point_to_indexed_vertex_array(const Vec3crd& point,
     double h = scale_factor * height;
 
     // new vertices ids
+#if ENABLE_TEXTURED_VOLUMES
+    int idx_last = int(volume.interleaved_data.size() / volume.vertex_size_floats());
+#else
     int idx_last = int(volume.vertices_and_normals_interleaved.size() / 6);
+#endif // ENABLE_TEXTURED_VOLUMES
     int idxs[6];
-    for (int i = 0; i < 6; ++i)
-    {
+    for (int i = 0; i < 6; ++i) {
         idxs[i] = idx_last + i;
     }
 
@@ -1665,6 +2055,22 @@ static void point_to_indexed_vertex_array(const Vec3crd& point,
     Vec3d displacement_y(0.0, w, 0.0);
     Vec3d displacement_z(0.0, 0.0, h);
 
+#if ENABLE_TEXTURED_VOLUMES
+    Vec3f pos_unit_x = Vec3f::UnitX();
+    Vec3f neg_unit_x = -pos_unit_x;
+    Vec3f pos_unit_y = Vec3f::UnitY();
+    Vec3f neg_unit_y = -pos_unit_y;
+    Vec3f pos_unit_z = Vec3f::UnitZ();
+    Vec3f neg_unit_z = -pos_unit_z;
+
+    // vertices
+    volume.push_geometry((center - displacement_x).cast<float>(), &neg_unit_x); // idxs[0]
+    volume.push_geometry((center + displacement_x).cast<float>(), &pos_unit_x); // idxs[1]
+    volume.push_geometry((center - displacement_y).cast<float>(), &neg_unit_y); // idxs[2]
+    volume.push_geometry((center + displacement_y).cast<float>(), &pos_unit_y); // idxs[3]
+    volume.push_geometry((center - displacement_z).cast<float>(), &neg_unit_z); // idxs[4]
+    volume.push_geometry((center + displacement_z).cast<float>(), &pos_unit_z); // idxs[5]
+#else
     Vec3d unit_x(1.0, 0.0, 0.0);
     Vec3d unit_y(0.0, 1.0, 0.0);
     Vec3d unit_z(0.0, 0.0, 1.0);
@@ -1676,6 +2082,7 @@ static void point_to_indexed_vertex_array(const Vec3crd& point,
     volume.push_geometry(center + displacement_y, unit_y);  // idxs[3]
     volume.push_geometry(center - displacement_z, -unit_z); // idxs[4]
     volume.push_geometry(center + displacement_z, unit_z);  // idxs[5]
+#endif // ENABLE_TEXTURED_VOLUMES
 
     // top piramid faces
     volume.push_triangle(idxs[0], idxs[2], idxs[5]);

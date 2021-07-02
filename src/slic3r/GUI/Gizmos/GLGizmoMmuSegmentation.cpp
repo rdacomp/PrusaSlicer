@@ -476,9 +476,13 @@ void TriangleSelectorMmuGui::render(ImGuiWrapper *imgui)
         iva_color.release_geometry();
     m_iva_seed_fill.release_geometry();
 
-    auto append_triangle = [this](GLIndexedVertexArray &iva, int &cnt, const Triangle &tr) -> void {
+    auto append_triangle = [this](GLIndexedVertexArray& iva, int& cnt, const Triangle& tr) -> void {
         for (int i = 0; i < 3; ++i)
+#if ENABLE_TEXTURED_VOLUMES
+            iva.push_geometry(m_vertices[tr.verts_idxs[i]].v, &m_mesh->stl.facet_start[tr.source_triangle].normal);
+#else
             iva.push_geometry(m_vertices[tr.verts_idxs[i]].v, m_mesh->stl.facet_start[tr.source_triangle].normal);
+#endif // ENABLE_TEXTURED_VOLUMES
         iva.push_triangle(cnt, cnt + 1, cnt + 2);
         cnt += 3;
     };

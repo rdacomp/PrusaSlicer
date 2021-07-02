@@ -20,12 +20,16 @@ GLGizmoPainterBase::GLGizmoPainterBase(GLCanvas3D& parent, const std::string& ic
     : GLGizmoBase(parent, icon_filename, sprite_id)
 {
     // Make sphere and save it into a vertex buffer.
-    const TriangleMesh sphere_mesh = make_sphere(1., (2*M_PI)/24.);
-    for (size_t i=0; i<sphere_mesh.its.vertices.size(); ++i)
+#if ENABLE_TEXTURED_VOLUMES
+    m_vbo_sphere.load_mesh(make_sphere(1.0, (2.0 * M_PI) / 24.0));
+#else
+    const TriangleMesh sphere_mesh = make_sphere(1., (2 * M_PI) / 24.);
+    for (size_t i = 0; i < sphere_mesh.its.vertices.size(); ++i)
         m_vbo_sphere.push_geometry(sphere_mesh.its.vertices[i].cast<double>(),
-                                    sphere_mesh.stl.facet_start[i].normal.cast<double>());
+            sphere_mesh.stl.facet_start[i].normal.cast<double>());
     for (const stl_triangle_vertex_indices& indices : sphere_mesh.its.indices)
         m_vbo_sphere.push_triangle(indices(0), indices(1), indices(2));
+#endif // ENABLE_TEXTURED_VOLUMES
     m_vbo_sphere.finalize_geometry(true);
 }
 
@@ -603,7 +607,11 @@ void TriangleSelectorGUI::render(ImGuiWrapper* imgui)
         int &                 cnt  = tr.get_state() == EnforcerBlockerType::ENFORCER ? enf_cnt : blc_cnt;
 
         for (int i = 0; i < 3; ++i)
+#if ENABLE_TEXTURED_VOLUMES
+            iva.push_geometry(m_vertices[tr.verts_idxs[i]].v, &m_mesh->stl.facet_start[tr.source_triangle].normal);
+#else
             iva.push_geometry(m_vertices[tr.verts_idxs[i]].v, m_mesh->stl.facet_start[tr.source_triangle].normal);
+#endif // ENABLE_TEXTURED_VOLUMES
         iva.push_triangle(cnt, cnt + 1, cnt + 2);
         cnt += 3;
     }
@@ -685,7 +693,7 @@ void TriangleSelectorGUI::render_debug(ImGuiWrapper* imgui)
             va = &m_varrays[ORIGINAL];
             cnt = &cnts[ORIGINAL];
         }
-        else if (tr.valid) {
+        else if (tr.valid()) {
             va = &m_varrays[SPLIT];
             cnt = &cnts[SPLIT];
         }
@@ -696,11 +704,19 @@ void TriangleSelectorGUI::render_debug(ImGuiWrapper* imgui)
             cnt = &cnts[INVALID];
         }
 
+#if ENABLE_TEXTURED_VOLUMES
+        Vec3f normal = Vec3f::UnitZ();
+#endif // ENABLE_TEXTURED_VOLUMES
+
         for (int i=0; i<3; ++i)
+#if ENABLE_TEXTURED_VOLUMES
+            va->push_geometry(m_vertices[tr.verts_idxs[i]].v, &normal);
+#else
             va->push_geometry(double(m_vertices[tr.verts_idxs[i]].v[0]),
                               double(m_vertices[tr.verts_idxs[i]].v[1]),
                               double(m_vertices[tr.verts_idxs[i]].v[2]),
                               0., 0., 1.);
+#endif // ENABLE_TEXTURED_VOLUMES
         va->push_triangle(*cnt,
                           *cnt+1,
                           *cnt+2);

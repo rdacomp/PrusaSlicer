@@ -26,6 +26,10 @@
     #define glcheck()
 #endif // HAS_GLSAFE
 
+#if ENABLE_TEXTURED_VOLUMES
+struct stl_facet;
+#endif // ENABLE_TEXTURED_VOLUMES
+
 namespace Slic3r {
 class SLAPrintObject;
 enum  SLAPrintObjectStep : unsigned int;
@@ -39,6 +43,197 @@ class ModelObject;
 class ModelVolume;
 enum ModelInstanceEPrintVolumeState : unsigned char;
 
+#if ENABLE_TEXTURED_VOLUMES
+// A container for interleaved arrays of 3D vertices,
+// Vertex data may contain: position (mandatory), normal (optional), uv coords (optional)
+// possibly indexed by triangles and / or quads.
+struct GLIndexedVertexArray {
+private:
+    BoundingBoxf3 m_bounding_box;
+
+public:
+    enum class EFormat {
+        Position,
+        PositionNormal,
+        PositionUV,
+        PositionNormalUV
+    };
+
+    // Format of the interleaved data
+    // Need to be set before any call to push_geometry()
+    EFormat format{ EFormat::PositionNormal };
+
+    // vector of floats containing:
+    // 3 floats for position, mandatory
+    // 3 floats for normal, optional
+    // 2 floats for uv, optional
+    // the vector is cleared after data are loaded into the graphics card
+    std::vector<float> interleaved_data;
+    // vector of indices for triangle primitives
+    // the vector is cleared after data are loaded into the graphics card
+    std::vector<unsigned int> triangle_indices;
+    // vector of indices for quad primitives
+    // the vector is cleared after data are loaded into the graphics card
+    std::vector<unsigned int> quad_indices;
+
+    // When the geometry data is loaded into the graphics card as Vertex Buffer Objects,
+    // the above mentioned std::vectors are cleared and the following variables are set,
+    // to record their size.
+    size_t interleaved_data_size{ 0 };
+    size_t triangle_indices_size{ 0 };
+    size_t quad_indices_size{ 0 };
+
+    // IDs of the Vertex Buffer Objects, into which the geometry has been loaded.
+    // Zero if the VBOs are not sent to GPU yet.
+    unsigned int interleaved_data_VBO_id{ 0 };
+    unsigned int triangle_indices_VBO_id{ 0 };
+    unsigned int quad_indices_VBO_id{ 0 };
+
+    GLIndexedVertexArray() = default;
+    GLIndexedVertexArray(const GLIndexedVertexArray& rhs) :
+        interleaved_data(rhs.interleaved_data),
+        triangle_indices(rhs.triangle_indices),
+        quad_indices(rhs.quad_indices),
+        m_bounding_box(rhs.m_bounding_box),
+        interleaved_data_VBO_id(0),
+        triangle_indices_VBO_id(0),
+        quad_indices_VBO_id(0)
+    {
+        assert(!rhs.has_VBOs());
+    }
+    GLIndexedVertexArray(GLIndexedVertexArray&& rhs) :
+        interleaved_data(std::move(rhs.interleaved_data)),
+        triangle_indices(std::move(rhs.triangle_indices)),
+        quad_indices(std::move(rhs.quad_indices)),
+        m_bounding_box(std::move(rhs.m_bounding_box)),
+        interleaved_data_VBO_id(0),
+        triangle_indices_VBO_id(0),
+        quad_indices_VBO_id(0)
+    {
+        assert(!rhs.has_VBOs());
+    }
+
+    ~GLIndexedVertexArray() { release_VBOs(); }
+
+    GLIndexedVertexArray& operator = (const GLIndexedVertexArray& rhs)
+    {
+        assert(!has_VBOs());
+        assert(!rhs.has_VBOs());
+
+        interleaved_data      = rhs.interleaved_data;
+        triangle_indices      = rhs.triangle_indices;
+        quad_indices          = rhs.quad_indices;
+        m_bounding_box        = rhs.m_bounding_box;
+        return *this;
+    }
+
+    GLIndexedVertexArray& operator = (GLIndexedVertexArray&& rhs)
+    {
+        assert(!has_VBOs());
+        assert(!rhs.has_VBOs());
+
+        interleaved_data      = std::move(rhs.interleaved_data);
+        triangle_indices      = std::move(rhs.triangle_indices);
+        quad_indices          = std::move(rhs.quad_indices);
+        m_bounding_box        = std::move(rhs.m_bounding_box);
+        return *this;
+    }
+
+    inline bool has_VBOs() const { return interleaved_data_VBO_id > 0 && (triangle_indices_VBO_id > 0 || quad_indices_VBO_id > 0); }
+    inline const BoundingBoxf3& bounding_box() const { return m_bounding_box; }
+
+    // Is there any geometry data stored?
+    inline bool empty() const { return interleaved_data.size() == 0 && interleaved_data_size == 0; }
+
+#if ENABLE_SMOOTH_NORMALS
+    void load_mesh_full_shading(const TriangleMesh& mesh, bool smooth_normals = false);
+    void load_mesh(const TriangleMesh& mesh, bool smooth_normals = false) { load_mesh_full_shading(mesh, smooth_normals); }
+#else
+    void load_mesh_full_shading(const TriangleMesh& mesh);
+    void load_mesh(const TriangleMesh& mesh) { load_mesh_full_shading(mesh); }
+#endif // ENABLE_SMOOTH_NORMALS
+
+    // push_geometry() parameters:
+    // position is mandatory
+    // normal is optional (required by PositionNormal and PositionNormalUV formats)
+    // uv is optional (required by PositionUV and PositionNormalUV formats)
+    // if optional values are required by the format, but are missing, dummy default values are added to the buffer
+    // a more appropriate name would be push_vertex()
+    void push_geometry(const Vec3f& position, const Vec3f* const normal = nullptr, const Vec2f* const uv = nullptr);
+    void push_geometry(const stl_facet& facet);
+
+    void push_triangle(unsigned int idx1, unsigned int idx2, unsigned int idx3);
+    void push_quad(unsigned int idx1, unsigned int idx2, unsigned int idx3, unsigned int idx4);
+
+    // Finalize the initialization of the geometry & indices,
+    // upload the geometry and indices to OpenGL VBO objects
+    // and shrink the allocated data, possibly relasing it if it has been loaded into the VBOs.
+    void finalize_geometry(bool opengl_initialized);
+
+    inline void reserve(size_t sz) {
+        assert(!has_VBOs());
+
+        interleaved_data.reserve(sz * vertex_size_floats());
+        triangle_indices.reserve(sz * 3);
+        quad_indices.reserve(sz * 4);
+    }
+
+    // Shrink the internal storage to tighly fit the data stored.
+    inline void shrink_to_fit() {
+        assert(!has_VBOs());
+
+        interleaved_data.shrink_to_fit();
+        triangle_indices.shrink_to_fit();
+        quad_indices.shrink_to_fit();
+    }
+
+    // Clear all data
+    void release_geometry() {
+        release_VBOs();
+        release_cpu_geometry();
+    }
+
+    // Clear vectors' data
+    void release_cpu_geometry();
+
+    // Return an estimate of the memory consumed by this class.
+    size_t cpu_memory_used() const {
+        return sizeof(*this) + interleaved_data.capacity() * sizeof(float) +
+            (triangle_indices.capacity() + quad_indices.capacity()) * sizeof(unsigned int);
+    }
+    // Return an estimate of the memory held by GPU vertex buffers.
+    size_t gpu_memory_used() const {
+        size_t memsize = 0;
+        if (interleaved_data_VBO_id > 0)
+            memsize += interleaved_data_size * sizeof(float);
+        if (triangle_indices_VBO_id > 0)
+            memsize += triangle_indices_size * sizeof(unsigned int);
+        if (quad_indices_VBO_id > 0)
+            memsize += quad_indices_size * sizeof(unsigned int);
+        return memsize;
+    }
+    size_t total_memory_used() const { return cpu_memory_used() + gpu_memory_used(); }
+
+    void render() const;
+    void render(const std::pair<size_t, size_t>& tverts_range, const std::pair<size_t, size_t>& qverts_range) const;
+
+    bool has_normal() const { return format == EFormat::PositionNormal || format == EFormat::PositionNormalUV; }
+    bool has_uv() const { return format == EFormat::PositionUV || format == EFormat::PositionNormalUV; }
+
+    size_t vertex_size_floats() const;
+    size_t vertex_size_bytes() const { return vertex_size_floats() * sizeof(float); }
+
+    size_t normal_offset_floats() const;
+    size_t normal_offset_bytes() const { return normal_offset_floats() * sizeof(float); }
+
+    size_t uv_offset_floats() const;
+    size_t uv_offset_bytes() const { return uv_offset_floats() * sizeof(float); }
+
+private:
+    // Release OpenGL VBOs.
+    void release_VBOs();
+};
+#else
 // A container for interleaved arrays of 3D vertices and normals,
 // possibly indexed by triangles and / or quads.
 class GLIndexedVertexArray {
@@ -103,7 +298,7 @@ public:
         return *this;
     }
 
-    // Vertices and their normals, interleaved to be used by void glInterleavedArrays(GL_N3F_V3F, 0, x)
+    // Vertices and their normals, interleaved
     std::vector<float> vertices_and_normals_interleaved;
     std::vector<int>   triangle_indices;
     std::vector<int>   quad_indices;
@@ -114,11 +309,11 @@ public:
     size_t triangle_indices_size{ 0 };
     size_t quad_indices_size{ 0 };
 
-    // IDs of the Vertex Array Objects, into which the geometry has been loaded.
+    // IDs of the Vertex Buffer Objects, into which the geometry has been loaded.
     // Zero if the VBOs are not sent to GPU yet.
-    unsigned int       vertices_and_normals_interleaved_VBO_id{ 0 };
-    unsigned int       triangle_indices_VBO_id{ 0 };
-    unsigned int       quad_indices_VBO_id{ 0 };
+    unsigned int vertices_and_normals_interleaved_VBO_id{ 0 };
+    unsigned int triangle_indices_VBO_id{ 0 };
+    unsigned int quad_indices_VBO_id{ 0 };
 
 #if ENABLE_SMOOTH_NORMALS
     void load_mesh_full_shading(const TriangleMesh& mesh, bool smooth_normals = false);
@@ -240,6 +435,7 @@ public:
 private:
     BoundingBoxf3 m_bounding_box;
 };
+#endif // ENABLE_TEXTURED_VOLUMES
 
 class GLVolume {
 public:
