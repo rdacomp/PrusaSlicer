@@ -508,7 +508,11 @@ void TriangleSelectorMmuGui::render(ImGuiWrapper *imgui)
     auto *shader = wxGetApp().get_current_shader();
     if (!shader)
         return;
+#if ENABLE_PHONG_SHADER
+    assert(shader->get_name() == "phong");
+#else
     assert(shader->get_name() == "gouraud");
+#endif // ENABLE_PHONG_SHADER
 
     auto render = [&shader](const GLIndexedVertexArray &iva, const std::array<float, 4> &color) -> void {
         if (iva.has_VBOs()) {

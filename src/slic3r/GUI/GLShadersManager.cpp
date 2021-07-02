@@ -48,6 +48,14 @@ std::pair<bool, std::string> GLShadersManager::init()
         , { "ENABLE_ENVIRONMENT_MAP"sv }
 #endif
         );
+#if ENABLE_PHONG_SHADER
+    // used to render objects in 3d editor
+    valid &= append_shader("phong", { "phong.vs", "phong.fs" }
+#if ENABLE_ENVIRONMENT_MAP
+        , { "ENABLE_ENVIRONMENT_MAP"sv }
+#endif
+    );
+#endif // ENABLE_PHONG_SHADER
     // used to render variable layers heights in 3d editor
     valid &= append_shader("variable_layer_height", { "variable_layer_height.vs", "variable_layer_height.fs" });
 

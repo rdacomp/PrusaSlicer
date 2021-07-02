@@ -77,6 +77,8 @@
 
 // Enable application of textures to volumes
 #define ENABLE_TEXTURED_VOLUMES (1 && ENABLE_2_5_0_ALPHA0)
+// Enable phong shader (vertex normal calculated into the fragment shader)
+#define ENABLE_PHONG_SHADER (1 && ENABLE_TEXTURED_VOLUMES)
 
 
 #endif // _prusaslicer_technologies_h_

@@ -137,7 +137,11 @@ void GLGizmoPainterBase::render_triangles(const Selection& selection, const bool
         clp_dataf[3] = float(clp->get_data()[3]);
     }
 
+#if ENABLE_PHONG_SHADER
+    auto* shader = wxGetApp().get_shader("phong");
+#else
     auto *shader = wxGetApp().get_shader("gouraud");
+#endif // ENABLE_PHONG_SHADER
     if (! shader)
         return;
     shader->start_using();
@@ -623,7 +627,11 @@ void TriangleSelectorGUI::render(ImGuiWrapper* imgui)
     if (! shader)
         return;
 
+#if ENABLE_PHONG_SHADER
+    assert(shader->get_name() == "phong");
+#else
     assert(shader->get_name() == "gouraud");
+#endif // ENABLE_PHONG_SHADER
 
     for (auto iva : {std::make_pair(&m_iva_enforcers, enforcers_color),
                      std::make_pair(&m_iva_blockers, blockers_color)}) {

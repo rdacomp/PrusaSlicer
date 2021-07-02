@@ -4164,7 +4164,11 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
     camera.apply_projection(box, near_z, far_z);
 
 #if ENABLE_TEXTURED_VOLUMES
+#if ENABLE_PHONG_SHADER
+    GLShaderProgram* shader = wxGetApp().get_shader("phong");
+#else
     GLShaderProgram* shader = wxGetApp().get_shader("gouraud");
+#endif // ENABLE_PHONG_SHADER
 #else
     GLShaderProgram* shader = wxGetApp().get_shader("gouraud_light");
 #endif // ENABLE_TEXTURED_VOLUMES
@@ -5132,7 +5136,11 @@ void GLCanvas3D::_render_objects()
 
     m_volumes.set_clipping_plane(m_camera_clipping_plane.get_data());
 
+#if ENABLE_PHONG_SHADER
+    GLShaderProgram* shader = wxGetApp().get_shader("phong");
+#else
     GLShaderProgram* shader = wxGetApp().get_shader("gouraud");
+#endif // ENABLE_PHONG_SHADER
     if (shader != nullptr) {
         shader->start_using();
 
