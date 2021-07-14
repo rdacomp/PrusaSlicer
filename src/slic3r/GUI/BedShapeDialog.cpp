@@ -174,7 +174,6 @@ void BedShape::apply_optgroup_values(ConfigOptionsGroupShp optgroup)
 void BedShapeDialog::build_dialog(const ConfigOptionPoints& default_pt, const ConfigOptionString& custom_texture, const ConfigOptionString& custom_model)
 {
     SetFont(wxGetApp().normal_font());
-//    wxGetApp().UpdateDarkUI(this);
 
 	m_panel = new BedShapePanel(this);
     m_panel->build_panel(default_pt, custom_texture, custom_model);
@@ -183,8 +182,7 @@ void BedShapeDialog::build_dialog(const ConfigOptionPoints& default_pt, const Co
 	main_sizer->Add(m_panel, 1, wxEXPAND);
 	main_sizer->Add(CreateButtonSizer(wxOK | wxCANCEL), 0, wxALIGN_CENTER_HORIZONTAL | wxBOTTOM, 10);
 
-    wxGetApp().UpdateDarkUI(static_cast<wxButton*>(this->FindWindowById(wxID_OK, this)), true);
-    wxGetApp().UpdateDarkUI(static_cast<wxButton*>(this->FindWindowById(wxID_CANCEL, this)), true);
+    wxGetApp().UpdateDlgDarkUI(this, true);
 
 	SetSizer(main_sizer);
 	SetMinSize(GetSize());
@@ -246,7 +244,6 @@ void BedShapePanel::build_panel(const ConfigOptionPoints& default_pt, const Conf
 	line.full_width = 1;
 	line.widget = [this](wxWindow* parent) {
         wxButton* shape_btn = new wxButton(parent, wxID_ANY, _L("Load shape from STL..."));
-        wxGetApp().UpdateDarkUI(shape_btn, true);
         wxSizer* shape_sizer = new wxBoxSizer(wxHORIZONTAL);
         shape_sizer->Add(shape_btn, 1, wxEXPAND);
 
@@ -330,7 +327,6 @@ wxPanel* BedShapePanel::init_texture_panel()
     line.full_width = 1;
     line.widget = [this](wxWindow* parent) {
         wxButton* load_btn = new wxButton(parent, wxID_ANY, _L("Load..."));
-        wxGetApp().UpdateDarkUI(load_btn, true);
         wxSizer* load_sizer = new wxBoxSizer(wxHORIZONTAL);
         load_sizer->Add(load_btn, 1, wxEXPAND);
 
@@ -340,7 +336,6 @@ wxPanel* BedShapePanel::init_texture_panel()
         filename_sizer->Add(filename_lbl, 1, wxEXPAND);
 
         wxButton* remove_btn = new wxButton(parent, wxID_ANY, _L("Remove"));
-        wxGetApp().UpdateDarkUI(remove_btn, true);
         wxSizer* remove_sizer = new wxBoxSizer(wxHORIZONTAL);
         remove_sizer->Add(remove_btn, 1, wxEXPAND);
 
@@ -411,8 +406,7 @@ wxPanel* BedShapePanel::init_model_panel()
     Line line{ "", "" };
     line.full_width = 1;
     line.widget = [this](wxWindow* parent) {
-        wxButton* load_btn = new wxButton(parent, wxID_ANY, _L("Load..."));
-        wxGetApp().UpdateDarkUI(load_btn, true);
+        wxButton * load_btn = new wxButton(parent, wxID_ANY, _L("Load..."));
         wxSizer* load_sizer = new wxBoxSizer(wxHORIZONTAL);
         load_sizer->Add(load_btn, 1, wxEXPAND);
 
@@ -420,8 +414,7 @@ wxPanel* BedShapePanel::init_model_panel()
         wxSizer* filename_sizer = new wxBoxSizer(wxHORIZONTAL);
         filename_sizer->Add(filename_lbl, 1, wxEXPAND);
 
-        wxButton* remove_btn = new wxButton(parent, wxID_ANY, _L("Remove"));
-        wxGetApp().UpdateDarkUI(remove_btn, true);
+        wxButton * remove_btn = new wxButton(parent, wxID_ANY, _L("Remove"));
         wxSizer* remove_sizer = new wxBoxSizer(wxHORIZONTAL);
         remove_sizer->Add(remove_btn, 1, wxEXPAND);
 
