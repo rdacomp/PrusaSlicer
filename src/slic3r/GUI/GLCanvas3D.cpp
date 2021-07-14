@@ -25,7 +25,6 @@
 #include "slic3r/GUI/GUI_Preview.hpp"
 #include "slic3r/GUI/OpenGLManager.hpp"
 #include "slic3r/GUI/3DBed.hpp"
-#include "slic3r/GUI/Camera.hpp"
 #include "slic3r/GUI/Plater.hpp"
 #include "slic3r/GUI/MainFrame.hpp"
 
@@ -701,7 +700,7 @@ void GLCanvas3D::Labels::render(const std::vector<const ModelInstance*>& sorted_
         Vec3d screen_box_center = world_to_screen * owner.world_box.center();
         float x = 0.0f;
         float y = 0.0f;
-        if (camera.get_type() == Camera::Perspective) {
+        if (camera.get_type() == Camera::EType::Perspective) {
             x = (0.5f + 0.001f * 0.5f * (float)screen_box_center(0)) * viewport[2];
             y = (0.5f - 0.001f * 0.5f * (float)screen_box_center(1)) * viewport[3];
         } else {
@@ -1594,16 +1593,25 @@ void GLCanvas3D::render()
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void GLCanvas3D::render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, Camera::EType camera_type)
 #else
-void GLCanvas3D::render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, Camera::EType camera_type)
+#endif // ENABLE_TEXTURED_VOLUMES
+{
+    render_thumbnail(thumbnail_data, w, h, thumbnail_params, m_volumes, camera_type);
+}
+
+#if ENABLE_TEXTURED_VOLUMES
+void GLCanvas3D::render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
+#else
+void GLCanvas3D::render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #endif // ENABLE_TEXTURED_VOLUMES
 {
     switch (OpenGLManager::get_framebuffers_type())
     {
-    case OpenGLManager::EFramebufferType::Arb: { _render_thumbnail_framebuffer(thumbnail_data, w, h, printable_only, parts_only, show_bed, transparent_background); break; }
-    case OpenGLManager::EFramebufferType::Ext: { _render_thumbnail_framebuffer_ext(thumbnail_data, w, h, printable_only, parts_only, show_bed, transparent_background); break; }
-    default: { _render_thumbnail_legacy(thumbnail_data, w, h, printable_only, parts_only, show_bed, transparent_background); break; }
+    case OpenGLManager::EFramebufferType::Arb: { _render_thumbnail_framebuffer(thumbnail_data, w, h, thumbnail_params, volumes, camera_type); break; }
+    case OpenGLManager::EFramebufferType::Ext: { _render_thumbnail_framebuffer_ext(thumbnail_data, w, h, thumbnail_params, volumes, camera_type); break; }
+    default: { _render_thumbnail_legacy(thumbnail_data, w, h, thumbnail_params, volumes, camera_type); break; }
     }
 }
 
@@ -2926,9 +2934,10 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
 #ifdef SLIC3R_DEBUG_MOUSE_EVENTS
         printf((format_mouse_event_debug_message(evt) + " - Consumed by ImGUI\n").c_str());
 #endif /* SLIC3R_DEBUG_MOUSE_EVENTS */
-		 m_dirty = true;
+        m_dirty = true;
         // do not return if dragging or tooltip not empty to allow for tooltip update
-        if (!m_mouse.dragging && m_tooltip.is_empty())
+        // also, do not return if the mouse is moving and also is inside MM gizmo to allow update seed fill selection
+        if (!m_mouse.dragging && m_tooltip.is_empty() && (m_gizmos.get_current_type() != GLGizmosManager::MmuSegmentation || !evt.Moving()))
             return;
     }
 
@@ -4111,9 +4120,9 @@ static void debug_output_thumbnail(const ThumbnailData& thumbnail_data)
 #endif // ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT
 
 #if ENABLE_TEXTURED_VOLUMES
-void GLCanvas3D::_render_thumbnail_internal(TextureData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_internal(TextureData& thumbnail_data, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #else
-void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #endif // ENABLE_TEXTURED_VOLUMES
 {
     auto is_visible = [](const GLVolume& v) {
@@ -4127,9 +4136,9 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
 
     GLVolumePtrs visible_volumes;
 
-    for (GLVolume* vol : m_volumes.volumes) {
-        if (!vol->is_modifier && !vol->is_wipe_tower && (!parts_only || (vol->composite_id.volume_id >= 0))) {
-            if (!printable_only || is_visible(*vol))
+    for (GLVolume* vol : volumes.volumes) {
+        if (!vol->is_modifier && !vol->is_wipe_tower && (!thumbnail_params.parts_only || vol->composite_id.volume_id >= 0)) {
+            if (!thumbnail_params.printable_only || is_visible(*vol))
                 visible_volumes.emplace_back(vol);
         }
     }
@@ -4137,31 +4146,31 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
     if (visible_volumes.empty())
         return;
 
-    BoundingBoxf3 box;
+    BoundingBoxf3 volumes_box;
     for (const GLVolume* vol : visible_volumes) {
-        box.merge(vol->transformed_bounding_box());
+        volumes_box.merge(vol->transformed_bounding_box());
     }
 
     Camera camera;
-    camera.set_type(Camera::Ortho);
+    camera.set_type(camera_type);
     camera.set_scene_box(scene_bounding_box());
     camera.apply_viewport(0, 0, thumbnail_data.width, thumbnail_data.height);
-    camera.zoom_to_volumes(visible_volumes);
+    camera.zoom_to_box(volumes_box);
     camera.apply_view_matrix();
 
     double near_z = -1.0;
     double far_z = -1.0;
 
-    if (show_bed) {
+    if (thumbnail_params.show_bed) {
         // extends the near and far z of the frustrum to avoid the bed being clipped
 
         // box in eye space
         BoundingBoxf3 t_bed_box = wxGetApp().plater()->get_bed().get_bounding_box(true).transformed(camera.get_view_matrix());
-        near_z = -t_bed_box.max(2);
-        far_z = -t_bed_box.min(2);
+        near_z = -t_bed_box.max.z();
+        far_z = -t_bed_box.min.z();
     }
 
-    camera.apply_projection(box, near_z, far_z);
+    camera.apply_projection(volumes_box, near_z, far_z);
 
 #if ENABLE_TEXTURED_VOLUMES
 #if ENABLE_PHONG_SHADER
@@ -4175,7 +4184,7 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
     if (shader == nullptr)
         return;
 
-    if (transparent_background)
+    if (thumbnail_params.transparent_background)
         glsafe(::glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 
     glsafe(::glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
@@ -4226,18 +4235,18 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, bool 
 
     glsafe(::glDisable(GL_DEPTH_TEST));
 
-    if (show_bed)
+    if (thumbnail_params.show_bed)
         _render_bed(!camera.is_looking_downward(), false);
 
     // restore background color
-    if (transparent_background)
+    if (thumbnail_params.transparent_background)
         glsafe(::glClearColor(1.0f, 1.0f, 1.0f, 1.0f));
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void GLCanvas3D::_render_thumbnail_framebuffer(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_framebuffer(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #else
-void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #endif // ENABLE_TEXTURED_VOLUMES
 {
     thumbnail_data.set(w, h);
@@ -4288,7 +4297,7 @@ void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, un
     glsafe(::glDrawBuffers(1, drawBufs));
 
     if (::glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) {
-        _render_thumbnail_internal(thumbnail_data, printable_only, parts_only, show_bed, transparent_background);
+        _render_thumbnail_internal(thumbnail_data, thumbnail_params, volumes, camera_type);
 
         if (multisample) {
             GLuint resolve_fbo;
@@ -4338,9 +4347,9 @@ void GLCanvas3D::_render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, un
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void GLCanvas3D::_render_thumbnail_framebuffer_ext(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_framebuffer_ext(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #else
-void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #endif // ENABLE_TEXTURED_VOLUMES
 {
     thumbnail_data.set(w, h);
@@ -4391,7 +4400,7 @@ void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data
     glsafe(::glDrawBuffers(1, drawBufs));
 
     if (::glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT) == GL_FRAMEBUFFER_COMPLETE_EXT) {
-        _render_thumbnail_internal(thumbnail_data, printable_only, parts_only, show_bed, transparent_background);
+        _render_thumbnail_internal(thumbnail_data, thumbnail_params, volumes, camera_type);
 
         if (multisample) {
             GLuint resolve_fbo;
@@ -4441,9 +4450,9 @@ void GLCanvas3D::_render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data
 }
 
 #if ENABLE_TEXTURED_VOLUMES
-void GLCanvas3D::_render_thumbnail_legacy(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_legacy(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #else
-void GLCanvas3D::_render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background)
+void GLCanvas3D::_render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type)
 #endif // ENABLE_TEXTURED_VOLUMES
 {
     // check that thumbnail size does not exceed the default framebuffer size
@@ -4460,7 +4469,7 @@ void GLCanvas3D::_render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigne
     if (!thumbnail_data.is_valid())
         return;
 
-    _render_thumbnail_internal(thumbnail_data, printable_only, parts_only, show_bed, transparent_background);
+    _render_thumbnail_internal(thumbnail_data, thumbnail_params, volumes, camera_type);
 
     glsafe(::glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void*)thumbnail_data.data.data()));
 #if ENABLE_THUMBNAIL_GENERATOR_DEBUG_OUTPUT

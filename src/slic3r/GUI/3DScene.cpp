@@ -209,7 +209,7 @@ void GLIndexedVertexArray::push_geometry(const Vec3f& position, const Vec3f* con
         interleaved_data.emplace_back(0.0f);
     }
 
-    m_bounding_box.merge(position.cast<double>());
+    m_bounding_box.extend(position);
 }
 
 void GLIndexedVertexArray::push_geometry(const stl_facet& facet)
@@ -288,7 +288,7 @@ void GLIndexedVertexArray::release_cpu_geometry() {
     interleaved_data.clear();
     triangle_indices.clear();
     quad_indices.clear();
-    m_bounding_box.reset();
+    m_bounding_box.setEmpty();
 }
 
 void GLIndexedVertexArray::render() const

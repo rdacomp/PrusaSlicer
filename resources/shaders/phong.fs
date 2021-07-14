@@ -64,6 +64,8 @@ uniform sampler2D projection_tex;
 uniform bool sinking;
 uniform ClippingPlane clipping_plane;
 
+uniform bool compute_triangle_normals_in_fs;
+
 #ifdef ENABLE_ENVIRONMENT_MAP
     uniform bool use_environment_tex;
     uniform sampler2D environment_tex;
@@ -79,6 +81,11 @@ varying vec3 model_normal;
 
 varying float world_pos_z;
 varying float world_normal_z;
+
+// x = diffuse, y = specular;
+varying vec2 intensity;
+
+varying vec3 eye_normal;
 
 vec3 sinking_color(vec3 position, vec3 color)
 {
@@ -150,9 +157,23 @@ void main()
     if (clipping_plane.active && any(lessThan(clipping_planes_dots, ZERO)))
         discard;
 
+    vec2 intensity_fs = intensity;
+    vec3 eye_normal_fs = eye_normal;
+    // z component of normal vector in world coordinate used for slope shading
+    float world_normal_z_fs = world_normal_z;
+    if (compute_triangle_normals_in_fs) {
+		// Normal shared by the three vertices of the triangle, in model space
+		vec3 triangle_normal = normalize(cross(dFdx(model_pos), dFdy(model_pos)));
+		// Transform position and normal in camera space
+		vec3 eye_position = (gl_ModelViewMatrix * vec4(model_pos, 1.0)).xyz;
+		eye_normal_fs = normalize(gl_NormalMatrix * triangle_normal);
+		intensity_fs = calc_intensity(eye_position, eye_normal_fs);
+		world_normal_z_fs = slope.active ? (normalize(slope.volume_world_normal_matrix * triangle_normal)).z : 0.0;
+	}
+
     vec3 color = uniform_color.rgb;
-    float alpha = uniform_color.a;
-    if (slope.active && world_normal_z < slope.normal_z - EPSILON) {
+    float alpha = uniform_color.a;		
+    if (slope.active && world_normal_z_fs < slope.normal_z - EPSILON) {
         color = vec3(0.7, 0.7, 1.0);
         alpha = 1.0;
     }
@@ -172,18 +193,11 @@ void main()
     
         color = mix(color, texture2D(projection_tex, tex_coords).rgb, 0.5);
     }
-    
-    // Normal shared by the three vertices of the triangle, in model space
-    vec3 triangle_normal = normalize(cross(dFdx(model_pos), dFdy(model_pos)));
-    // Transform position and normal in camera space
-    vec3 eye_position = (gl_ModelViewMatrix * vec4(model_pos, 1.0)).xyz;
-    vec3 eye_normal = normalize(gl_NormalMatrix * triangle_normal);
-    vec2 intensity = calc_intensity(eye_position, eye_normal);
-         
+             
 #ifdef ENABLE_ENVIRONMENT_MAP
     if (use_environment_tex)
-        gl_FragColor = vec4(0.45 * texture2D(environment_tex, normalize(eye_normal).xy * 0.5 + 0.5).xyz + 0.8 * color * intensity.x, alpha);
+        gl_FragColor = vec4(0.45 * texture2D(environment_tex, normalize(eye_normal_fs).xy * 0.5 + 0.5).xyz + 0.8 * color * intensity_fs.x, alpha);
     else
 #endif
-        gl_FragColor = vec4(vec3(intensity.y) + color * intensity.x, alpha);
+        gl_FragColor = vec4(vec3(intensity_fs.y) + color * intensity_fs.x, alpha);
 }

@@ -15,6 +15,7 @@
 #include "MeshUtils.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
 #include "GCodeViewer.hpp"
+#include "Camera.hpp"
 
 #include "libslic3r/Slicing.hpp"
 
@@ -37,13 +38,13 @@ class wxGLContext;
 
 namespace Slic3r {
 
-struct Camera;
 class BackgroundSlicingProcess;
 #if ENABLE_TEXTURED_VOLUMES
 struct TextureData;
 #else
 struct ThumbnailData;
 #endif // ENABLE_TEXTURED_VOLUMES
+struct ThumbnailsParams;
 class ModelObject;
 class ModelInstance;
 class PrintObject;
@@ -627,9 +628,11 @@ public:
     // printable_only == false -> render also non printable volumes as grayed
     // parts_only == false -> render also sla support and pad
 #if ENABLE_TEXTURED_VOLUMES
-    void render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, Camera::EType camera_type);
+    void render_thumbnail(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
 #else
-    void render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, Camera::EType camera_type);
+    void render_thumbnail(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
 #endif // ENABLE_TEXTURED_VOLUMES
 
     void select_all();
@@ -861,21 +864,21 @@ private:
     bool _render_search_list(float pos_x);
     bool _render_arrange_menu(float pos_x);
 #if ENABLE_TEXTURED_VOLUMES
-    void _render_thumbnail_internal(TextureData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_internal(TextureData& thumbnail_data, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
     // render thumbnail using an off-screen framebuffer
-    void _render_thumbnail_framebuffer(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_framebuffer(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
     // render thumbnail using an off-screen framebuffer when GLEW_EXT_framebuffer_object is supported
-    void _render_thumbnail_framebuffer_ext(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_framebuffer_ext(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
     // render thumbnail using the default framebuffer
-    void _render_thumbnail_legacy(TextureData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_legacy(TextureData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
 #else
-    void _render_thumbnail_internal(ThumbnailData& thumbnail_data, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_internal(ThumbnailData& thumbnail_data, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
     // render thumbnail using an off-screen framebuffer
-    void _render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_framebuffer(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
     // render thumbnail using an off-screen framebuffer when GLEW_EXT_framebuffer_object is supported
-    void _render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_framebuffer_ext(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
     // render thumbnail using the default framebuffer
-    void _render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, bool printable_only, bool parts_only, bool show_bed, bool transparent_background);
+    void _render_thumbnail_legacy(ThumbnailData& thumbnail_data, unsigned int w, unsigned int h, const ThumbnailsParams& thumbnail_params, const GLVolumeCollection& volumes, Camera::EType camera_type);
 #endif // ENABLE_TEXTURED_VOLUMES
 
     void _update_volumes_hover_state();

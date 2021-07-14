@@ -48,10 +48,10 @@ enum ModelInstanceEPrintVolumeState : unsigned char;
 // Vertex data may contain: position (mandatory), normal (optional), uv coords (optional)
 // possibly indexed by triangles and / or quads.
 struct GLIndexedVertexArray {
-private:
-    BoundingBoxf3 m_bounding_box;
+    // Only Eigen types of Nx16 size are vectorized. This bounding box will not be vectorized.
+    static_assert(sizeof(Eigen::AlignedBox<float, 3>) == 24, "Eigen::AlignedBox<float, 3> is not being vectorized, thus it does not need to be aligned");
+    using BoundingBox = Eigen::AlignedBox<float, 3>;
 
-public:
     enum class EFormat {
         Position,
         PositionNormal,
@@ -89,7 +89,7 @@ public:
     unsigned int triangle_indices_VBO_id{ 0 };
     unsigned int quad_indices_VBO_id{ 0 };
 
-    GLIndexedVertexArray() = default;
+    GLIndexedVertexArray() { m_bounding_box.setEmpty(); }
     GLIndexedVertexArray(const GLIndexedVertexArray& rhs) :
         interleaved_data(rhs.interleaved_data),
         triangle_indices(rhs.triangle_indices),
@@ -135,12 +135,12 @@ public:
         interleaved_data      = std::move(rhs.interleaved_data);
         triangle_indices      = std::move(rhs.triangle_indices);
         quad_indices          = std::move(rhs.quad_indices);
-        m_bounding_box        = std::move(rhs.m_bounding_box);
+        m_bounding_box        = rhs.m_bounding_box;
         return *this;
     }
 
     inline bool has_VBOs() const { return interleaved_data_VBO_id > 0 && (triangle_indices_VBO_id > 0 || quad_indices_VBO_id > 0); }
-    inline const BoundingBoxf3& bounding_box() const { return m_bounding_box; }
+    inline const BoundingBox& bounding_box() const { return m_bounding_box; }
 
     // Is there any geometry data stored?
     inline bool empty() const { return interleaved_data.size() == 0 && interleaved_data_size == 0; }
@@ -230,6 +230,8 @@ public:
     size_t uv_offset_bytes() const { return uv_offset_floats() * sizeof(float); }
 
 private:
+    BoundingBox m_bounding_box;
+
     // Release OpenGL VBOs.
     void release_VBOs();
 };
@@ -238,26 +240,22 @@ private:
 // possibly indexed by triangles and / or quads.
 class GLIndexedVertexArray {
 public:
-    GLIndexedVertexArray() : 
-        vertices_and_normals_interleaved_VBO_id(0),
-        triangle_indices_VBO_id(0),
-        quad_indices_VBO_id(0)
-        {}
+    // Only Eigen types of Nx16 size are vectorized. This bounding box will not be vectorized.
+    static_assert(sizeof(Eigen::AlignedBox<float, 3>) == 24, "Eigen::AlignedBox<float, 3> is not being vectorized, thus it does not need to be aligned");
+    using BoundingBox = Eigen::AlignedBox<float, 3>;
+
+    GLIndexedVertexArray() { m_bounding_box.setEmpty(); }
     GLIndexedVertexArray(const GLIndexedVertexArray &rhs) :
         vertices_and_normals_interleaved(rhs.vertices_and_normals_interleaved),
         triangle_indices(rhs.triangle_indices),
         quad_indices(rhs.quad_indices),
-        vertices_and_normals_interleaved_VBO_id(0),
-        triangle_indices_VBO_id(0),
-        quad_indices_VBO_id(0)
-        { assert(! rhs.has_VBOs()); }
+        m_bounding_box(rhs.m_bounding_box)
+        { assert(! rhs.has_VBOs()); m_bounding_box.setEmpty(); }
     GLIndexedVertexArray(GLIndexedVertexArray &&rhs) :
         vertices_and_normals_interleaved(std::move(rhs.vertices_and_normals_interleaved)),
         triangle_indices(std::move(rhs.triangle_indices)),
         quad_indices(std::move(rhs.quad_indices)),
-        vertices_and_normals_interleaved_VBO_id(0),
-        triangle_indices_VBO_id(0),
-        quad_indices_VBO_id(0)
+        m_bounding_box(rhs.m_bounding_box)
         { assert(! rhs.has_VBOs()); }
 
     ~GLIndexedVertexArray() { release_geometry(); }
@@ -288,13 +286,13 @@ public:
         assert(rhs.vertices_and_normals_interleaved_VBO_id == 0);
         assert(rhs.triangle_indices_VBO_id == 0);
         assert(rhs.quad_indices_VBO_id == 0);
-        vertices_and_normals_interleaved 	  = std::move(rhs.vertices_and_normals_interleaved);
-        triangle_indices                 	  = std::move(rhs.triangle_indices);
-        quad_indices                     	  = std::move(rhs.quad_indices);
-        m_bounding_box                   	  = std::move(rhs.m_bounding_box);
-        vertices_and_normals_interleaved_size = rhs.vertices_and_normals_interleaved_size;
-        triangle_indices_size                 = rhs.triangle_indices_size;
-        quad_indices_size                     = rhs.quad_indices_size;
+        this->vertices_and_normals_interleaved 		 = std::move(rhs.vertices_and_normals_interleaved);
+        this->triangle_indices                 		 = std::move(rhs.triangle_indices);
+        this->quad_indices                     		 = std::move(rhs.quad_indices);
+        this->m_bounding_box                   		 = rhs.m_bounding_box;
+        this->vertices_and_normals_interleaved_size  = rhs.vertices_and_normals_interleaved_size;
+        this->triangle_indices_size                  = rhs.triangle_indices_size;
+        this->quad_indices_size                      = rhs.quad_indices_size;
         return *this;
     }
 
@@ -345,8 +343,8 @@ public:
         vertices_and_normals_interleaved.emplace_back(y);
         vertices_and_normals_interleaved.emplace_back(z);
 
-        vertices_and_normals_interleaved_size = vertices_and_normals_interleaved.size();
-        m_bounding_box.merge(Vec3f(x, y, z).cast<double>());
+        this->vertices_and_normals_interleaved_size = this->vertices_and_normals_interleaved.size();
+        m_bounding_box.extend(Vec3f(x, y, z));
     };
 
     inline void push_geometry(double x, double y, double z, double nx, double ny, double nz) {
@@ -399,13 +397,13 @@ public:
     bool empty() const { return vertices_and_normals_interleaved_size == 0; }
 
     void clear() {
-        vertices_and_normals_interleaved.clear();
-        triangle_indices.clear();
-        quad_indices.clear();
-        m_bounding_box.reset();
+        this->vertices_and_normals_interleaved.clear();
+        this->triangle_indices.clear();
+        this->quad_indices.clear();
         vertices_and_normals_interleaved_size = 0;
         triangle_indices_size = 0;
         quad_indices_size = 0;
+        m_bounding_box.setEmpty();
     }
 
     // Shrink the internal storage to tighly fit the data stored.
@@ -415,7 +413,7 @@ public:
         quad_indices.shrink_to_fit();
     }
 
-    const BoundingBoxf3& bounding_box() const { return m_bounding_box; }
+    const BoundingBox& bounding_box() const { return m_bounding_box; }
 
     // Return an estimate of the memory consumed by this class.
     size_t cpu_memory_used() const { return sizeof(*this) + vertices_and_normals_interleaved.capacity() * sizeof(float) + triangle_indices.capacity() * sizeof(int) + quad_indices.capacity() * sizeof(int); }
@@ -433,7 +431,7 @@ public:
     size_t total_memory_used() const { return cpu_memory_used() + gpu_memory_used(); }
 
 private:
-    BoundingBoxf3 m_bounding_box;
+    BoundingBox m_bounding_box;
 };
 #endif // ENABLE_TEXTURED_VOLUMES
 
@@ -559,7 +557,15 @@ public:
 #endif // ENABLE_TEXTURED_VOLUMES
 
     // Bounding box of this volume, in unscaled coordinates.
-    const BoundingBoxf3& bounding_box() const { return indexed_vertex_array.bounding_box(); }
+    BoundingBoxf3 bounding_box() const {
+        BoundingBoxf3 out;
+        if (!indexed_vertex_array.bounding_box().isEmpty()) {
+            out.min = indexed_vertex_array.bounding_box().min().cast<double>();
+            out.max = indexed_vertex_array.bounding_box().max().cast<double>();
+            out.defined = true;
+        };
+        return out;
+    }
 
     void set_render_color(float r, float g, float b, float a);
     void set_render_color(const float* rgba, unsigned int size);
