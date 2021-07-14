@@ -710,7 +710,7 @@ public:
 class GLVolumeCollection
 {
 public:
-    enum ERenderType : unsigned char
+    enum class ERenderType : unsigned char
     {
         Opaque,
         Transparent,
