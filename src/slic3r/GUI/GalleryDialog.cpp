@@ -32,6 +32,7 @@
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/GCode/ThumbnailData.hpp"
+#include "../Utils/MacDarkMode.hpp"
 
 namespace Slic3r {
 namespace GUI {
@@ -74,7 +75,7 @@ GalleryDialog::GalleryDialog(wxWindow* parent) :
     wxStaticText* label_top = new wxStaticText(this, wxID_ANY, _L("Select shape from the gallery") + ":");
 
     m_list_ctrl = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(55 * wxGetApp().em_unit(), 35 * wxGetApp().em_unit()),
-                                wxLC_ICON | wxLC_NO_HEADER | wxLC_ALIGN_TOP | wxSIMPLE_BORDER);
+                                wxLC_ICON | wxSIMPLE_BORDER);
     m_list_ctrl->Bind(wxEVT_LIST_ITEM_SELECTED, &GalleryDialog::select, this);
     m_list_ctrl->Bind(wxEVT_LIST_ITEM_DESELECTED, &GalleryDialog::deselect, this);
     m_list_ctrl->Bind(wxEVT_LIST_ITEM_ACTIVATED, [this](wxListEvent& event) {
@@ -82,10 +83,12 @@ GalleryDialog::GalleryDialog(wxWindow* parent) :
         select(event);
         this->EndModal(wxID_OK);
     });
+#ifdef _WIN32
     this->Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
         event.Skip();
         m_list_ctrl->Arrange();
     });
+#endif
 
     wxStdDialogButtonSizer* buttons = this->CreateStdDialogButtonSizer(wxOK | wxCANCEL);
     wxButton* ok_btn = static_cast<wxButton*>(FindWindowById(wxID_OK, this));
@@ -98,7 +101,7 @@ GalleryDialog::GalleryDialog(wxWindow* parent) :
         wxButton* btn = new wxButton(this, ID, title);
         btn->SetToolTip(tooltip);
         btn->Bind(wxEVT_UPDATE_UI, [enable_fn](wxUpdateUIEvent& evt) { evt.Enable(enable_fn()); });
-        buttons->Insert(pos, btn, 0, wxRIGHT, BORDER_W);
+        buttons->Insert(pos, btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, BORDER_W);
         this->Bind(wxEVT_BUTTON, method, this, ID);
     };
 
@@ -153,13 +156,16 @@ void GalleryDialog::on_dpi_changed(const wxRect& suggested_rect)
 
 static void add_lock(wxImage& image) 
 {
-    wxBitmap bmp = create_scaled_bitmap("lock", nullptr, 22);
+    int lock_sz = 22;
+#ifdef __APPLE__
+    lock_sz /= mac_max_scaling_factor();
+#endif
+    wxBitmap bmp = create_scaled_bitmap("lock", nullptr, lock_sz);
 
     wxImage lock_image = bmp.ConvertToImage();
     if (!lock_image.IsOk() || lock_image.GetWidth() == 0 || lock_image.GetHeight() == 0)
         return;
 
-    int icon_sz = 16;
     auto lock_px_data = (uint8_t*)lock_image.GetData();
     auto lock_a_data = (uint8_t*)lock_image.GetAlpha();
     int lock_width  = lock_image.GetWidth();
@@ -208,12 +214,9 @@ static void add_default_image(wxImageList* img_list, bool is_system)
 
 static fs::path get_dir(bool sys_dir)
 {
-    return fs::absolute(fs::path(gallery_dir()) / (sys_dir ? "system" : "custom")).make_preferred();
-}
-
-static bool custom_exists() 
-{
-    return fs::exists(fs::absolute(fs::path(gallery_dir()) / "custom").make_preferred());
+    if (sys_dir)
+        return fs::absolute(fs::path(sys_shapes_dir())).make_preferred();
+    return fs::absolute(fs::path(data_dir()) / "shapes").make_preferred();
 }
 
 static std::string get_dir_path(bool sys_dir) 
@@ -295,14 +298,22 @@ void GalleryDialog::load_label_icon_list()
     auto add_files_from_gallery = [](std::vector<Item>& items, bool sys_dir, std::string& dir_path)
     {
         fs::path dir = get_dir(sys_dir);
+        if (!fs::exists(dir))
+            return;
+
         dir_path = get_dir_path(sys_dir);
 
+        std::vector<std::string> sorted_names;
         for (auto& dir_entry : fs::directory_iterator(dir))
-            if (TriangleMesh mesh; is_stl_file(dir_entry) && mesh.ReadSTLFile(dir_entry.path().string().c_str())) {
-                std::string name = dir_entry.path().stem().string();
-                Item item = Item{ name, sys_dir };
-                items.push_back(item);
-            }
+            if (TriangleMesh mesh; is_stl_file(dir_entry) && mesh.ReadSTLFile(dir_entry.path().string().c_str()))
+                sorted_names.push_back(dir_entry.path().stem().string());
+
+        // sort the filename case insensitive
+        std::sort(sorted_names.begin(), sorted_names.end(), [](const std::string& a, const std::string& b)
+            { return boost::algorithm::to_lower_copy(a) < boost::algorithm::to_lower_copy(b); });
+
+        for (const std::string& name : sorted_names)
+            items.push_back(Item{ name, sys_dir });
     };
 
     wxBusyCursor busy;
@@ -310,8 +321,7 @@ void GalleryDialog::load_label_icon_list()
     std::string m_sys_dir_path, m_cust_dir_path;
     std::vector<Item> list_items;
     add_files_from_gallery(list_items, true, m_sys_dir_path);
-    if (custom_exists())
-        add_files_from_gallery(list_items, false, m_cust_dir_path);
+    add_files_from_gallery(list_items, false, m_cust_dir_path);
 
     // Make an image list containing large icons
 
@@ -347,7 +357,7 @@ void GalleryDialog::load_label_icon_list()
     for (int i = 0; i < img_cnt; i++) {
         m_list_ctrl->InsertItem(i, from_u8(list_items[i].name), i);
         if (list_items[i].is_system)
-            m_list_ctrl->SetItemFont(i, m_list_ctrl->GetItemFont(i).Bold());
+            m_list_ctrl->SetItemFont(i, wxGetApp().bold_font());
     }
 }
 
@@ -375,20 +385,22 @@ void GalleryDialog::add_custom_shapes(wxEvent& event)
 
 void GalleryDialog::del_custom_shapes(wxEvent& event)
 {
-    auto dest_dir = get_dir(false);
+    auto custom_dir = get_dir(false);
 
-    for (const Item& item : m_selected_items) {
-        std::string filename = item.name + ".stl";
-
-        if (!fs::exists(dest_dir / filename))
-            continue;
+    auto remove_file = [custom_dir](const std::string& name) {
+        if (!fs::exists(custom_dir / name))
+            return;
         try {
-            fs::remove(dest_dir / filename);
+            fs::remove(custom_dir / name);
         }
         catch (fs::filesystem_error const& e) {
             std::cerr << e.what() << '\n';
-            return;
         }
+    };
+
+    for (const Item& item : m_selected_items) {
+        remove_file(item.name + ".stl");
+        remove_file(item.name + ".png");
     }
 
     update();
