@@ -447,6 +447,8 @@ void Selection::clear()
 
     for (unsigned int i : m_list) {
         (*m_volumes)[i]->selected = false;
+        // ensure the volume gets the proper color before next call to render (expecially needed for transparent volumes)
+        (*m_volumes)[i]->set_render_color();
     }
 
     m_list.clear();
