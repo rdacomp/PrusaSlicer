@@ -1151,9 +1151,6 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
         shader->set_uniform("print_box.volume_world_matrix", volume.first->world_matrix());
         shader->set_uniform("slope.active", m_slope.active && !volume.first->is_modifier && !volume.first->is_wipe_tower);
         shader->set_uniform("slope.volume_world_normal_matrix", static_cast<Matrix3f>(volume.first->world_matrix().matrix().block(0, 0, 3, 3).inverse().transpose().cast<float>()));
-#if ENABLE_ALLOW_NEGATIVE_Z
-        shader->set_uniform("sinking", volume.first->is_sinking());
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
 #if ENABLE_TEXTURED_VOLUMES
         bool has_texture = !volume.first->texture.empty();
