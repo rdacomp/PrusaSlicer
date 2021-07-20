@@ -747,6 +747,10 @@ void ConfigOptionsGroup::sys_color_changed()
             wxGetApp().UpdateDarkUI(extra_col);
     }
 
+    if (custom_ctrl)
+        wxGetApp().UpdateDarkUI(custom_ctrl);
+#endif
+
     auto update = [](wxSizer* sizer) {
         for (wxSizerItem* item : sizer->GetChildren())
             if (item->IsWindow()) {
@@ -767,10 +771,6 @@ void ConfigOptionsGroup::sys_color_changed()
         if (line.extra_widget_sizer)
             update(line.extra_widget_sizer);
     }
-
-    if (custom_ctrl)
-        wxGetApp().UpdateDarkUI(custom_ctrl);
-#endif
 
 	// update undo buttons : rescale bitmaps
 	for (const auto& field : m_fields)
@@ -904,7 +904,7 @@ boost::any ConfigOptionsGroup::get_config_value(const DynamicPrintConfig& config
 	case coPoints:
 		if (opt_key == "bed_shape")
 			ret = config.option<ConfigOptionPoints>(opt_key)->values;
-        if (opt_key == "thumbnails")
+        else if (opt_key == "thumbnails")
             ret = get_thumbnails_string(config.option<ConfigOptionPoints>(opt_key)->values);
 		else
 			ret = config.option<ConfigOptionPoints>(opt_key)->get_at(idx);

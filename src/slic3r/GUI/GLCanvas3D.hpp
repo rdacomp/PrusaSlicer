@@ -125,9 +125,7 @@ wxDECLARE_EVENT(EVT_GLCANVAS_INSTANCE_SCALED, SimpleEvent);
 wxDECLARE_EVENT(EVT_GLCANVAS_WIPETOWER_ROTATED, Vec3dEvent);
 wxDECLARE_EVENT(EVT_GLCANVAS_ENABLE_ACTION_BUTTONS, Event<bool>);
 wxDECLARE_EVENT(EVT_GLCANVAS_UPDATE_GEOMETRY, Vec3dsEvent<2>);
-#if ENABLE_SEQUENTIAL_LIMITS
 wxDECLARE_EVENT(EVT_GLCANVAS_MOUSE_DRAGGING_STARTED, SimpleEvent);
-#endif // ENABLE_SEQUENTIAL_LIMITS
 wxDECLARE_EVENT(EVT_GLCANVAS_MOUSE_DRAGGING_FINISHED, SimpleEvent);
 wxDECLARE_EVENT(EVT_GLCANVAS_UPDATE_BED_SHAPE, SimpleEvent);
 wxDECLARE_EVENT(EVT_GLCANVAS_TAB, SimpleEvent);
@@ -504,7 +502,6 @@ private:
 
     void load_arrange_settings();
 
-#if ENABLE_SEQUENTIAL_LIMITS
     class SequentialPrintClearance
     {
         GLModel m_fill;
@@ -525,7 +522,6 @@ private:
 
     SequentialPrintClearance m_sequential_print_clearance;
     bool m_sequential_print_clearance_first_displacement{ true };
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
 public:
     explicit GLCanvas3D(wxGLCanvas* canvas);
@@ -779,7 +775,6 @@ public:
 #endif
     }
 
-#if ENABLE_SEQUENTIAL_LIMITS
     void reset_sequential_print_clearance() {
         m_sequential_print_clearance.set_visible(false);
         m_sequential_print_clearance.set_render_fill(false);
@@ -799,7 +794,6 @@ public:
     }
 
     void update_sequential_clearance();
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
     const Print* fff_print() const;
     const SLAPrint* sla_print() const;
@@ -844,9 +838,7 @@ private:
 #endif // ENABLE_DELAYED_TRANSPARENT_VOLUMES_RENDERING
     void _render_gcode() const;
     void _render_selection() const;
-#if ENABLE_SEQUENTIAL_LIMITS
     void _render_sequential_clearance();
-#endif // ENABLE_SEQUENTIAL_LIMITS
 #if ENABLE_RENDER_SELECTION_CENTER
     void _render_selection_center() const;
 #endif // ENABLE_RENDER_SELECTION_CENTER
