@@ -675,14 +675,12 @@ void MainFrame::init_tabpanel()
 #else
     m_tabpanel->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
 #endif
-#if ENABLE_VALIDATE_CUSTOM_GCODE
         if (int old_selection = e.GetOldSelection();
             old_selection != wxNOT_FOUND && old_selection < static_cast<int>(m_tabpanel->GetPageCount())) {
             Tab* old_tab = dynamic_cast<Tab*>(m_tabpanel->GetPage(old_selection));
             if (old_tab)
                 old_tab->validate_custom_gcodes();
         }
-#endif // ENABLE_VALIDATE_CUSTOM_GCODE
 
         wxWindow* panel = m_tabpanel->GetCurrentPage();
         Tab* tab = dynamic_cast<Tab*>(panel);
@@ -1985,7 +1983,7 @@ void MainFrame::select_tab(size_t tab/* = size_t(-1)*/)
         m_main_sizer->Show(m_tabpanel, tab != 0);
 
         // plater should be focused for correct navigation inside search window
-        if (tab == 0 && m_plater->canvas3D()->is_search_pressed())
+        if (tab == 0)
             m_plater->SetFocus();
         Layout();
     }
