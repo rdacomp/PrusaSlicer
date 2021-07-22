@@ -173,17 +173,10 @@ void GLCanvas3D::LayersEditing::set_config(const DynamicPrintConfig* config)
 void GLCanvas3D::LayersEditing::select_object(const Model &model, int object_id)
 {
     const ModelObject *model_object_new = (object_id >= 0) ? model.objects[object_id] : nullptr;
-#if ENABLE_ALLOW_NEGATIVE_Z
     // Maximum height of an object changes when the object gets rotated or scaled.
     // Changing maximum height of an object will invalidate the layer heigth editing profile.
     // m_model_object->bounding_box() is cached, therefore it is cheap even if this method is called frequently.
     const float new_max_z = (model_object_new == nullptr) ? 0.0f : static_cast<float>(model_object_new->bounding_box().max.z());
-#else
-    // Maximum height of an object changes when the object gets rotated or scaled.
-    // Changing maximum height of an object will invalidate the layer heigth editing profile.
-    // m_model_object->raw_bounding_box() is cached, therefore it is cheap even if this method is called frequently.
-	float new_max_z = (model_object_new == nullptr) ? 0.f : model_object_new->raw_bounding_box().size().z();
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     if (m_model_object != model_object_new || this->last_object_id != object_id || m_object_max_z != new_max_z ||
         (model_object_new != nullptr && m_model_object->id() != model_object_new->id())) {
         m_layer_height_profile.clear();
@@ -792,7 +785,6 @@ void GLCanvas3D::Tooltip::render(const Vec2d& mouse_position, GLCanvas3D& canvas
     ImGui::PopStyleVar(2);
 }
 
-#if ENABLE_SEQUENTIAL_LIMITS
 void GLCanvas3D::SequentialPrintClearance::set_polygons(const Polygons& polygons)
 {
     m_perimeter.reset();
@@ -879,7 +871,6 @@ void GLCanvas3D::SequentialPrintClearance::render()
 
     shader->stop_using();
 }
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
 wxDEFINE_EVENT(EVT_GLCANVAS_SCHEDULE_BACKGROUND_PROCESS, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_OBJECT_SELECT, SimpleEvent);
@@ -897,9 +888,7 @@ wxDEFINE_EVENT(EVT_GLCANVAS_WIPETOWER_MOVED, Vec3dEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_WIPETOWER_ROTATED, Vec3dEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_ENABLE_ACTION_BUTTONS, Event<bool>);
 wxDEFINE_EVENT(EVT_GLCANVAS_UPDATE_GEOMETRY, Vec3dsEvent<2>);
-#if ENABLE_SEQUENTIAL_LIMITS
 wxDEFINE_EVENT(EVT_GLCANVAS_MOUSE_DRAGGING_STARTED, SimpleEvent);
-#endif // ENABLE_SEQUENTIAL_LIMITS
 wxDEFINE_EVENT(EVT_GLCANVAS_MOUSE_DRAGGING_FINISHED, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_UPDATE_BED_SHAPE, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_TAB, SimpleEvent);
@@ -1127,7 +1116,6 @@ int GLCanvas3D::check_volumes_outside_state() const
     return (int)state;
 }
 
-#if ENABLE_GCODE_WINDOW
 void GLCanvas3D::start_mapping_gcode_window()
 {
     m_gcode_viewer.start_mapping_gcode_window();
@@ -1137,7 +1125,6 @@ void GLCanvas3D::stop_mapping_gcode_window()
 {
     m_gcode_viewer.stop_mapping_gcode_window();
 }
-#endif // ENABLE_GCODE_WINDOW
 
 void GLCanvas3D::toggle_sla_auxiliaries_visibility(bool visible, const ModelObject* mo, int instance_idx)
 {
@@ -1493,9 +1480,7 @@ void GLCanvas3D::render()
     _render_objects(GLVolumeCollection::ERenderType::Transparent);
 #endif // ENABLE_DELAYED_TRANSPARENT_VOLUMES_RENDERING
 
-#if ENABLE_SEQUENTIAL_LIMITS
     _render_sequential_clearance();
-#endif // ENABLE_SEQUENTIAL_LIMITS
 #if ENABLE_RENDER_SELECTION_CENTER
     _render_selection_center();
 #endif // ENABLE_RENDER_SELECTION_CENTER
@@ -2445,10 +2430,8 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
         case 'a': { post_event(SimpleEvent(EVT_GLCANVAS_ARRANGE)); break; }
         case 'B':
         case 'b': { zoom_to_bed(); break; }
-#if ENABLE_GCODE_WINDOW
         case 'C':
         case 'c': { m_gcode_viewer.toggle_gcode_window_visibility(); m_dirty = true; request_extra_frame(); break; }
-#endif // ENABLE_GCODE_WINDOW
         case 'E':
         case 'e': { m_labels.show(!m_labels.is_shown()); m_dirty = true; break; }
         case 'G':
@@ -2475,8 +2458,8 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
         case 'O':
         case 'o': { _update_camera_zoom(-1.0); break; }
 #if ENABLE_RENDER_PICKING_PASS
-        case 'P':
-        case 'p': {
+        case 'T':
+        case 't': {
             m_show_picking_texture = !m_show_picking_texture;
             m_dirty = true;
             break;
@@ -3006,7 +2989,6 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
         m_mouse.set_start_position_3D_as_invalid();
         m_mouse.position = pos.cast<double>();
 
-#if ENABLE_SEQUENTIAL_LIMITS
         if (evt.Dragging() && current_printer_technology() == ptFFF && fff_print()->config().complete_objects) {
             switch (m_gizmos.get_current_type())
             {
@@ -3020,7 +3002,6 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
             default: { break; }
             }
         }
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
         return;
     }
@@ -3144,9 +3125,7 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
                         m_mouse.drag.move_volume_idx = volume_idx;
                         m_selection.start_dragging();
                         m_mouse.drag.start_position_3D = m_mouse.scene_position;
-#if ENABLE_SEQUENTIAL_LIMITS
                         m_sequential_print_clearance_first_displacement = true;
-#endif // ENABLE_SEQUENTIAL_LIMITS
                         m_moving = true;
                     }
                 }
@@ -3192,10 +3171,8 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
             }
 
             m_selection.translate(cur_pos - m_mouse.drag.start_position_3D);
-#if ENABLE_SEQUENTIAL_LIMITS
             if (current_printer_technology() == ptFFF && fff_print()->config().complete_objects)
                 update_sequential_clearance();
-#endif // ENABLE_SEQUENTIAL_LIMITS
             wxGetApp().obj_manipul()->set_dirty();
             m_dirty = true;
         }
@@ -3437,37 +3414,21 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
             wipe_tower_origin = v->get_volume_offset();
     }
 
-#if ENABLE_ALLOW_NEGATIVE_Z
     // Fixes flying instances
-#else
-    // Fixes sinking/flying instances
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     for (const std::pair<int, int>& i : done) {
         ModelObject* m = m_model->objects[i.first];
-#if ENABLE_ALLOW_NEGATIVE_Z
         const double shift_z = m->get_instance_min_z(i.second);
-#if DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
         if (current_printer_technology() == ptSLA || shift_z > SINKING_Z_THRESHOLD) {
-#else
-        if (shift_z > 0.0) {
-#endif // DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
             const Vec3d shift(0.0, 0.0, -shift_z);
-#else
-        const Vec3d shift(0.0, 0.0, -m->get_instance_min_z(i.second));
-#endif // ENABLE_ALLOW_NEGATIVE_Z
-        m_selection.translate(i.first, i.second, shift);
-        m->translate_instance(i.second, shift);
-#if ENABLE_ALLOW_NEGATIVE_Z
+            m_selection.translate(i.first, i.second, shift);
+            m->translate_instance(i.second, shift);
         }
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     }
 
-#if ENABLE_ALLOW_NEGATIVE_Z
     // if the selection is not valid to allow for layer editing after the move, we need to turn off the tool if it is running
     // similar to void Plater::priv::selection_changed()
     if (!wxGetApp().plater()->can_layers_editing() && is_layers_editing_enabled())
         post_event(SimpleEvent(EVT_GLTOOLBAR_LAYERSEDITING));
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
     if (object_moved)
         post_event(SimpleEvent(EVT_GLCANVAS_INSTANCE_MOVED));
@@ -3475,9 +3436,7 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
     if (wipe_tower_origin != Vec3d::Zero())
         post_event(Vec3dEvent(EVT_GLCANVAS_WIPETOWER_MOVED, std::move(wipe_tower_origin)));
 
-#if ENABLE_SEQUENTIAL_LIMITS
     reset_sequential_print_clearance();
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
     m_dirty = true;
 }
@@ -3490,7 +3449,6 @@ void GLCanvas3D::do_rotate(const std::string& snapshot_type)
     if (!snapshot_type.empty())
         wxGetApp().plater()->take_snapshot(_(snapshot_type));
 
-#if ENABLE_ALLOW_NEGATIVE_Z
     // stores current min_z of instances
     std::map<std::pair<int, int>, double> min_zs;
     if (!snapshot_type.empty()) {
@@ -3501,7 +3459,6 @@ void GLCanvas3D::do_rotate(const std::string& snapshot_type)
             }
         }
     }
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
     std::set<std::pair<int, int>> done;  // keeps track of modified instances
 
@@ -3539,19 +3496,13 @@ void GLCanvas3D::do_rotate(const std::string& snapshot_type)
     // Fixes sinking/flying instances
     for (const std::pair<int, int>& i : done) {
         ModelObject* m = m_model->objects[i.first];
-#if ENABLE_ALLOW_NEGATIVE_Z
         double shift_z = m->get_instance_min_z(i.second);
         // leave sinking instances as sinking
         if (min_zs.empty() || min_zs.find({ i.first, i.second })->second >= SINKING_Z_THRESHOLD || shift_z > SINKING_Z_THRESHOLD) {
             Vec3d shift(0.0, 0.0, -shift_z);
-#else
-        Vec3d shift(0.0, 0.0, -m->get_instance_min_z(i.second));
-#endif // ENABLE_ALLOW_NEGATIVE_Z
             m_selection.translate(i.first, i.second, shift);
             m->translate_instance(i.second, shift);
-#if ENABLE_ALLOW_NEGATIVE_Z
         }
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     }
 
     if (!done.empty())
@@ -3568,7 +3519,6 @@ void GLCanvas3D::do_scale(const std::string& snapshot_type)
     if (!snapshot_type.empty())
         wxGetApp().plater()->take_snapshot(_(snapshot_type));
 
-#if ENABLE_ALLOW_NEGATIVE_Z
     // stores current min_z of instances
     std::map<std::pair<int, int>, double> min_zs;
     if (!snapshot_type.empty()) {
@@ -3579,7 +3529,6 @@ void GLCanvas3D::do_scale(const std::string& snapshot_type)
             }
         }
     }
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
     std::set<std::pair<int, int>> done;  // keeps track of modified instances
 
@@ -3614,19 +3563,13 @@ void GLCanvas3D::do_scale(const std::string& snapshot_type)
     // Fixes sinking/flying instances
     for (const std::pair<int, int>& i : done) {
         ModelObject* m = m_model->objects[i.first];
-#if ENABLE_ALLOW_NEGATIVE_Z
         double shift_z = m->get_instance_min_z(i.second);
         // leave sinking instances as sinking
         if (min_zs.empty() || min_zs.find({ i.first, i.second })->second >= SINKING_Z_THRESHOLD || shift_z > SINKING_Z_THRESHOLD) {
             Vec3d shift(0.0, 0.0, -shift_z);
-#else
-        Vec3d shift(0.0, 0.0, -m->get_instance_min_z(i.second));
-#endif // ENABLE_ALLOW_NEGATIVE_Z
-        m_selection.translate(i.first, i.second, shift);
-        m->translate_instance(i.second, shift);
-#if ENABLE_ALLOW_NEGATIVE_Z
+            m_selection.translate(i.first, i.second, shift);
+            m->translate_instance(i.second, shift);
         }
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     }
 
     if (!done.empty())
@@ -3825,7 +3768,6 @@ void GLCanvas3D::mouse_up_cleanup()
         m_canvas->ReleaseMouse();
 }
 
-#if ENABLE_SEQUENTIAL_LIMITS
 void GLCanvas3D::update_sequential_clearance()
 {
     if (current_printer_technology() != ptFFF || !fff_print()->config().complete_objects)
@@ -3915,7 +3857,6 @@ void GLCanvas3D::update_sequential_clearance()
     set_sequential_print_clearance_render_fill(false);
     set_sequential_print_clearance_polygons(polygons);
 }
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
 #if ENABLE_TEXTURED_VOLUMES
 void GLCanvas3D::update_volumes_texture_from_objects()
@@ -4940,21 +4881,30 @@ void GLCanvas3D::_picking_pass()
         if (m_camera_clipping_plane.is_active())
             ::glDisable(GL_CLIP_PLANE0);
 
+        _render_bed_for_picking(!wxGetApp().plater()->get_camera().is_looking_downward());
+
         m_gizmos.render_current_gizmo_for_picking_pass();
 
         if (m_multisample_allowed)
             glsafe(::glEnable(GL_MULTISAMPLE));
 
         int volume_id = -1;
+        int gizmo_id = -1;
 
         GLubyte color[4] = { 0, 0, 0, 0 };
         const Size& cnv_size = get_canvas_size();
         bool inside = 0 <= m_mouse.position(0) && m_mouse.position(0) < cnv_size.get_width() && 0 <= m_mouse.position(1) && m_mouse.position(1) < cnv_size.get_height();
         if (inside) {
             glsafe(::glReadPixels(m_mouse.position(0), cnv_size.get_height() - m_mouse.position(1) - 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, (void*)color));
-            if (picking_checksum_alpha_channel(color[0], color[1], color[2]) == color[3])
-            	// Only non-interpolated colors are valid, those have their lowest three bits zeroed.
-            	volume_id = color[0] + (color[1] << 8) + (color[2] << 16);
+            if (picking_checksum_alpha_channel(color[0], color[1], color[2]) == color[3]) {
+                // Only non-interpolated colors are valid, those have their lowest three bits zeroed.
+                // we reserve color = (0,0,0) for occluders (as the printbed) 
+                // volumes' id are shifted by 1
+                // see: _render_volumes_for_picking()
+                volume_id = color[0] + (color[1] << 8) + (color[2] << 16) - 1;
+                // gizmos' id are instead properly encoded by the color
+                gizmo_id = color[0] + (color[1] << 8) + (color[2] << 16);
+            }
         }
         if (0 <= volume_id && volume_id < (int)m_volumes.volumes.size()) {
             // do not add the volume id if any gizmo is active and CTRL is pressed
@@ -4963,7 +4913,7 @@ void GLCanvas3D::_picking_pass()
             m_gizmos.set_hover_id(-1);
         }
         else
-            m_gizmos.set_hover_id(inside && (unsigned int)volume_id <= GLGizmoBase::BASE_ID ? ((int)GLGizmoBase::BASE_ID - volume_id) : -1);
+            m_gizmos.set_hover_id(inside && (unsigned int)gizmo_id <= GLGizmoBase::BASE_ID ? ((int)GLGizmoBase::BASE_ID - gizmo_id) : -1);
 
         _update_volumes_hover_state();
     }
@@ -4986,6 +4936,7 @@ void GLCanvas3D::_rectangular_selection_picking_pass()
         glsafe(::glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
         _render_volumes_for_picking();
+        _render_bed_for_picking(!wxGetApp().plater()->get_camera().is_looking_downward());
 
         if (m_multisample_allowed)
             glsafe(::glEnable(GL_MULTISAMPLE));
@@ -5004,7 +4955,10 @@ void GLCanvas3D::_rectangular_selection_picking_pass()
                 std::array<GLubyte, 4> data;
             	// Only non-interpolated colors are valid, those have their lowest three bits zeroed.
                 bool valid() const { return picking_checksum_alpha_channel(data[0], data[1], data[2]) == data[3]; }
-                int id() const { return data[0] + (data[1] << 8) + (data[2] << 16); }
+                // we reserve color = (0,0,0) for occluders (as the printbed) 
+                // volumes' id are shifted by 1
+                // see: _render_volumes_for_picking()
+                int id() const { return data[0] + (data[1] << 8) + (data[2] << 16) - 1; }
             };
 
             std::vector<Pixel> frame(px_count);
@@ -5126,6 +5080,17 @@ void GLCanvas3D::_render_bed(bool bottom, bool show_axes)
     wxGetApp().plater()->get_bed().render(*this, bottom, scale_factor, show_axes, show_texture);
 }
 
+void GLCanvas3D::_render_bed_for_picking(bool bottom)
+{
+    float scale_factor = 1.0;
+#if ENABLE_RETINA_GL
+    scale_factor = m_retina_helper->get_scale_factor();
+#endif // ENABLE_RETINA_GL
+
+    wxGetApp().plater()->get_bed().render_for_picking(*this, bottom, scale_factor);
+}
+
+
 #if ENABLE_DELAYED_TRANSPARENT_VOLUMES_RENDERING
 void GLCanvas3D::_render_objects(GLVolumeCollection::ERenderType type)
 #else
@@ -5244,7 +5209,6 @@ void GLCanvas3D::_render_selection() const
         m_selection.render(scale_factor);
 }
 
-#if ENABLE_SEQUENTIAL_LIMITS
 void GLCanvas3D::_render_sequential_clearance()
 {
     if (m_layers_editing.is_enabled() || m_gizmos.is_dragging())
@@ -5263,7 +5227,6 @@ void GLCanvas3D::_render_sequential_clearance()
  
     m_sequential_print_clearance.render();
 }
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
 #if ENABLE_RENDER_SELECTION_CENTER
 void GLCanvas3D::_render_selection_center() const
@@ -5384,14 +5347,16 @@ void GLCanvas3D::_render_volumes_for_picking() const
     for (size_t type = 0; type < 2; ++ type) {
         GLVolumeWithIdAndZList to_render = volumes_to_render(m_volumes.volumes, (type == 0) ? GLVolumeCollection::ERenderType::Opaque : GLVolumeCollection::ERenderType::Transparent, view_matrix);
         for (const GLVolumeWithIdAndZ& volume : to_render)
-	        if (!volume.first->disabled && ((volume.first->composite_id.volume_id >= 0) || m_render_sla_auxiliaries)) {
+	        if (!volume.first->disabled && (volume.first->composite_id.volume_id >= 0 || m_render_sla_auxiliaries)) {
 		        // Object picking mode. Render the object with a color encoding the object index.
-		        unsigned int id = volume.second.first;
-		        unsigned int r = (id & (0x000000FF << 0)) << 0;
+                // we reserve color = (0,0,0) for occluders (as the printbed) 
+                // so we shift volumes' id by 1 to get the proper color
+                unsigned int id = 1 + volume.second.first;
+                unsigned int r = (id & (0x000000FF << 0)) << 0;
 		        unsigned int g = (id & (0x000000FF << 8)) >> 8;
 		        unsigned int b = (id & (0x000000FF << 16)) >> 16;
 		        unsigned int a = picking_checksum_alpha_channel(r, g, b);
-		        glsafe(::glColor4f((GLfloat)r * INV_255, (GLfloat)g * INV_255, (GLfloat)b * INV_255, (GLfloat)a * INV_255));
+                glsafe(::glColor4f((GLfloat)r * INV_255, (GLfloat)g * INV_255, (GLfloat)b * INV_255, (GLfloat)a * INV_255));
 	            volume.first->render();
 	        }
 	}

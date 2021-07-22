@@ -45,7 +45,6 @@ uniform vec4 uniform_color;
 uniform SlopeDetection slope;
 uniform ProjectedTexture proj_texture;
 uniform sampler2D projection_tex;
-uniform bool sinking;
 uniform ClippingPlane clipping_plane;
 
 #ifdef ENABLE_ENVIRONMENT_MAP
@@ -68,10 +67,7 @@ varying float world_pos_z;
 varying float world_normal_z;
 varying vec3 eye_normal;
 
-vec3 sinking_color(vec3 position, vec3 color)
-{
-    return (mod(position.x + position.y + position.z, BANDS_WIDTH) < (0.5 * BANDS_WIDTH)) ? mix(color, ZERO, 0.6666) : color;
-}
+uniform bool compute_triangle_normals_in_fs;
 
 float azimuth(vec2 dir)
 {
@@ -127,9 +123,6 @@ void main()
     }
     // if the fragment is outside the print volume -> use darker color
 	color = (any(lessThan(delta_box_min, ZERO)) || any(greaterThan(delta_box_max, ZERO))) ? mix(color, ZERO, 0.3333) : color;
-    // if the object is sinking, shade it with inclined bands or white around world z = 0
-    if (sinking)
-        color = (abs(world_pos_z) < 0.05) ? WHITE : sinking_color(model_pos, color);
     if (proj_texture.active) {
         vec2 tex_coords;    
         if (proj_texture.projection == 1)

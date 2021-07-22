@@ -5,9 +5,7 @@
 #include "libslic3r/GCode/GCodeProcessor.hpp"
 #include "GLModel.hpp"
 
-#if ENABLE_GCODE_WINDOW
 #include <boost/iostreams/device/mapped_file.hpp>
-#endif // ENABLE_GCODE_WINDOW
 
 #include <cstdint>
 #include <float.h>
@@ -505,9 +503,6 @@ public:
             Vec3f m_world_position;
             Transform3f m_world_transform;
             float m_z_offset{ 0.5f };
-#if !ENABLE_SEQUENTIAL_LIMITS
-            std::array<float, 4> m_color{ 1.0f, 1.0f, 1.0f, 0.5f };
-#endif // !ENABLE_SEQUENTIAL_LIMITS
             bool m_visible{ true };
 
         public:
@@ -516,9 +511,6 @@ public:
             const BoundingBoxf3& get_bounding_box() const { return m_model.get_bounding_box(); }
 
             void set_world_position(const Vec3f& position);
-#if !ENABLE_SEQUENTIAL_LIMITS
-            void set_color(const std::array<float, 4>& color) { m_color = color; }
-#endif // !ENABLE_SEQUENTIAL_LIMITS
 
             bool is_visible() const { return m_visible; }
             void set_visible(bool visible) { m_visible = visible; }
@@ -526,7 +518,6 @@ public:
             void render() const;
         };
 
-#if ENABLE_GCODE_WINDOW
         class GCodeWindow
         {
             struct Line
@@ -563,7 +554,6 @@ public:
 
             void stop_mapping_file();
         };
-#endif // ENABLE_GCODE_WINDOW
 
         struct Endpoints
         {
@@ -577,16 +567,10 @@ public:
         Endpoints last_current;
         Vec3f current_position{ Vec3f::Zero() };
         Marker marker;
-#if ENABLE_GCODE_WINDOW
         GCodeWindow gcode_window;
-#endif // ENABLE_GCODE_WINDOW
-#if ENABLE_GCODE_LINES_ID_IN_H_SLIDER
         std::vector<unsigned int> gcode_ids;
-#endif // ENABLE_GCODE_LINES_ID_IN_H_SLIDER
 
-#if ENABLE_GCODE_WINDOW
         void render(float legend_height) const;
-#endif // ENABLE_GCODE_WINDOW
     };
 
     enum class EViewType : unsigned char
@@ -679,11 +663,9 @@ public:
 
     void export_toolpaths_to_obj(const char* filename) const;
 
-#if ENABLE_GCODE_WINDOW
     void start_mapping_gcode_window();
     void stop_mapping_gcode_window();
     void toggle_gcode_window_visibility() { m_sequential_view.gcode_window.toggle_visibility(); }
-#endif // ENABLE_GCODE_WINDOW
 
 private:
     void load_toolpaths(const GCodeProcessor::Result& gcode_result);
@@ -691,11 +673,7 @@ private:
     void refresh_render_paths(bool keep_sequential_current_first, bool keep_sequential_current_last) const;
     void render_toolpaths() const;
     void render_shells() const;
-#if ENABLE_GCODE_WINDOW
     void render_legend(float& legend_height) const;
-#else
-    void render_legend() const;
-#endif // ENABLE_GCODE_WINDOW
 #if ENABLE_GCODE_VIEWER_STATISTICS
     void render_statistics() const;
 #endif // ENABLE_GCODE_VIEWER_STATISTICS

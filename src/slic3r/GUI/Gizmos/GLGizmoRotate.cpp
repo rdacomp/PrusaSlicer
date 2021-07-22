@@ -336,16 +336,11 @@ void GLGizmoRotate::render_grabber_extension(const BoundingBoxf3& box, bool pick
     if (shader == nullptr)
         return;
 
-    if (! picking) {
+    const_cast<GLModel*>(&m_cone)->set_color(-1, color);
+    if (!picking) {
         shader->start_using();
         shader->set_uniform("emission_factor", 0.1);
-#if ENABLE_SEQUENTIAL_LIMITS
-        const_cast<GLModel*>(&m_cone)->set_color(-1, color);
-#else
-        shader->set_uniform("uniform_color", color);
-#endif // ENABLE_SEQUENTIAL_LIMITS
-    } else
-        glsafe(::glColor4fv(color.data()));
+    }
 
     glsafe(::glPushMatrix());
     glsafe(::glTranslated(m_grabbers[0].center.x(), m_grabbers[0].center.y(), m_grabbers[0].center.z()));

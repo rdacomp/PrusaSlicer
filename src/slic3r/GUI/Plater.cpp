@@ -1683,11 +1683,8 @@ struct Plater::priv
     BoundingBox scaled_bed_shape_bb() const;
 
     std::vector<size_t> load_files(const std::vector<fs::path>& input_files, bool load_model, bool load_config, bool used_inches = false);
-#if ENABLE_ALLOW_NEGATIVE_Z
     std::vector<size_t> load_model_objects(const ModelObjectPtrs& model_objects, bool allow_negative_z = false);
-#else
-    std::vector<size_t> load_model_objects(const ModelObjectPtrs &model_objects);
-#endif // ENABLE_ALLOW_NEGATIVE_Z
+
     wxString get_export_file(GUI::FileType file_type);
 
     const Selection& get_selection() const;
@@ -1793,9 +1790,7 @@ struct Plater::priv
     void on_wipetower_moved(Vec3dEvent&);
     void on_wipetower_rotated(Vec3dEvent&);
     void on_update_geometry(Vec3dsEvent<2>&);
-#if ENABLE_SEQUENTIAL_LIMITS
     void on_3dcanvas_mouse_dragging_started(SimpleEvent&);
-#endif // ENABLE_SEQUENTIAL_LIMITS
     void on_3dcanvas_mouse_dragging_finished(SimpleEvent&);
 
     void show_action_buttons(const bool is_ready_to_slice) const;
@@ -1977,9 +1972,7 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
         view3D_canvas->Bind(EVT_GLCANVAS_INSTANCE_SCALED, [this](SimpleEvent&) { update(); });
         view3D_canvas->Bind(EVT_GLCANVAS_ENABLE_ACTION_BUTTONS, [this](Event<bool>& evt) { this->sidebar->enable_buttons(evt.data); });
         view3D_canvas->Bind(EVT_GLCANVAS_UPDATE_GEOMETRY, &priv::on_update_geometry, this);
-#if ENABLE_SEQUENTIAL_LIMITS
         view3D_canvas->Bind(EVT_GLCANVAS_MOUSE_DRAGGING_STARTED, &priv::on_3dcanvas_mouse_dragging_started, this);
-#endif // ENABLE_SEQUENTIAL_LIMITS
         view3D_canvas->Bind(EVT_GLCANVAS_MOUSE_DRAGGING_FINISHED, &priv::on_3dcanvas_mouse_dragging_finished, this);
         view3D_canvas->Bind(EVT_GLCANVAS_TAB, [this](SimpleEvent&) { select_next_view_3D(); });
         view3D_canvas->Bind(EVT_GLCANVAS_RESETGIZMOS, [this](SimpleEvent&) { reset_all_gizmos(); });
@@ -2458,19 +2451,11 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
                     return obj_idxs;
             }
 
-#if ENABLE_ALLOW_NEGATIVE_Z
             for (ModelObject* model_object : model.objects) {
                 if (!type_3mf && !type_zip_amf)
                     model_object->center_around_origin(false);
                 model_object->ensure_on_bed(is_project_file);
             }
-#else
-            for (ModelObject* model_object : model.objects) {
-                if (!type_3mf && !type_zip_amf)
-                    model_object->center_around_origin(false);
-                model_object->ensure_on_bed();
-            }
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
             // check multi-part object adding for the SLA-printing
             if (printer_technology == ptSLA) {
@@ -2490,11 +2475,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
 #endif // ENABLE_TEXTURED_VOLUMES
 
             if (one_by_one) {
-#if ENABLE_ALLOW_NEGATIVE_Z
                 auto loaded_idxs = load_model_objects(model.objects, is_project_file);
-#else
-                auto loaded_idxs = load_model_objects(model.objects);
-#endif // ENABLE_ALLOW_NEGATIVE_Z
                 obj_idxs.insert(obj_idxs.end(), loaded_idxs.begin(), loaded_idxs.end());
             } else {
                 // This must be an .stl or .obj file, which may contain a maximum of one volume.
@@ -2553,11 +2534,7 @@ std::vector<size_t> Plater::priv::load_files(const std::vector<fs::path>& input_
 
 // #define AUTOPLACEMENT_ON_LOAD
 
-#if ENABLE_ALLOW_NEGATIVE_Z
 std::vector<size_t> Plater::priv::load_model_objects(const ModelObjectPtrs& model_objects, bool allow_negative_z)
-#else
-std::vector<size_t> Plater::priv::load_model_objects(const ModelObjectPtrs &model_objects)
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 {
     const BoundingBoxf bed_shape = bed_shape_bb();
     const Vec3d bed_size = Slic3r::to_3d(bed_shape.size().cast<double>(), 1.0) - 2.0 * Vec3d::Ones();
@@ -2635,11 +2612,7 @@ std::vector<size_t> Plater::priv::load_model_objects(const ModelObjectPtrs &mode
         }
 #endif // ENABLE_MODIFIED_DOWNSCALE_ON_LOAD_OBJECTS_TOO_BIG
 
-#if ENABLE_ALLOW_NEGATIVE_Z
         object->ensure_on_bed(allow_negative_z);
-#else
-        object->ensure_on_bed();
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     }
 
 #ifdef AUTOPLACEMENT_ON_LOAD
@@ -2868,9 +2841,7 @@ void Plater::priv::reset()
     reset_gcode_toolpaths();
     gcode_result.reset();
 
-#if ENABLE_SEQUENTIAL_LIMITS
     view3D->get_canvas3d()->reset_sequential_print_clearance();
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
     // Stop and reset the Print content.
     background_process.reset();
@@ -3082,19 +3053,17 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
             // Pass a warning from validation and either show a notification,
             // or hide the old one.
             process_validation_warning(warning);
-#if ENABLE_SEQUENTIAL_LIMITS
             if (printer_technology == ptFFF) {
                 view3D->get_canvas3d()->reset_sequential_print_clearance();
                 view3D->get_canvas3d()->set_as_dirty();
                 view3D->get_canvas3d()->request_extra_frame();
             }
-#endif // ENABLE_SEQUENTIAL_LIMITS
-        } else {
+        }
+        else {
 			// The print is not valid.
 			// Show error as notification.
             notification_manager->push_slicing_error_notification(err);
             return_state |= UPDATE_BACKGROUND_PROCESS_INVALID;
-#if ENABLE_SEQUENTIAL_LIMITS
             if (printer_technology == ptFFF) {
                 const Print* print = background_process.fff_print();
                 Polygons polygons;
@@ -3104,10 +3073,9 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
                 view3D->get_canvas3d()->set_sequential_print_clearance_render_fill(true);
                 view3D->get_canvas3d()->set_sequential_print_clearance_polygons(polygons);
             }
-#endif // ENABLE_SEQUENTIAL_LIMITS
         }
-
-    } else if (! this->delayed_error_message.empty()) {
+    }
+    else if (! this->delayed_error_message.empty()) {
     	// Reusing the old state.
         return_state |= UPDATE_BACKGROUND_PROCESS_INVALID;
     }
@@ -3312,9 +3280,7 @@ void Plater::priv::replace_with_stl()
     ModelObject* old_model_object = model.objects[object_idx];
     ModelVolume* old_volume = old_model_object->volumes[volume_idx];
 
-#if ENABLE_ALLOW_NEGATIVE_Z
     bool sinking = old_model_object->bounding_box().min.z() < SINKING_Z_THRESHOLD;
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
     ModelObject* new_model_object = new_model.objects[0];
     old_model_object->add_volume(*new_model_object->volumes[0]);
@@ -3334,9 +3300,7 @@ void Plater::priv::replace_with_stl()
     new_volume->mmu_segmentation_facets.assign(old_volume->mmu_segmentation_facets);
     std::swap(old_model_object->volumes[volume_idx], old_model_object->volumes.back());
     old_model_object->delete_volume(old_model_object->volumes.size() - 1);
-#if ENABLE_ALLOW_NEGATIVE_Z
     if (!sinking)
-#endif // ENABLE_ALLOW_NEGATIVE_Z
         old_model_object->ensure_on_bed();
     old_model_object->sort_volumes(wxGetApp().app_config->get("order_volumes") == "1");
 
@@ -3487,9 +3451,7 @@ void Plater::priv::reload_from_disk()
             ModelObject* old_model_object = model.objects[sel_v.object_idx];
             ModelVolume* old_volume = old_model_object->volumes[sel_v.volume_idx];
 
-#if ENABLE_ALLOW_NEGATIVE_Z
             bool sinking = old_model_object->bounding_box().min.z() < SINKING_Z_THRESHOLD;
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 
             bool has_source = !old_volume->source.input_file.empty() && boost::algorithm::iequals(fs::path(old_volume->source.input_file).filename().string(), fs::path(path).filename().string());
             bool has_name = !old_volume->name.empty() && boost::algorithm::iequals(old_volume->name, fs::path(path).filename().string());
@@ -3546,9 +3508,7 @@ void Plater::priv::reload_from_disk()
                     new_volume->mmu_segmentation_facets.assign(old_volume->mmu_segmentation_facets);
                     std::swap(old_model_object->volumes[sel_v.volume_idx], old_model_object->volumes.back());
                     old_model_object->delete_volume(old_model_object->volumes.size() - 1);
-#if ENABLE_ALLOW_NEGATIVE_Z
                     if (!sinking)
-#endif // ENABLE_ALLOW_NEGATIVE_Z
                         old_model_object->ensure_on_bed();
                     old_model_object->sort_volumes(wxGetApp().app_config->get("order_volumes") == "1");
 
@@ -3650,6 +3610,7 @@ void Plater::priv::fix_through_netfabb(const int obj_idx, const int vol_idx/* = 
     }
 
     fix_model_by_win10_sdk_gui(*mo, vol_idx);
+    q->SetFocus();
     sla::reproject_points_and_holes(mo);
     this->update();
     this->object_list_changed();
@@ -4120,12 +4081,10 @@ void Plater::priv::on_update_geometry(Vec3dsEvent<2>&)
     // TODO
 }
 
-#if ENABLE_SEQUENTIAL_LIMITS
 void Plater::priv::on_3dcanvas_mouse_dragging_started(SimpleEvent&)
 {
     view3D->get_canvas3d()->reset_sequential_print_clearance();
 }
-#endif // ENABLE_SEQUENTIAL_LIMITS
 
 // Update the scene from the background processing,
 // if the update message was received during mouse manipulation.
@@ -4351,12 +4310,8 @@ bool Plater::priv::layers_height_allowed() const
         return false;
 
     int obj_idx = get_selected_object_idx();
-#if ENABLE_ALLOW_NEGATIVE_Z
     return 0 <= obj_idx && obj_idx < (int)model.objects.size() && model.objects[obj_idx]->bounding_box().max.z() > SINKING_Z_THRESHOLD &&
         config->opt_bool("variable_layer_height") && view3D->is_layers_editing_allowed();
-#else
-    return 0 <= obj_idx && obj_idx < (int)model.objects.size() && config->opt_bool("variable_layer_height") && view3D->is_layers_editing_allowed();
-#endif // ENABLE_ALLOW_NEGATIVE_Z
 }
 
 bool Plater::priv::can_mirror() const
@@ -5000,7 +4955,15 @@ void Plater::load_gcode(const wxString& filename)
     // process gcode
     GCodeProcessor processor;
     processor.enable_producers(true);
-    processor.process_file(filename.ToUTF8().data(), false);
+    try
+    {
+        processor.process_file(filename.ToUTF8().data(), false);
+    }
+    catch (const std::exception& ex)
+    {
+        show_error(this, ex.what());
+        return;
+    }
     p->gcode_result = std::move(processor.extract_result());
 
     // show results
@@ -6277,7 +6240,6 @@ BoundingBoxf Plater::bed_shape_bb() const
     return p->bed_shape_bb();
 }
 
-#if ENABLE_GCODE_WINDOW
 void Plater::start_mapping_gcode_window()
 {
     p->preview->get_canvas3d()->start_mapping_gcode_window();
@@ -6287,7 +6249,6 @@ void Plater::stop_mapping_gcode_window()
 {
     p->preview->get_canvas3d()->stop_mapping_gcode_window();
 }
-#endif // ENABLE_GCODE_WINDOW
 
 void Plater::arrange()
 {
@@ -6326,13 +6287,11 @@ bool Plater::set_printer_technology(PrinterTechnology printer_technology)
     //FIXME for SLA synchronize
     //p->background_process.apply(Model)!
 
-#if DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
     if (printer_technology == ptSLA) {
         for (ModelObject* model_object : p->model.objects) {
             model_object->ensure_on_bed();
         }
     }
-#endif // DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
 
     p->label_btn_export = printer_technology == ptFFF ? L("Export G-code") : L("Export");
     p->label_btn_send   = printer_technology == ptFFF ? L("Send G-code")   : L("Send to printer");
@@ -6353,15 +6312,7 @@ void Plater::changed_object(int obj_idx)
         return;
     // recenter and re - align to Z = 0
     auto model_object = p->model.objects[obj_idx];
-#if ENABLE_ALLOW_NEGATIVE_Z
-#if DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
     model_object->ensure_on_bed(p->printer_technology != ptSLA);
-#else
-    model_object->ensure_on_bed(true);
-#endif // DISABLE_ALLOW_NEGATIVE_Z_FOR_SLA
-#else
-    model_object->ensure_on_bed();
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     if (p->printer_technology == ptSLA) {
         // Update the SLAPrint from the current Model, so that the reload_scene()
         // pulls the correct data, update the 3D scene.
@@ -6380,17 +6331,11 @@ void Plater::changed_objects(const std::vector<size_t>& object_idxs)
         return;
 
     for (size_t obj_idx : object_idxs) {
-#if ENABLE_ALLOW_NEGATIVE_Z
         if (obj_idx < p->model.objects.size()) {
             if (p->model.objects[obj_idx]->bounding_box().min.z() >= SINKING_Z_THRESHOLD)
                 // re - align to Z = 0
                 p->model.objects[obj_idx]->ensure_on_bed();
         }
-#else
-        if (obj_idx < p->model.objects.size())
-            // recenter and re - align to Z = 0
-            p->model.objects[obj_idx]->ensure_on_bed();
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     }
     if (this->p->printer_technology == ptSLA) {
         // Update the SLAPrint from the current Model, so that the reload_scene()

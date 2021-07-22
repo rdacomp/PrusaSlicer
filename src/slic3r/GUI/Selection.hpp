@@ -186,6 +186,8 @@ private:
         // to a set of indices of ModelVolume instances in ModelObject::instances
         // Here the index means a position inside the respective std::vector, not ObjectID.
         ObjectIdxsToInstanceIdxsMap content;
+        // List of ids of the volumes which are sinking when starting dragging
+        std::vector<unsigned int> sinking_volumes;
     };
 
     // Volumes owned by GLCanvas3D.

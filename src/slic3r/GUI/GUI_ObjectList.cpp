@@ -1409,7 +1409,7 @@ void ObjectList::load_part(ModelObject& model_object, std::vector<ModelVolume*>&
 
     if (from_galery) {
         GalleryDialog dlg(this);
-        if (dlg.ShowModal() == wxID_CANCEL)
+        if (dlg.ShowModal() == wxID_CLOSE)
             return;
         dlg.get_input_files(input_files);
         if (input_files.IsEmpty())
@@ -1468,7 +1468,7 @@ void ObjectList::load_modifier(ModelObject& model_object, std::vector<ModelVolum
 
     if (from_galery) {
         GalleryDialog dlg(this);
-        if (dlg.ShowModal() == wxID_CANCEL)
+        if (dlg.ShowModal() == wxID_CLOSE)
             return;
         dlg.get_input_files(input_files);
         if (input_files.IsEmpty())
@@ -1680,18 +1680,22 @@ void ObjectList::load_shape_object_from_gallery()
 
     wxArrayString input_files;
     GalleryDialog gallery_dlg(this);
-    if (gallery_dlg.ShowModal() == wxID_CANCEL)
+    if (gallery_dlg.ShowModal() == wxID_CLOSE)
         return;
     gallery_dlg.get_input_files(input_files);
     if (input_files.IsEmpty())
         return;
+    load_shape_object_from_gallery(input_files);
+}
 
+void ObjectList::load_shape_object_from_gallery(const wxArrayString& input_files)
+{
     std::vector<boost::filesystem::path> paths;
     for (const auto& file : input_files)
         paths.push_back(into_path(file));
 
     assert(!paths.empty());
-    wxString snapshot_label = (paths.size() == 1 ? _L("Add Shape") : _L("Add Shapes")) + ": " +
+    wxString snapshot_label = (paths.size() == 1 ? _L("Add Shape from Gallery") : _L("Add Shapes from Gallery")) + ": " +
         wxString::FromUTF8(paths.front().filename().string().c_str());
     for (size_t i = 1; i < paths.size(); ++i)
         snapshot_label += ", " + wxString::FromUTF8(paths[i].filename().string().c_str());
@@ -2752,10 +2756,16 @@ void ObjectList::delete_from_model_and_list(const std::vector<ItemForDelete>& it
                 continue;
             if (item->type&itVolume) {
                 m_objects_model->Delete(m_objects_model->GetItemByVolumeId(item->obj_idx, item->sub_obj_idx));
-                if ((*m_objects)[item->obj_idx]->volumes.size() == 1 && 
-                    (*m_objects)[item->obj_idx]->config.has("extruder")) {
-                    const wxString extruder = wxString::Format("%d", (*m_objects)[item->obj_idx]->config.extruder());
-                    m_objects_model->SetExtruder(extruder, m_objects_model->GetItemById(item->obj_idx));
+                ModelObject* obj = object(item->obj_idx);
+                if (obj->volumes.size() == 1) {
+                    wxDataViewItem parent = m_objects_model->GetItemById(item->obj_idx);
+                    if (obj->config.has("extruder")) {
+                        const wxString extruder = wxString::Format("%d", obj->config.extruder());
+                        m_objects_model->SetExtruder(extruder, parent);
+                    }
+                    // If last volume item with warning was deleted, unmark object item
+                    if (obj->get_mesh_errors_count() == 0)
+                        m_objects_model->DeleteWarningIcon(parent);
                 }
                 wxGetApp().plater()->canvas3D()->ensure_on_bed(item->obj_idx);
             }
