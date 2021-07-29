@@ -8,9 +8,21 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Geometry.hpp"
 
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+//<<<<<<< HEAD
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 #if ENABLE_TEXTURED_VOLUMES
 #include "GLTexture.hpp"
 #endif // ENABLE_TEXTURED_VOLUMES
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+//=======
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+#if ENABLE_SINKING_CONTOURS
+#include "GLModel.hpp"
+#endif // ENABLE_SINKING_CONTOURS
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+//>>>>>>> 226353452eaf2e602bf49df162f0f4297de183d7
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 #include <functional>
 
@@ -451,6 +463,9 @@ public:
     enum EHoverState : unsigned char
     {
         HS_None,
+#if ENABLE_SINKING_CONTOURS
+        HS_Hover,
+#endif // ENABLE_SINKING_CONTOURS
         HS_Select,
         HS_Deselect
     };
@@ -474,6 +489,26 @@ private:
     BoundingBoxf3 m_transformed_convex_hull_bounding_box;
     // Whether or not is needed to recalculate the transformed convex hull bounding box.
     bool          m_transformed_convex_hull_bounding_box_dirty;
+
+#if ENABLE_SINKING_CONTOURS
+    class SinkingContours
+    {
+        static const float HalfWidth;
+        GLVolume& m_parent;
+        GUI::GLModel m_model;
+        BoundingBoxf3 m_old_box;
+        Vec3d m_shift{ Vec3d::Zero() };
+
+    public:
+        SinkingContours(GLVolume& volume) : m_parent(volume) {}
+        void render();
+
+    private:
+        void update();
+    };
+
+    SinkingContours m_sinking_contours;
+#endif // ENABLE_SINKING_CONTOURS
 
 public:
     // Color of the triangles / quads held by this volume.
@@ -535,7 +570,11 @@ public:
 	    bool                force_native_color : 1;
         // Whether or not render this volume in neutral
         bool                force_neutral_color : 1;
-	};
+#if ENABLE_SINKING_CONTOURS
+        // Whether or not to force rendering of sinking contours
+        bool                force_sinking_contours : 1;
+#endif // ENABLE_SINKING_CONTOURS
+    };
 
     // Is mouse or rectangle selection over this object to select/deselect it ?
     EHoverState         	hover;
@@ -667,6 +706,9 @@ public:
 
     bool                is_sinking() const;
     bool                is_below_printbed() const;
+#if ENABLE_SINKING_CONTOURS
+    void                render_sinking_contours();
+#endif // ENABLE_SINKING_CONTOURS
 
     // Return an estimate of the memory consumed by this class.
     size_t 				cpu_memory_used() const { 

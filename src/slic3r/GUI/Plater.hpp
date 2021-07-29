@@ -158,6 +158,7 @@ public:
 #endif // ENABLE_PROJECT_DIRTY_STATE
 
     Sidebar& sidebar();
+    const Model& model() const;
     Model& model();
     const Print& fff_print() const;
     Print& fff_print();
