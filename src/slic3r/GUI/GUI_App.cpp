@@ -1783,7 +1783,7 @@ void GUI_App::update_mode()
     for (auto tab : tabs_list)
         tab->update_mode();
 
-    plater()->update_object_menu();
+    plater()->update_menus();
     plater()->canvas3D()->update_gizmos_on_off_state();
 }
 
