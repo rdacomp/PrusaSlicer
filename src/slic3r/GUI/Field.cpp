@@ -1003,7 +1003,14 @@ void Choice::BUILD() {
             bKilledFocus = false;
         } );
 
-        temp->Bind(wxEVT_TEXT_ENTER, [this, temp](wxEvent& e) { temp->SetFocus(); } );
+        temp->Bind(wxEVT_TEXT_ENTER, [this, temp](wxEvent& e) {
+#ifdef _WIN32
+            temp->SetFocus();
+#else
+            bEnterPressed = true;
+            propagate_value();
+#endif //_WIN32
+        } );
     }
 
 	temp->SetToolTip(get_tooltip_text(temp->GetValue()));
