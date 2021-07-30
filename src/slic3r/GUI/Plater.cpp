@@ -89,9 +89,7 @@
 #include "NotificationManager.hpp"
 #include "PresetComboBoxes.hpp"
 #include "MsgDialog.hpp"
-#if ENABLE_PROJECT_DIRTY_STATE
 #include "ProjectDirtyStateManager.hpp"
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
 #ifdef __APPLE__
 #include "Gizmos/GLGizmosManager.hpp"
@@ -1071,6 +1069,12 @@ void Sidebar::search()
     p->searcher.search();
 }
 
+void Sidebar::jump_to_option(const std::string& opt_key, Preset::Type type, const std::wstring& category)
+{
+    //const Search::Option& opt = p->searcher.get_option(opt_key, type);
+    wxGetApp().get_tab(type)->activate_option(opt_key, category);
+}
+
 void Sidebar::jump_to_option(size_t selected)
 {
     const Search::Option& opt = p->searcher.get_option(selected);
@@ -1487,13 +1491,9 @@ bool PlaterDropTarget::OnDropFiles(wxCoord x, wxCoord y, const wxArrayString &fi
     this->MSWUpdateDragImageOnLeave();
 #endif // WIN32
 
-#if ENABLE_PROJECT_DIRTY_STATE
     bool res = (m_plater != nullptr) ? m_plater->load_files(filenames) : false;
     wxGetApp().mainframe->update_title();
     return res;
-#else
-    return (m_plater != nullptr) ? m_plater->load_files(filenames) : false;
-#endif // ENABLE_PROJECT_DIRTY_STATE
 }
 
 // State to manage showing after export notifications and device ejecting
@@ -1537,9 +1537,7 @@ struct Plater::priv
     Preview *preview;
     NotificationManager* notification_manager { nullptr };
 
-#if ENABLE_PROJECT_DIRTY_STATE
     ProjectDirtyStateManager dirty_state;
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     BackgroundSlicingProcess    background_process;
     bool suppressed_backround_processing_update { false };
@@ -1609,7 +1607,6 @@ struct Plater::priv
     priv(Plater *q, MainFrame *main_frame);
     ~priv();
 
-#if ENABLE_PROJECT_DIRTY_STATE
     bool is_project_dirty() const { return dirty_state.is_dirty(); }
     void update_project_dirty_from_presets() { dirty_state.update_from_presets(); }
     bool save_project_if_dirty() {
@@ -1633,7 +1630,6 @@ struct Plater::priv
 #if ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
     void render_project_state_debug_window() const { dirty_state.render_debug_window(); }
 #endif // ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     enum class UpdateParams {
         FORCE_FULL_SCREEN_REFRESH          = 1,
@@ -2949,7 +2945,7 @@ void Plater::priv::update_print_volume_state()
 void Plater::priv::process_validation_warning(const std::string& warning) const
 {
     if (warning.empty())
-        notification_manager->close_notification_of_type(NotificationType::PrintValidateWarning);
+        notification_manager->close_notification_of_type(NotificationType::ValidateWarning);
     else {
         std::string text = warning;
         std::string hypertext = "";
@@ -2972,9 +2968,9 @@ void Plater::priv::process_validation_warning(const std::string& warning) const
         }
 
         notification_manager->push_notification(
-            NotificationType::PrintValidateWarning,
-            NotificationManager::NotificationLevel::ImportantNotification,
-            text, hypertext, action_fn
+            NotificationType::ValidateWarning,
+            NotificationManager::NotificationLevel::WarningNotification,
+            _u8L("WARNING:") + "\n" + text, hypertext, action_fn
         );
     }
 }
@@ -3026,6 +3022,7 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         std::string err = background_process.validate(&warning);
         if (err.empty()) {
 			notification_manager->set_all_slicing_errors_gray(true);
+            notification_manager->close_notification_of_type(NotificationType::ValidateError);
             if (invalidated != Print::APPLY_STATUS_UNCHANGED && background_processing_enabled())
                 return_state |= UPDATE_BACKGROUND_PROCESS_RESTART;
 
@@ -3041,7 +3038,7 @@ unsigned int Plater::priv::update_background_process(bool force_validation, bool
         else {
 			// The print is not valid.
 			// Show error as notification.
-            notification_manager->push_slicing_error_notification(err);
+            notification_manager->push_validate_error_notification(err);
             return_state |= UPDATE_BACKGROUND_PROCESS_INVALID;
             if (printer_technology == ptFFF) {
                 const Print* print = background_process.fff_print();
@@ -4517,9 +4514,7 @@ void Plater::priv::take_snapshot(const std::string& snapshot_name)
     undo_redo_stack().take_snapshot(snapshot_name, model, view3D->get_canvas3d()->get_selection(), view3D->get_canvas3d()->get_gizmos_manager(), snapshot_data);
     undo_redo_stack().release_least_recently_used();
 
-#if ENABLE_PROJECT_DIRTY_STATE
     dirty_state.update_from_undo_redo_stack(ProjectDirtyStateManager::UpdateType::TakeSnapshot);
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     // Save the last active preset name of a particular printer technology.
     ((printer_technology == ptFFF) ? m_last_fff_printer_profile_name : m_last_sla_printer_profile_name) = wxGetApp().preset_bundle->printers.get_selected_preset_name();
@@ -4561,13 +4556,8 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
     if (printer_technology_changed) {
         // Switching the printer technology when jumping forwards / backwards in time. Switch to the last active printer profile of the other type.
         std::string s_pt = (it_snapshot->snapshot_data.printer_technology == ptFFF) ? "FFF" : "SLA";
-#if ENABLE_PROJECT_DIRTY_STATE
         if (!wxGetApp().check_and_save_current_preset_changes(format_wxstr(_L(
             "%1% printer was active at the time the target Undo / Redo snapshot was taken. Switching to %1% printer requires reloading of %1% presets."), s_pt)))
-#else
-        if (! wxGetApp().check_unsaved_changes(format_wxstr(_L(
-            "%1% printer was active at the time the target Undo / Redo snapshot was taken. Switching to %1% printer requires reloading of %1% presets."), s_pt)))
-#endif // ENABLE_PROJECT_DIRTY_STATE
             // Don't switch the profiles.
             return;
     }
@@ -4679,9 +4669,7 @@ void Plater::priv::undo_redo_to(std::vector<UndoRedo::Snapshot>::const_iterator 
             view3D->get_canvas3d()->force_main_toolbar_left_action(view3D->get_canvas3d()->get_main_toolbar_item_id("layersediting"));
     }
 
-#if ENABLE_PROJECT_DIRTY_STATE
     dirty_state.update_from_undo_redo_stack(ProjectDirtyStateManager::UpdateType::UndoRedoTo);
-#endif // ENABLE_PROJECT_DIRTY_STATE
 }
 
 void Plater::priv::update_after_undo_redo(const UndoRedo::Snapshot& snapshot, bool /* temp_snapshot_was_taken */)
@@ -4768,7 +4756,6 @@ Plater::Plater(wxWindow *parent, MainFrame *main_frame)
     // Initialization performed in the private c-tor
 }
 
-#if ENABLE_PROJECT_DIRTY_STATE
 bool Plater::is_project_dirty() const { return p->is_project_dirty(); }
 void Plater::update_project_dirty_from_presets() { p->update_project_dirty_from_presets(); }
 bool Plater::save_project_if_dirty() { return p->save_project_if_dirty(); }
@@ -4777,7 +4764,6 @@ void Plater::reset_project_dirty_initial_presets() { p->reset_project_dirty_init
 #if ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
 void Plater::render_project_state_debug_window() const { p->render_project_state_debug_window(); }
 #endif // ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
 Sidebar&        Plater::sidebar()           { return *p->sidebar; }
 const Model&    Plater::model() const       { return p->model; }
@@ -4789,29 +4775,21 @@ SLAPrint&       Plater::sla_print()         { return p->sla_print; }
 
 void Plater::new_project()
 {
-#if ENABLE_PROJECT_DIRTY_STATE
     if (!p->save_project_if_dirty())
         return;
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     p->select_view_3D("3D");
-#if ENABLE_PROJECT_DIRTY_STATE
     take_snapshot(_L("New Project"));
     Plater::SuppressSnapshots suppress(this);
     reset();
     reset_project_dirty_initial_presets();
     update_project_dirty_from_presets();
-#else
-    wxPostEvent(p->view3D->get_wxglcanvas(), SimpleEvent(EVT_GLTOOLBAR_DELETE_ALL));
-#endif // ENABLE_PROJECT_DIRTY_STATE
 }
 
 void Plater::load_project()
 {
-#if ENABLE_PROJECT_DIRTY_STATE
     if (!p->save_project_if_dirty())
         return;
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     // Ask user for a project file name.
     wxString input_file;
@@ -4836,16 +4814,11 @@ void Plater::load_project(const wxString& filename)
     std::vector<size_t> res = load_files(input_paths);
 
     // if res is empty no data has been loaded
-#if ENABLE_PROJECT_DIRTY_STATE
     if (!res.empty()) {
         p->set_project_filename(filename);
         reset_project_dirty_initial_presets();
         update_project_dirty_from_presets();
     }
-#else
-    if (!res.empty())
-        p->set_project_filename(filename);
-#endif // ENABLE_PROJECT_DIRTY_STATE
 }
 
 void Plater::add_model(bool imperial_units/* = false*/)
@@ -4876,13 +4849,9 @@ void Plater::add_model(bool imperial_units/* = false*/)
     }
 
     Plater::TakeSnapshot snapshot(this, snapshot_label);
-#if ENABLE_PROJECT_DIRTY_STATE
     std::vector<size_t> res = load_files(paths, true, false, imperial_units);
     if (!res.empty())
         wxGetApp().mainframe->update_title();
-#else
-    load_files(paths, true, false, imperial_units);
-#endif // ENABLE_PROJECT_DIRTY_STATE
 }
 
 void Plater::import_sl1_archive()
@@ -5644,38 +5613,22 @@ void Plater::export_amf()
     }
 }
 
-#if ENABLE_PROJECT_DIRTY_STATE
 bool Plater::export_3mf(const boost::filesystem::path& output_path)
-#else
-void Plater::export_3mf(const boost::filesystem::path& output_path)
-#endif // ENABLE_PROJECT_DIRTY_STATE
 {
     if (p->model.objects.empty())
-#if ENABLE_PROJECT_DIRTY_STATE
         return false;
-#else
-        return;
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     wxString path;
     bool export_config = true;
     if (output_path.empty()) {
         path = p->get_export_file(FT_3MF);
-#if ENABLE_PROJECT_DIRTY_STATE
         if (path.empty()) { return false; }
-#else
-        if (path.empty()) { return; }
-#endif // ENABLE_PROJECT_DIRTY_STATE
     }
     else
         path = from_path(output_path);
 
     if (!path.Lower().EndsWith(".3mf"))
-#if ENABLE_PROJECT_DIRTY_STATE
         return false;
-#else
-        return;
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     DynamicPrintConfig cfg = wxGetApp().preset_bundle->full_config_secure();
     const std::string path_u8 = into_u8(path);
@@ -5688,7 +5641,6 @@ void Plater::export_3mf(const boost::filesystem::path& output_path)
 #endif // ENABLE_TEXTURED_VOLUMES
     ThumbnailsParams thumbnail_params = { {}, false, true, true, true };
     p->generate_thumbnail(thumbnail_data, THUMBNAIL_SIZE_3MF.first, THUMBNAIL_SIZE_3MF.second, thumbnail_params, Camera::EType::Ortho);
-#if ENABLE_PROJECT_DIRTY_STATE
     bool ret = Slic3r::store_3mf(path_u8.c_str(), &p->model, export_config ? &cfg : nullptr, full_pathnames, &thumbnail_data);
     if (ret) {
         // Success
@@ -5700,17 +5652,6 @@ void Plater::export_3mf(const boost::filesystem::path& output_path)
         p->statusbar()->set_status_text(format_wxstr(_L("Error exporting 3MF file %s"), path));
     }
     return ret;
-#else
-    if (Slic3r::store_3mf(path_u8.c_str(), &p->model, export_config ? &cfg : nullptr, full_pathnames, &thumbnail_data)) {
-        // Success
-        p->statusbar()->set_status_text(format_wxstr(_L("3MF file exported to %s"), path));
-        p->set_project_filename(path);
-    }
-    else {
-        // Failure
-        p->statusbar()->set_status_text(format_wxstr(_L("Error exporting 3MF file %s"), path));
-    }
-#endif // ENABLE_PROJECT_DIRTY_STATE
 }
 
 void Plater::reload_from_disk()
@@ -6476,7 +6417,7 @@ Camera& Plater::get_camera()
 void Plater::init_environment_texture()
 {
     if (p->environment_texture.get_id() == 0)
-        p->environment_texture.load_from_file(resources_dir() + "/icons/Pmetal_001.png", false, GLTexture::ECompressionType::SingleThreaded, false);
+        p->environment_texture.load_from_png_file(resources_dir() + "/icons/Pmetal_001.png", false, GLTexture::ECompressionType::SingleThreaded, false);
 }
 
 unsigned int Plater::get_environment_texture_id() const
@@ -6606,9 +6547,7 @@ bool Plater::can_mirror() const { return p->can_mirror(); }
 bool Plater::can_split(bool to_objects) const { return p->can_split(to_objects); }
 const UndoRedo::Stack& Plater::undo_redo_stack_main() const { return p->undo_redo_stack_main(); }
 void Plater::clear_undo_redo_stack_main() { p->undo_redo_stack_main().clear(); }
-#if ENABLE_PROJECT_DIRTY_STATE
 const UndoRedo::Stack& Plater::undo_redo_stack_active() const { return p->undo_redo_stack(); }
-#endif // ENABLE_PROJECT_DIRTY_STATE
 void Plater::enter_gizmos_stack() { p->enter_gizmos_stack(); }
 void Plater::leave_gizmos_stack() { p->leave_gizmos_stack(); }
 bool Plater::inside_snapshot_capture() { return p->inside_snapshot_capture(); }

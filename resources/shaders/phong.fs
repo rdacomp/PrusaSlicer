@@ -61,7 +61,6 @@ uniform vec4 uniform_color;
 uniform SlopeDetection slope;
 uniform ProjectedTexture proj_texture;
 uniform sampler2D projection_tex;
-uniform bool sinking;
 uniform ClippingPlane clipping_plane;
 
 uniform bool compute_triangle_normals_in_fs;
@@ -87,11 +86,6 @@ varying vec2 intensity;
 
 varying vec3 eye_normal;
 
-vec3 sinking_color(vec3 position, vec3 color)
-{
-    return (mod(position.x + position.y + position.z, BANDS_WIDTH) < (0.5 * BANDS_WIDTH)) ? mix(color, ZERO, 0.6666) : color;
-}
-
 float azimuth(vec2 dir)
 {
     float ret = atan(dir.y, dir.x); // [-PI..PI]
@@ -111,14 +105,16 @@ vec2 cylindrical_uv(vec3 position, vec3 normal)
 {
     vec2 ret = vec2(0.0, 0.0);
     vec3 dir = position - proj_texture.box.center;
+	float max_box_xy_size = max(proj_texture.box.sizes.x, proj_texture.box.sizes.y);
+	max_box_xy_size *= PI / floor(PI);
     if (length(normal.xy) == 0.0) {
         // caps
-        ret = dir.xy / proj_texture.box.sizes.xy + 0.5;
+        ret = dir.xy / max_box_xy_size + 0.5;
         if (dir.z < 0.0)
             ret.y = 1.0 - ret.y;
     }
     else {
-        ret.x = azimuth(dir.xy);        
+        ret.x = azimuth(dir.xy) * floor(PI);
         float min_z = proj_texture.box.center.z - 0.5 * proj_texture.box.sizes.z;
         ret.y = (position.z - min_z) / proj_texture.box.sizes.z; // [0..1]
     }
@@ -129,7 +125,7 @@ vec2 spherical_uv(vec3 position)
 {
     vec2 ret = vec2(0.0, 0.0);
     vec3 dir = position - proj_texture.box.center;
-    ret.x = azimuth(dir.xy);
+    ret.x = azimuth(dir.xy) * 2.0;
     ret.y = atan(length(dir.xy), -dir.z) / PI; // [0..1]
     return ret;
 }
@@ -179,18 +175,14 @@ void main()
     }
     // if the fragment is outside the print volume -> use darker color
 	color = (any(lessThan(delta_box_min, ZERO)) || any(greaterThan(delta_box_max, ZERO))) ? mix(color, ZERO, 0.3333) : color;
-    // if the object is sinking, shade it with inclined bands or white around world z = 0
-    if (sinking)
-        color = (abs(world_pos_z) < 0.05) ? WHITE : sinking_color(model_pos, color);
     if (proj_texture.active) {
-        vec2 tex_coords;    
-        if (proj_texture.projection == 1)
+        vec2 tex_coords;
+        if (proj_texture.projection == 0)
+            tex_coords = cubic_uv(model_pos);
+        else if (proj_texture.projection == 1)
             tex_coords = cylindrical_uv(model_pos, model_normal);
         else if (proj_texture.projection == 2)
-            tex_coords = spherical_uv(model_pos);
-        else
-            tex_coords = cubic_uv(model_pos);
-    
+            tex_coords = spherical_uv(model_pos);    
         color = mix(color, texture2D(projection_tex, tex_coords).rgb, 0.5);
     }
              

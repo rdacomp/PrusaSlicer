@@ -89,6 +89,7 @@ public:
     void sys_color_changed();
     void search();
     void jump_to_option(size_t selected);
+    void jump_to_option(const std::string& opt_key, Preset::Type type, const std::wstring& category);
 
     ObjectManipulation*     obj_manipul();
     ObjectList*             obj_list();
@@ -146,7 +147,6 @@ public:
     Plater &operator=(const Plater &) = delete;
     ~Plater() = default;
 
-#if ENABLE_PROJECT_DIRTY_STATE
     bool is_project_dirty() const;
     void update_project_dirty_from_presets();
     bool save_project_if_dirty();
@@ -155,7 +155,6 @@ public:
 #if ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
     void render_project_state_debug_window() const;
 #endif // ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
-#endif // ENABLE_PROJECT_DIRTY_STATE
 
     Sidebar& sidebar();
     const Model& model() const;
@@ -226,11 +225,7 @@ public:
     void export_gcode(bool prefer_removable);
     void export_stl(bool extended = false, bool selection_only = false);
     void export_amf();
-#if ENABLE_PROJECT_DIRTY_STATE
     bool export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path());
-#else
-    void export_3mf(const boost::filesystem::path& output_path = boost::filesystem::path());
-#endif // ENABLE_PROJECT_DIRTY_STATE
     void reload_from_disk();
     void replace_with_stl();
     void reload_all_from_disk();
@@ -261,9 +256,7 @@ public:
     // For the memory statistics. 
     const Slic3r::UndoRedo::Stack& undo_redo_stack_main() const;
     void clear_undo_redo_stack_main();
-#if ENABLE_PROJECT_DIRTY_STATE
     const Slic3r::UndoRedo::Stack& undo_redo_stack_active() const;
-#endif // ENABLE_PROJECT_DIRTY_STATE
     // Enter / leave the Gizmos specific Undo / Redo stack. To be used by the SLA support point editing gizmo.
     void enter_gizmos_stack();
     void leave_gizmos_stack();

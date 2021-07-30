@@ -43,7 +43,11 @@ static const std::map<const char, std::string> font_icons = {
     {ImGui::FilamentIconMarker    , "spool"                         },
     {ImGui::MaterialIconMarker    , "resin"                         },
     {ImGui::MinimalizeButton      , "notification_minimalize"       },
-    {ImGui::MinimalizeHoverButton , "notification_minimalize_hover" }
+    {ImGui::MinimalizeHoverButton , "notification_minimalize_hover" },
+    {ImGui::RightArrowButton      , "notification_right"            },
+    {ImGui::RightArrowHoverButton , "notification_right_hover"      },
+    {ImGui::PreferencesButton      , "notification_preferences"      },
+    {ImGui::PreferencesHoverButton , "notification_preferences_hover"},
 };
 static const std::map<const char, std::string> font_icons_large = {
     {ImGui::CloseNotifButton       , "notification_close"            },
@@ -54,6 +58,12 @@ static const std::map<const char, std::string> font_icons_large = {
     {ImGui::ErrorMarker            , "notification_error"            },
     {ImGui::CancelButton           , "notification_cancel"           },
     {ImGui::CancelHoverButton      , "notification_cancel_hover"     },
+    {ImGui::SinkingObjectMarker    , "move"                          },
+    {ImGui::CustomSupportsMarker   , "fdm_supports"                  },
+    {ImGui::CustomSeamMarker       , "seam"                          },
+    {ImGui::MmuSegmentationMarker  , "move"                          },
+    {ImGui::VarLayerHeightMarker   , "layers"                        },
+    
 };
 
 const ImVec4 ImGuiWrapper::COL_GREY_DARK         = { 0.333f, 0.333f, 0.333f, 1.0f };
