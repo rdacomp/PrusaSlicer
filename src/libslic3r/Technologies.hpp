@@ -10,8 +10,6 @@
 #define ENABLE_SELECTION_DEBUG_OUTPUT 0
 // Renders a small sphere in the center of the bounding box of the current selection when no gizmo is active
 #define ENABLE_RENDER_SELECTION_CENTER 0
-// Shows an imgui dialog with render related data
-#define ENABLE_RENDER_STATISTICS 0
 // Shows an imgui dialog with camera related data
 #define ENABLE_CAMERA_STATISTICS 0
 // Render the picking pass instead of the main scene (use [T] key to toggle between regular rendering and picking pass only rendering)
@@ -49,6 +47,8 @@
 #define ENABLE_DELAYED_TRANSPARENT_VOLUMES_RENDERING (1 && ENABLE_2_4_0_ALPHA0)
 // Enable the fix of importing color print view from gcode files into GCodeViewer
 #define ENABLE_FIX_IMPORTING_COLOR_PRINT_VIEW_INTO_GCODEVIEWER (1 && ENABLE_2_4_0_ALPHA0)
+// Enable drawing contours, at cut level, for sinking volumes
+#define ENABLE_SINKING_CONTOURS (1 && ENABLE_2_4_0_ALPHA0)
 
 
 //====================

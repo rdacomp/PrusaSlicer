@@ -56,6 +56,7 @@ enum class InfoItemType
     CustomSupports,
     CustomSeam,
     MmuSegmentation,
+    Sinking,
     VariableLayerHeight
 };
 

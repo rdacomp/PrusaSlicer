@@ -796,7 +796,7 @@ void GLCanvas3D::SequentialPrintClearance::set_polygons(const Polygons& polygons
     for (const Polygon& poly : polygons) {
         triangles_count += poly.points.size() - 2;
     }
-    size_t vertices_count = 3 * triangles_count;
+    const size_t vertices_count = 3 * triangles_count;
 
     if (m_render_fill) {
         GLModel::InitializationData fill_data;
@@ -807,13 +807,13 @@ void GLCanvas3D::SequentialPrintClearance::set_polygons(const Polygons& polygons
         entity.normals.reserve(vertices_count);
         entity.indices.reserve(vertices_count);
 
-        ExPolygons polygons_union = union_ex(polygons);
+        const ExPolygons polygons_union = union_ex(polygons);
         for (const ExPolygon& poly : polygons_union) {
-            std::vector<Vec3d> triangulation = triangulate_expolygon_3d(poly, false);
+            const std::vector<Vec3d> triangulation = triangulate_expolygon_3d(poly);
             for (const Vec3d& v : triangulation) {
                 entity.positions.emplace_back(v.cast<float>() + Vec3f(0.0f, 0.0f, 0.0125f)); // add a small positive z to avoid z-fighting
                 entity.normals.emplace_back(Vec3f::UnitZ());
-                size_t positions_count = entity.positions.size();
+                const size_t positions_count = entity.positions.size();
                 if (positions_count % 3 == 0) {
                     entity.indices.emplace_back(positions_count - 3);
                     entity.indices.emplace_back(positions_count - 2);
@@ -1411,10 +1411,6 @@ void GLCanvas3D::render()
     if (!is_initialized() && !init())
         return;
 
-#if ENABLE_RENDER_STATISTICS
-    auto start_time = std::chrono::high_resolution_clock::now();
-#endif // ENABLE_RENDER_STATISTICS
-
     if (wxGetApp().plater()->get_bed().get_shape().empty()) {
         // this happens at startup when no data is still saved under <>\AppData\Roaming\Slic3rPE
         post_event(SimpleEvent(EVT_GLCANVAS_UPDATE_BED_SHAPE));
@@ -1509,19 +1505,12 @@ void GLCanvas3D::render()
     // draw overlays
     _render_overlays();
 
-#if ENABLE_RENDER_STATISTICS
     if (wxGetApp().plater()->is_render_statistic_dialog_visible()) {
         ImGuiWrapper& imgui = *wxGetApp().imgui();
         imgui.begin(std::string("Render statistics"), ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
-        imgui.text("Last frame:");
+        imgui.text("FPS (SwapBuffers() calls per second):");
         ImGui::SameLine();
-        int64_t average = m_render_stats.get_average();
-        imgui.text(std::to_string(average));
-        ImGui::SameLine();
-        imgui.text("ms");
-        imgui.text("FPS:");
-        ImGui::SameLine();
-        imgui.text(std::to_string((average == 0) ? 0 : static_cast<int>(1000.0f / static_cast<float>(average))));
+        imgui.text(std::to_string(m_render_stats.get_fps_and_reset_if_needed()));
         ImGui::Separator();
         imgui.text("Compressed textures:");
         ImGui::SameLine();
@@ -1531,7 +1520,6 @@ void GLCanvas3D::render()
         imgui.text(std::to_string(OpenGLManager::get_gl_info().get_max_tex_size()));
         imgui.end();
     }
-#endif // ENABLE_RENDER_STATISTICS
 
 #if ENABLE_PROJECT_DIRTY_STATE_DEBUG_WINDOW
     if (wxGetApp().is_editor() && wxGetApp().plater()->is_view3D_shown())
@@ -1578,11 +1566,7 @@ void GLCanvas3D::render()
     wxGetApp().imgui()->render();
 
     m_canvas->SwapBuffers();
-
-#if ENABLE_RENDER_STATISTICS
-    auto end_time = std::chrono::high_resolution_clock::now();
-    m_render_stats.add_frame(std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
-#endif // ENABLE_RENDER_STATISTICS
+    m_render_stats.increment_fps_counter();
 }
 
 #if ENABLE_TEXTURED_VOLUMES
@@ -2612,15 +2596,11 @@ void GLCanvas3D::on_key(wxKeyEvent& evt)
     {
         if (!m_gizmos.on_key(evt)) {
             if (evt.GetEventType() == wxEVT_KEY_UP) {
-#if ENABLE_RENDER_STATISTICS
                 if (evt.ShiftDown() && evt.ControlDown() && keyCode == WXK_SPACE) {
                     wxGetApp().plater()->toggle_render_statistic_dialog();
                     m_dirty = true;
                 }
                 if (m_tab_down && keyCode == WXK_TAB && !evt.HasAnyModifiers()) {
-#else
-                if (m_tab_down && keyCode == WXK_TAB && !evt.HasAnyModifiers()) {
-#endif // ENABLE_RENDER_STATISTICS
                     // Enable switching between 3D and Preview with Tab
                     // m_canvas->HandleAsNavigationKey(evt);   // XXX: Doesn't work in some cases / on Linux
                     post_event(SimpleEvent(EVT_GLCANVAS_TAB));
@@ -2978,6 +2958,20 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
         return;
     }
 
+#if ENABLE_SINKING_CONTOURS
+    for (GLVolume* volume : m_volumes.volumes) {
+        volume->force_sinking_contours = false;
+    }
+
+    auto show_sinking_contours = [this]() {
+        const Selection::IndicesList& idxs = m_selection.get_volume_idxs();
+        for (unsigned int idx : idxs) {
+            m_volumes.volumes[idx]->force_sinking_contours = true;
+        }
+        m_dirty = true;
+    };
+#endif // ENABLE_SINKING_CONTOURS
+
     if (m_gizmos.on_mouse(evt)) {
         if (wxWindow::FindFocus() != m_canvas)
             // Grab keyboard focus for input in gizmo dialogs.
@@ -3002,6 +2996,21 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
             default: { break; }
             }
         }
+#if ENABLE_SINKING_CONTOURS
+        else if (evt.Dragging()) {
+            switch (m_gizmos.get_current_type())
+            {
+            case GLGizmosManager::EType::Move:
+            case GLGizmosManager::EType::Scale:
+            case GLGizmosManager::EType::Rotate:
+            {
+                show_sinking_contours();
+                break;
+            }
+            default: { break; }
+            }
+        }
+#endif // ENABLE_SINKING_CONTOURS
 
         return;
     }
@@ -3311,6 +3320,11 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
     else
         evt.Skip();
 
+#if ENABLE_SINKING_CONTOURS
+    if (m_moving)
+        show_sinking_contours();
+#endif // ENABLE_SINKING_CONTOURS
+
 #ifdef __WXMSW__
 	if (on_enter_workaround)
 		m_mouse.position = Vec2d(-1., -1.);
@@ -3423,6 +3437,7 @@ void GLCanvas3D::do_move(const std::string& snapshot_type)
             m_selection.translate(i.first, i.second, shift);
             m->translate_instance(i.second, shift);
         }
+        wxGetApp().obj_list()->update_info_items(static_cast<size_t>(i.first));
     }
 
     // if the selection is not valid to allow for layer editing after the move, we need to turn off the tool if it is running
@@ -3503,6 +3518,7 @@ void GLCanvas3D::do_rotate(const std::string& snapshot_type)
             m_selection.translate(i.first, i.second, shift);
             m->translate_instance(i.second, shift);
         }
+        wxGetApp().obj_list()->update_info_items(static_cast<size_t>(i.first));
     }
 
     if (!done.empty())
@@ -3570,6 +3586,7 @@ void GLCanvas3D::do_scale(const std::string& snapshot_type)
             m_selection.translate(i.first, i.second, shift);
             m->translate_instance(i.second, shift);
         }
+        wxGetApp().obj_list()->update_info_items(static_cast<size_t>(i.first));
     }
 
     if (!done.empty())
@@ -5682,6 +5699,11 @@ void GLCanvas3D::_update_volumes_hover_state()
                 }
             }
         }
+#if ENABLE_SINKING_CONTOURS
+        else if (volume.selected)
+            volume.hover = GLVolume::HS_Hover;
+#endif // ENABLE_SINKING_CONTOURS
+
     }
 }
 
