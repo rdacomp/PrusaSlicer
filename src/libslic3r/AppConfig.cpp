@@ -155,9 +155,6 @@ void AppConfig::set_defaults()
     if (get("seq_top_layer_only").empty())
         set("seq_top_layer_only", "1");
 
-    if (get("seq_top_gcode_indices").empty())
-        set("seq_top_gcode_indices", "1");
-
     if (get("use_perspective_camera").empty())
         set("use_perspective_camera", "1");
 
@@ -169,6 +166,12 @@ void AppConfig::set_defaults()
 
     if (get("show_splash_screen").empty())
         set("show_splash_screen", "1");
+
+    if (get("last_hint").empty())
+        set("last_hint", "0");
+
+    if (get("show_hints").empty())
+        set("show_hints", "1");
 
 #ifdef _WIN32
     if (get("use_legacy_3DConnexion").empty())

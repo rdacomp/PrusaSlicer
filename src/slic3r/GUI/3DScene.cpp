@@ -24,6 +24,7 @@
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/AppConfig.hpp"
 #include "libslic3r/PresetBundle.hpp"
+#include "libslic3r/ClipperUtils.hpp"
 #if ENABLE_SINKING_CONTOURS
 #include "libslic3r/Tesselate.hpp"
 #endif // ENABLE_SINKING_CONTOURS
@@ -1183,6 +1184,17 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
     if (disable_cullface)
         glsafe(::glDisable(GL_CULL_FACE));
 
+#if ENABLE_ENVIRONMENT_MAP
+    unsigned int environment_texture_id = GUI::wxGetApp().plater()->get_environment_texture_id();
+    bool use_environment_texture = environment_texture_id > 0 && GUI::wxGetApp().app_config->get("use_environment_map") == "1";
+    shader->set_uniform("use_environment_tex", use_environment_texture);
+    if (use_environment_texture) {
+        shader->set_uniform("environment_tex", 1);
+        glsafe(::glActiveTexture(GL_TEXTURE0 + 1));
+        glsafe(::glBindTexture(GL_TEXTURE_2D, environment_texture_id));
+    }
+#endif // ENABLE_ENVIRONMENT_MAP
+
 #if ENABLE_SINKING_CONTOURS
     GLVolumeWithIdAndZList to_render = volumes_to_render(volumes, type, view_matrix, filter_func);
     for (GLVolumeWithIdAndZ& volume : to_render) {
@@ -1204,27 +1216,38 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
         shader->set_uniform("clipping_plane", m_clipping_plane, 4);
         shader->set_uniform("print_box.min", m_print_box_min, 3);
         shader->set_uniform("print_box.max", m_print_box_max, 3);
-        shader->set_uniform("print_box.actived", volume.first->shader_outside_printer_detection_enabled);
+        shader->set_uniform("print_box.active", volume.first->shader_outside_printer_detection_enabled);
         shader->set_uniform("print_box.volume_world_matrix", volume.first->world_matrix());
-        shader->set_uniform("slope.actived", m_slope.active && !volume.first->is_modifier && !volume.first->is_wipe_tower);
+        shader->set_uniform("slope.active", m_slope.active && !volume.first->is_modifier && !volume.first->is_wipe_tower);
         shader->set_uniform("slope.volume_world_normal_matrix", static_cast<Matrix3f>(volume.first->world_matrix().matrix().block(0, 0, 3, 3).inverse().transpose().cast<float>()));
         shader->set_uniform("slope.normal_z", m_slope.normal_z);
 
+#if ENABLE_TEXTURED_VOLUMES
+        bool has_texture = !volume.first->texture.empty();
+        shader->set_uniform("proj_texture.active", has_texture ? 1 : 0);
+        unsigned int tex_id = 0;
+        if (has_texture) {
+            tex_id = m_textures_manager.get_texture_id(volume.first->texture);
+            if (tex_id > 0) {
+                shader->set_uniform("proj_texture.box.center", volume.first->bounding_box().center());
+                shader->set_uniform("proj_texture.box.sizes", volume.first->bounding_box().size());
+                const ModelObject* model_object = GUI::wxGetApp().model().objects[volume.first->object_idx()];
+                shader->set_uniform("proj_texture.projection", static_cast<int>(model_object->texture.mapping));
+                shader->set_uniform("projection_tex", 0);
 #if ENABLE_ENVIRONMENT_MAP
-        unsigned int environment_texture_id = GUI::wxGetApp().plater()->get_environment_texture_id();
-        bool use_environment_texture = environment_texture_id > 0 && GUI::wxGetApp().app_config->get("use_environment_map") == "1";
-        shader->set_uniform("use_environment_tex", use_environment_texture);
-        if (use_environment_texture)
-            glsafe(::glBindTexture(GL_TEXTURE_2D, environment_texture_id));
+                glsafe(::glActiveTexture(GL_TEXTURE0));
 #endif // ENABLE_ENVIRONMENT_MAP
-        glcheck();
+                glsafe(::glBindTexture(GL_TEXTURE_2D, tex_id));
+            }
+        }
+#endif // ENABLE_TEXTURED_VOLUMES
 
         volume.first->render();
 
-#if ENABLE_ENVIRONMENT_MAP
-        if (use_environment_texture)
+#if ENABLE_TEXTURED_VOLUMES
+        if (tex_id > 0)
             glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
-#endif // ENABLE_ENVIRONMENT_MAP
+#endif // ENABLE_TEXTURED_VOLUMES
 
         glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
@@ -1232,6 +1255,14 @@ void GLVolumeCollection::render(GLVolumeCollection::ERenderType type, bool disab
         glsafe(::glDisableClientState(GL_VERTEX_ARRAY));
         glsafe(::glDisableClientState(GL_NORMAL_ARRAY));
     }
+
+#if ENABLE_ENVIRONMENT_MAP
+    if (use_environment_texture) {
+        glsafe(::glActiveTexture(GL_TEXTURE0 + 1));
+        glsafe(::glBindTexture(GL_TEXTURE_2D, 0));
+        glsafe(::glActiveTexture(GL_TEXTURE0));
+    }
+#endif // ENABLE_ENVIRONMENT_MAP
 
     for (GLVolumeWithIdAndZ& volume : to_render) {
         // render sinking contours of hovered/displaced volumes
