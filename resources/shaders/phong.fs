@@ -160,6 +160,9 @@ void main()
     if (compute_triangle_normals_in_fs) {
 		// Normal shared by the three vertices of the triangle, in model space
 		vec3 triangle_normal = normalize(cross(dFdx(model_pos), dFdy(model_pos)));
+#ifdef FLIP_TRIANGLE_NORMALS
+        triangle_normal = -triangle_normal;
+#endif
 		// Transform position and normal in camera space
 		vec3 eye_position = (gl_ModelViewMatrix * vec4(model_pos, 1.0)).xyz;
 		eye_normal_fs = normalize(gl_NormalMatrix * triangle_normal);
