@@ -516,6 +516,31 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
         m_parent.set_as_dirty();
     }
 
+    ImGui::Separator();
+    m_imgui->text("Selection coef.:");
+    ImGui::AlignTextToFramePadding();
+    ImGui::SameLine(sliders_width);
+    ImGui::PushItemWidth(window_width - sliders_width);
+    if (m_imgui->slider_float("##selection_color", &m_selection_color, -1.f, 1.f, "%.2f")) {
+        ModelObject *mo  = m_c->selection_info()->model_object();
+        int          idx = -1;
+        for (ModelVolume *mv : mo->volumes)
+            if (mv->is_model_part()) {
+                ++idx;
+                m_triangle_selectors[idx]->m_selection_color = m_selection_color;
+            }
+    }
+
+    if (m_imgui->checkbox(_L("Lightening method 2"), m_lightening_method_2)) {
+        ModelObject *mo  = m_c->selection_info()->model_object();
+        int          idx = -1;
+        for (ModelVolume *mv : mo->volumes)
+            if (mv->is_model_part()) {
+                ++idx;
+                m_triangle_selectors[idx]->m_lightening_method_2 = m_lightening_method_2;
+            }
+    }
+
     m_imgui->end();
 }
 
@@ -593,9 +618,33 @@ std::array<float, 4> GLGizmoMmuSegmentation::get_cursor_sphere_right_button_colo
     return {color[0], color[1], color[2], 0.25f};
 }
 
+
+
 void TriangleSelectorMmGui::render(ImGuiWrapper *imgui)
 {
-    static constexpr std::array<float, 4> seed_fill_color{0.f, 1.f, 0.44f, 1.f};
+    size_t seed_fill_color_idx = m_seed_fill_selected_type == EnforcerBlockerType::NONE ? 0 : size_t(m_seed_fill_selected_type) - 1;
+    assert(seed_fill_color_idx < m_colors.size());
+    std::array<float, 4> seed_fill_color = m_colors[seed_fill_color_idx];
+
+    if (m_selection_color < 0.0f) {
+        // Darker
+        seed_fill_color[0] *= (1.f + m_selection_color);
+        seed_fill_color[1] *= (1.f + m_selection_color);
+        seed_fill_color[2] *= (1.f + m_selection_color);
+    } else if (m_selection_color > 0.0f) {
+        // Lighter
+        if (!m_lightening_method_2) {
+            // Method 1
+            seed_fill_color[0] = std::clamp(seed_fill_color[0] * (1.f + m_selection_color), 0.f, 1.f);
+            seed_fill_color[1] = std::clamp(seed_fill_color[1] * (1.f + m_selection_color), 0.f, 1.f);
+            seed_fill_color[2] = std::clamp(seed_fill_color[2] * (1.f + m_selection_color), 0.f, 1.f);
+        } else {
+            // Method 2
+            seed_fill_color[0] = (1.f - seed_fill_color[0]) * m_selection_color + seed_fill_color[0];
+            seed_fill_color[1] = (1.f - seed_fill_color[1]) * m_selection_color + seed_fill_color[1];
+            seed_fill_color[2] = (1.f - seed_fill_color[2]) * m_selection_color + seed_fill_color[2];
+        }
+    }
 
     if (m_update_render_data)
         update_render_data();

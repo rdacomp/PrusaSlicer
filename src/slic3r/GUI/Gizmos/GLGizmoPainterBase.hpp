@@ -40,14 +40,20 @@ public:
 
     void request_update_render_data() { m_update_render_data = true; };
 
+    void set_seed_fill_selected_type(EnforcerBlockerType type) { m_seed_fill_selected_type = type; };
+
 #ifdef PRUSASLICER_TRIANGLE_SELECTOR_DEBUG
     void render_debug(ImGuiWrapper* imgui);
     bool m_show_triangles{false};
     bool m_show_invalid{false};
 #endif
 
+    float m_selection_color     = 0.f;
+    bool  m_lightening_method_2 = false;
+
 protected:
-    bool m_update_render_data = false;
+    bool                m_update_render_data      = false;
+    EnforcerBlockerType m_seed_fill_selected_type = EnforcerBlockerType::NONE;
 
 private:
     void update_render_data();

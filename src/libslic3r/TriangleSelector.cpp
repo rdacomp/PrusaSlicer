@@ -178,13 +178,16 @@ void TriangleSelector::select_patch(const Vec3f& hit, int facet_start,
     }
 }
 
-void TriangleSelector::seed_fill_select_triangles(const Vec3f &hit, int facet_start, float seed_fill_angle, bool force_reselection)
+EnforcerBlockerType TriangleSelector::seed_fill_select_triangles(const Vec3f &hit, int facet_start, float seed_fill_angle, bool force_reselection)
 {
     assert(facet_start < m_orig_size_indices);
 
     // Recompute seed fill only if the cursor is pointing on facet unselected by seed fill.
-    if (int start_facet_idx = select_unsplit_triangle(hit, facet_start); start_facet_idx >= 0 && m_triangles[start_facet_idx].is_selected_by_seed_fill() && !force_reselection)
-        return;
+    int start_facet_idx = select_unsplit_triangle(hit, facet_start);
+    assert(start_facet_idx >= 0 && start_facet_idx < m_triangles.size());
+    assert(!m_triangles[start_facet_idx].is_split());
+    if (start_facet_idx >= 0 && m_triangles[start_facet_idx].is_selected_by_seed_fill() && !force_reselection)
+        return m_triangles[start_facet_idx].get_state();
 
     this->seed_fill_unselect_all_triangles();
 
@@ -226,6 +229,8 @@ void TriangleSelector::seed_fill_select_triangles(const Vec3f &hit, int facet_st
         }
         visited[current_facet] = true;
     }
+
+    return m_triangles[start_facet_idx].get_state();
 }
 
 void TriangleSelector::precompute_all_neighbors_recursive(const int facet_idx, const Vec3i &neighbors, const Vec3i &neighbors_propagated, std::vector<Vec3i> &neighbors_out, std::vector<Vec3i> &neighbors_propagated_out) const
@@ -295,12 +300,16 @@ void TriangleSelector::append_touching_subtriangles(int itriangle, int vertexi, 
         process_subtriangle(touching.second, Partition::Second);
 }
 
-void TriangleSelector::bucket_fill_select_triangles(const Vec3f& hit, int facet_start, bool propagate)
+EnforcerBlockerType TriangleSelector::bucket_fill_select_triangles(const Vec3f& hit, int facet_start, bool propagate)
 {
     int start_facet_idx = select_unsplit_triangle(hit, facet_start);
+    assert(start_facet_idx != -1);
     // Recompute bucket fill only if the cursor is pointing on facet unselected by bucket fill.
+    if(start_facet_idx == -1)
+        return EnforcerBlockerType::NONE;
+
     if (start_facet_idx == -1 || m_triangles[start_facet_idx].is_selected_by_seed_fill())
-        return;
+        return m_triangles[start_facet_idx].get_state();
 
     assert(!m_triangles[start_facet_idx].is_split());
     EnforcerBlockerType start_facet_state = m_triangles[start_facet_idx].get_state();
@@ -308,7 +317,7 @@ void TriangleSelector::bucket_fill_select_triangles(const Vec3f& hit, int facet_
 
     if (!propagate) {
         m_triangles[start_facet_idx].select_by_seed_fill();
-        return;
+        return m_triangles[start_facet_idx].get_state();
     }
 
     auto get_all_touching_triangles = [this](int facet_idx, const Vec3i &neighbors, const Vec3i &neighbors_propagated) -> std::vector<int> {
@@ -352,6 +361,8 @@ void TriangleSelector::bucket_fill_select_triangles(const Vec3f& hit, int facet_
 
         visited[current_facet] = true;
     }
+
+    return m_triangles[start_facet_idx].get_state();
 }
 
 // Selects either the whole triangle (discarding any children it had), or divides

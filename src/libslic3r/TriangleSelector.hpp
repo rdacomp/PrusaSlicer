@@ -47,14 +47,15 @@ public:
                       const Transform3d  &trafo,       // matrix to get from mesh to world
                       bool                triangle_splitting); // If triangles will be split base on the cursor or not
 
-    void seed_fill_select_triangles(const Vec3f &hit,               // point where to start
-                                    int          facet_start,       // facet of the original mesh (unsplit) that the hit point belongs to
-                                    float        seed_fill_angle,   // the maximal angle between two facets to be painted by the same color
-                                    bool         force_reselection = false); // force reselection of the triangle mesh even in cases that mouse is pointing on the selected triangle
+    EnforcerBlockerType seed_fill_select_triangles(const Vec3f &hit,             // point where to start
+                                                   int          facet_start,     // facet of the original mesh (unsplit) that the hit point belongs to
+                                                   float        seed_fill_angle, // the maximal angle between two facets to be painted by the same color
+                                                   bool         force_reselection = false); // force reselection of the triangle mesh even in cases that mouse is pointing on the selected triangle
 
-    void bucket_fill_select_triangles(const Vec3f &hit,             // point where to start
-                                    int          facet_start,       // facet of the original mesh (unsplit) that the hit point belongs to
-                                    bool         propagate);        // if bucket fill is propagated to neighbor faces or if it fills the only facet of the modified mesh that the hit point belongs to.
+
+    EnforcerBlockerType bucket_fill_select_triangles(const Vec3f &hit,         // point where to start
+                                                     int          facet_start, // facet of the original mesh (unsplit) that the hit point belongs to
+                                                     bool         propagate);  // if bucket fill is propagated to neighbor faces or if it fills the only facet of the modified mesh that the hit point belongs to.
 
     bool                 has_facets(EnforcerBlockerType state) const;
     static bool          has_facets(const std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> &data, EnforcerBlockerType test_state);

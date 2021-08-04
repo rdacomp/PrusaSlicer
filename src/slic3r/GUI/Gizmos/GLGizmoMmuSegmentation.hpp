@@ -120,6 +120,9 @@ protected:
     std::vector<std::array<float, 4>> m_modified_extruders_colors;
     std::vector<int>                  m_original_volumes_extruder_idxs;
 
+    float m_selection_color     = 0.f;
+    bool  m_lightening_method_2 = false;
+
 private:
     bool on_init() override;
 
