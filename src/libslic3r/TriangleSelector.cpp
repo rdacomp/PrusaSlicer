@@ -1285,6 +1285,43 @@ void TriangleSelector::get_facets_strict_recursive(
         this->get_facets_split_by_tjoints({tr.verts_idxs[0], tr.verts_idxs[1], tr.verts_idxs[2]}, neighbors, out_triangles);
 }
 
+indexed_triangle_set TriangleSelector::get_seed_fill_facets_strict() const
+{
+    indexed_triangle_set out;
+
+    size_t num_vertices = 0;
+    for (const Vertex &v : m_vertices)
+        if (v.ref_cnt > 0)
+            ++num_vertices;
+    out.vertices.reserve(num_vertices);
+    std::vector<int> vertex_map(m_vertices.size(), -1);
+    for (size_t i = 0; i < m_vertices.size(); ++i)
+        if (const Vertex &v = m_vertices[i]; v.ref_cnt > 0) {
+            vertex_map[i] = int(out.vertices.size());
+            out.vertices.emplace_back(v.v);
+        }
+
+    for (int itriangle = 0; itriangle < m_orig_size_indices; ++itriangle)
+        this->get_seed_fill_facets_strict_recursive(m_triangles[itriangle], root_neighbors(*m_mesh, itriangle), out.indices);
+
+    for (auto &triangle : out.indices)
+        for (int i = 0; i < 3; ++i)
+            triangle(i) = vertex_map[triangle(i)];
+
+    return out;
+}
+
+void TriangleSelector::get_seed_fill_facets_strict_recursive(const Triangle                           &tr,
+                                                             const Vec3i                              &neighbors,
+                                                             std::vector<stl_triangle_vertex_indices> &out_triangles) const
+{
+    if (tr.is_split()) {
+        for (int i = 0; i <= tr.number_of_split_sides(); ++i)
+            this->get_seed_fill_facets_strict_recursive(m_triangles[tr.children[i]], this->child_neighbors(tr, neighbors, i), out_triangles);
+    } else if (tr.is_selected_by_seed_fill())
+        this->get_facets_split_by_tjoints({tr.verts_idxs[0], tr.verts_idxs[1], tr.verts_idxs[2]}, neighbors, out_triangles);
+}
+
 void TriangleSelector::get_facets_split_by_tjoints(const Vec3i &vertices, const Vec3i &neighbors, std::vector<stl_triangle_vertex_indices> &out_triangles) const
 {
 // Export this triangle, but first collect the T-joint vertices along its edges.

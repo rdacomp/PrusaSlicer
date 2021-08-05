@@ -664,6 +664,13 @@ void TriangleSelectorMmGui::render(ImGuiWrapper *imgui)
             m_gizmo_scene.render(color_idx);
         }
 
+    if (m_gizmo_scene.has_lines_VBO()) {
+        ScopeGuard lines_guard([shader]() { if (shader) shader->set_uniform("draw_seed_fill_contour", false); });
+        shader->set_uniform("draw_seed_fill_contour", true);
+        shader->set_uniform("uniform_color", std::array<float, 4>{1.f, 1.f, 1.f, 1.f});
+        m_gizmo_scene.render_lines();
+    }
+
     m_update_render_data = false;
 }
 
@@ -696,6 +703,32 @@ void TriangleSelectorMmGui::update_render_data()
         m_gizmo_scene.triangle_indices_sizes[color_idx] = m_gizmo_scene.triangle_indices[color_idx].size();
 
     m_gizmo_scene.finalize_triangle_indices();
+
+    indexed_triangle_set seed_fill_facets           = this->get_seed_fill_facets_strict();
+    std::vector<Vec3i>   seed_fill_facets_neighbors = its_face_neighbors(seed_fill_facets);
+
+    for (size_t facet_idx = 0; facet_idx < seed_fill_facets.indices.size(); ++facet_idx) {
+        for (int i = 0; i < 3; ++i) {
+            if (seed_fill_facets_neighbors[facet_idx](i) == -1) {
+                if (m_gizmo_scene.lines_vertices.size() + 6 > m_gizmo_scene.lines_vertices.capacity())
+                    m_gizmo_scene.lines_vertices.reserve(next_highest_power_of_2(m_gizmo_scene.lines_vertices.size() + 6));
+
+                m_gizmo_scene.lines_vertices.emplace_back(seed_fill_facets.vertices[seed_fill_facets.indices[facet_idx](i)].x());
+                m_gizmo_scene.lines_vertices.emplace_back(seed_fill_facets.vertices[seed_fill_facets.indices[facet_idx](i)].y());
+                m_gizmo_scene.lines_vertices.emplace_back(seed_fill_facets.vertices[seed_fill_facets.indices[facet_idx](i)].z());
+
+                m_gizmo_scene.lines_vertices.emplace_back(seed_fill_facets.vertices[seed_fill_facets.indices[facet_idx](next_idx_modulo(i, 3))].x());
+                m_gizmo_scene.lines_vertices.emplace_back(seed_fill_facets.vertices[seed_fill_facets.indices[facet_idx](next_idx_modulo(i, 3))].y());
+                m_gizmo_scene.lines_vertices.emplace_back(seed_fill_facets.vertices[seed_fill_facets.indices[facet_idx](next_idx_modulo(i, 3))].z());
+            }
+        }
+    }
+
+    m_gizmo_scene.lines_indices.assign(m_gizmo_scene.lines_vertices.size() / 3, 0);
+    std::iota(m_gizmo_scene.lines_indices.begin(), m_gizmo_scene.lines_indices.end(), 0);
+    m_gizmo_scene.lines_indices_size = m_gizmo_scene.lines_indices.size();
+
+    m_gizmo_scene.finalize_lines();
 }
 
 wxString GLGizmoMmuSegmentation::handle_snapshot_action_name(bool shift_down, GLGizmoPainterBase::Button button_down) const
@@ -719,6 +752,14 @@ void GLMmSegmentationGizmo3DScene::release_geometry() {
         glsafe(::glDeleteBuffers(1, &triangle_indices_VBO_id));
         triangle_indices_VBO_id = 0;
     }
+    if (this->lines_vertices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &this->lines_vertices_VBO_id));
+        this->lines_vertices_VBO_id = 0;
+    }
+    if (this->lines_indices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &this->lines_indices_VBO_id));
+        this->lines_indices_VBO_id = 0;
+    }
     this->clear();
 }
 
@@ -728,6 +769,10 @@ void GLMmSegmentationGizmo3DScene::render(size_t triangle_indices_idx) const
     assert(this->triangle_indices_sizes.size() == this->triangle_indices_VBO_ids.size());
     assert(this->vertices_VBO_id != 0);
     assert(this->triangle_indices_VBO_ids[triangle_indices_idx] != 0);
+
+    ScopeGuard offset_fill_guard([]() { glsafe(::glDisable(GL_POLYGON_OFFSET_FILL)); });
+    glsafe(::glEnable(GL_POLYGON_OFFSET_FILL));
+    glsafe(::glPolygonOffset(5.0, 5.0));
 
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_VBO_id));
     glsafe(::glVertexPointer(3, GL_FLOAT, 3 * sizeof(float), (const void*)(0 * sizeof(float))));
@@ -739,6 +784,29 @@ void GLMmSegmentationGizmo3DScene::render(size_t triangle_indices_idx) const
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_ids[triangle_indices_idx]));
         glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(this->triangle_indices_sizes[triangle_indices_idx]), GL_UNSIGNED_INT, nullptr));
         glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+    }
+
+    glsafe(::glDisableClientState(GL_VERTEX_ARRAY));
+
+    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+}
+
+void GLMmSegmentationGizmo3DScene::render_lines() const
+{
+    assert(this->lines_vertices_VBO_id != 0);
+    assert(this->lines_indices_VBO_id != 0);
+
+    glsafe(::glLineWidth(4.0f));
+
+    glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->lines_vertices_VBO_id));
+    glsafe(::glVertexPointer(3, GL_FLOAT, 3 * sizeof(float), nullptr));
+
+    glsafe(::glEnableClientState(GL_VERTEX_ARRAY));
+
+    if (this->lines_indices_size > 0) {
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->lines_indices_VBO_id));
+        glsafe(::glDrawElements(GL_LINES, GLsizei(this->lines_indices_size), GL_UNSIGNED_INT, nullptr));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
 
     glsafe(::glDisableClientState(GL_VERTEX_ARRAY));
@@ -780,6 +848,29 @@ void GLMmSegmentationGizmo3DScene::finalize_geometry()
     assert(this->triangle_indices.size() == this->triangle_indices_VBO_ids.size());
     finalize_vertices();
     finalize_triangle_indices();
+    finalize_lines();
+}
+
+void GLMmSegmentationGizmo3DScene::finalize_lines()
+{
+    assert(this->lines_vertices_VBO_id == 0);
+    assert(this->lines_indices_VBO_id == 0);
+
+    if (!this->lines_vertices.empty()) {
+        glsafe(::glGenBuffers(1, &this->lines_vertices_VBO_id));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->lines_vertices_VBO_id));
+        glsafe(::glBufferData(GL_ARRAY_BUFFER, this->lines_vertices.size() * sizeof(float), this->lines_vertices.data(), GL_STATIC_DRAW));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+        this->lines_vertices.clear();
+    }
+
+    if (!this->lines_indices.empty()) {
+        glsafe(::glGenBuffers(1, &this->lines_indices_VBO_id));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->lines_indices_VBO_id));
+        glsafe(::glBufferData(GL_ARRAY_BUFFER, this->lines_indices.size() * sizeof(unsigned int), this->lines_indices.data(), GL_STATIC_DRAW));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+        this->lines_indices.clear();
+    }
 }
 
 } // namespace Slic3r

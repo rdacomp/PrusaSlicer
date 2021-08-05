@@ -51,6 +51,7 @@ varying float world_normal_z;
 varying vec3 eye_normal;
 
 uniform bool compute_triangle_normals_in_fs;
+uniform bool draw_seed_fill_contour;
 
 void main()
 {
@@ -100,4 +101,7 @@ void main()
     else
 #endif
         gl_FragColor = vec4(vec3(intensity_fs.y) + color * intensity_fs.x, alpha);
+
+    if (draw_seed_fill_contour)
+        gl_FragColor = uniform_color;
 }

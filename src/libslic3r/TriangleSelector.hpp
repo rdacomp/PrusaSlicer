@@ -64,6 +64,8 @@ public:
     indexed_triangle_set get_facets(EnforcerBlockerType state) const;
     // Get facets at a given state. Triangulate T-joints.
     indexed_triangle_set get_facets_strict(EnforcerBlockerType state) const;
+    // Get facets with the flag indicating that the triangle was selected by seed fill. Triangulate T-joints.
+    indexed_triangle_set get_seed_fill_facets_strict() const;
 
     // Set facet of the mesh to a given state. Only works for original triangles.
     void set_facet(int facet_idx, EnforcerBlockerType state);
@@ -229,11 +231,15 @@ private:
     bool verify_triangle_midpoints(const Triangle& tr) const;
 #endif // NDEBUG
 
-    void get_facets_strict_recursive(
-        const Triangle                              &tr,
-        const Vec3i                                 &neighbors,
-        EnforcerBlockerType                          state,
-        std::vector<stl_triangle_vertex_indices>    &out_triangles) const;
+    void get_facets_strict_recursive(const Triangle                           &tr,
+                                     const Vec3i                              &neighbors,
+                                     EnforcerBlockerType                       state,
+                                     std::vector<stl_triangle_vertex_indices> &out_triangles) const;
+
+    void get_seed_fill_facets_strict_recursive(const Triangle                           &tr,
+                                               const Vec3i                              &neighbors,
+                                               std::vector<stl_triangle_vertex_indices> &out_triangles) const;
+
     void get_facets_split_by_tjoints(const Vec3i &vertices, const Vec3i &neighbors, std::vector<stl_triangle_vertex_indices> &out_triangles) const;
 
     int m_free_triangles_head { -1 };

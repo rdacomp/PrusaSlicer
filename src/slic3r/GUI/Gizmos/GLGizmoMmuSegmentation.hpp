@@ -25,6 +25,8 @@ public:
         return this->triangle_indices_VBO_ids[triangle_indices_idx] != 0;
     }
 
+    [[nodiscard]] inline bool has_lines_VBO() const { return this->lines_indices_VBO_id != 0; }
+
     // Finalize the initialization of the geometry and indices, upload the geometry and indices to OpenGL VBO objects
     // and possibly releasing it if it has been loaded into the VBOs.
     void finalize_geometry();
@@ -37,6 +39,8 @@ public:
     // and possibly releasing it if it has been loaded into the VBOs.
     void finalize_triangle_indices();
 
+    void finalize_lines();
+
     void clear()
     {
         this->vertices.clear();
@@ -45,21 +49,34 @@ public:
 
         for (size_t &triangle_indices_size : this->triangle_indices_sizes)
             triangle_indices_size = 0;
+
+        this->lines_vertices.clear();
+        this->lines_indices.clear();
+        this->lines_indices_size = 0;
     }
 
     void render(size_t triangle_indices_idx) const;
 
+    void render_lines() const;
+
     std::vector<float>            vertices;
     std::vector<std::vector<int>> triangle_indices;
+
+    std::vector<float>            lines_vertices;
+    std::vector<int>              lines_indices;
 
     // When the triangle indices are loaded into the graphics card as Vertex Buffer Objects,
     // the above mentioned std::vectors are cleared and the following variables keep their original length.
     std::vector<size_t> triangle_indices_sizes;
+    size_t              lines_indices_size{0};
 
     // IDs of the Vertex Array Objects, into which the geometry has been loaded.
     // Zero if the VBOs are not sent to GPU yet.
     unsigned int              vertices_VBO_id{0};
     std::vector<unsigned int> triangle_indices_VBO_ids;
+
+    unsigned int              lines_vertices_VBO_id{0};
+    unsigned int              lines_indices_VBO_id{0};
 };
 
 class TriangleSelectorMmGui : public TriangleSelectorGUI {
