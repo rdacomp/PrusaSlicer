@@ -54,6 +54,9 @@ varying float world_pos_z;
 varying float world_normal_z;
 varying vec3 eye_normal;
 
+attribute float vertex_local_index;
+varying   vec3  barycentric_cord;
+
 void main()
 {
     // First transform the normal into camera space and normalize the result.
@@ -94,4 +97,9 @@ void main()
     gl_Position = ftransform();
     // Fill in the scalars for fragment shader clipping. Fragments with any of these components lower than zero are discarded.
     clipping_planes_dots = vec3(dot(world_pos, clipping_plane), world_pos.z - z_range.x, z_range.y - world_pos.z);
+
+    int i_vertex_local_index = int(vertex_local_index);
+    barycentric_cord = vec3(0.0);
+    if(i_vertex_local_index >= 0 && i_vertex_local_index <= 2)
+        barycentric_cord[i_vertex_local_index] = 1.0;
 }

@@ -42,6 +42,9 @@ vec3 sinking_color(vec3 color)
     return (mod(model_pos.x + model_pos.y + model_pos.z, BANDS_WIDTH) < (0.5 * BANDS_WIDTH)) ? mix(color, ZERO, 0.6666) : color;
 }
 
+uniform bool show_triangle_edges;
+varying vec3 barycentric_cord;
+
 void main()
 {
     if (any(lessThan(clipping_planes_dots, ZERO)))
@@ -60,8 +63,12 @@ void main()
         color = (abs(world_pos_z) < 0.05) ? WHITE : sinking_color(color);
 #ifdef ENABLE_ENVIRONMENT_MAP
     if (use_environment_tex)
-        gl_FragColor = vec4(0.45 * texture2D(environment_tex, normalize(eye_normal).xy * 0.5 + 0.5).xyz + 0.8 * color * intensity.x, alpha);
+        color = 0.45 * texture2D(environment_tex, normalize(eye_normal).xy * 0.5 + 0.5).xyz + 0.8 * color * intensity.x;
     else
 #endif
-        gl_FragColor = vec4(vec3(intensity.y) + color * intensity.x, alpha);
+        color = vec3(intensity.y) + color * intensity.x;
+
+    gl_FragColor = vec4(color, alpha);
+    if(show_triangle_edges && any(lessThan(barycentric_cord, vec3(0.025))))
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }

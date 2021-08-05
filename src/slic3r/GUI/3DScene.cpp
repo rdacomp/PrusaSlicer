@@ -177,12 +177,16 @@ void GLIndexedVertexArray::finalize_geometry(bool opengl_initialized)
     assert(this->vertices_and_normals_interleaved_VBO_id == 0);
     assert(this->triangle_indices_VBO_id == 0);
     assert(this->quad_indices_VBO_id == 0);
+    assert(this->vertices_local_indices_VBO_id == 0);
 
 	if (! opengl_initialized) {
 		// Shrink the data vectors to conserve memory in case the data cannot be transfered to the OpenGL driver yet.
 		this->shrink_to_fit();
 		return;
 	}
+
+    if (! this->vertices_local_indices.empty())
+        assert(this->vertices_local_indices.size() == this->triangle_indices.size());
 
     if (! this->vertices_and_normals_interleaved.empty()) {
         glsafe(::glGenBuffers(1, &this->vertices_and_normals_interleaved_VBO_id));
@@ -205,6 +209,13 @@ void GLIndexedVertexArray::finalize_geometry(bool opengl_initialized)
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
         this->quad_indices.clear();
     }
+    if (! this->vertices_local_indices.empty()) {
+        glsafe(::glGenBuffers(1, &this->vertices_local_indices_VBO_id));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_local_indices_VBO_id));
+        glsafe(::glBufferData(GL_ARRAY_BUFFER, this->vertices_local_indices.size() * 4, this->vertices_local_indices.data(), GL_STATIC_DRAW));
+        glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+        this->vertices_local_indices.clear();
+    }
 }
 
 void GLIndexedVertexArray::release_geometry()
@@ -221,6 +232,10 @@ void GLIndexedVertexArray::release_geometry()
         glsafe(::glDeleteBuffers(1, &this->quad_indices_VBO_id));
         this->quad_indices_VBO_id = 0;
     }
+    if (this->vertices_local_indices_VBO_id) {
+        glsafe(::glDeleteBuffers(1, &this->vertices_local_indices_VBO_id));
+        this->vertices_local_indices_VBO_id = 0;
+    }
     this->clear();
 }
 
@@ -236,17 +251,31 @@ void GLIndexedVertexArray::render() const
     glsafe(::glEnableClientState(GL_VERTEX_ARRAY));
     glsafe(::glEnableClientState(GL_NORMAL_ARRAY));
 
+    GLint vertex_local_index_attrib_loc = -1;
+    if (this->vertices_local_indices_size > 0) {
+        auto* shader = GUI::wxGetApp().get_current_shader();
+        if (shader && (vertex_local_index_attrib_loc = shader->get_attrib_location("vertex_local_index")) != -1) {
+            glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_local_indices_VBO_id));
+            glsafe(::glEnableVertexAttribArray(vertex_local_index_attrib_loc));
+            glsafe(::glVertexAttribPointer(vertex_local_index_attrib_loc, 1, GL_UNSIGNED_INT, GL_FALSE, 1 * sizeof(uint32_t), nullptr));
+            glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+        }
+    }
+
     // Render using the Vertex Buffer Objects.
     if (this->triangle_indices_size > 0) {
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_id));
         glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(this->triangle_indices_size), GL_UNSIGNED_INT, nullptr));
-        glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
     if (this->quad_indices_size > 0) {
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->quad_indices_VBO_id));
         glsafe(::glDrawElements(GL_QUADS, GLsizei(this->quad_indices_size), GL_UNSIGNED_INT, nullptr));
-        glsafe(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+        glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
+
+    if (vertex_local_index_attrib_loc != -1)
+        glsafe(::glDisableVertexAttribArray(vertex_local_index_attrib_loc));
 
     glsafe(::glDisableClientState(GL_VERTEX_ARRAY));
     glsafe(::glDisableClientState(GL_NORMAL_ARRAY));
@@ -269,6 +298,17 @@ void GLIndexedVertexArray::render(
     glsafe(::glEnableClientState(GL_VERTEX_ARRAY));
     glsafe(::glEnableClientState(GL_NORMAL_ARRAY));
 
+    GLint vertex_local_index_attrib_loc = -1;
+    if (this->vertices_local_indices_size > 0) {
+        auto* shader = GUI::wxGetApp().get_current_shader();
+        if (shader && (vertex_local_index_attrib_loc = shader->get_attrib_location("vertex_local_index")) != -1) {
+            glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->vertices_local_indices_VBO_id));
+            glsafe(::glEnableVertexAttribArray(vertex_local_index_attrib_loc));
+            glsafe(::glVertexAttribPointer(vertex_local_index_attrib_loc, 1, GL_UNSIGNED_INT, GL_FALSE, 1 * sizeof(uint32_t), nullptr));
+            glsafe(::glBindBuffer(GL_ARRAY_BUFFER, 0));
+        }
+    }
+
     if (this->triangle_indices_size > 0) {
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->triangle_indices_VBO_id));
         glsafe(::glDrawElements(GL_TRIANGLES, GLsizei(std::min(this->triangle_indices_size, tverts_range.second - tverts_range.first)), GL_UNSIGNED_INT, (const void*)(tverts_range.first * 4)));
@@ -279,6 +319,9 @@ void GLIndexedVertexArray::render(
         glsafe(::glDrawElements(GL_QUADS, GLsizei(std::min(this->quad_indices_size, qverts_range.second - qverts_range.first)), GL_UNSIGNED_INT, (const void*)(qverts_range.first * 4)));
         glsafe(::glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
     }
+
+    if (vertex_local_index_attrib_loc != -1)
+        glsafe(::glDisableVertexAttribArray(vertex_local_index_attrib_loc));
 
     glsafe(::glDisableClientState(GL_VERTEX_ARRAY));
     glsafe(::glDisableClientState(GL_NORMAL_ARRAY));

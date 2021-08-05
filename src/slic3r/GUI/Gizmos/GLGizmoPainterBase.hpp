@@ -113,6 +113,7 @@ protected:
         Right
     };
 
+    bool  m_show_triangle_edges        = false;
 private:
     bool is_mesh_point_clipped(const Vec3d& point, const Transform3d& trafo) const;
     void update_raycast_cache(const Vec2d& mouse_position,
