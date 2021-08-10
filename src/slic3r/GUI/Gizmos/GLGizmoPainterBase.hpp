@@ -40,6 +40,8 @@ public:
 
     void request_update_render_data() { m_update_render_data = true; };
 
+    void show_debug_edges(bool show_triangle_edges) { m_show_debug_edges = show_triangle_edges; };
+
 #ifdef PRUSASLICER_TRIANGLE_SELECTOR_DEBUG
     void render_debug(ImGuiWrapper* imgui);
     bool m_show_triangles{false};
@@ -48,6 +50,8 @@ public:
 
 protected:
     bool m_update_render_data = false;
+
+    bool m_show_debug_edges = false;
 
 private:
     void update_render_data();

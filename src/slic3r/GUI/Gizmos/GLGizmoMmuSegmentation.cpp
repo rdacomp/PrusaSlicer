@@ -37,6 +37,7 @@ void GLGizmoMmuSegmentation::on_shutdown()
 {
     m_parent.use_slope(false);
     m_parent.toggle_model_objects_visibility(true);
+    m_show_triangle_edges = true;
 }
 
 std::string GLGizmoMmuSegmentation::on_get_name() const
@@ -519,6 +520,17 @@ void GLGizmoMmuSegmentation::on_render_input_window(float x, float y, float bott
         m_parent.set_as_dirty();
     }
 
+    ImGui::Separator();
+    m_imgui->checkbox(_L("Show triangle edges"), m_show_triangle_edges);
+    ModelObject *        mo  = m_c->selection_info()->model_object();
+    int                  idx = -1;
+    for (ModelVolume *mv : mo->volumes)
+        if (mv->is_model_part()) {
+            ++idx;
+            m_triangle_selectors[idx]->show_debug_edges(m_show_triangle_edges);
+            m_triangle_selectors[idx]->request_update_render_data();
+        }
+
     m_imgui->end();
 }
 
@@ -670,7 +682,16 @@ void TriangleSelectorMmGui::update_render_data()
 
     m_gizmo_scene.finalize_triangle_indices();
 
-    std::vector<Vec2i> contour_edges = this->get_seed_fill_contour();
+//    std::vector<Vec2i> contour_edges = this->get_seed_fill_contour();
+    std::vector<Vec2i> contour_edges;
+    if(m_show_debug_edges)
+        for (const Triangle &tr : m_triangles)
+            if (tr.valid() && !tr.is_split()) {
+                contour_edges.emplace_back(tr.verts_idxs[0], tr.verts_idxs[1]);
+                contour_edges.emplace_back(tr.verts_idxs[1], tr.verts_idxs[2]);
+                contour_edges.emplace_back(tr.verts_idxs[2], tr.verts_idxs[0]);
+            }
+
     m_gizmo_scene.contour_vertices.reserve(contour_edges.size() * 6);
     for (const Vec2i &edge : contour_edges) {
         m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(0)].v.x());
@@ -750,7 +771,7 @@ void GLMmSegmentationGizmo3DScene::render_contour() const
     assert(this->contour_vertices_VBO_id != 0);
     assert(this->contour_indices_VBO_id != 0);
 
-    glsafe(::glLineWidth(4.0f));
+    glsafe(::glLineWidth(1.0f));
 
     glsafe(::glBindBuffer(GL_ARRAY_BUFFER, this->contour_vertices_VBO_id));
     glsafe(::glVertexPointer(3, GL_FLOAT, 3 * sizeof(float), nullptr));
