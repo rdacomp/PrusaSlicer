@@ -26,6 +26,7 @@ BitmapCache* m_bitmap_cache = nullptr;
 
 void ObjectDataViewModelNode::init_container()
 {
+    return;
 #ifdef __WXGTK__
     // it's necessary on GTK because of control have to know if this item will be container
     // in another case you couldn't to add subitem for this item
