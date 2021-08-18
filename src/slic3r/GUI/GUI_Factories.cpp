@@ -433,7 +433,7 @@ wxMenu* MenuFactory::append_submenu_add_generic(wxMenu* menu, ModelVolumeType ty
             [type, item](wxCommandEvent&) { obj_list()->load_generic_subobject(item, type); }, "", menu);
     }
 
-    if (wxGetApp().get_mode() == comExpert) {
+    if (wxGetApp().get_mode() >= comAdvanced) {
         sub_menu->AppendSeparator();
         append_menu_item(sub_menu, wxID_ANY, _L("Gallery"), "",
             [type](wxCommandEvent&) { obj_list()->load_subobject(type, true); }, "", menu);
@@ -666,6 +666,15 @@ wxMenuItem* MenuFactory::append_menu_item_fix_through_netfabb(wxMenu* menu)
     wxMenuItem* menu_item = append_menu_item(menu, wxID_ANY, _L("Fix through the Netfabb"), "",
         [](wxCommandEvent&) { obj_list()->fix_through_netfabb(); }, "", menu,
         []() {return plater()->can_fix_through_netfabb(); }, plater());
+
+    return menu_item;
+}
+
+wxMenuItem* MenuFactory::append_menu_item_simplify(wxMenu* menu)
+{
+    wxMenuItem* menu_item = append_menu_item(menu, wxID_ANY, _L("Simplify model"), "",
+        [](wxCommandEvent&) { obj_list()->simplify(); }, "", menu,
+        []() {return plater()->can_simplify(); }, plater());
     menu->AppendSeparator();
 
     return menu_item;
@@ -883,6 +892,7 @@ void MenuFactory::create_common_object_menu(wxMenu* menu)
     append_menu_item_scale_selection_to_fit_print_volume(menu);
 
     append_menu_item_fix_through_netfabb(menu);
+    append_menu_item_simplify(menu);
     append_menu_items_mirror(menu);
 }
 
@@ -937,6 +947,7 @@ void MenuFactory::create_part_menu()
     append_menu_item_replace_with_stl(menu);
     append_menu_item_export_stl(menu);
     append_menu_item_fix_through_netfabb(menu);
+    append_menu_item_simplify(menu);
     append_menu_items_mirror(menu);
 
     append_menu_item(menu, wxID_ANY, _L("Split"), _L("Split the selected object into individual parts"),

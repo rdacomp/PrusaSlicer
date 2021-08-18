@@ -234,7 +234,7 @@ void PrintConfigDef::init_common_params()
 
     def = this->add("thumbnails", coPoints);
     def->label = L("G-code thumbnails");
-    def->tooltip = L("Picture sizes to be stored into a .gcode and .sl1 files, in the following format: \"XxY, XxY, ...\"");
+    def->tooltip = L("Picture sizes to be stored into a .gcode and .sl1 / .sl1s files, in the following format: \"XxY, XxY, ...\"");
     def->mode = comExpert;
     def->gui_type = ConfigOptionDef::GUIType::one_string;
     def->set_default_value(new ConfigOptionPoints());
@@ -295,7 +295,7 @@ void PrintConfigDef::init_common_params()
     def->sidetext = L("mm");
     def->min = 0;
     def->mode = comAdvanced;
-    def->set_default_value(new ConfigOptionFloat(0.2));
+    def->set_default_value(new ConfigOptionFloat(0.));
 
     // Options used by physical printers
     
@@ -491,10 +491,11 @@ void PrintConfigDef::init_fff_params()
     def = this->add("brim_offset", coFloat);
     def->label = L("Brim offset");
     def->category = L("Skirt and brim");
-    def->tooltip = L("The offset of the brim from the printed object.");
+    def->tooltip = L("The offset of the brim from the printed object. The offset is applied after the elephant foot compensation.");
     def->sidetext = L("mm");
-    def->mode = comSimple;
-    def->set_default_value(new ConfigOptionFloat(0));
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.f));
 
     def = this->add("clip_multipart_objects", coBool);
     def->label = L("Clip multi-part objects");
@@ -4153,6 +4154,11 @@ CLITransformConfigDef::CLITransformConfigDef()
     def = this->add("dont_arrange", coBool);
     def->label = L("Don't arrange");
     def->tooltip = L("Do not rearrange the given models before merging and keep their original XY coordinates.");
+
+    def = this->add("ensure_on_bed", coBool);
+    def->label = L("Ensure on bed");
+    def->tooltip = L("Lift the object above the bed when it is partially below. Enabled by default, use --no-ensure-on-bed to disable.");
+    def->set_default_value(new ConfigOptionBool(true));
 
     def = this->add("duplicate", coInt);
     def->label = L("Duplicate");

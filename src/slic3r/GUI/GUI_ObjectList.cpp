@@ -1774,10 +1774,8 @@ void ObjectList::del_subobject_item(wxDataViewItem& item)
         del_layers_from_object(obj_idx);
     else if (type & itLayer && obj_idx != -1)
         del_layer_from_object(obj_idx, m_objects_model->GetLayerRangeByItem(item));
-    else if (type & itInfo && obj_idx != -1) {
-        Unselect(item);
-        Select(parent);
-    }
+    else if (type & itInfo && obj_idx != -1)
+        del_info_item(obj_idx, m_objects_model->GetInfoItemType(item));
 #if ENABLE_TEXTURED_VOLUMES
     else if (type & itTexture && obj_idx != -1)
         del_texture_from_object(obj_idx);
@@ -1793,6 +1791,52 @@ void ObjectList::del_subobject_item(wxDataViewItem& item)
 
     m_objects_model->Delete(item);
     update_info_items(obj_idx);
+}
+
+void ObjectList::del_info_item(const int obj_idx, InfoItemType type)
+{
+    Plater* plater = wxGetApp().plater();
+    GLCanvas3D* cnv = plater->canvas3D();
+
+    switch (type) {
+    case InfoItemType::CustomSupports:
+        cnv->get_gizmos_manager().reset_all_states();
+        Plater::TakeSnapshot(plater, _L("Remove paint-on supports"));
+        for (ModelVolume* mv : (*m_objects)[obj_idx]->volumes)
+            mv->supported_facets.clear();
+        break;
+
+    case InfoItemType::CustomSeam:
+        cnv->get_gizmos_manager().reset_all_states();
+        Plater::TakeSnapshot(plater, _L("Remove paint-on seam"));
+        for (ModelVolume* mv : (*m_objects)[obj_idx]->volumes)
+            mv->seam_facets.clear();
+        break;
+
+    case InfoItemType::MmuSegmentation:
+        cnv->get_gizmos_manager().reset_all_states();
+        Plater::TakeSnapshot(plater, _L("Remove Multi Material painting"));
+        for (ModelVolume* mv : (*m_objects)[obj_idx]->volumes)
+            mv->mmu_segmentation_facets.clear();
+        break;
+
+    case InfoItemType::Sinking:
+        Plater::TakeSnapshot(plater, _L("Shift objects to bed"));
+        (*m_objects)[obj_idx]->ensure_on_bed();
+        cnv->reload_scene(true, true);
+        break;
+
+    case InfoItemType::VariableLayerHeight:
+        Plater::TakeSnapshot(plater, _L("Remove variable layer height"));
+        (*m_objects)[obj_idx]->layer_height_profile.clear();
+        if (cnv->is_layers_editing_enabled())
+            //cnv->post_event(SimpleEvent(EVT_GLTOOLBAR_LAYERSEDITING));
+            cnv->force_main_toolbar_left_action(cnv->get_main_toolbar_item_id("layersediting"));
+        break;
+
+    case InfoItemType::Undef : assert(false); break;
+    }
+    cnv->post_event(SimpleEvent(EVT_GLCANVAS_SCHEDULE_BACKGROUND_PROCESS));
 }
 
 void ObjectList::del_settings_from_config(const wxDataViewItem& parent_item)
@@ -2597,7 +2641,7 @@ void ObjectList::del_texture_item()
 }
 #endif // ENABLE_TEXTURED_VOLUMES
 
-void ObjectList::update_info_items(size_t obj_idx)
+void ObjectList::update_info_items(size_t obj_idx, wxDataViewItemArray* selections/* = nullptr*/, bool added_object/* = false*/)
 {
     const ModelObject* model_object = (*m_objects)[obj_idx];
     wxDataViewItem item_obj = m_objects_model->GetItemById(obj_idx);
@@ -2641,13 +2685,25 @@ void ObjectList::update_info_items(size_t obj_idx)
         if (! shows && should_show) {
             m_objects_model->AddInfoChild(item_obj, type);
             Expand(item_obj);
-            wxGetApp().notification_manager()->push_updated_item_info_notification(type);
-            
+            if (added_object)
+                wxGetApp().notification_manager()->push_updated_item_info_notification(type); 
         }
         else if (shows && ! should_show) {
-            Unselect(item);
+            if (!selections)
+                Unselect(item);
             m_objects_model->Delete(item);
-            Select(item_obj);
+            if (selections) {
+                if (selections->Index(item) != wxNOT_FOUND) {
+                    // If info item was deleted from the list, 
+                    // it's need to be deleted from selection array, if it was there
+                    selections->Remove(item);
+                    // Select item_obj, if info_item doesn't exist for item anymore, but was selected
+                    if (selections->Index(item_obj) == wxNOT_FOUND)
+                        selections->Add(item_obj);
+                }
+            }
+            else
+                Select(item_obj);
         }
     }
 }
@@ -2662,7 +2718,7 @@ void ObjectList::add_object_to_list(size_t obj_idx, bool call_selection_changed)
                       model_object->config.has("extruder") ? model_object->config.extruder() : 0,
                       get_mesh_errors_count(obj_idx) > 0);
 
-    update_info_items(obj_idx);
+    update_info_items(obj_idx, nullptr, true);
 
     // add volumes to the object
     if (model_object->volumes.size() > 1) {
@@ -3846,7 +3902,7 @@ void ObjectList::update_object_list_by_printer_technology()
 
     for (auto& object_item : object_items) {
         // update custom supports info
-        update_info_items(m_objects_model->GetObjectIdByItem(object_item));
+        update_info_items(m_objects_model->GetObjectIdByItem(object_item), &sel);
 
         // Update Settings Item for object
         update_settings_item_and_selection(object_item, sel);
@@ -3931,6 +3987,7 @@ void ObjectList::instances_to_separated_object(const int obj_idx, const std::set
 
     // update printable state for new volumes on canvas3D
     wxGetApp().plater()->canvas3D()->update_instance_printable_state_for_object(new_obj_indx);
+    update_info_items(new_obj_indx);
 }
 
 void ObjectList::instances_to_separated_objects(const int obj_idx)
@@ -3963,6 +4020,8 @@ void ObjectList::instances_to_separated_objects(const int obj_idx)
 
     // update printable state for new volumes on canvas3D
     wxGetApp().plater()->canvas3D()->update_instance_printable_state_for_objects(object_idxs);
+    for (size_t object : object_idxs)
+        update_info_items(object);
 }
 
 void ObjectList::split_instances()
@@ -4027,6 +4086,13 @@ void ObjectList::fix_through_netfabb()
     wxGetApp().plater()->fix_through_netfabb(obj_idx, vol_idx);
     
     update_item_error_icon(obj_idx, vol_idx);
+    update_info_items(obj_idx);
+}
+
+void ObjectList::simplify()
+{
+    GLGizmosManager& gizmos_mgr = wxGetApp().plater()->canvas3D()->get_gizmos_manager();
+    gizmos_mgr.open_gizmo(GLGizmosManager::EType::Simplify);
 }
 
 void ObjectList::update_item_error_icon(const int obj_idx, const int vol_idx) const 
@@ -4046,6 +4112,8 @@ void ObjectList::update_item_error_icon(const int obj_idx, const int vol_idx) co
             // unmark fixed item only
             m_objects_model->DeleteWarningIcon(item);
     }
+    else
+        m_objects_model->AddWarningIcon(item);
 }
 
 void ObjectList::msw_rescale()
@@ -4312,6 +4380,11 @@ ModelObject* ObjectList::object(const int obj_idx) const
         return nullptr;
 
     return (*m_objects)[obj_idx];
+}
+
+bool ObjectList::has_paint_on_segmentation()
+{
+    return m_objects_model->HasInfoItem(InfoItemType::MmuSegmentation);
 }
 
 } //namespace GUI
