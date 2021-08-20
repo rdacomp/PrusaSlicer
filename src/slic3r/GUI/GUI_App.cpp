@@ -87,6 +87,10 @@
 #include <boost/nowide/fstream.hpp>
 #endif // ENABLE_THUMBNAIL_GENERATOR_DEBUG
 
+#ifdef __WXGTK__
+    #include <gtk/gtk.h>
+#endif
+
 namespace Slic3r {
 namespace GUI {
 
@@ -799,6 +803,10 @@ bool GUI_App::OnInit()
 
 bool GUI_App::on_init_inner()
 {
+#ifdef __WXGTK__
+    g_object_set (gtk_settings_get_default (), "gtk-menu-images", TRUE, NULL);
+#endif
+
     // Verify resources path
     const wxString resources_dir = from_u8(Slic3r::resources_dir());
     wxCHECK_MSG(wxDirExists(resources_dir), false,
