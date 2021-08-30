@@ -4189,11 +4189,9 @@ void GLCanvas3D::_render_thumbnail_internal(ThumbnailData& thumbnail_data, const
     glsafe(::glEnable(GL_DEPTH_TEST));
 
     shader->start_using();
-    shader->set_uniform("emission_factor", 0.0);
+
+    shader->set_uniform("emission_factor", 0.0f);
 #if ENABLE_TEXTURED_VOLUMES
-#if ENABLE_ALLOW_NEGATIVE_Z
-    shader->set_uniform("sinking", false);
-#endif // ENABLE_ALLOW_NEGATIVE_Z
     shader->set_uniform("print_box.active", false);
     shader->set_uniform("slope.active", false);
     shader->set_uniform("clipping_plane.active", false);
@@ -5256,7 +5254,7 @@ void GLCanvas3D::_render_objects()
     m_camera_clipping_plane = ClippingPlane::ClipsNothing();
 }
 
-void GLCanvas3D::_render_gcode() const
+void GLCanvas3D::_render_gcode()
 {
     m_gcode_viewer.render();
 }
