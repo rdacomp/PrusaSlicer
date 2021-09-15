@@ -948,6 +948,39 @@ std::vector<unsigned char> ImGuiWrapper::load_svg(const std::string& bitmap_name
     return data;
 }
 
+#ifdef _WIN32
+std::vector<unsigned char> get_windows_font()
+{
+    wxFont wx_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+    HFONT  hfont   = wx_font.GetHFONT();
+
+    HDC hdc = ::CreateCompatibleDC(NULL);
+    if (hdc == NULL) {
+        std::cerr << "Can't create HDC by CreateCompatibleDC(NULL).";
+        return {};
+    }
+
+    ::SelectObject(hdc, hfont);
+    size_t size = ::GetFontData(hdc, 0, 0, NULL, 0);
+    if (size == 0) {
+        std::cerr << "HFONT doesn't have size.";
+        ::DeleteDC(hdc);
+        return {};
+    }
+
+    std::vector<unsigned char> buffer(size);
+    size_t loaded_size = ::GetFontData(hdc, 0, 0, buffer.data(), size);
+    ::DeleteDC(hdc);
+
+    if (size != loaded_size) {
+        std::cerr << "Different loaded(from HFONT) data size.";
+        return {};
+    }
+
+    return buffer;
+}
+#endif
+
 void ImGuiWrapper::init_font(bool compress)
 {
     destroy_font();
@@ -965,10 +998,17 @@ void ImGuiWrapper::init_font(bool compress)
 		builder.AddRanges(ranges_keyboard_shortcuts);
 #endif
 	builder.BuildRanges(&ranges); // Build the final result (ordered ranges with all the unique characters submitted)
-
-    //FIXME replace with io.Fonts->AddFontFromMemoryTTF(buf_decompressed_data, (int)buf_decompressed_size, m_font_size, nullptr, ranges.Data);
-    //https://github.com/ocornut/imgui/issues/220
-	ImFont* font = io.Fonts->AddFontFromFileTTF((Slic3r::resources_dir() + "/fonts/" + (m_font_cjk ? "NotoSansCJK-Regular.ttc" : "NotoSans-Regular.ttf")).c_str(), m_font_size, nullptr, ranges.Data);
+        
+    ImFont *font = nullptr;
+    ImFontConfig *font_config = nullptr;
+#ifdef _WIN32
+    std::vector<unsigned char> buffer = get_windows_font();
+    if (!buffer.empty())
+        font = io.Fonts->AddFontFromMemoryTTF(buffer.data(), buffer.size(), m_font_size, font_config, ranges.Data);
+#else
+    std::string font_path = Slic3r::resources_dir() + "/fonts/" + (m_font_cjk ? "NotoSansCJK-Regular.ttc" : "NotoSans-Regular.ttf");
+	font = io.Fonts->AddFontFromFileTTF(font_path.c_str(), m_font_size, font_config, ranges.Data);
+#endif
     if (font == nullptr) {
         font = io.Fonts->AddFontDefault();
         if (font == nullptr) {
