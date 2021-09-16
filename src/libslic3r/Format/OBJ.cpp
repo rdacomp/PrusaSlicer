@@ -93,6 +93,8 @@ bool load_obj(const char *path, TriangleMesh *meshptr)
         BOOST_LOG_TRIVIAL(error) << "load_obj: This OBJ file couldn't be read because it's empty. " << path;
         return false;
     }
+    if (meshptr->volume() < 0)
+        meshptr->flip_triangles();
     return true;
 }
 

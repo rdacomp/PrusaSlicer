@@ -18,20 +18,30 @@ class TriangleMeshSlicer;
 typedef std::vector<TriangleMesh*> TriangleMeshPtrs;
 
 struct TriangleMeshStats {
+    // Mesh metrics.
     uint32_t      number_of_facets          = 0;
     stl_vertex    max                       = stl_vertex::Zero();
     stl_vertex    min                       = stl_vertex::Zero();
     stl_vertex    size                      = stl_vertex::Zero();
     float         volume                    = -1.f;
+    int           number_of_parts           = 0;
+
+    // Mesh errors, fixed and remaining.
     // If we don't know, don't indicate non manifoldness.
     bool          manifold                  = true;
+    // How many edges were united by merging their end points with some other end points in epsilon neighborhood?
     int           edges_fixed               = 0;
+    // How many degenerate faces were removed?
     int           degenerate_facets         = 0;
+    // How many faces were removed during fixing? Includes degenerate_faces and disconnected faces.
     int           facets_removed            = 0;
-    int           facets_added              = 0;
+    // New faces could only be created with stl_fill_holes() and we ditched stl_fill_holes(), because mostly it does more harm than good.
+    //int          facets_added             = 0;
+    // How many facets were revesed? Faces are reversed by admesh while it connects patches of triangles togeter and a flipped triangle is encountered.
+    // Also the facets are reversed when a negative volume is corrected by flipping all facets.
     int           facets_reversed           = 0;
+    // Edges shared by two triangles, oriented incorrectly.
     int           backwards_edges           = 0;
-    int           number_of_parts           = 0;
 
     void clear() { *this = TriangleMeshStats(); }
 
@@ -46,17 +56,21 @@ struct TriangleMeshStats {
         out.min                     = this->min.cwiseMin(rhs.min);
         out.max                     = this->max.cwiseMax(rhs.max);
         out.size                    = out.max - out.min;
+        out.number_of_parts         = this->number_of_parts     + rhs.number_of_parts;
         out.manifold                = this->manifold            && rhs.manifold;
         out.volume                  = this->volume              + rhs.volume;
         out.edges_fixed             = this->edges_fixed         + rhs.edges_fixed;
         out.degenerate_facets       = this->degenerate_facets   + rhs.degenerate_facets;
         out.facets_removed          = this->facets_removed      + rhs.facets_removed;
-        out.facets_added            = this->facets_added        + rhs.facets_added;
         out.facets_reversed         = this->facets_reversed     + rhs.facets_reversed;
         out.backwards_edges         = this->backwards_edges     + rhs.backwards_edges;
-        out.number_of_parts         = this->number_of_parts     + rhs.number_of_parts;
         return out;
       }
+    }
+
+    bool repaired() const
+    {
+        return degenerate_facets > 0 || edges_fixed > 0 || facets_removed > 0 || facets_reversed > 0 || backwards_edges > 0;
     }
 };
 
@@ -89,6 +103,8 @@ public:
     void mirror_z() { this->mirror(Z); }
     void transform(const Transform3d& t, bool fix_left_handed = false);
     void transform(const Matrix3d& t, bool fix_left_handed = false);
+    // Flip triangles, negate volume.
+    void flip_triangles();
     void align_to_origin();
     void rotate(double angle, Point* center);
     TriangleMeshPtrs split() const;
@@ -113,10 +129,13 @@ public:
     bool   is_splittable() const;
     // Estimate of the memory occupied by this structure, important for keeping an eye on the Undo / Redo stack allocation.
     size_t memsize() const;
+
+    // Used by the Undo / Redo stack, legacy interface. As of now there is nothing cached at TriangleMesh,
+    // but we may decide to cache some data in the future (for example normals), thus we keep the interface in place.
     // Release optional data from the mesh if the object is on the Undo / Redo stack only. Returns the amount of memory released.
-    size_t release_optional();
+    size_t release_optional() { return 0; }
     // Restore optional data possibly released by release_optional().
-    void   restore_optional();
+    void   restore_optional() {}
 
     const TriangleMeshStats& stats() const { return m_stats; }
     

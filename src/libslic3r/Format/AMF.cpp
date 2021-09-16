@@ -625,19 +625,22 @@ void AMFParserContext::endElement(const char * /* name */)
                     return;
                 }
 
-        //FIXME no triangle fixing will be performed!
-        m_volume->set_mesh(indexed_triangle_set{ std::move(m_volume_facets), std::move(m_object_vertices) });
+        {
+            TriangleMesh triangle_mesh { std::move(m_object_vertices), std::move(m_volume_facets) };
+            if (triangle_mesh.volume() < 0)
+                triangle_mesh.flip_triangles();
+            m_volume->set_mesh(std::move(triangle_mesh));
+        }
 
         // stores the volume matrix taken from the metadata, if present
         if (bool has_transform = !m_volume_transform.isApprox(Transform3d::Identity(), 1e-10); has_transform)
             m_volume->source.transform = Slic3r::Geometry::Transformation(m_volume_transform);
-        if (m_volume->source.input_file.empty() && (m_volume->type() == ModelVolumeType::MODEL_PART))
-        {
+
+        if (m_volume->source.input_file.empty() && (m_volume->type() == ModelVolumeType::MODEL_PART)) {
             m_volume->source.object_idx = (int)m_model.objects.size() - 1;
             m_volume->source.volume_idx = (int)m_model.objects.back()->volumes.size() - 1;
             m_volume->center_geometry_after_creation();
-        }
-        else
+        } else
             // pass false if the mesh offset has been already taken from the data 
             m_volume->center_geometry_after_creation(m_volume->source.input_file.empty());
 

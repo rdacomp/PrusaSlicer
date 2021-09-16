@@ -90,9 +90,11 @@ static void trianglemesh_repair_on_import(stl_file &stl)
     float tolerance = (float)stl.stats.shortest_edge;
     float increment = (float)stl.stats.bounding_diameter / 10000.0f;
     int iterations = 2;
-    if (stl.stats.connected_facets_3_edge < (int)stl.stats.number_of_facets) {
-        for (int i = 0; i < iterations; i++) {
-            if (stl.stats.connected_facets_3_edge < (int)stl.stats.number_of_facets) {
+    if (stl.stats.connected_facets_3_edge < int(stl.stats.number_of_facets)) {
+        // Not a manifold, some triangles have unconnected edges.
+        for (int i = 0; i < iterations; ++ i) {
+            if (stl.stats.connected_facets_3_edge < int(stl.stats.number_of_facets)) {
+                // Still not a manifold, some triangles have unconnected edges.
                 //printf("Checking nearby. Tolerance= %f Iteration=%d of %d...", tolerance, i + 1, iterations);
 #ifdef SLIC3R_TRACE_REPAIR
                 BOOST_LOG_TRIVIAL(trace) << "\tstl_check_faces_nearby";
@@ -148,6 +150,7 @@ static void trianglemesh_repair_on_import(stl_file &stl)
 #ifdef SLIC3R_TRACE_REPAIR
     BOOST_LOG_TRIVIAL(trace) << "\tstl_calculate_volume";
 #endif /* SLIC3R_TRACE_REPAIR */
+    // If the volume is negative, all the facets are flipped and added to stats.facets_reversed.
     stl_calculate_volume(&stl);
     assert(stl_validate(&stl));
     
@@ -182,7 +185,6 @@ bool TriangleMesh::ReadSTLFile(const char* input_file, bool repair)
     m_stats.edges_fixed             = stl.stats.edges_fixed;
     m_stats.degenerate_facets       = stl.stats.degenerate_facets;
     m_stats.facets_removed          = stl.stats.facets_removed;
-    m_stats.facets_added            = stl.stats.facets_added;
     m_stats.facets_reversed         = stl.stats.facets_reversed;
     m_stats.backwards_edges         = stl.stats.backwards_edges;
     m_stats.number_of_parts         = stl.stats.number_of_parts;
@@ -206,16 +208,6 @@ float TriangleMesh::volume()
     if (m_stats.volume == -1)
         m_stats.volume = its_volume(this->its);
     return m_stats.volume;
-}
-
-bool TriangleMesh::repaired() const
-{
-    return m_stats.degenerate_facets    > 0
-        || m_stats.edges_fixed          > 0
-        || m_stats.facets_removed       > 0
-        || m_stats.facets_added         > 0
-        || m_stats.facets_reversed      > 0
-        || m_stats.backwards_edges      > 0;
 }
 
 void TriangleMesh::WriteOBJFile(const char* output_file) const
@@ -323,6 +315,8 @@ void TriangleMesh::transform(const Transform3d& t, bool fix_left_handed)
     its_transform(its, t);
     if (fix_left_handed && t.matrix().block(0, 0, 3, 3).determinant() < 0.)
         its_flip_triangles(its);
+    else
+        m_stats.volume = - m_stats.volume;
     update_bounding_box(this->its, this->m_stats);
 }
 
@@ -331,7 +325,15 @@ void TriangleMesh::transform(const Matrix3d& m, bool fix_left_handed)
     its_transform(its, m);
     if (fix_left_handed && m.determinant() < 0.)
         its_flip_triangles(its);
+    else
+        m_stats.volume = - m_stats.volume;
     update_bounding_box(this->its, this->m_stats);
+}
+
+void TriangleMesh::flip_triangles()
+{
+    its_flip_triangles(its);
+    m_stats.volume = - m_stats.volume;
 }
 
 void TriangleMesh::align_to_origin()
@@ -476,17 +478,6 @@ size_t TriangleMesh::memsize() const
 {
     size_t memsize = 8 + this->its.memsize() + sizeof(this->m_stats);
     return memsize;
-}
-
-// Release optional data from the mesh if the object is on the Undo / Redo stack only. Returns the amount of memory released.
-size_t TriangleMesh::release_optional()
-{
-    return 0;
-}
-
-// Restore optional data possibly released by release_optional().
-void TriangleMesh::restore_optional()
-{
 }
 
 // Create a mapping from triangle edge into face.

@@ -1924,11 +1924,13 @@ namespace Slic3r {
                 // bake the transformation into the geometry to allow the reload from disk command
                 // to work properly
                 if (object.instances.size() == 1) {
-                    triangle_mesh.transform(object.instances.front()->get_transformation().get_matrix());
+                    triangle_mesh.transform(object.instances.front()->get_transformation().get_matrix(), false);
                     object.instances.front()->set_transformation(Slic3r::Geometry::Transformation());
                     //FIXME do the mesh fixing?
                 }
             }
+            if (triangle_mesh.volume() < 0)
+                triangle_mesh.flip_triangles();
 
 			ModelVolume* volume = object.add_volume(std::move(triangle_mesh));
             // stores the volume matrix taken from the metadata, if present

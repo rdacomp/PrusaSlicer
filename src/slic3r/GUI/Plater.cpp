@@ -1135,7 +1135,7 @@ void Sidebar::show_info_sizer()
                                                        static_cast<int>(model_object->facets_count()), stats.number_of_parts));
 
     int errors = stats.degenerate_facets + stats.edges_fixed + stats.facets_removed +
-        stats.facets_added + stats.facets_reversed + stats.backwards_edges;
+        stats.facets_reversed + stats.backwards_edges;
     if (errors > 0) {
         wxString tooltip = format_wxstr(_L_PLURAL("Auto-repaired %1$d error", "Auto-repaired %1$d errors", errors), errors);
         p->object_info->info_manifold->SetLabel(tooltip);
@@ -1147,8 +1147,6 @@ void Sidebar::show_info_sizer()
             tooltip += format_wxstr(_L_PLURAL("%1$d edge fixed", "%1$d edges fixed", stats.edges_fixed), stats.edges_fixed) + ", ";
         if (stats.facets_removed > 0)
             tooltip += format_wxstr(_L_PLURAL("%1$d facet removed", "%1$d facets removed", stats.facets_removed), stats.facets_removed) + ", ";
-        if (stats.facets_added > 0)
-            tooltip += format_wxstr(_L_PLURAL("%1$d facet added", "%1$d facets added", stats.facets_added), stats.facets_added) + ", ";
         if (stats.facets_reversed > 0)
             tooltip += format_wxstr(_L_PLURAL("%1$d facet reversed", "%1$d facets reversed", stats.facets_reversed), stats.facets_reversed) + ", ";
         if (stats.backwards_edges > 0)

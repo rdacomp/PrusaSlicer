@@ -1563,15 +1563,13 @@ void ModelObject::print_info() const
     cout << "number_of_facets = " << mesh.facets_count() << endl;
     cout << "manifold = "   << (mesh.stats().manifold ? "yes" : "no") << endl;
     
-    if (mesh.repaired()) {
+    if (mesh.stats().repaired()) {
         if (mesh.stats().degenerate_facets > 0)
             cout << "degenerate_facets = "  << mesh.stats().degenerate_facets << endl;
         if (mesh.stats().edges_fixed > 0)
             cout << "edges_fixed = "        << mesh.stats().edges_fixed       << endl;
         if (mesh.stats().facets_removed > 0)
             cout << "facets_removed = "     << mesh.stats().facets_removed    << endl;
-        if (mesh.stats().facets_added > 0)
-            cout << "facets_added = "       << mesh.stats().facets_added      << endl;
         if (mesh.stats().facets_reversed > 0)
             cout << "facets_reversed = "    << mesh.stats().facets_reversed   << endl;
         if (mesh.stats().backwards_edges > 0)
@@ -1618,7 +1616,6 @@ TriangleMeshStats ModelObject::get_object_stl_stats() const
         full_stats.degenerate_facets    += stats.degenerate_facets;
         full_stats.edges_fixed          += stats.edges_fixed;
         full_stats.facets_removed       += stats.facets_removed;
-        full_stats.facets_added         += stats.facets_added;
         full_stats.facets_reversed      += stats.facets_reversed;
         full_stats.backwards_edges      += stats.backwards_edges;
 
@@ -1640,7 +1637,7 @@ int ModelObject::get_mesh_errors_count(const int vol_idx /*= -1*/) const
     const TriangleMeshStats& stats = get_object_stl_stats();
 
     return  stats.degenerate_facets + stats.edges_fixed     + stats.facets_removed +
-            stats.facets_added      + stats.facets_reversed + stats.backwards_edges;
+            stats.facets_reversed + stats.backwards_edges;
 }
 
 void ModelVolume::set_material_id(t_model_material_id material_id)
@@ -1712,7 +1709,7 @@ int ModelVolume::get_mesh_errors_count() const
     const TriangleMeshStats &stats = this->mesh().stats();
 
     return  stats.degenerate_facets + stats.edges_fixed     + stats.facets_removed +
-            stats.facets_added      + stats.facets_reversed + stats.backwards_edges;
+            stats.facets_reversed + stats.backwards_edges;
 }
 
 const TriangleMesh& ModelVolume::get_convex_hull() const

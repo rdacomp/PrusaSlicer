@@ -73,7 +73,6 @@ TriangleMesh::stats()
         (void)hv_stores( hv, "degenerate_facets",   newSViv(THIS->stats().degenerate_facets) );
         (void)hv_stores( hv, "edges_fixed",         newSViv(THIS->stats().edges_fixed) );
         (void)hv_stores( hv, "facets_removed",      newSViv(THIS->stats().facets_removed) );
-        (void)hv_stores( hv, "facets_added",        newSViv(THIS->stats().facets_added) );
         (void)hv_stores( hv, "facets_reversed",     newSViv(THIS->stats().facets_reversed) );
         (void)hv_stores( hv, "backwards_edges",     newSViv(THIS->stats().backwards_edges) );
         RETVAL = (SV*)newRV_noinc((SV*)hv);

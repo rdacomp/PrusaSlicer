@@ -401,8 +401,6 @@ wxString ObjectList::get_mesh_errors_list(const int obj_idx, const int vol_idx /
         tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d edge fixed", "%1$d edges fixed", stats.edges_fixed), stats.edges_fixed) + "\n";
     if (stats.facets_removed > 0)
         tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d facet removed", "%1$d facets removed", stats.facets_removed), stats.facets_removed) + "\n";
-    if (stats.facets_added > 0)
-        tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d facet added", "%1$d facets added", stats.facets_added), stats.facets_added) + "\n";
     if (stats.facets_reversed > 0)
         tooltip += "\t" + format_wxstr(_L_PLURAL("%1$d facet reversed", "%1$d facets reversed", stats.facets_reversed), stats.facets_reversed) + "\n";
     if (stats.backwards_edges > 0)
