@@ -212,7 +212,6 @@ ModelMaterial::attributes()
         %code%{ THIS->origin_translation = *point; %};
     
     void ensure_on_bed();
-    bool needed_repair() const;
     int materials_count() const;
     int facets_count();
     void center_around_origin();

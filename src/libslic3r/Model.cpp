@@ -475,10 +475,10 @@ bool Model::looks_like_imperial_units() const
 
 void Model::convert_from_imperial_units(bool only_small_volumes)
 {
-    static constexpr const double in_to_mm = 25.4;
+    static constexpr const float in_to_mm = 25.4f;
     for (ModelObject* obj : this->objects)
         if (! only_small_volumes || obj->get_object_stl_stats().volume < volume_threshold_inches) {
-            obj->scale_mesh_after_creation(Vec3d(in_to_mm, in_to_mm, in_to_mm));
+            obj->scale_mesh_after_creation(in_to_mm);
             for (ModelVolume* v : obj->volumes) {
                 assert(! v->source.is_converted_from_meters);
                 v->source.is_converted_from_inches = true;
@@ -505,7 +505,7 @@ void Model::convert_from_meters(bool only_small_volumes)
     static constexpr const double m_to_mm = 1000;
     for (ModelObject* obj : this->objects)
         if (! only_small_volumes || obj->get_object_stl_stats().volume < volume_threshold_meters) {
-            obj->scale_mesh_after_creation(Vec3d(m_to_mm, m_to_mm, m_to_mm));
+            obj->scale_mesh_after_creation(m_to_mm);
             for (ModelVolume* v : obj->volumes) {
                 assert(! v->source.is_converted_from_inches);
                 v->source.is_converted_from_meters = true;
@@ -1062,11 +1062,11 @@ void ModelObject::mirror(Axis axis)
 }
 
 // This method could only be called before the meshes of this ModelVolumes are not shared!
-void ModelObject::scale_mesh_after_creation(const Vec3d &versor)
+void ModelObject::scale_mesh_after_creation(const float scale)
 {
     for (ModelVolume *v : this->volumes) {
-        v->scale_geometry_after_creation(versor);
-        v->set_offset(versor.cwiseProduct(v->get_offset()));
+        v->scale_geometry_after_creation(scale);
+        v->set_offset(Vec3d(scale, scale, scale).cwiseProduct(v->get_offset()));
     }
     this->invalidate_bounding_box();
 }
@@ -1077,9 +1077,8 @@ void ModelObject::convert_units(ModelObjectPtrs& new_objects, ConversionType con
 
     ModelObject* new_object = new_clone(*this);
 
-    double koef = conv_type == ConversionType::CONV_FROM_INCH   ? 25.4 : conv_type == ConversionType::CONV_TO_INCH  ? 0.0393700787  :
-                  conv_type == ConversionType::CONV_FROM_METER  ? 1000 : conv_type == ConversionType::CONV_TO_METER ? 0.001         : 1;
-    const Vec3d versor = Vec3d(koef, koef, koef);
+    float koef = conv_type == ConversionType::CONV_FROM_INCH   ? 25.4f  : conv_type == ConversionType::CONV_TO_INCH  ? 0.0393700787f  :
+                 conv_type == ConversionType::CONV_FROM_METER  ? 1000.f : conv_type == ConversionType::CONV_TO_METER ? 0.001f         : 1.f;
 
     new_object->set_model(nullptr);
     new_object->sla_support_points.clear();
@@ -1092,7 +1091,6 @@ void ModelObject::convert_units(ModelObjectPtrs& new_objects, ConversionType con
     for (ModelVolume* volume : volumes) {
         if (!volume->mesh().empty()) {
             TriangleMesh mesh(volume->mesh());
-            mesh.require_shared_vertices();
 
             ModelVolume* vol = new_object->add_volume(mesh);
             vol->name = volume->name;
@@ -1118,8 +1116,8 @@ void ModelObject::convert_units(ModelObjectPtrs& new_objects, ConversionType con
             if (//vol->source.is_converted_from_inches != from_imperial && 
                 (volume_idxs.empty() || 
                  std::find(volume_idxs.begin(), volume_idxs.end(), vol_idx) != volume_idxs.end())) {
-                vol->scale_geometry_after_creation(versor);
-                vol->set_offset(versor.cwiseProduct(volume->get_offset()));
+                vol->scale_geometry_after_creation(koef);
+                vol->set_offset(Vec3d(koef, koef, koef).cwiseProduct(volume->get_offset()));
                 if (conv_type == ConversionType::CONV_FROM_INCH || conv_type == ConversionType::CONV_TO_INCH)
                     vol->source.is_converted_from_inches = conv_type == ConversionType::CONV_FROM_INCH;
                 if (conv_type == ConversionType::CONV_FROM_METER || conv_type == ConversionType::CONV_TO_METER)
@@ -1162,14 +1160,6 @@ size_t ModelObject::parts_count() const
         if (v->is_model_part())
             ++num;
     return num;
-}
-
-bool ModelObject::needed_repair() const
-{
-    for (const ModelVolume *v : this->volumes)
-        if (v->is_model_part() && v->mesh().needed_repair())
-            return true;
-    return false;
 }
 
 ModelObjectPtrs ModelObject::cut(size_t instance, coordf_t z, ModelObjectCutAttributes attributes)
@@ -1253,21 +1243,14 @@ ModelObjectPtrs ModelObject::cut(size_t instance, coordf_t z, ModelObjectCutAttr
             TriangleMesh upper_mesh, lower_mesh;
             {
                 indexed_triangle_set upper_its, lower_its;
-                mesh.require_shared_vertices();
                 cut_mesh(mesh.its, float(z), &upper_its, &lower_its);
-                if (attributes.has(ModelObjectCutAttribute::KeepUpper)) {
+                if (attributes.has(ModelObjectCutAttribute::KeepUpper))
                     upper_mesh = TriangleMesh(upper_its);
-                    upper_mesh.repair();
-                    upper_mesh.reset_repair_stats();
-                }
-                if (attributes.has(ModelObjectCutAttribute::KeepLower)) {
+                if (attributes.has(ModelObjectCutAttribute::KeepLower))
                     lower_mesh = TriangleMesh(lower_its);
-                    lower_mesh.repair();
-                    lower_mesh.reset_repair_stats();
-                }
             }
 
-            if (attributes.has(ModelObjectCutAttribute::KeepUpper) && upper_mesh.facets_count() > 0) {
+            if (attributes.has(ModelObjectCutAttribute::KeepUpper) && ! upper_mesh.empty()) {
                 ModelVolume* vol = upper->add_volume(upper_mesh);
                 vol->name	= volume->name;
                 // Don't copy the config's ID.
@@ -1276,7 +1259,7 @@ ModelObjectPtrs ModelObject::cut(size_t instance, coordf_t z, ModelObjectCutAttr
 	    		assert(vol->config.id() != volume->config.id());
                 vol->set_material(volume->material_id(), *volume->material());
             }
-            if (attributes.has(ModelObjectCutAttribute::KeepLower) && lower_mesh.facets_count() > 0) {
+            if (attributes.has(ModelObjectCutAttribute::KeepLower) && ! lower_mesh.empty()) {
                 ModelVolume* vol = lower->add_volume(lower_mesh);
                 vol->name	= volume->name;
                 // Don't copy the config's ID.
@@ -1353,8 +1336,6 @@ void ModelObject::split(ModelObjectPtrs* new_objects)
             // FIXME: crashes if not satisfied
             if (mesh->facets_count() < 3) continue;
 
-            mesh->repair();
-
             // XXX: this seems to be the only real usage of m_model, maybe refactor this so that it's not needed?
             ModelObject* new_object = m_model->add_object();
             if (meshptrs.size() == 1) {
@@ -1402,7 +1383,6 @@ void ModelObject::merge()
     for (ModelVolume* volume : volumes)
         if (!volume->mesh().empty())
             mesh.merge(volume->mesh());
-    mesh.repair();
 
     this->clear_volumes();
     ModelVolume* vol = this->add_volume(mesh);
@@ -1569,7 +1549,6 @@ void ModelObject::print_info() const
     boost::nowide::cout << "[" << boost::filesystem::path(this->input_file).filename().string() << "]" << endl;
     
     TriangleMesh mesh = this->raw_mesh();
-    mesh.check_topology();
     BoundingBoxf3 bb = mesh.bounding_box();
     Vec3d size = bb.size();
     cout << "size_x = " << size(0) << endl;
@@ -1582,11 +1561,9 @@ void ModelObject::print_info() const
     cout << "max_y = " << bb.max(1) << endl;
     cout << "max_z = " << bb.max(2) << endl;
     cout << "number_of_facets = " << mesh.facets_count() << endl;
-    cout << "manifold = "   << (mesh.is_manifold() ? "yes" : "no") << endl;
+    cout << "manifold = "   << (mesh.stats().manifold ? "yes" : "no") << endl;
     
-    mesh.repair();  // this calculates number_of_parts
-    if (mesh.needed_repair()) {
-        mesh.repair();
+    if (mesh.repaired()) {
         if (mesh.stats().degenerate_facets > 0)
             cout << "degenerate_facets = "  << mesh.stats().degenerate_facets << endl;
         if (mesh.stats().edges_fixed > 0)
@@ -1624,18 +1601,18 @@ std::string ModelObject::get_export_filename() const
     return ret;
 }
 
-stl_stats ModelObject::get_object_stl_stats() const
+TriangleMeshStats ModelObject::get_object_stl_stats() const
 {
     if (this->volumes.size() == 1)
         return this->volumes[0]->mesh().stats();
 
-    stl_stats full_stats;
+    TriangleMeshStats full_stats;
     full_stats.volume = 0.f;
 
     // fill full_stats from all objet's meshes
     for (ModelVolume* volume : this->volumes)
     {
-        const stl_stats& stats = volume->mesh().stats();
+        const TriangleMeshStats& stats = volume->mesh().stats();
 
         // initialize full_stats (for repaired errors)
         full_stats.degenerate_facets    += stats.degenerate_facets;
@@ -1660,7 +1637,7 @@ int ModelObject::get_mesh_errors_count(const int vol_idx /*= -1*/) const
     if (vol_idx >= 0)
         return this->volumes[vol_idx]->get_mesh_errors_count();
 
-    const stl_stats& stats = get_object_stl_stats();
+    const TriangleMeshStats& stats = get_object_stl_stats();
 
     return  stats.degenerate_facets + stats.edges_fixed     + stats.facets_removed +
             stats.facets_added      + stats.facets_reversed + stats.backwards_edges;
@@ -1727,11 +1704,12 @@ void ModelVolume::center_geometry_after_creation(bool update_source_offset)
 void ModelVolume::calculate_convex_hull()
 {
     m_convex_hull = std::make_shared<TriangleMesh>(this->mesh().convex_hull_3d());
+    assert(m_convex_hull.get());
 }
 
 int ModelVolume::get_mesh_errors_count() const
 {
-    const stl_stats &stats = this->mesh().stats();
+    const TriangleMeshStats &stats = this->mesh().stats();
 
     return  stats.degenerate_facets + stats.edges_fixed     + stats.facets_removed +
             stats.facets_added      + stats.facets_reversed + stats.backwards_edges;
@@ -1796,7 +1774,6 @@ size_t ModelVolume::split(unsigned int max_extruders)
     Vec3d offset = this->get_offset();
 
     for (TriangleMesh *mesh : meshptrs) {
-        mesh->repair();
         if (mesh->empty())
             // Repair may have removed unconnected triangles, thus emptying the mesh.
             continue;
@@ -1888,7 +1865,7 @@ void ModelVolume::mirror(Axis axis)
 }
 
 // This method could only be called before the meshes of this ModelVolumes are not shared!
-void ModelVolume::scale_geometry_after_creation(const Vec3d& versor)
+void ModelVolume::scale_geometry_after_creation(const Vec3f& versor)
 {
 	const_cast<TriangleMesh*>(m_mesh.get())->scale(versor);
 	const_cast<TriangleMesh*>(m_convex_hull.get())->scale(versor);
@@ -1921,8 +1898,7 @@ void ModelVolume::transform_this_mesh(const Matrix3d &matrix, bool fix_left_hand
 void ModelVolume::convert_from_imperial_units()
 {
     assert(! this->source.is_converted_from_meters);
-    double in_to_mm = 25.4;
-    this->scale_geometry_after_creation(Vec3d(in_to_mm, in_to_mm, in_to_mm));
+    this->scale_geometry_after_creation(25.4f);
     this->set_offset(Vec3d(0, 0, 0));
     this->source.is_converted_from_inches = true;
 }
@@ -1930,8 +1906,7 @@ void ModelVolume::convert_from_imperial_units()
 void ModelVolume::convert_from_meters()
 {
     assert(! this->source.is_converted_from_inches);
-    double m_to_mm = 1000;
-    this->scale_geometry_after_creation(Vec3d(m_to_mm, m_to_mm, m_to_mm));
+    this->scale_geometry_after_creation(1000.f);
     this->set_offset(Vec3d(0, 0, 0));
     this->source.is_converted_from_meters = true;
 }

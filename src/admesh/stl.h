@@ -135,13 +135,11 @@ struct stl_file {
 	std::vector<stl_facet>     		facet_start;
 	std::vector<stl_neighbors> 		neighbors_start;
 	// Statistics
-	stl_stats     					      stats;
+	stl_stats     					stats;
 };
 
 struct indexed_triangle_set
 {
-	indexed_triangle_set() {}
-
 	void clear() { indices.clear(); vertices.clear(); }
 
 	size_t memsize() const {
@@ -149,9 +147,7 @@ struct indexed_triangle_set
 	}
 
 	std::vector<stl_triangle_vertex_indices> 	indices;
-    std::vector<stl_vertex>       				    vertices;
-	//FIXME add normals once we get rid of the stl_file from TriangleMesh completely.
-	//std::vector<stl_normal> 					      normals
+    std::vector<stl_vertex>       				vertices;
 
     bool empty() const { return indices.empty() || vertices.empty(); }
 };

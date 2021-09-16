@@ -273,8 +273,6 @@ void HollowedMesh::on_update()
                     const indexed_triangle_set &interior = print_object->hollowed_interior_mesh();
                     if (!interior.empty()) {
                         m_hollowed_interior_transformed = std::make_unique<TriangleMesh>(interior);
-                        m_hollowed_interior_transformed->repaired = false;
-                        m_hollowed_interior_transformed->repair(true);
                         m_hollowed_interior_transformed->transform(trafo_inv);
                     }
                 }
