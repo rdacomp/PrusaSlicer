@@ -1720,7 +1720,6 @@ struct Plater::priv
 #endif // ENABLE_RELOAD_FROM_DISK_REPLACE_FILE
     void replace_with_stl();
     void reload_all_from_disk();
-    void fix_through_netfabb(const int obj_idx, const int vol_idx = -1);
     void create_simplify_notification(const std::vector<size_t>& obj_ids);
     void set_current_panel(wxPanel* panel);
 
@@ -3660,27 +3659,6 @@ void Plater::priv::reload_all_from_disk()
     }
 }
 
-void Plater::priv::fix_through_netfabb(const int obj_idx, const int vol_idx/* = -1*/)
-{
-    if (obj_idx < 0)
-        return;
-
-    // Do not fix anything when a gizmo is open. There might be issues with updates
-    // and what is worse, the snapshot time would refer to the internal stack.
-    if (! q->canvas3D()->get_gizmos_manager().check_gizmos_closed_except(GLGizmosManager::Undefined))
-        return;
-
-    // size_t snapshot_time = undo_redo_stack().active_snapshot_time();
-    Plater::TakeSnapshot snapshot(q, _L("Fix through NetFabb"));
-
-    q->clear_before_change_mesh(obj_idx);
-    ModelObject* mo = model.objects[obj_idx];
-    fix_model_by_win10_sdk_gui(*mo, vol_idx);
-    q->changed_mesh(obj_idx);
-    // workaround to fix the issue, when PrusaSlicer lose a focus after model fixing
-    q->SetFocus();
-}
-
 void Plater::priv::create_simplify_notification(const std::vector<size_t>& obj_ids) {
     const uint32_t triangles_to_suggest_simplify = 1000000;
 
@@ -4164,7 +4142,8 @@ void Plater::priv::on_right_click(RBtnEvent& evt)
             const bool is_some_full_instances = get_selection().is_single_full_instance() || 
                                                 get_selection().is_single_full_object() || 
                                                 get_selection().is_multiple_full_instance();
-            menu = is_some_full_instances ? menus.object_menu() : menus.part_menu();
+            menu = is_some_full_instances               ? menus.object_menu() : 
+                   get_selection().is_single_volume()   ? menus.part_menu()   : menus.multi_selection_menu();
         }
     }
 
@@ -4517,11 +4496,22 @@ bool Plater::priv::can_delete_all() const
 
 bool Plater::priv::can_fix_through_netfabb() const
 {
-    int obj_idx = get_selected_object_idx();
-    if (obj_idx < 0)
-        return false;
+    std::vector<int> obj_idxs, vol_idxs;
+    sidebar->obj_list()->get_selection_indexes(obj_idxs, vol_idxs);
 
-    return model.objects[obj_idx]->get_mesh_errors_count() > 0;
+    if (vol_idxs.empty()) {
+        for (auto obj_idx : obj_idxs)
+            if (model.objects[obj_idx]->get_mesh_errors_count() > 0)
+                return true;
+        return false;
+    }
+
+    int obj_idx = obj_idxs.front();
+    for (auto vol_idx : vol_idxs)
+        if (model.objects[obj_idx]->get_mesh_errors_count(vol_idx) > 0)
+            return true;
+
+    return false;
 }
 
 
@@ -6226,7 +6216,6 @@ std::vector<std::string> Plater::get_colors_for_color_print(const GCodeProcessor
     std::vector<std::string> colors = get_extruder_colors_from_plater_config(result);
     colors.reserve(colors.size() + p->model.custom_gcode_per_print_z.gcodes.size());
 
-#if ENABLE_FIX_IMPORTING_COLOR_PRINT_VIEW_INTO_GCODEVIEWER
     if (wxGetApp().is_gcode_viewer() && result != nullptr) {
         for (const CustomGCode::Item& code : result->custom_gcode_per_print_z) {
             if (code.type == CustomGCode::ColorChange)
@@ -6234,14 +6223,11 @@ std::vector<std::string> Plater::get_colors_for_color_print(const GCodeProcessor
         }
     }
     else {
-#endif // ENABLE_FIX_IMPORTING_COLOR_PRINT_VIEW_INTO_GCODEVIEWER
         for (const CustomGCode::Item& code : p->model.custom_gcode_per_print_z.gcodes) {
             if (code.type == CustomGCode::ColorChange)
                 colors.emplace_back(code.color);
         }
-#if ENABLE_FIX_IMPORTING_COLOR_PRINT_VIEW_INTO_GCODEVIEWER
     }
-#endif // ENABLE_FIX_IMPORTING_COLOR_PRINT_VIEW_INTO_GCODEVIEWER
 
     return colors;
 }
@@ -6465,7 +6451,6 @@ void Plater::suppress_background_process(const bool stop_background_process)
     this->p->suppressed_backround_processing_update = true;
 }
 
-void Plater::fix_through_netfabb(const int obj_idx, const int vol_idx/* = -1*/) { p->fix_through_netfabb(obj_idx, vol_idx); }
 void Plater::mirror(Axis axis)      { p->mirror(axis); }
 void Plater::split_object()         { p->split_object(); }
 void Plater::split_volume()         { p->split_volume(); }

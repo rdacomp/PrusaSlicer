@@ -6,13 +6,13 @@
 #include <vector>
 #include <string>
 
+struct indexed_triangle_set;
+
 namespace Slic3r {
 
 class TriangleMesh;
-#if ENABLE_SINKING_CONTOURS
 class Polygon;
 using Polygons = std::vector<Polygon>;
-#endif // ENABLE_SINKING_CONTOURS
 
 namespace GUI {
 
@@ -72,9 +72,7 @@ namespace GUI {
         void init_from(const InitializationData& data);
         void init_from(const indexed_triangle_set& its, const BoundingBoxf3& bbox);
         void init_from(const indexed_triangle_set& its);
-#if ENABLE_SINKING_CONTOURS
         void init_from(const Polygons& polygons, float z);
-#endif // ENABLE_SINKING_CONTOURS
         bool init_from_file(const std::string& filename);
 
         // if entity_id == -1 set the color of all entities
