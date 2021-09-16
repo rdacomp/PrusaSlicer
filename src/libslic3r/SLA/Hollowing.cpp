@@ -554,6 +554,7 @@ void remove_inside_triangles(TriangleMesh &mesh, const Interior &interior,
     new_faces = {};
 
     mesh = TriangleMesh{mesh.its};
+    //FIXME do we want to repair the mesh? Are there duplicate vertices or flipped triangles?
 }
 
 }} // namespace Slic3r::sla

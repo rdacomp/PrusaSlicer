@@ -298,7 +298,6 @@ void check_validity(const TriangleMesh &input_mesh, int flags)
     }
     
     if (flags & ASSUME_MANIFOLD) {
-        mesh.require_shared_vertices();
         if (!mesh.is_manifold()) mesh.WriteOBJFile("non_manifold.obj");
         REQUIRE(mesh.is_manifold());
     }
