@@ -751,7 +751,6 @@ int GLVolumeCollection::load_wipe_tower_preview(
     TriangleMesh brim_mesh = make_cube(width + 2.f * brim_width, depth + 2.f * brim_width, 0.2f);
     brim_mesh.translate(-brim_width, -brim_width, 0.f);
     mesh.merge(brim_mesh);
-    mesh.repair();
 
     volumes.emplace_back(new GLVolume(color));
     GLVolume& v = *volumes.back();
