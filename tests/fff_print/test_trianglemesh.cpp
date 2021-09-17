@@ -236,10 +236,10 @@ SCENARIO( "TriangleMesh: split functionality.") {
     GIVEN( "A 20mm cube with one corner on the origin") {
 		auto cube = make_cube();
         WHEN( "The mesh is split into its component parts.") {
-            std::vector<TriangleMesh*> meshes = cube.split();
+            std::vector<TriangleMesh> meshes = cube.split();
             THEN(" The bounding box statistics are propagated to the split copies") {
                 REQUIRE(meshes.size() == 1);
-                REQUIRE((meshes.at(0)->bounding_box() == cube.bounding_box()));
+                REQUIRE((meshes.front().bounding_box() == cube.bounding_box()));
             }
         }
     }
@@ -252,7 +252,7 @@ SCENARIO( "TriangleMesh: split functionality.") {
             THEN( "Number of faces is 2x the source.") {
                 REQUIRE(cube.facets_count() == 2 * cube2.facets_count());
             }
-            std::vector<TriangleMesh*> meshes = cube.split();
+            std::vector<TriangleMesh> meshes = cube.split();
             THEN( "Two meshes are in the output vector.") {
                 REQUIRE(meshes.size() == 2);
             }

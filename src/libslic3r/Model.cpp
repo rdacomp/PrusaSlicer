@@ -1329,22 +1329,22 @@ void ModelObject::split(ModelObjectPtrs* new_objects)
         if (volume->type() != ModelVolumeType::MODEL_PART)
             continue;
 
-        TriangleMeshPtrs meshptrs = volume->mesh().split();
+        std::vector<TriangleMesh> meshes = volume->mesh().split();
         size_t counter = 1;
-        for (TriangleMesh* mesh : meshptrs) {
-
+        for (TriangleMesh &mesh : meshes) {
             // FIXME: crashes if not satisfied
-            if (mesh->facets_count() < 3) continue;
+            if (mesh.facets_count() < 3)
+                continue;
 
             // XXX: this seems to be the only real usage of m_model, maybe refactor this so that it's not needed?
             ModelObject* new_object = m_model->add_object();
-            if (meshptrs.size() == 1) {
+            if (meshes.size() == 1) {
                 new_object->name = volume->name;
                 // Don't copy the config's ID.
                 new_object->config.assign_config(this->config.size() > 0 ? this->config : volume->config);
             }
             else {
-                new_object->name = this->name + (meshptrs.size() > 1 ? "_" + std::to_string(counter++) : "");
+                new_object->name = this->name + (meshes.size() > 1 ? "_" + std::to_string(counter++) : "");
                 // Don't copy the config's ID.
                 new_object->config.assign_config(this->config);
             }
@@ -1353,7 +1353,7 @@ void ModelObject::split(ModelObjectPtrs* new_objects)
             new_object->instances.reserve(this->instances.size());
             for (const ModelInstance* model_instance : this->instances)
                 new_object->add_instance(*model_instance);
-            ModelVolume* new_vol = new_object->add_volume(*volume, std::move(*mesh));
+            ModelVolume* new_vol = new_object->add_volume(*volume, std::move(mesh));
 
             for (ModelInstance* model_instance : new_object->instances)
             {
@@ -1365,7 +1365,6 @@ void ModelObject::split(ModelObjectPtrs* new_objects)
             // reset the source to disable reload from disk
             new_vol->source = ModelVolume::Source();
             new_objects->emplace_back(new_object);
-            delete mesh;
         }
     }
 }
@@ -1561,7 +1560,10 @@ void ModelObject::print_info() const
     cout << "max_y = " << bb.max(1) << endl;
     cout << "max_z = " << bb.max(2) << endl;
     cout << "number_of_facets = " << mesh.facets_count() << endl;
-    cout << "manifold = "   << (mesh.stats().manifold ? "yes" : "no") << endl;
+
+    cout << "manifold = "   << (mesh.stats().manifold() ? "yes" : "no") << endl;
+    if (! mesh.stats().manifold())
+        cout << "open_edges = " << mesh.stats().open_edges << endl;
     
     if (mesh.stats().repaired()) {
         if (mesh.stats().degenerate_facets > 0)
@@ -1757,11 +1759,9 @@ std::string ModelVolume::type_to_string(const ModelVolumeType t)
 // This is useful to assign different materials to different volumes of an object.
 size_t ModelVolume::split(unsigned int max_extruders)
 {
-    TriangleMeshPtrs meshptrs = this->mesh().split();
-    if (meshptrs.size() <= 1) {
-        delete meshptrs.front();
+    std::vector<TriangleMesh> meshes = this->mesh().split();
+    if (meshes.size() <= 1)
         return 1;
-    }
 
     size_t idx = 0;
     size_t ivolume = std::find(this->object->volumes.begin(), this->object->volumes.end(), this) - this->object->volumes.begin();
@@ -1770,14 +1770,14 @@ size_t ModelVolume::split(unsigned int max_extruders)
     unsigned int extruder_counter = 0;
     Vec3d offset = this->get_offset();
 
-    for (TriangleMesh *mesh : meshptrs) {
-        if (mesh->empty())
+    for (TriangleMesh &mesh : meshes) {
+        if (mesh.empty())
             // Repair may have removed unconnected triangles, thus emptying the mesh.
             continue;
 
         if (idx == 0)
         {
-            this->set_mesh(std::move(*mesh));
+            this->set_mesh(std::move(mesh));
             this->calculate_convex_hull();
             // Assign a new unique ID, so that a new GLVolume will be generated.
             this->set_new_unique_id();
@@ -1785,7 +1785,7 @@ size_t ModelVolume::split(unsigned int max_extruders)
             this->source = ModelVolume::Source();
         }
         else
-            this->object->volumes.insert(this->object->volumes.begin() + (++ivolume), new ModelVolume(object, *this, std::move(*mesh)));
+            this->object->volumes.insert(this->object->volumes.begin() + (++ivolume), new ModelVolume(object, *this, std::move(mesh)));
 
         this->object->volumes[ivolume]->set_offset(Vec3d::Zero());
         this->object->volumes[ivolume]->center_geometry_after_creation();
@@ -1793,7 +1793,6 @@ size_t ModelVolume::split(unsigned int max_extruders)
         this->object->volumes[ivolume]->name = name + "_" + std::to_string(idx + 1);
         this->object->volumes[ivolume]->config.set("extruder", auto_extruder_id(max_extruders, extruder_counter));
         this->object->volumes[ivolume]->m_is_splittable = 0;
-        delete mesh;
         ++ idx;
     }
     

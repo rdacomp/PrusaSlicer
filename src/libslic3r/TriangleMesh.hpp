@@ -15,7 +15,6 @@ namespace Slic3r {
 
 class TriangleMesh;
 class TriangleMeshSlicer;
-typedef std::vector<TriangleMesh*> TriangleMeshPtrs;
 
 struct TriangleMeshStats {
     // Mesh metrics.
@@ -26,9 +25,10 @@ struct TriangleMeshStats {
     float         volume                    = -1.f;
     int           number_of_parts           = 0;
 
-    // Mesh errors, fixed and remaining.
-    // If we don't know, don't indicate non manifoldness.
-    bool          manifold                  = true;
+    // Mesh errors, remaining.
+    int           open_edges                = 0;
+
+    // Mesh errors, fixed.
     // How many edges were united by merging their end points with some other end points in epsilon neighborhood?
     int           edges_fixed               = 0;
     // How many degenerate faces were removed?
@@ -57,7 +57,7 @@ struct TriangleMeshStats {
         out.max                     = this->max.cwiseMax(rhs.max);
         out.size                    = out.max - out.min;
         out.number_of_parts         = this->number_of_parts     + rhs.number_of_parts;
-        out.manifold                = this->manifold            && rhs.manifold;
+        out.open_edges              = this->open_edges          + rhs.open_edges;
         out.volume                  = this->volume              + rhs.volume;
         out.edges_fixed             = this->edges_fixed         + rhs.edges_fixed;
         out.degenerate_facets       = this->degenerate_facets   + rhs.degenerate_facets;
@@ -68,10 +68,8 @@ struct TriangleMeshStats {
       }
     }
 
-    bool repaired() const
-    {
-        return degenerate_facets > 0 || edges_fixed > 0 || facets_removed > 0 || facets_reversed > 0 || backwards_edges > 0;
-    }
+    bool manifold() const { return open_edges == 0; }
+    bool repaired() const { return degenerate_facets > 0 || edges_fixed > 0 || facets_removed > 0 || facets_reversed > 0 || backwards_edges > 0; }
 };
 
 class TriangleMesh
@@ -107,7 +105,7 @@ public:
     void flip_triangles();
     void align_to_origin();
     void rotate(double angle, Point* center);
-    TriangleMeshPtrs split() const;
+    std::vector<TriangleMesh> split() const;
     void merge(const TriangleMesh &mesh);
     ExPolygons horizontal_projection() const;
     // 2D convex hull of a 3D mesh projected into the Z=0 plane.
@@ -202,8 +200,18 @@ bool its_store_triangle(const indexed_triangle_set &its, const char *obj_filenam
 bool its_store_triangles(const indexed_triangle_set &its, const char *obj_filename, const std::vector<size_t>& triangles);
 
 std::vector<indexed_triangle_set> its_split(const indexed_triangle_set &its);
+std::vector<indexed_triangle_set> its_split(const indexed_triangle_set &its, std::vector<Vec3i> &face_neighbors);
 
+// Number of disconnected patches (faces are connected if they share an edge, shared edge defined with 2 shared vertex indices).
+bool its_number_of_patches(const indexed_triangle_set &its);
+bool its_number_of_patches(const indexed_triangle_set &its, const std::vector<Vec3i> &face_neighbors);
+// Same as its_number_of_patches(its) > 1, but faster.
 bool its_is_splittable(const indexed_triangle_set &its);
+bool its_is_splittable(const indexed_triangle_set &its, const std::vector<Vec3i> &face_neighbors);
+
+// Calculate number of unconnected face edges. There should be no unconnected edge in a manifold mesh.
+size_t its_num_open_edges(const indexed_triangle_set &its);
+size_t its_num_open_edges(const std::vector<Vec3i> &face_neighbors);
 
 // Shrink the vectors of its.vertices and its.faces to a minimum size by reallocating the two vectors.
 void its_shrink_to_fit(indexed_triangle_set &its);

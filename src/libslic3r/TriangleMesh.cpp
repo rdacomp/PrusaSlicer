@@ -42,6 +42,10 @@ static void fill_initial_stats(const indexed_triangle_set &its, TriangleMeshStat
     out.number_of_facets    = its.indices.size();
     out.volume              = its_volume(its);
     update_bounding_box(its, out);
+
+    const std::vector<Vec3i> face_neighbors = its_face_neighbors(its);
+    out.number_of_parts = its_number_of_patches(its, face_neighbors);
+    out.open_edges      = its_num_open_edges(face_neighbors);
 }
 
 TriangleMesh::TriangleMesh(const std::vector<Vec3f> &vertices, const std::vector<Vec3i> &faces) : its { faces, vertices }
@@ -181,7 +185,12 @@ bool TriangleMesh::ReadSTLFile(const char* input_file, bool repair)
     m_stats.max                     = stl.stats.max;
     m_stats.size                    = stl.stats.size;
     m_stats.volume                  = stl.stats.volume;
-    m_stats.manifold                = stl.stats.connected_facets_3_edge == int(stl.stats.number_of_facets);
+
+    auto facets_w_1_bad_edge = stl.stats.connected_facets_2_edge - stl.stats.connected_facets_3_edge;
+    auto facets_w_2_bad_edge = stl.stats.connected_facets_1_edge - stl.stats.connected_facets_2_edge;
+    auto facets_w_3_bad_edge = stl.stats.number_of_facets - stl.stats.connected_facets_1_edge;
+    m_stats.open_edges              = facets_w_1_bad_edge + facets_w_2_bad_edge * 2 + facets_w_3_bad_edge * 3;
+
     m_stats.edges_fixed             = stl.stats.edges_fixed;
     m_stats.degenerate_facets       = stl.stats.degenerate_facets;
     m_stats.facets_removed          = stl.stats.facets_removed;
@@ -359,25 +368,20 @@ bool TriangleMesh::is_splittable() const
     return its_is_splittable(this->its);
 }
 
-/**
- * Splits a mesh into multiple meshes when possible.
- * 
- * @return A TriangleMeshPtrs with the newly created meshes.
- */
-TriangleMeshPtrs TriangleMesh::split() const
+std::vector<TriangleMesh> TriangleMesh::split() const
 {
-    struct MeshAdder {
-        TriangleMeshPtrs &meshes;
-        MeshAdder(TriangleMeshPtrs &ptrs): meshes{ptrs} {}
-        void operator=(const indexed_triangle_set &its)
-        {
-            meshes.emplace_back(new TriangleMesh(its));
-        }
-    };
+    std::vector<indexed_triangle_set> itss = its_split(this->its);
+    std::vector<TriangleMesh> out;
+    out.reserve(itss.size());
+    for (indexed_triangle_set &m : itss) {
+        // The TriangleMesh constructor shall fill in the mesh statistics including volume.
+        out.emplace_back(std::move(m));
+        if (TriangleMesh &triangle_mesh = out.back(); triangle_mesh.volume() < 0)
+            // Some source mesh parts may be incorrectly oriented. Correct them.
+            triangle_mesh.flip_triangles();
 
-    TriangleMeshPtrs meshes;
-    its_split(its, MeshAdder{meshes});
-    return meshes;
+    }
+    return out;
 }
 
 void TriangleMesh::merge(const TriangleMesh &mesh)
@@ -1110,9 +1114,39 @@ std::vector<indexed_triangle_set> its_split(const indexed_triangle_set &its)
     return its_split<>(its);
 }
 
+// Number of disconnected patches (faces are connected if they share an edge, shared edge defined with 2 shared vertex indices).
+bool its_number_of_patches(const indexed_triangle_set &its)
+{
+    return its_number_of_patches<>(its);
+}
+bool its_number_of_patches(const indexed_triangle_set &its, const std::vector<Vec3i> &face_neighbors)
+{
+    return its_number_of_patches<>(ItsNeighborsWrapper{ its, face_neighbors });
+}
+
+// Same as its_number_of_patches(its) > 1, but faster.
 bool its_is_splittable(const indexed_triangle_set &its)
 {
     return its_is_splittable<>(its);
+}
+bool its_is_splittable(const indexed_triangle_set &its, const std::vector<Vec3i> &face_neighbors)
+{
+    return its_is_splittable<>(ItsNeighborsWrapper{ its, face_neighbors });
+}
+
+size_t its_num_open_edges(const std::vector<Vec3i> &face_neighbors)
+{
+    size_t num_open_edges = 0;
+    for (Vec3i neighbors : face_neighbors)
+        for (int n : neighbors)
+            if (n < 0)
+                ++ num_open_edges;
+    return num_open_edges;
+}
+
+size_t its_num_open_edges(const indexed_triangle_set &its)
+{
+    return its_num_open_edges(its_face_neighbors(its));
 }
 
 void VertexFaceIndex::create(const indexed_triangle_set &its)
