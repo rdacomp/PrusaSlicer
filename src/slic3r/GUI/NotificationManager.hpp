@@ -626,8 +626,10 @@ private:
 		void render_minimize_button(ImGuiWrapper& imgui, const float win_pos_x, const float win_pos_y) override
 			{ m_minimize_b_visible = false; }
 		bool on_text_click() override;
+		void on_eject_click();
 		// local time of last hover for showing tooltip
 		long      m_hover_time { 0 };
+		bool	  m_eject_pending { false };
 	};
 
 	class UpdatedItemsInfoNotification : public PopNotification

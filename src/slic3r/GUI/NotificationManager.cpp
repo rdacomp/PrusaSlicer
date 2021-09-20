@@ -633,6 +633,10 @@ bool NotificationManager::PopNotification::update_state(bool paused, const int64
 //---------------ExportFinishedNotification-----------
 void NotificationManager::ExportFinishedNotification::count_spaces()
 {
+	if (m_eject_pending)
+	{
+		return PopNotification::count_spaces();
+	}
 	//determine line width 
 	m_line_height = ImGui::CalcTextSize("A").y;
 
@@ -650,7 +654,10 @@ void NotificationManager::ExportFinishedNotification::count_spaces()
 
 void NotificationManager::ExportFinishedNotification::render_text(ImGuiWrapper& imgui, const float win_size_x, const float win_size_y, const float win_pos_x, const float win_pos_y)
 {
-	
+	if (m_eject_pending)
+	{
+		return PopNotification::render_text(imgui, win_size_x, win_size_y, win_pos_x, win_pos_y);
+	}
 	float       x_offset = m_left_indentation;
 	std::string fulltext = m_text1 + m_hypertext; //+ m_text2;
 	// Lines are always at least two and m_multiline is always true for ExportFinishedNotification.
@@ -669,7 +676,7 @@ void NotificationManager::ExportFinishedNotification::render_text(ImGuiWrapper& 
 			ImGui::SetCursorPosY(starting_y + i * shift_y);
 			imgui.text(line.c_str());
 			//hyperlink text
-			if ( i == 0 )  {
+			if ( i == 0 && !m_eject_pending)  {
 				render_hypertext(imgui, x_offset + ImGui::CalcTextSize(line.c_str()).x + ImGui::CalcTextSize("   ").x, starting_y, _u8L("Open Folder."));
 			}
 		}
@@ -680,7 +687,7 @@ void NotificationManager::ExportFinishedNotification::render_text(ImGuiWrapper& 
 void NotificationManager::ExportFinishedNotification::render_close_button(ImGuiWrapper& imgui, const float win_size_x, const float win_size_y, const float win_pos_x, const float win_pos_y)
 {
 	PopNotification::render_close_button(imgui, win_size_x, win_size_y, win_pos_x, win_pos_y);
-	if(m_to_removable)
+	if(m_to_removable && ! m_eject_pending)
 		render_eject_button(imgui, win_size_x, win_size_y, win_pos_x, win_pos_y);
 }
 
@@ -725,7 +732,7 @@ void NotificationManager::ExportFinishedNotification::render_eject_button(ImGuiW
 		assert(m_evt_handler != nullptr);
 		if (m_evt_handler != nullptr)
 			wxPostEvent(m_evt_handler, EjectDriveNotificationClickedEvent(EVT_EJECT_DRIVE_NOTIFICAION_CLICKED));
-		close();
+		on_eject_click();
 	}
 
 	//invisible large button
@@ -736,7 +743,7 @@ void NotificationManager::ExportFinishedNotification::render_eject_button(ImGuiW
 		assert(m_evt_handler != nullptr);
 		if (m_evt_handler != nullptr)
 			wxPostEvent(m_evt_handler, EjectDriveNotificationClickedEvent(EVT_EJECT_DRIVE_NOTIFICAION_CLICKED));
-		close();
+		on_eject_click();
 	}
 	ImGui::PopStyleColor(5);
 }
@@ -745,6 +752,14 @@ bool NotificationManager::ExportFinishedNotification::on_text_click()
 	open_folder(m_export_dir_path);
 	return false;
 }
+void NotificationManager::ExportFinishedNotification::on_eject_click()
+{
+	NotificationData data{ get_data().type, get_data().level , 0, _utf8("Ejecting.") };
+	m_eject_pending = true;
+	m_multiline = false;
+	update(data);
+}
+
 //------ProgressBar----------------
 void NotificationManager::ProgressBarNotification::init()
 {
