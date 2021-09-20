@@ -7,6 +7,7 @@
 #include "Point.hpp"
 #include "Execution/ExecutionTBB.hpp"
 #include "Execution/ExecutionSeq.hpp"
+#include "Utils.hpp"
 
 #include <libqhullcpp/Qhull.h>
 #include <libqhullcpp/QhullFacetList.h>
@@ -452,23 +453,60 @@ TriangleMesh TriangleMesh::convex_hull_3d() const
     }
 
     // Let's collect results:
-    indexed_triangle_set its;
-    auto facet_list = qhull.facetList().toStdVector();
-    for (const orgQhull::QhullFacet& facet : facet_list)
-    {   // iterate through facets
-        orgQhull::QhullVertexSet vertices = facet.vertices();
-        for (int i = 0; i < 3; ++i)
-        {   // iterate through facet's vertices
-
-            orgQhull::QhullPoint p = vertices[i].point();
-            const auto* coords = p.coordinates();
-            its.vertices.emplace_back(float(coords[0]), float(coords[1]), float(coords[2]));
+    std::vector<Vec3f>  dst_vertices;
+    std::vector<Vec3i>  dst_facets;
+    // Map of QHull's vertex ID to our own vertex ID (pointing to dst_vertices).
+    std::vector<int>    map_dst_vertices;
+#ifndef NDEBUG
+    Vec3f               centroid = Vec3f::Zero();
+    for (auto pt : this->its.vertices)
+        centroid += pt;
+    centroid /= float(this->its.vertices.size());
+#endif // NDEBUG
+    for (const orgQhull::QhullFacet facet : qhull.facetList()) {
+        // Collect face vertices first, allocate unique vertices in dst_vertices based on QHull's vertex ID.
+        Vec3i  indices;
+        int    cnt = 0;
+        for (const orgQhull::QhullVertex vertex : facet.vertices()) {
+            int id = vertex.id();
+            assert(id >= 0);
+            if (id >= int(map_dst_vertices.size()))
+                map_dst_vertices.resize(next_highest_power_of_2(size_t(id + 1)), -1);
+            if (int i = map_dst_vertices[id]; i == -1) {
+                // Allocate a new vertex.
+                i = int(dst_vertices.size());
+                map_dst_vertices[id] = i;
+                orgQhull::QhullPoint pt(vertex.point());
+                dst_vertices.emplace_back(pt[0], pt[1], pt[2]);
+                indices[cnt] = i;
+            } else {
+                // Reuse existing vertex.
+                indices[cnt] = i;
+            }
+            if (cnt ++ == 3)
+                break;
         }
-        int size = int(its.vertices.size());
-        its.indices.emplace_back(size - 3, size - 2, size - 1);
+        assert(cnt == 3);
+        if (cnt == 3) {
+            // QHull sorts vertices of a face lexicographically by their IDs, not by face normals.
+            // Calculate face normal based on the order of vertices.
+            Vec3f n  = (dst_vertices[indices(1)] - dst_vertices[indices(0)]).cross(dst_vertices[indices(2)] - dst_vertices[indices(1)]);
+            auto *n2 = facet.getBaseT()->normal;
+            auto  d = n.x() * n2[0] + n.y() * n2[1] + n.z() * n2[2];
+#ifndef NDEBUG
+            Vec3f n3 = (dst_vertices[indices(0)] - centroid);
+            auto  d3 = n.dot(n3);
+            assert((d < 0.f) == (d3 < 0.f));
+#endif // NDEBUG
+            // Get the face normal from QHull.
+            if (d < 0.f)
+                // Fix face orientation.
+                std::swap(indices[1], indices[2]);
+            dst_facets.emplace_back(indices);
+        }
     }
 
-    return TriangleMesh { std::move(its) };
+    return TriangleMesh { std::move(dst_vertices), std::move(dst_facets) };
 }
 
 std::vector<ExPolygons> TriangleMesh::slice(const std::vector<double> &z) const
