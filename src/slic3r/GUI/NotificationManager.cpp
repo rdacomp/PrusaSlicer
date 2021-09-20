@@ -593,7 +593,7 @@ bool NotificationManager::PopNotification::update_state(bool paused, const int64
 		m_state = EState::Unknown;
 		init();
 	// Timers when not fading
-	} else if (m_state != EState::NotFading && m_state != EState::FadingOut && get_duration() != 0 && !paused) {
+	} else if (m_state != EState::NotFading && m_state != EState::FadingOut && m_state != EState::ClosePending && m_state != EState::Finished && get_duration() != 0 && !paused) {
 		int64_t up_time = now - m_notification_start;
 		if (up_time >= get_duration() * 1000) {
 			m_state					= EState::FadingOut;
@@ -1173,7 +1173,7 @@ void NotificationManager::SlicingProgressNotification::set_status_text(const std
 	{
 		NotificationData data{ NotificationType::SlicingProgress, NotificationLevel::ProgressBarNotificationLevel, 0,  _u8L("Slicing finished."), m_is_fff ? _u8L("Export G-Code.") : _u8L("Export.") };
 		update(data);
-		m_state = EState::Shown;
+		m_state = m_sidebar_collapsed ? EState::NotFading : EState::ClosePending;
 	}
 		break;
 	default:
@@ -1193,7 +1193,7 @@ void NotificationManager::SlicingProgressNotification::set_sidebar_collapsed(boo
 {
 	m_sidebar_collapsed = collapsed;
 	if (m_sp_state == SlicingProgressState::SP_COMPLETED)
-		m_state = EState::Shown;
+		m_state = m_sidebar_collapsed ? EState::NotFading : EState::ClosePending;
 }
 
 void NotificationManager::SlicingProgressNotification::on_cancel_button()
@@ -1207,9 +1207,9 @@ void NotificationManager::SlicingProgressNotification::on_cancel_button()
 int NotificationManager::SlicingProgressNotification::get_duration()
 {
 	if (m_sp_state == SlicingProgressState::SP_CANCELLED)
-		return 10;
+		return 1;
 	else if (m_sp_state == SlicingProgressState::SP_COMPLETED && !m_sidebar_collapsed)
-		return 5;
+		return 1;
 	else
 		return 0;
 }
@@ -1383,7 +1383,7 @@ void NotificationManager::ProgressIndicatorNotification::init()
 		m_state = EState::NotFading;
 		break;
 	case Slic3r::GUI::NotificationManager::ProgressIndicatorNotification::ProgressIndicatorState::PIS_COMPLETED:
-		m_state = EState::Shown;
+		m_state = EState::ClosePending;
 		break;
 	default:
 		break;
@@ -1397,7 +1397,7 @@ void NotificationManager::ProgressIndicatorNotification::set_percentage(float pe
 		m_has_cancel_button = true;
 		m_progress_state = ProgressIndicatorState::PIS_PROGRESS_REQUEST;
 	} else if (percent >= 1.0f) {
-		m_state = EState::Shown;
+		m_state = EState::FadingOut;
 		m_progress_state = ProgressIndicatorState::PIS_COMPLETED;
 		m_has_cancel_button = false;
 	} else {
@@ -1808,7 +1808,7 @@ void NotificationManager::init_progress_indicator()
 			return;
 		}
 	}
-	NotificationData data{ NotificationType::ProgressIndicator, NotificationLevel::ProgressBarNotificationLevel, 2};
+	NotificationData data{ NotificationType::ProgressIndicator, NotificationLevel::ProgressBarNotificationLevel, 1};
 	auto notification = std::make_unique<NotificationManager::ProgressIndicatorNotification>(data, m_id_provider, m_evt_handler);
 	push_notification_data(std::move(notification), 0);
 }
