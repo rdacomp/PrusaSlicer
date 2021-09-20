@@ -44,7 +44,6 @@ private:
 
     void render_points(const Selection& selection, bool picking = false) const;
     void hollow_mesh(bool postpone_error_messages = false);
-    bool unsaved_changes() const;
 
     ObjectID m_old_mo_id = -1;
 

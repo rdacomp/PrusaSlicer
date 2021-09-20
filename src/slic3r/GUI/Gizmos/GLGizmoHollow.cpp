@@ -523,9 +523,16 @@ RENDER_AGAIN:
     float window_width = minimal_slider_width + std::max({settings_sliders_left, clipping_slider_left, diameter_slider_left});
     window_width = std::max(window_width, m_imgui->calc_text_size(m_desc.at("preview")).x);
 
+
+    // Disable when we have the drilled mesh, or when we don't have it with
+    // hollowing disabled and no holes.
+    bool has_drilled_mesh = (m_c->hollowed_mesh() && m_c->hollowed_mesh()->get_hollowed_mesh());
+    bool has_holes = ! m_c->selection_info()->model_object()->sla_drain_holes.empty();
+    bool holes_match = has_drilled_mesh && m_c->hollowed_mesh()->get_drainholes() == m_c->selection_info()->model_object()->sla_drain_holes;
+    m_imgui->disabled_begin((has_drilled_mesh && holes_match) || (! m_enable_hollowing && ! has_holes));
     if (m_imgui->button(m_desc["preview"]))
         hollow_mesh();
-    
+    m_imgui->disabled_end();
     bool config_changed = false;
 
     ImGui::Separator();
