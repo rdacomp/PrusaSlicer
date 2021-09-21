@@ -543,8 +543,12 @@ private:
 											const float win_size_x, const float win_size_y,
 											const float win_pos_x, const float win_pos_y) override;
 		void		render_close_button(ImGuiWrapper& imgui,
-									const float win_size_x, const float win_size_y,
-									const float win_pos_x, const float win_pos_y) override;
+										const float win_size_x, const float win_size_y,
+										const float win_pos_x, const float win_pos_y) override;
+		void		render_hypertext(ImGuiWrapper& imgui,
+										const float text_x, const float text_y,
+										const std::string text,
+										bool more = false) override ;
 		void       on_cancel_button();
 		int		   get_duration() override;
 		// if returns false, process was already canceled
