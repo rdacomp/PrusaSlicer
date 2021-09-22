@@ -189,6 +189,7 @@ public:
 	void upload_job_notification_show_error(int id, const std::string& filename, const std::string& host);
 	// slicing progress
 	void init_slicing_progress_notification(std::function<bool()> cancel_callback);
+	void set_slicing_progress_began();
 	// percentage negative = canceled, <0-1) = progress, 1 = completed 
 	void set_slicing_progress_percentage(const std::string& text, float percentage);
 	// hides slicing progress notification imidietly
@@ -492,6 +493,7 @@ private:
 		enum class SlicingProgressState
 		{
 			SP_NO_SLICING, // hidden
+			SP_BEGAN, // still hidden but allows to go to SP_PROGRESS state. This prevents showing progress after slicing was canceled.
 			SP_PROGRESS, // never fades outs, no close button, has cancel button
 			SP_CANCELLED, // fades after 10 seconds, simple message
 			SP_COMPLETED // Has export hyperlink and print info, fades after 20 sec if sidebar is shown, otherwise no fade out

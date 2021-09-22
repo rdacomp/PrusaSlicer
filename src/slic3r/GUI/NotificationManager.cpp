@@ -1113,20 +1113,27 @@ void NotificationManager::SlicingProgressNotification::set_progress_state(Notifi
 	switch (state)
 	{
 	case Slic3r::GUI::NotificationManager::SlicingProgressNotification::SlicingProgressState::SP_NO_SLICING:
+	case Slic3r::GUI::NotificationManager::SlicingProgressNotification::SlicingProgressState::SP_BEGAN:
 		m_state = EState::Hidden;
 		set_percentage(-1);
 		m_has_print_info = false;
 		set_export_possible(false);
+		m_sp_state = state;
 		break;
 	case Slic3r::GUI::NotificationManager::SlicingProgressNotification::SlicingProgressState::SP_PROGRESS:
-		set_percentage(percent);
-		m_has_cancel_button = true;
+		if (m_sp_state == SlicingProgressState::SP_BEGAN || m_sp_state ==  SlicingProgressState::SP_PROGRESS)
+		{
+			set_percentage(percent);
+			m_has_cancel_button = true;
+			m_sp_state = state;
+		}
 		break;
 	case Slic3r::GUI::NotificationManager::SlicingProgressNotification::SlicingProgressState::SP_CANCELLED:
 		set_percentage(-1);
 		m_has_cancel_button = false;
 		m_has_print_info = false;
 		set_export_possible(false);
+		m_sp_state = state;
 		break;
 	case Slic3r::GUI::NotificationManager::SlicingProgressNotification::SlicingProgressState::SP_COMPLETED:
 		set_percentage(1);
@@ -1134,11 +1141,12 @@ void NotificationManager::SlicingProgressNotification::set_progress_state(Notifi
 		m_has_print_info = false;
 		// m_export_possible is important only for PROGRESS state, thus we can reset it here
 		set_export_possible(false);
+		m_sp_state = state;
 		break;
 	default:
 		break;
 	}
-	m_sp_state = state;
+	
 }
 void NotificationManager::SlicingProgressNotification::set_status_text(const std::string& text)
 {
@@ -1714,6 +1722,19 @@ void NotificationManager::init_slicing_progress_notification(std::function<bool(
 						  }
 	};
 	push_notification_data(std::make_unique<NotificationManager::SlicingProgressNotification>(data, m_id_provider, m_evt_handler, cancel_callback), 0);
+}
+void NotificationManager::set_slicing_progress_began()
+{
+	for (std::unique_ptr<PopNotification> & notification : m_pop_notifications) {
+		if (notification->get_type() == NotificationType::SlicingProgress) {
+			SlicingProgressNotification* spn = dynamic_cast<SlicingProgressNotification*>(notification.get());
+			spn->set_progress_state(SlicingProgressNotification::SlicingProgressState::SP_BEGAN);
+			//wxGetApp().plater()->get_current_canvas3D()->schedule_extra_frame(0);
+			return;
+		}
+	}
+	// Slicing progress notification was not found - init it thru plater so correct cancel callback function is appended
+	wxGetApp().plater()->init_notification_manager();
 }
 void NotificationManager::set_slicing_progress_percentage(const std::string& text, float percentage)
 {
