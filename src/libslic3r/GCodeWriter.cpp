@@ -539,15 +539,15 @@ void GCodeFormatter::emit_axis(const char axis, const double v, size_t digits) {
     static constexpr const std::array<int, 7> pow_10{1, 10, 100, 1000, 10000, 100000, 1000000};
     *ptr_err.ptr++ = ' '; *ptr_err.ptr++ = axis;
 
-    char *base_ptr = this->ptr_err.ptr;
+    char *const base_ptr = this->ptr_err.ptr;
     auto  v_int    = int64_t(std::round(v * pow_10[digits]));
     // Older stdlib on macOS doesn't support std::from_chars at all, so it is used boost::spirit::karma::generate instead of it.
     // That is a little bit slower than std::to_chars but not much.
 #ifdef __APPLE__
     boost::spirit::karma::generate(this->ptr_err.ptr, boost::spirit::karma::int_generator<int64_t>(), v_int);
 #else
-    // this->buf_end minus 1 because we need space for adding the extra decimal point.
-    this->ptr_err = std::to_chars(this->ptr_err.ptr, this->buf_end - 1, v_int);
+    // this->buf_end minus 2 because we need space for adding the extra decimal point and possibly a leading zero
+    this->ptr_err = std::to_chars(this->ptr_err.ptr, this->buf_end - 2, v_int);
 #endif
     size_t writen_digits = (this->ptr_err.ptr - base_ptr) - (v_int < 0 ? 1 : 0);
     if (writen_digits < digits) {
@@ -576,6 +576,15 @@ void GCodeFormatter::emit_axis(const char axis, const double v, size_t digits) {
     if ((this->ptr_err.ptr + 1) == base_ptr || *this->ptr_err.ptr == '-')
         *(++this->ptr_err.ptr) = '0';
     this->ptr_err.ptr++;
+
+    // Prepend the number with a leading zero if needed.
+    char* const leading = (base_ptr + (v_int < 0));
+    if (*leading == '.') {
+        for (char* c = this->ptr_err.ptr; c>leading; --c)
+            *c = *(c-1);
+        *leading = '0';
+        ++this->ptr_err.ptr;
+    }
 }
 
 } // namespace Slic3r
