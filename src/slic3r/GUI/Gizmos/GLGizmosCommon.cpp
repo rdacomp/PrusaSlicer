@@ -17,6 +17,17 @@ namespace GUI {
 
 using namespace CommonGizmosDataObjects;
 
+
+
+// Return a single number that is likely to be different for each mesh.
+// Used to quickly decide whether we work on the same mesh as before.
+static double get_mesh_hash(const TriangleMesh& mesh)
+{
+    return mesh.stats().volume + mesh.its.vertices.size() + mesh.its.indices.size();
+}
+
+
+
 CommonGizmosDataPool::CommonGizmosDataPool(GLCanvas3D* canvas)
     : m_canvas(canvas)
 {
@@ -156,18 +167,18 @@ void InstancesHider::on_update()
         canvas->set_clipping_plane(1, ClippingPlane(-Vec3d::UnitZ(), std::numeric_limits<double>::max()));
 
 
-        std::vector<const TriangleMesh*> meshes;
+        std::vector<double> mesh_hashes;
         for (const ModelVolume* mv : mo->volumes)
-            meshes.push_back(&mv->mesh());
+            mesh_hashes.emplace_back(get_mesh_hash(mv->mesh()));
 
-        if (meshes != m_old_meshes) {
+        if (mesh_hashes != m_mesh_hashes) {
             m_clippers.clear();
-            for (const TriangleMesh* mesh : meshes) {
+            m_mesh_hashes = std::move(mesh_hashes);
+            for (const ModelVolume* mv : mo->volumes) {
                 m_clippers.emplace_back(new MeshClipper);
                 m_clippers.back()->set_plane(ClippingPlane(-Vec3d::UnitZ(), -SINKING_Z_THRESHOLD));
-                m_clippers.back()->set_mesh(*mesh);
+                m_clippers.back()->set_mesh(mv->mesh());
             }
-            m_old_meshes = meshes;
         }
     }
     else
@@ -178,7 +189,7 @@ void InstancesHider::on_release()
 {
     get_pool()->get_canvas()->toggle_model_objects_visibility(true);
     get_pool()->get_canvas()->set_use_clipping_planes(false);
-    m_old_meshes.clear();
+    m_mesh_hashes.clear();
     m_clippers.clear();
 }
 
@@ -332,18 +343,22 @@ void Raycaster::on_update()
         }
     }
 
-    if (meshes != m_old_meshes) {
+    std::vector<double> mesh_hashes;
+    for (const TriangleMesh* mesh : meshes)
+        mesh_hashes.push_back(get_mesh_hash(*mesh));
+
+    if (mesh_hashes != m_mesh_hashes) {
         m_raycasters.clear();
+        m_mesh_hashes = std::move(mesh_hashes);
         for (const TriangleMesh* mesh : meshes)
             m_raycasters.emplace_back(new MeshRaycaster(*mesh));
-        m_old_meshes = meshes;
     }
 }
 
 void Raycaster::on_release()
 {
     m_raycasters.clear();
-    m_old_meshes.clear();
+    m_mesh_hashes.clear();
 }
 
 std::vector<const MeshRaycaster*> Raycaster::raycasters() const
@@ -374,13 +389,17 @@ void ObjectClipper::on_update()
         for (const ModelVolume* mv : mo->volumes)
             meshes.push_back(&mv->mesh());
 
-    if (meshes != m_old_meshes) {
+    std::vector<double> mesh_hashes;
+    for (const TriangleMesh* mesh : meshes)
+        mesh_hashes.emplace_back(get_mesh_hash(*mesh));
+
+    if (mesh_hashes != m_mesh_hashes) {
         m_clippers.clear();
+        m_mesh_hashes = std::move(mesh_hashes);
         for (const TriangleMesh* mesh : meshes) {
             m_clippers.emplace_back(new MeshClipper);
             m_clippers.back()->set_mesh(*mesh);
         }
-        m_old_meshes = meshes;
 
         if (has_hollowed)
             m_clippers.front()->set_negative_mesh(*get_pool()->hollowed_mesh()->get_hollowed_interior());
@@ -394,7 +413,7 @@ void ObjectClipper::on_update()
 void ObjectClipper::on_release()
 {
     m_clippers.clear();
-    m_old_meshes.clear();
+    m_mesh_hashes.clear();
     m_clp.reset();
     m_clp_ratio = 0.;
 

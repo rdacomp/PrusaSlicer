@@ -48,6 +48,7 @@ namespace CommonGizmosDataObjects {
     class SupportsClipper;
 }
 
+
 // Some of the gizmos use the same data that need to be updated ocassionally.
 // It is also desirable that the data are not recalculated when the gizmos
 // are just switched, but on the other hand, they should be released when
@@ -188,7 +189,7 @@ protected:
 
 private:
     bool m_show_supports = false;
-    std::vector<const TriangleMesh*> m_old_meshes;
+    std::vector<double> m_mesh_hashes;
     std::vector<std::unique_ptr<MeshClipper>> m_clippers;
 };
 
@@ -241,7 +242,7 @@ protected:
 
 private:
     std::vector<std::unique_ptr<MeshRaycaster>> m_raycasters;
-    std::vector<const TriangleMesh*> m_old_meshes;
+    std::vector<double> m_mesh_hashes;
 };
 
 
@@ -266,7 +267,7 @@ protected:
     void on_release() override;
 
 private:
-    std::vector<const TriangleMesh*> m_old_meshes;
+    std::vector<double> m_mesh_hashes;
     std::vector<std::unique_ptr<MeshClipper>> m_clippers;
     std::unique_ptr<ClippingPlane> m_clp;
     double m_clp_ratio = 0.;
