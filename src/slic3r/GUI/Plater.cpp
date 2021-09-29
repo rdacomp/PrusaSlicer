@@ -2064,9 +2064,6 @@ Plater::priv::priv(Plater *q, MainFrame *main_frame)
 
     // Initialize the Undo / Redo stack with a first snapshot.
     this->take_snapshot(_L("New Project"), UndoRedo::SnapshotType::ProjectSeparator);
-    // Reset the "dirty project" flag.
-    m_undo_redo_stack_main.mark_current_as_saved();
-    dirty_state.update_from_undo_redo_stack(false);
 
     this->q->Bind(EVT_LOAD_MODEL_OTHER_INSTANCE, [this](LoadFromOtherInstanceEvent& evt) {
         BOOST_LOG_TRIVIAL(trace) << "Received load from other instance event.";
@@ -3804,9 +3801,7 @@ void Plater::priv::set_current_panel(wxPanel* panel)
         bool model_fits = view3D->get_canvas3d()->check_volumes_outside_state() != ModelInstancePVS_Partly_Outside;
         if (!model.objects.empty() && !export_in_progress && model_fits) {
 #if ENABLE_SEAMS_USING_MODELS
-            // the following call is needed to ensure that GCodeViewer buffers are initialized
-            // before calling reslice() when background processing is active
-            preview->SetFocusFromKbd();
+            preview->get_canvas3d()->init_gcode_viewer();
 #endif // ENABLE_SEAMS_USING_MODELS
             q->reslice();
         }
@@ -4698,11 +4693,14 @@ void Plater::priv::take_snapshot(const std::string& snapshot_name, const UndoRed
         model.wipe_tower.rotation = config.opt_float("wipe_tower_rotation_angle");
     }
     this->undo_redo_stack().take_snapshot(snapshot_name, model, view3D->get_canvas3d()->get_selection(), view3D->get_canvas3d()->get_gizmos_manager(), snapshot_data);
-    if (snapshot_type == UndoRedo::SnapshotType::LeavingGizmoWithAction)
+    if (snapshot_type == UndoRedo::SnapshotType::LeavingGizmoWithAction) {
         // Filter all but the last UndoRedo::SnapshotType::GizmoAction in a row between the last UndoRedo::SnapshotType::EnteringGizmo and UndoRedo::SnapshotType::LeavingGizmoWithAction.
         this->undo_redo_stack().reduce_noisy_snapshots();
+    } else if (snapshot_type == UndoRedo::SnapshotType::ProjectSeparator) {
+        // Reset the "dirty project" flag.
+        m_undo_redo_stack_main.mark_current_as_saved();
+    }
     this->undo_redo_stack().release_least_recently_used();
-
     dirty_state.update_from_undo_redo_stack(m_undo_redo_stack_main.project_modified());
 
     // Save the last active preset name of a particular printer technology.

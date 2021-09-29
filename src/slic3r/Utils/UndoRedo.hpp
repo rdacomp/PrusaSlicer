@@ -74,7 +74,9 @@ struct Snapshot
 	
 	std::string 		name;
 	size_t 				timestamp;
+	// ObjectID of the Model instance, the root of the serialized object hierarchy.
 	size_t 				model_id;
+	// Some detail of the Undo / Redo snapshot.
 	SnapshotData  		snapshot_data;
 
 	bool		operator< (const Snapshot &rhs) const { return this->timestamp < rhs.timestamp; }
