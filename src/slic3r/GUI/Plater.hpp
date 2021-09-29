@@ -368,7 +368,11 @@ public:
     void init_notification_manager();
 
     void bring_instance_forward();
-    
+   
+#ifdef __APPLE__
+    void post_mac_notifiacation(const std::string& title, const std::string& message);
+#endif //__APPLE__
+
     // ROII wrapper for suppressing the Undo / Redo snapshot to be taken.
 	class SuppressSnapshots
 	{
