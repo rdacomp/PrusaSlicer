@@ -1112,7 +1112,7 @@ void GLGizmoSlaSupports::get_data_from_backend()
         if (po->model_object()->id() == mo->id()) {
             m_normal_cache.clear();
             const std::vector<sla::SupportPoint>& points = po->get_support_points();
-            auto mat = po->trafo().inverse().cast<float>();
+            auto mat = (po->trafo()/* * mo->volumes.front()->get_matrix()*/).inverse().cast<float>();
             for (unsigned int i=0; i<points.size();++i)
                 m_normal_cache.emplace_back(sla::SupportPoint(mat * points[i].pos, points[i].head_front_radius, points[i].is_new_island));
 

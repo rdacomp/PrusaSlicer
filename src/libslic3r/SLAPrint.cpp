@@ -132,8 +132,11 @@ Transform3d SLAPrint::sla_trafo(const ModelObject &model_object) const
     Vec3d corr = this->relative_correction();
 
     ModelInstance &model_instance = *model_object.instances.front();
-    Vec3d          offset         = model_instance.get_offset();
-    Vec3d          rotation       = model_instance.get_rotation();
+    const ModelVolume* mv = model_object.volumes.front();
+    const auto& tr = Geometry::Transformation(model_instance.get_matrix() * mv->get_matrix());
+
+    Vec3d          offset         = tr.get_offset();
+    Vec3d          rotation       = tr.get_rotation();
     offset(0) = 0.;
     offset(1) = 0.;
     rotation(2) = 0.;
@@ -146,10 +149,10 @@ Transform3d SLAPrint::sla_trafo(const ModelObject &model_object) const
     trafo.rotate(Eigen::AngleAxisd(rotation(2), Vec3d::UnitZ()));
     trafo.rotate(Eigen::AngleAxisd(rotation(1), Vec3d::UnitY()));
     trafo.rotate(Eigen::AngleAxisd(rotation(0), Vec3d::UnitX()));
-    trafo.scale(model_instance.get_scaling_factor());
-    trafo.scale(model_instance.get_mirror());
+    trafo.scale(tr.get_scaling_factor());
+    trafo.scale(tr.get_mirror());
 
-    if (model_instance.is_left_handed())
+    if (tr.is_left_handed())
         trafo = Eigen::Scaling(Vec3d(-1., 1., 1.)) * trafo;
 
     return trafo;
@@ -893,7 +896,7 @@ SLAPrintObject::SLAPrintObject(SLAPrint *print, ModelObject *model_object)
     : Inherited(print, model_object)
     , m_stepmask(slaposCount, true)
     , m_transformed_rmesh([this](TriangleMesh &obj) {
-        obj = m_model_object->raw_mesh();
+        obj = m_model_object->volumes.front()->mesh();
         if (!obj.empty()) {
             obj.transform(m_trafo);
         }
@@ -1168,7 +1171,7 @@ sla::SupportPoints SLAPrintObject::transformed_support_points() const
     assert(m_model_object != nullptr);
     auto spts = m_model_object->sla_support_points;
 
-    auto tr = (trafo() * m_model_object->volumes.front()->get_transformation().get_matrix()).cast<float>();
+    auto tr = (trafo()/* * m_model_object->volumes.front()->get_transformation().get_matrix()*/).cast<float>();
 
     for (sla::SupportPoint& suppt : spts) {
         suppt.pos = tr * suppt.pos;
@@ -1181,7 +1184,7 @@ sla::DrainHoles SLAPrintObject::transformed_drainhole_points() const
 {
     assert(m_model_object != nullptr);
     auto pts = m_model_object->sla_drain_holes;
-    Transform3f tr = (trafo() * m_model_object->volumes.front()->get_matrix()).cast<float>();
+    Transform3f tr = (trafo()/* * m_model_object->volumes.front()->get_matrix()*/).cast<float>();
     Vec3f sc = Geometry::Transformation(tr.cast<double>()).get_scaling_factor().cast<float>();
     for (sla::DrainHole &hl : pts) {
         hl.pos = tr * hl.pos;
