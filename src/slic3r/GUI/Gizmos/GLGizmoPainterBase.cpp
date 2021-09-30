@@ -330,19 +330,21 @@ bool GLGizmoPainterBase::gizmo_event(SLAGizmoEventType action, const Vec2d& mous
         // In case current mouse position is far from the last one,
         // add several positions from between into the list, so there
         // are no gaps in the painted region.
+        Vec2d last_mouse_click = mouse_position;
         {
             if (m_last_mouse_click == Vec2d::Zero())
                 m_last_mouse_click = mouse_position;
-            // resolution describes minimal distance limit using circle radius
-            // as a unit (e.g., 2 would mean the patches will be touching).
-            double resolution = 0.7;
-            double diameter_px =  resolution  * m_cursor_radius * camera.get_zoom();
-            int patches_in_between = int(((mouse_position - m_last_mouse_click).norm() - diameter_px) / diameter_px);
-            if (patches_in_between > 0) {
-                Vec2d diff = (mouse_position - m_last_mouse_click)/(patches_in_between+1);
-                for (int i=1; i<=patches_in_between; ++i)
-                    mouse_positions.emplace_back(m_last_mouse_click + i*diff);
-            }
+//            // resolution describes minimal distance limit using circle radius
+//            // as a unit (e.g., 2 would mean the patches will be touching).
+//            double resolution = 0.7;
+//            double diameter_px =  resolution  * m_cursor_radius * camera.get_zoom();
+//            int patches_in_between = int(((mouse_position - m_last_mouse_click).norm() - diameter_px) / diameter_px);
+//            if (patches_in_between > 0) {
+//                Vec2d diff = (mouse_position - m_last_mouse_click)/(patches_in_between+1);
+//                for (int i=1; i<=patches_in_between; ++i)
+//                    mouse_positions.emplace_back(m_last_mouse_click + i*diff);
+//            }
+            last_mouse_click = m_last_mouse_click;
         }
         m_last_mouse_click = Vec2d::Zero(); // only actual hits should be saved
 
@@ -355,7 +357,12 @@ bool GLGizmoPainterBase::gizmo_event(SLAGizmoEventType action, const Vec2d& mous
 
         // Now "click" into all the prepared points and spill paint around them.
         for (const Vec2d& mp : mouse_positions) {
+            update_raycast_cache(last_mouse_click, camera, trafo_matrices);
+            RaycastResult m_rr2 = m_rr;
             update_raycast_cache(mp, camera, trafo_matrices);
+            if(m_rr2.mesh_id != m_rr.mesh_id) {
+                m_rr2.hit = m_rr.hit;
+            }
 
             bool dragging_while_painting = (action == SLAGizmoEventType::Dragging && m_button_down != Button::None);
 
@@ -390,7 +397,7 @@ bool GLGizmoPainterBase::gizmo_event(SLAGizmoEventType action, const Vec2d& mous
 
                 m_seed_fill_last_mesh_id = -1;
             } else if (m_tool_type == ToolType::BRUSH)
-                m_triangle_selectors[m_rr.mesh_id]->select_patch(m_rr.hit, int(m_rr.facet), camera_pos, m_cursor_radius, m_cursor_type,
+                m_triangle_selectors[m_rr.mesh_id]->select_patch(m_rr.hit, m_rr2.hit, int(m_rr.facet), camera_pos, m_cursor_radius, m_cursor_type,
                                                                  new_state, trafo_matrix, m_triangle_splitting_enabled);
 
             m_triangle_selectors[m_rr.mesh_id]->request_update_render_data();

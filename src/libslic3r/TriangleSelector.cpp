@@ -9,6 +9,169 @@
 
 namespace Slic3r {
 
+// Is a point (in mesh coords) inside a Capsule cursor?
+static bool is_mesh_point_inside_capsule(Vec3d point, const Vec3d &first_center, const Vec3d &second_center, const double radius)
+{
+    // First sphere test
+    if((first_center - point).norm() < radius + EPSILON)
+        return true;
+
+    // Second sphere test
+    if((second_center - point).norm() < radius + EPSILON)
+        return true;
+
+    // Cylinder test
+    Vec3d diff_p1 = point - first_center;
+    Vec3d diff_p2 = point - second_center;
+    Vec3d center_diff = second_center - first_center;
+    if (diff_p1.dot(center_diff) >= 0 && diff_p2.dot(center_diff) <= 0)
+        if((diff_p1.cross(center_diff).norm() / center_diff.norm()) <= radius + EPSILON)
+            return true;
+
+    return false;
+}
+
+static int line_sphere_intersection(const Vec3d &line_A, const Vec3d &line_B, const Vec3d &sphere_P, const double sphere_radius, Vec2d &intersection)
+{
+    Vec3d line_dir     = line_B - line_A;   // n
+    Vec3d origins_diff = line_A - sphere_P; // m
+
+    double n_dot_n = line_dir.dot(line_dir);
+    double m_dot_n = origins_diff.dot(line_dir);
+    double m_dot_m = origins_diff.dot(origins_diff);
+
+    double eq_A = n_dot_n;
+    double eq_B = m_dot_n;
+    double eq_C = m_dot_m - sphere_radius * sphere_radius;
+
+    double discr = eq_B * eq_B - eq_A * eq_C;
+
+    // A negative discriminant corresponds to ray missing sphere
+    if (discr < 0.0)
+        return 0;
+
+    double discr_sqrt = std::sqrt(discr);
+    double t1 = (-eq_B - discr_sqrt) / eq_A;
+    double t2 = (-eq_B + discr_sqrt) / eq_A;
+
+    int intersection_count = 0;
+    if (0.0 <= t1 && t1 <= 1.0)
+        intersection(intersection_count++) = t1;
+
+    if (0.0 <= t2 && t2 <= 1.0 && discr_sqrt > 0.0)
+        intersection(intersection_count++) = t2;
+
+    return intersection_count;
+}
+
+static int line_capsule_intersection(const Vec3d &line_A, const Vec3d &line_B, const Vec3d &capsule_P, const Vec3d &capsule_Q, const double capsule_radius, Vec2d &intersection) {
+    if (capsule_P == capsule_Q)
+        return line_sphere_intersection(line_A, line_B, capsule_P, capsule_radius, intersection);
+
+    // line_A is origin and capsule_P also;
+    Vec3d capsule_dir  = capsule_Q - capsule_P; // d
+    Vec3d origins_diff = line_A - capsule_P;    // m
+    Vec3d line_dir     = line_B - line_A;       // n
+
+    double m_dot_d = origins_diff.dot(capsule_dir);
+    double n_dot_d = line_dir.dot(capsule_dir);
+
+    double d_dot_d = capsule_dir.dot(capsule_dir);
+
+    double n_dot_n = line_dir.dot(line_dir);
+    double m_dot_n = origins_diff.dot(line_dir);
+    double m_dot_m = origins_diff.dot(origins_diff);
+
+    double eq_A = d_dot_d * n_dot_n - n_dot_d * n_dot_d;
+    double eq_B = d_dot_d * m_dot_n - n_dot_d * m_dot_d;
+    double eq_C = d_dot_d * (m_dot_m - capsule_radius * capsule_radius) - m_dot_d * m_dot_d;
+
+    auto hemisphere_P_intersection = [&m_dot_d, &n_dot_d, &line_A, &line_B, &capsule_P, &capsule_radius]() -> std::pair<int, Vec2d> {
+        Vec2d sphere_i           = {-1.0, -1.0};
+        int   sphere_i_count     = line_sphere_intersection(line_A, line_B, capsule_P, capsule_radius, sphere_i);
+        int   intersection_count = 0;
+        Vec2d intersection       = {-1.0, -1.0};
+
+        if (m_dot_d + sphere_i(0) * n_dot_d < 0.0f)
+            if (0.0f <= sphere_i(0) && sphere_i(0) <= 1.0f)
+                intersection(intersection_count++) = sphere_i(0);
+
+        if (m_dot_d + sphere_i(1) * n_dot_d < 0.0f)
+            if (0.0f <= sphere_i(1) && sphere_i(1) <= 1.0f)
+                intersection(intersection_count++) = sphere_i(1);
+
+        return {intersection_count, intersection};
+    };
+
+    auto hemisphere_Q_intersection = [&m_dot_d, &n_dot_d, &d_dot_d, &line_A, &line_B, &capsule_Q, &capsule_radius]() -> std::pair<int, Vec2d> {
+        Vec2d sphere_i           = {-1.0, -1.0};
+        int   sphere_i_count     = line_sphere_intersection(line_A, line_B, capsule_Q, capsule_radius, sphere_i);
+        int   intersection_count = 0;
+        Vec2d intersection       = {-1.0, -1.0};
+
+        if (m_dot_d + sphere_i(0) * n_dot_d > d_dot_d)
+            if (0.0f <= sphere_i(0) && sphere_i(0) <= 1.0f)
+                intersection(intersection_count++) = sphere_i(0);
+
+        if (m_dot_d + sphere_i(1) * n_dot_d > d_dot_d)
+            if (0.0f <= sphere_i(1) && sphere_i(1) <= 1.0f)
+                intersection(intersection_count++) = sphere_i(1);
+
+        return {intersection_count, intersection};
+    };
+
+    auto finite_cylinder_intersection = [&m_dot_d, &n_dot_d, &d_dot_d](const double t1, const double t2) -> std::pair<int, Vec2d> {
+        int   intersection_count = 0;
+        Vec2d intersection       = {-1.0, -1.0};
+
+        if (0.0f <= t1 && t1 <= 1.0f)
+            if (m_dot_d + t1 * n_dot_d >= 0.0f)
+                if (m_dot_d + t1 * n_dot_d <= d_dot_d)
+                    intersection(intersection_count++) = t1;
+
+        if (0.0f <= t2 && t2 <= 1.0f)
+            if (m_dot_d + t2 * n_dot_d >= 0.0f)
+                if (m_dot_d + t2 * n_dot_d <= d_dot_d)
+                    intersection(intersection_count++) = t2;
+
+        return {intersection_count, intersection};
+    };
+
+    int n = 0;
+    auto c1 = hemisphere_P_intersection();
+    auto c2 = hemisphere_Q_intersection();
+
+    double discr = eq_B * eq_B - eq_A * eq_C;
+    if(c1.first >= 1)
+        intersection(n++) = c1.second(0);
+
+    if(c1.first >= 2)
+        intersection(n++) = c1.second(1);
+
+    if(c2.first >= 1)
+        intersection(n++) = c2.second(0);
+
+    if(c2.first >= 2)
+        intersection(n++) = c2.second(1);
+
+    if (discr >= 0.0f) {
+        double discr_sqrt = std::sqrt(discr);
+
+        double t_1 = (-eq_B - discr_sqrt) / eq_A;
+        double t_2 = (-eq_B + discr_sqrt) / eq_A;
+
+        auto c3 = finite_cylinder_intersection(t_1, t_2);
+
+        if(c3.first >= 1)
+            intersection(n++) = c3.second(0);
+
+        if(c3.first >= 2)
+            intersection(n++) = c3.second(1);
+    }
+
+    return n;
+}
+
 static inline Vec3i root_neighbors(const TriangleMesh &mesh, int triangle_id)
 {
     Vec3i neighbors;
@@ -22,16 +185,21 @@ static inline Vec3i root_neighbors(const TriangleMesh &mesh, int triangle_id)
 #ifndef NDEBUG
 bool TriangleSelector::verify_triangle_midpoints(const Triangle &tr) const
 {
+    return true;
     for (int i = 0; i < 3; ++ i) {
         int v1   = tr.verts_idxs[i];
         int v2   = tr.verts_idxs[next_idx_modulo(i, 3)];
-        int vmid = this->triangle_midpoint(tr, v1, v2);
-        assert(vmid >= -1);
-        if (vmid != -1) {
-            Vec3f c1 = 0.5f * (m_vertices[v1].v + m_vertices[v2].v);
-            Vec3f c2 = m_vertices[vmid].v;
-            float d  = (c2 - c1).norm();
-            assert(std::abs(d) < EPSILON);
+        std::pair<int, float> vmid = this->triangle_midpoint(tr, v1, v2);
+        assert(vmid.first >= -1);
+        if (vmid.first != -1) {
+            float split_param = tr.division_params[prev_idx_modulo(i, 3)];
+            assert(split_param != -1.f);
+            Vec3f c1_0 = split_param * m_vertices[v1].v + (1.f - split_param) * m_vertices[v2].v;
+            Vec3f c1_1 = split_param * m_vertices[v2].v + (1.f - split_param) * m_vertices[v1].v;
+            Vec3f c2 = m_vertices[vmid.first].v;
+            float d_0 = (c2 - c1_0).norm();
+            float d_1 = (c2 - c1_1).norm();
+            assert(std::abs(d_0) < EPSILON || std::abs(d_1) < EPSILON);
         }
     }
     return true;
@@ -90,6 +258,13 @@ inline bool is_point_inside_triangle(const Vec3f &pt, const Vec3f &p1, const Vec
     return std::all_of(begin(barycentric_cords), end(barycentric_cords), [](float cord) { return 0.f <= cord && cord <= 1.0; });
 }
 
+bool TriangleSelector::is_point_inside_triangle(const Vec3f &pt, int facet_idx)
+{
+    assert(0 <= facet_idx && facet_idx < m_triangles.size());
+    std::array<int, 3> vertices = m_triangles[facet_idx].verts_idxs;
+    return ::Slic3r::is_point_inside_triangle(pt, m_vertices[vertices[0]].v, m_vertices[vertices[1]].v, m_vertices[vertices[2]].v);
+}
+
 int TriangleSelector::select_unsplit_triangle(const Vec3f &hit, int facet_idx, const Vec3i &neighbors) const
 {
     assert(facet_idx < int(m_triangles.size()));
@@ -98,7 +273,7 @@ int TriangleSelector::select_unsplit_triangle(const Vec3f &hit, int facet_idx, c
         return -1;
 
     if (!tr->is_split()) {
-        if (const std::array<int, 3> &t_vert = m_triangles[facet_idx].verts_idxs; is_point_inside_triangle(hit, m_vertices[t_vert[0]].v, m_vertices[t_vert[1]].v, m_vertices[t_vert[2]].v))
+        if (const std::array<int, 3> &t_vert = m_triangles[facet_idx].verts_idxs; ::Slic3r::is_point_inside_triangle(hit, m_vertices[t_vert[0]].v, m_vertices[t_vert[1]].v, m_vertices[t_vert[2]].v))
             return facet_idx;
 
         return -1;
@@ -115,7 +290,7 @@ int TriangleSelector::select_unsplit_triangle(const Vec3f &hit, int facet_idx, c
             // All children of this triangle were created by splitting a single source triangle of the original mesh.
 
             const std::array<int, 3> &t_vert = m_triangles[tr->children[i]].verts_idxs;
-            if (is_point_inside_triangle(hit, m_vertices[t_vert[0]].v, m_vertices[t_vert[1]].v, m_vertices[t_vert[2]].v))
+            if (::Slic3r::is_point_inside_triangle(hit, m_vertices[t_vert[0]].v, m_vertices[t_vert[1]].v, m_vertices[t_vert[2]].v))
                 return this->select_unsplit_triangle(hit, tr->children[i], this->child_neighbors(*tr, neighbors, i));
         }
     }
@@ -134,7 +309,80 @@ int TriangleSelector::select_unsplit_triangle(const Vec3f &hit, int facet_idx) c
     return this->select_unsplit_triangle(hit, facet_idx, neighbors);
 }
 
-void TriangleSelector::select_patch(const Vec3f& hit, int facet_start,
+void TriangleSelector::triangulate_tjoints_recursive(const int tr_idx, const Vec3i &neighbors) {
+    if (m_triangles[tr_idx].is_split()) {
+        for (int i = 0; i <= m_triangles[tr_idx].number_of_split_sides(); ++ i) {
+            this->triangulate_tjoints_recursive(m_triangles[tr_idx].children[i], this->child_neighbors(m_triangles[tr_idx], neighbors, i));
+        }
+    } else {
+        this->triangulate_tjoints(tr_idx, neighbors);
+    }
+}
+
+void TriangleSelector::triangulate_tjoints(const int tr_idx, const Vec3i &neighbors) {
+    assert(!m_triangles[tr_idx].is_split());
+    const Vec3i vertices = {m_triangles[tr_idx].verts_idxs[0], m_triangles[tr_idx].verts_idxs[1], m_triangles[tr_idx].verts_idxs[2]};
+    Vec3i midpoints(this->triangle_midpoint(neighbors(0), vertices(1), vertices(0)).first,
+                          this->triangle_midpoint(neighbors(1), vertices(2), vertices(1)).first,
+                          this->triangle_midpoint(neighbors(2), vertices(0), vertices(2)).first);
+    Vec3f midpoints_p(this->triangle_midpoint(neighbors(0), vertices(1), vertices(0)).second,
+                          this->triangle_midpoint(neighbors(1), vertices(2), vertices(1)).second,
+                          this->triangle_midpoint(neighbors(2), vertices(0), vertices(2)).second);
+
+    assert(midpoints(0) == -1 || midpoints(0) < m_vertices.size());
+    assert(midpoints(1) == -1 || midpoints(1) < m_vertices.size());
+    assert(midpoints(2) == -1 || midpoints(2) < m_vertices.size());
+    int splits = (midpoints(0) != -1) + (midpoints(1) != -1) + (midpoints(2) != -1);
+    switch (splits) {
+        case 0: {
+            break;
+        }
+        case 1: {
+            int midpoint_idx = midpoints(0) != -1 ? 0 : midpoints(1) != -1 ? 1 : 2;
+            EnforcerBlockerType tr_state = m_triangles[tr_idx].get_state();
+            assert(midpoints(midpoint_idx) != -1);
+            m_triangles[tr_idx].set_division(1, prev_idx_modulo(midpoint_idx, 3));
+            m_triangles[tr_idx].division_params = {-1.f, -1.f, -1.f};
+//            assert(midpoints_p(midpoint_idx) != -1.f);
+            m_triangles[tr_idx].division_params[prev_idx_modulo(midpoint_idx, 3)] = midpoints_p(midpoint_idx);
+            perform_split(tr_idx, neighbors, tr_state);
+            triangulate_tjoints_recursive(tr_idx, neighbors);
+            break;
+        }
+        case 2: {
+            int midpoint_idx = (midpoints(1) != -1 && midpoints(2) != -1) ? 0 : (midpoints(0) != -1 && midpoints(2) != -1) ? 1 : 2;
+            EnforcerBlockerType tr_state = m_triangles[tr_idx].get_state();
+            assert(midpoints(midpoint_idx) == -1);
+            assert(midpoints(prev_idx_modulo(midpoint_idx, 3)) != -1);
+            assert(midpoints(next_idx_modulo(midpoint_idx, 3)) != -1);
+            m_triangles[tr_idx].set_division(2, prev_idx_modulo(midpoint_idx, 3));
+//            m_triangles[tr_idx].division_params = {0.5f, 0.5f, 0.5f};
+            m_triangles[tr_idx].division_params = {-1.f, -1.f, -1.f};
+            m_triangles[tr_idx].division_params[midpoint_idx] = midpoints_p(midpoint_idx);
+            m_triangles[tr_idx].division_params[next_idx_modulo(midpoint_idx, 3)] = midpoints_p(next_idx_modulo(midpoint_idx, 3));
+//            BOOST_LOG_TRIVIAL(debug) << "TriangleSelector: 2 split";
+            perform_split(tr_idx, neighbors, tr_state);
+            triangulate_tjoints_recursive(tr_idx, neighbors);
+            break;
+        }
+        case 3: {
+            EnforcerBlockerType tr_state = m_triangles[tr_idx].get_state();
+            m_triangles[tr_idx].set_division(3, 0);
+//            m_triangles[tr_idx].division_params = {0.5f, 0.5f, 0.5f};
+            m_triangles[tr_idx].division_params = {midpoints_p(1), midpoints_p(2), midpoints_p(0)};
+            perform_split(tr_idx, neighbors, tr_state);
+            triangulate_tjoints_recursive(tr_idx, neighbors);
+            break;
+        }
+        default:
+            assert(false);
+            break;
+    }
+}
+
+void TriangleSelector::select_patch(const Vec3f& hit,
+                                    const Vec3f        &hit2,
+                                    int facet_start,
                                     const Vec3f& source, float radius,
                                     CursorType cursor_type, EnforcerBlockerType new_state,
                                     const Transform3d& trafo, bool triangle_splitting)
@@ -143,7 +391,7 @@ void TriangleSelector::select_patch(const Vec3f& hit, int facet_start,
 
     // Save current cursor center, squared radius and camera direction, so we don't
     // have to pass it around.
-    m_cursor = Cursor(hit, source, radius, cursor_type, trafo);
+    m_cursor = Cursor(hit, hit2, source, radius, cursor_type, trafo);
 
     // In case user changed cursor size since last time, update triangle edge limit.
     // It is necessary to compare the internal radius in m_cursor! radius is in
@@ -176,6 +424,10 @@ void TriangleSelector::select_patch(const Vec3f& hit, int facet_start,
         visited[facet] = true;
         ++facet_idx;
     }
+
+//    for (int tr_idx = 0; tr_idx < m_orig_size_indices; ++tr_idx)
+//        if(m_triangles[tr_idx].valid())
+//            this->triangulate_tjoints_recursive(tr_idx, root_neighbors(*m_mesh, tr_idx));
 }
 
 void TriangleSelector::seed_fill_select_triangles(const Vec3f &hit, int facet_start, float seed_fill_angle, bool force_reselection)
@@ -281,8 +533,8 @@ void TriangleSelector::append_touching_subtriangles(int itriangle, int vertexi, 
         assert(subtriangle_idx != -1);
         if (!m_triangles[subtriangle_idx].is_split())
             touching_subtriangles_out.emplace_back(subtriangle_idx);
-        else if (int midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj); midpoint != -1)
-            append_touching_subtriangles(subtriangle_idx, partition == Partition::First ? vertexi : midpoint, partition == Partition::First ? midpoint : vertexj, touching_subtriangles_out);
+        else if (std::pair<int, float> midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj); midpoint.first != -1)
+            append_touching_subtriangles(subtriangle_idx, partition == Partition::First ? vertexi : midpoint.first, partition == Partition::First ? midpoint.first : vertexj, touching_subtriangles_out);
         else
             append_touching_subtriangles(subtriangle_idx, vertexi, vertexj, touching_subtriangles_out);
     };
@@ -306,18 +558,18 @@ void TriangleSelector::append_touching_edges(int itriangle, int vertexi, int ver
         assert(subtriangle_idx != -1);
         if (!m_triangles[subtriangle_idx].is_split()) {
             if (!m_triangles[subtriangle_idx].is_selected_by_seed_fill()) {
-                int midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj);
-                if (partition == Partition::First && midpoint != -1) {
-                    touching_edges_out.emplace_back(vertexi, midpoint);
-                } else if (partition == Partition::First && midpoint == -1) {
+                std::pair<int, float> midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj);
+                if (partition == Partition::First && midpoint.first != -1) {
+                    touching_edges_out.emplace_back(vertexi, midpoint.first);
+                } else if (partition == Partition::First && midpoint.first == -1) {
                     touching_edges_out.emplace_back(vertexi, vertexj);
                 } else {
-                    assert(midpoint != -1 && partition == Partition::Second);
-                    touching_edges_out.emplace_back(midpoint, vertexj);
+                    assert(midpoint.first != -1 && partition == Partition::Second);
+                    touching_edges_out.emplace_back(midpoint.first, vertexj);
                 }
             }
-        } else if (int midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj); midpoint != -1)
-            append_touching_edges(subtriangle_idx, partition == Partition::First ? vertexi : midpoint, partition == Partition::First ? midpoint : vertexj,
+        } else if (std::pair<int, float> midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj); midpoint.first != -1)
+            append_touching_edges(subtriangle_idx, partition == Partition::First ? vertexi : midpoint.first, partition == Partition::First ? midpoint.first : vertexj,
                                   touching_edges_out);
         else
             append_touching_edges(subtriangle_idx, vertexi, vertexj, touching_edges_out);
@@ -508,11 +760,11 @@ std::pair<int, int> TriangleSelector::triangle_subtriangles(const Triangle &tr, 
 
 // Return existing midpoint of CCW oriented side (vertexi, vertexj).
 // If itriangle == -1 or if the side sharing (vertexi, vertexj) is not split, return -1.
-int TriangleSelector::triangle_midpoint(const Triangle &tr, int vertexi, int vertexj) const
+std::pair<int, float> TriangleSelector::triangle_midpoint(const Triangle &tr, int vertexi, int vertexj) const
 {
     if (tr.number_of_split_sides() == 0)
         // If this triangle is not split, then there is no upper / lower subtriangle sharing the edge.
-        return -1;
+        return {-1, -1.f};
 
     // Find the triangle edge.
     int edge = tr.verts_idxs[0] == vertexi ? 0 : tr.verts_idxs[1] == vertexi ? 1 : 2;
@@ -521,66 +773,69 @@ int TriangleSelector::triangle_midpoint(const Triangle &tr, int vertexi, int ver
 
     if (tr.number_of_split_sides() == 1) {
         return edge == next_idx_modulo(tr.special_side(), 3) ?
-            m_triangles[tr.children[0]].verts_idxs[2] :
+            std::make_pair(m_triangles[tr.children[0]].verts_idxs[2], tr.division_params[edge]) :
             this->triangle_midpoint(m_triangles[tr.children[edge == tr.special_side() ? 0 : 1]], vertexi, vertexj);
     } else if (tr.number_of_split_sides() == 2) {
         return edge == next_idx_modulo(tr.special_side(), 3) ?
                     this->triangle_midpoint(m_triangles[tr.children[2]], vertexi, vertexj) :
                edge == tr.special_side() ?
-                    m_triangles[tr.children[0]].verts_idxs[1] :
-                    m_triangles[tr.children[1]].verts_idxs[2];
+                    std::make_pair(m_triangles[tr.children[0]].verts_idxs[1], tr.division_params[edge]) :
+                    std::make_pair(m_triangles[tr.children[1]].verts_idxs[2], tr.division_params[edge]);
     } else {
         assert(tr.number_of_split_sides() == 3);
         assert(tr.special_side() == 0);
         return
-            (edge == 0) ? m_triangles[tr.children[0]].verts_idxs[1] :
-            (edge == 1) ? m_triangles[tr.children[1]].verts_idxs[2] :
-                          m_triangles[tr.children[2]].verts_idxs[2];
+            (edge == 0) ? std::make_pair(m_triangles[tr.children[0]].verts_idxs[1], tr.division_params[edge]) :
+            (edge == 1) ? std::make_pair(m_triangles[tr.children[1]].verts_idxs[2], tr.division_params[edge]) :
+                          std::make_pair(m_triangles[tr.children[2]].verts_idxs[2], tr.division_params[edge]);
     }
 }
 
 // Return existing midpoint of CCW oriented side (vertexi, vertexj).
 // If itriangle == -1 or if the side sharing (vertexi, vertexj) is not split, return -1.
-int TriangleSelector::triangle_midpoint(int itriangle, int vertexi, int vertexj) const
+std::pair<int, float> TriangleSelector::triangle_midpoint(int itriangle, int vertexi, int vertexj) const
 {
-    return itriangle == -1 ? -1 : this->triangle_midpoint(m_triangles[itriangle], vertexi, vertexj);
+    return itriangle == -1 ? std::make_pair(-1, -1.f) : this->triangle_midpoint(m_triangles[itriangle], vertexi, vertexj);
 }
 
-int TriangleSelector::triangle_midpoint_or_allocate(int itriangle, int vertexi, int vertexj)
+int TriangleSelector::triangle_midpoint_or_allocate(int itriangle, int vertexi, int vertexj, float split_param)
 {
-    int midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj);
-    if (midpoint == -1) {
-        Vec3f c = 0.5f * (m_vertices[vertexi].v + m_vertices[vertexj].v);
+    assert(0.f <= split_param && split_param <= 1.f);
+    std::pair<int, float> midpoint = this->triangle_midpoint(itriangle, vertexi, vertexj);
+    if (midpoint.first == -1) {
+        Vec3f c = split_param * m_vertices[vertexi].v + (1.f - split_param) * m_vertices[vertexj].v;
 #ifdef EXPENSIVE_DEBUG_CHECKS
-        // Verify that the vertex is really a new one.
-        auto it = std::find_if(m_vertices.begin(), m_vertices.end(), [c](const Vertex &v) {
-            return v.ref_cnt > 0 && (v.v - c).norm() < EPSILON; });
-        assert(it == m_vertices.end());
+//        // Verify that the vertex is really a new one.
+//        auto it = std::find_if(m_vertices.begin(), m_vertices.end(), [c](const Vertex &v) {
+//            return v.ref_cnt > 0 && (v.v - c).norm() < EPSILON; });
+//        assert(it == m_vertices.end());
 #endif // EXPENSIVE_DEBUG_CHECKS
         // Allocate a new vertex, possibly reusing the free list.
         if (m_free_vertices_head == -1) {
             // Allocate a new vertex.
-            midpoint = int(m_vertices.size());
+            midpoint.first = int(m_vertices.size());
             m_vertices.emplace_back(c);
         } else {
             // Reuse a vertex from the free list.
             assert(m_free_vertices_head >= -1 && m_free_vertices_head < int(m_vertices.size()));
-            midpoint = m_free_vertices_head;
-            memcpy(&m_free_vertices_head, &m_vertices[midpoint].v[0], sizeof(m_free_vertices_head));
+            midpoint.first = m_free_vertices_head;
+            memcpy(&m_free_vertices_head, &m_vertices[midpoint.first].v[0], sizeof(m_free_vertices_head));
             assert(m_free_vertices_head >= -1 && m_free_vertices_head < int(m_vertices.size()));
-            m_vertices[midpoint].v = c;
+            m_vertices[midpoint.first].v = c;
         }
-        assert(m_vertices[midpoint].ref_cnt == 0);
+        assert(m_vertices[midpoint.first].ref_cnt == 0);
     } else {
 #ifndef NDEBUG
-        Vec3f c1 = 0.5f * (m_vertices[vertexi].v + m_vertices[vertexj].v);
-        Vec3f c2 = m_vertices[midpoint].v;
-        float d = (c2 - c1).norm();
-        assert(std::abs(d) < EPSILON);
+        Vec3f c1_0 = split_param * m_vertices[vertexi].v + (1.f - split_param) * m_vertices[vertexj].v;
+        Vec3f c1_1 = split_param * m_vertices[vertexj].v + (1.f - split_param) * m_vertices[vertexi].v;
+        Vec3f c2 = m_vertices[midpoint.first].v;
+        float d_0 = (c2 - c1_0).norm();
+        float d_1 = (c2 - c1_1).norm();
+//        assert(std::abs(d_0) < EPSILON || std::abs(d_1) < EPSILON);
 #endif // NDEBUG
-        assert(m_vertices[midpoint].ref_cnt > 0);
+        assert(m_vertices[midpoint.first].ref_cnt > 0);
     }
-    return midpoint;
+    return midpoint.first;
 }
 
 // Return neighbors of ith child of a triangle given neighbors of the triangle.
@@ -782,10 +1037,10 @@ bool TriangleSelector::select_triangle_recursive(int facet_idx, const Vec3i &nei
 
     int num_of_inside_vertices = vertices_inside(facet_idx);
 
-    if (num_of_inside_vertices == 0
-     && ! is_pointer_in_triangle(facet_idx)
-     && ! is_edge_inside_cursor(facet_idx))
-        return false;
+//    if (num_of_inside_vertices == 0
+//     && ! is_pointer_in_triangle(facet_idx)
+//     && ! is_edge_inside_cursor(facet_idx))
+//        return false;
 
     if (num_of_inside_vertices == 3) {
         // dump any subdivision and select whole triangle
@@ -833,11 +1088,11 @@ void TriangleSelector::set_facet(int facet_idx, EnforcerBlockerType state)
 
 // called by select_patch()->select_triangle()...select_triangle()
 // to decide which sides of the traingle to split and to actually split it calling set_division() and perform_split().
-void TriangleSelector::split_triangle(int facet_idx, const Vec3i &neighbors)
+int TriangleSelector::split_triangle(int facet_idx, const Vec3i &neighbors)
 {
     if (m_triangles[facet_idx].is_split()) {
         // The triangle is divided already.
-        return;
+        return 0;
     }
 
     Triangle* tr = &m_triangles[facet_idx];
@@ -867,7 +1122,60 @@ void TriangleSelector::split_triangle(int facet_idx, const Vec3i &neighbors)
                                    (*pts[0] - *pts[2]).squaredNorm(),
                                    (*pts[1] - *pts[0]).squaredNorm()};
 
-    boost::container::small_vector<int, 3> sides_to_split;
+//    auto is_cursor_inside_triangle = [this](int facet_idx){
+//        assert(0 <= facet_idx && facet_idx < m_triangles.size());
+//        // Cursor is inside triangle iff pointer is inside triangle and there is no intersection of any edge
+//        if (this->is_point_inside_triangle(m_cursor.center, facet_idx)) {
+//            Triangle &tr = m_triangles[facet_idx];
+//            Vec2d tmp;
+//            int int_count_0 = line_sphere_intersection(m_vertices[tr.verts_idxs[1]].v.cast<double>(),
+//                                                             m_vertices[tr.verts_idxs[2]].v.cast<double>(),
+//                                                             m_cursor.center.cast<double>(), std::sqrt(m_cursor.radius_sqr), tmp);
+//            int int_count_1 = line_sphere_intersection(m_vertices[tr.verts_idxs[2]].v.cast<double>(),
+//                                                             m_vertices[tr.verts_idxs[0]].v.cast<double>(),
+//                                                             m_cursor.center.cast<double>(), std::sqrt(m_cursor.radius_sqr), tmp);
+//            int int_count_2 = line_sphere_intersection(m_vertices[tr.verts_idxs[0]].v.cast<double>(),
+//                                                             m_vertices[tr.verts_idxs[1]].v.cast<double>(),
+//                                                             m_cursor.center.cast<double>(), std::sqrt(m_cursor.radius_sqr), tmp);
+//            int int_total = int_count_0 + int_count_1 + int_count_2;
+//
+//            if(int_total == 0) {
+//                return true;
+//            }
+//        }
+//        return false;
+//    };
+
+    std::array<float, 3> sides_split_params = {-1.f, -1.f, -1.f};
+
+    auto get_side_split_params = [](const Cursor &cursor, const Vec3d &line_a, const Vec3d &line_b) -> float {
+        Vec2d intersection{};
+        float sides_split_params = -1.f;
+        if (int int_count = line_capsule_intersection(line_a, line_b, cursor.center0.cast<double>(), cursor.center1.cast<double>(),
+                                                      std::sqrt(cursor.radius_sqr), intersection);
+            int_count > 0) {
+            if (int_count == 1)
+                sides_split_params = float(intersection[0]);
+            else if (int_count == 2)
+                sides_split_params = float(intersection[0] + intersection[1]) / 2.f;
+            else
+                assert(false);
+
+            if ((1.f - sides_split_params) <= 0.001f)
+                sides_split_params = -1.f;
+            else if (sides_split_params <= 0.001f)
+                sides_split_params = -1.f;
+        }
+
+        return sides_split_params;
+    };
+
+    sides_split_params[0] = get_side_split_params(m_cursor, m_vertices[tr->verts_idxs[1]].v.cast<double>(), m_vertices[tr->verts_idxs[2]].v.cast<double>());
+    sides_split_params[1] = get_side_split_params(m_cursor, m_vertices[tr->verts_idxs[2]].v.cast<double>(), m_vertices[tr->verts_idxs[0]].v.cast<double>());
+    sides_split_params[2] = get_side_split_params(m_cursor, m_vertices[tr->verts_idxs[0]].v.cast<double>(), m_vertices[tr->verts_idxs[1]].v.cast<double>());
+
+    this->lines_split.clear();
+    std::vector<int> sides_to_split;
     int side_to_keep = -1;
     for (int pt_idx = 0; pt_idx<3; ++pt_idx) {
         if (sides[pt_idx] > limit_squared)
@@ -875,29 +1183,41 @@ void TriangleSelector::split_triangle(int facet_idx, const Vec3i &neighbors)
         else
             side_to_keep = pt_idx;
     }
-    if (sides_to_split.empty()) {
-        // This shall be unselected.
-        tr->set_division(0, 0);
-        return;
+    if (!sides_to_split.empty()) {
+        // Save how the triangle will be split. Second argument makes sense only for one
+        // or two split sides, otherwise the value is ignored.
+        tr->set_division(int(sides_to_split.size()),
+                         sides_to_split.size() == 2 ? side_to_keep : sides_to_split[0]);
+
+        for (int pt_idx = 0; pt_idx < 3; ++pt_idx)
+            tr->division_params[pt_idx] = 0.5f;
+
+        perform_split(facet_idx, neighbors, old_type);
+        return 1;
+    } else {
+        std::vector<int> sides_to_split;
+        int side_to_keep = -1;
+        for (int pt_idx = 0; pt_idx<3; ++pt_idx) {
+            if (sides_split_params[pt_idx] != -1 && sides[pt_idx] > limit_squared/1000.)
+                sides_to_split.push_back(pt_idx);
+            else
+                side_to_keep = pt_idx;
+        }
+        if (sides_to_split.empty()) {
+            // This shall be unselected.
+            tr->set_division(0, 0);
+            return 0;
+        }
+
+        tr->set_division(int(sides_to_split.size()),sides_to_split.size() == 2 ? side_to_keep : sides_to_split[0]);
+
+        for (int pt_idx = 0; pt_idx < 3; ++pt_idx)
+            tr->division_params[pt_idx] = sides_split_params[pt_idx];
+
+        perform_split(facet_idx, neighbors, old_type);
+        return 2;
     }
-
-    // Save how the triangle will be split. Second argument makes sense only for one
-    // or two split sides, otherwise the value is ignored.
-    tr->set_division(int(sides_to_split.size()),
-        sides_to_split.size() == 2 ? side_to_keep : sides_to_split[0]);
-
-    perform_split(facet_idx, neighbors, old_type);
-}
-
-
-
-// Is pointer in a triangle?
-bool TriangleSelector::is_pointer_in_triangle(int facet_idx) const
-{
-    const Vec3f& p1 = m_vertices[m_triangles[facet_idx].verts_idxs[0]].v;
-    const Vec3f& p2 = m_vertices[m_triangles[facet_idx].verts_idxs[1]].v;
-    const Vec3f& p3 = m_vertices[m_triangles[facet_idx].verts_idxs[2]].v;
-    return m_cursor.is_pointer_in_triangle(p1, p2, p3);
+    return 0;
 }
 
 
@@ -928,36 +1248,33 @@ int TriangleSelector::vertices_inside(int facet_idx) const
     return inside;
 }
 
-
-// Is edge inside cursor?
-bool TriangleSelector::is_edge_inside_cursor(int facet_idx) const
-{
-    std::array<Vec3f, 3> pts;
-    for (int i=0; i<3; ++i) {
-        pts[i] = m_vertices[m_triangles[facet_idx].verts_idxs[i]].v;
-        if (! m_cursor.uniform_scaling)
-            pts[i] = m_cursor.trafo * pts[i];
-    }
-
-    const Vec3f& p = m_cursor.center;
-
-    for (int side = 0; side < 3; ++side) {
-        const Vec3f& a = pts[side];
-        const Vec3f& b = pts[side<2 ? side+1 : 0];
-        Vec3f s = (b-a).normalized();
-        float t = (p-a).dot(s);
-        Vec3f vector = a+t*s - p;
-
-        // vector is 3D vector from center to the intersection. What we want to
-        // measure is length of its projection onto plane perpendicular to dir.
-        float dist_sqr = vector.squaredNorm() - std::pow(vector.dot(m_cursor.dir), 2.f);
-        if (dist_sqr < m_cursor.radius_sqr && t>=0.f && t<=(b-a).norm())
-            return true;
-    }
-    return false;
-}
-
-
+//// Is edge inside cursor?
+//bool TriangleSelector::is_edge_inside_cursor(int facet_idx) const
+//{
+//    std::array<Vec3f, 3> pts;
+//    for (int i=0; i<3; ++i) {
+//        pts[i] = m_vertices[m_triangles[facet_idx].verts_idxs[i]].v;
+//        if (! m_cursor.uniform_scaling)
+//            pts[i] = m_cursor.trafo * pts[i];
+//    }
+//
+//    const Vec3f& p = m_cursor.center;
+//
+//    for (int side = 0; side < 3; ++side) {
+//        const Vec3f& a = pts[side];
+//        const Vec3f& b = pts[side<2 ? side+1 : 0];
+//        Vec3f s = (b-a).normalized();
+//        float t = (p-a).dot(s);
+//        Vec3f vector = a+t*s - p;
+//
+//        // vector is 3D vector from center to the intersection. What we want to
+//        // measure is length of its projection onto plane perpendicular to dir.
+//        float dist_sqr = vector.squaredNorm() - std::pow(vector.dot(m_cursor.dir), 2.f);
+//        if (dist_sqr < m_cursor.radius_sqr && t>=0.f && t<=(b-a).norm())
+//            return true;
+//    }
+//    return false;
+//}
 
 // Recursively remove all subtriangles.
 void TriangleSelector::undivide_triangle(int facet_idx)
@@ -997,7 +1314,6 @@ void TriangleSelector::undivide_triangle(int facet_idx)
         tr.set_division(0, 0); // not split
     }
 }
-
 
 void TriangleSelector::remove_useless_children(int facet_idx)
 {
@@ -1099,7 +1415,6 @@ TriangleSelector::TriangleSelector(const TriangleMesh& mesh)
     reset();
 }
 
-
 void TriangleSelector::reset()
 {
     m_vertices.clear();
@@ -1127,8 +1442,6 @@ void TriangleSelector::set_edge_limit(float edge_limit)
 {
     m_edge_limit_sqr = std::pow(edge_limit, 2.f);
 }
-
-
 
 int TriangleSelector::push_triangle(int a, int b, int c, int source_triangle, const EnforcerBlockerType state)
 {
@@ -1187,35 +1500,53 @@ void TriangleSelector::perform_split(int facet_idx, const Vec3i &neighbors, Enfo
     for (int j=0, idx = tr.special_side(); j<3; ++j, idx = next_idx_modulo(idx, 3))
         verts_idxs.push_back(tr.verts_idxs[idx]);
 
-    auto get_alloc_vertex = [this, &neighbors, &verts_idxs](int edge, int i1, int i2) -> int {
-        return this->triangle_midpoint_or_allocate(neighbors(edge), verts_idxs[i1], verts_idxs[i2]);
+    auto get_alloc_vertex = [this, &neighbors, &verts_idxs, &tr](int edge, int i1, int i2, float split_param) -> int {
+        assert(tr.division_params[prev_idx_modulo(edge, 3)] != -1.f);
+        assert(tr.verts_idxs[edge] == verts_idxs[i2]);
+        assert(tr.verts_idxs[next_idx_modulo(edge, 3)] == verts_idxs[i1]);
+        assert(0.f <= split_param && split_param <= 1.f);
+        return this->triangle_midpoint_or_allocate(neighbors(edge), verts_idxs[i1], verts_idxs[i2], split_param);
     };
 
     int ichild = 0;
     switch (tr.number_of_split_sides()) {
     case 1:
-        verts_idxs.insert(verts_idxs.begin()+2, get_alloc_vertex(next_idx_modulo(tr.special_side(), 3), 2, 1));
-        tr.children[ichild ++] = push_triangle(verts_idxs[0], verts_idxs[1], verts_idxs[2], tr.source_triangle, old_state);
-        tr.children[ichild   ] = push_triangle(verts_idxs[2], verts_idxs[3], verts_idxs[0], tr.source_triangle, old_state);
+        assert(tr.division_params[tr.special_side()] != -1.f);
+        assert(0.f <= tr.division_params[tr.special_side()] && tr.division_params[tr.special_side()] <= 1.f);
+        verts_idxs.insert(verts_idxs.begin() + 2, get_alloc_vertex(next_idx_modulo(tr.special_side(), 3), 2, 1, tr.division_params[tr.special_side()]));
+        tr.children[ichild++] = push_triangle(verts_idxs[0], verts_idxs[1], verts_idxs[2], tr.source_triangle, old_state);
+        tr.children[ichild]   = push_triangle(verts_idxs[2], verts_idxs[3], verts_idxs[0], tr.source_triangle, old_state);
         break;
 
     case 2:
-        verts_idxs.insert(verts_idxs.begin()+1, get_alloc_vertex(tr.special_side(), 1, 0));
-        verts_idxs.insert(verts_idxs.begin()+4, get_alloc_vertex(prev_idx_modulo(tr.special_side(), 3), 0, 3));
-        tr.children[ichild ++] = push_triangle(verts_idxs[0], verts_idxs[1], verts_idxs[4], tr.source_triangle, old_state);
-        tr.children[ichild ++] = push_triangle(verts_idxs[1], verts_idxs[2], verts_idxs[4], tr.source_triangle, old_state);
-        tr.children[ichild   ] = push_triangle(verts_idxs[2], verts_idxs[3], verts_idxs[4], tr.source_triangle, old_state);
+        assert(tr.division_params[prev_idx_modulo(tr.special_side(), 3)] != -1.f);
+        assert(tr.division_params[next_idx_modulo(tr.special_side(), 3)] != -1.f);
+        assert(0.f <= tr.division_params[prev_idx_modulo(tr.special_side(), 3)] && tr.division_params[prev_idx_modulo(tr.special_side(), 3)] <= 1.f);
+        assert(0.f <= tr.division_params[next_idx_modulo(tr.special_side(), 3)] && tr.division_params[next_idx_modulo(tr.special_side(), 3)] <= 1.f);
+
+        verts_idxs.insert(verts_idxs.begin() + 1, get_alloc_vertex(tr.special_side(), 1, 0, tr.division_params[prev_idx_modulo(tr.special_side(), 3)]));
+        verts_idxs.insert(verts_idxs.begin() + 4, get_alloc_vertex(prev_idx_modulo(tr.special_side(), 3), 0, 3, tr.division_params[next_idx_modulo(tr.special_side(), 3)]));
+        tr.children[ichild++] = push_triangle(verts_idxs[0], verts_idxs[1], verts_idxs[4], tr.source_triangle, old_state);
+        tr.children[ichild++] = push_triangle(verts_idxs[1], verts_idxs[2], verts_idxs[4], tr.source_triangle, old_state);
+        tr.children[ichild]   = push_triangle(verts_idxs[2], verts_idxs[3], verts_idxs[4], tr.source_triangle, old_state);
         break;
 
     case 3:
         assert(tr.special_side() == 0);
-        verts_idxs.insert(verts_idxs.begin()+1, get_alloc_vertex(0, 1, 0));
-        verts_idxs.insert(verts_idxs.begin()+3, get_alloc_vertex(1, 3, 2));
-        verts_idxs.insert(verts_idxs.begin()+5, get_alloc_vertex(2, 0, 4));
-        tr.children[ichild ++] = push_triangle(verts_idxs[0], verts_idxs[1], verts_idxs[5], tr.source_triangle, old_state);
-        tr.children[ichild ++] = push_triangle(verts_idxs[1], verts_idxs[2], verts_idxs[3], tr.source_triangle, old_state);
-        tr.children[ichild ++] = push_triangle(verts_idxs[3], verts_idxs[4], verts_idxs[5], tr.source_triangle, old_state);
-        tr.children[ichild   ] = push_triangle(verts_idxs[1], verts_idxs[3], verts_idxs[5], tr.source_triangle, old_state);
+        assert(tr.division_params[2] != -1.f);
+        assert(tr.division_params[0] != -1.f);
+        assert(tr.division_params[1] != -1.f);
+        assert(0.f <= tr.division_params[2] && tr.division_params[2] <= 1.f);
+        assert(0.f <= tr.division_params[0] && tr.division_params[0] <= 1.f);
+        assert(0.f <= tr.division_params[1] && tr.division_params[1] <= 1.f);
+
+        verts_idxs.insert(verts_idxs.begin() + 1, get_alloc_vertex(0, 1, 0, tr.division_params[2]));
+        verts_idxs.insert(verts_idxs.begin() + 3, get_alloc_vertex(1, 3, 2, tr.division_params[0]));
+        verts_idxs.insert(verts_idxs.begin() + 5, get_alloc_vertex(2, 0, 4, tr.division_params[1]));
+        tr.children[ichild++] = push_triangle(verts_idxs[0], verts_idxs[1], verts_idxs[5], tr.source_triangle, old_state);
+        tr.children[ichild++] = push_triangle(verts_idxs[1], verts_idxs[2], verts_idxs[3], tr.source_triangle, old_state);
+        tr.children[ichild++] = push_triangle(verts_idxs[3], verts_idxs[4], verts_idxs[5], tr.source_triangle, old_state);
+        tr.children[ichild]   = push_triangle(verts_idxs[1], verts_idxs[3], verts_idxs[5], tr.source_triangle, old_state);
         break;
 
     default:
@@ -1315,9 +1646,9 @@ void TriangleSelector::get_facets_split_by_tjoints(const Vec3i &vertices, const 
 {
 // Export this triangle, but first collect the T-joint vertices along its edges.
     Vec3i midpoints(
-        this->triangle_midpoint(neighbors(0), vertices(1), vertices(0)),
-        this->triangle_midpoint(neighbors(1), vertices(2), vertices(1)),
-        this->triangle_midpoint(neighbors(2), vertices(0), vertices(2)));
+        this->triangle_midpoint(neighbors(0), vertices(1), vertices(0)).first,
+        this->triangle_midpoint(neighbors(1), vertices(2), vertices(1)).first,
+        this->triangle_midpoint(neighbors(2), vertices(0), vertices(2)).first);
     int splits = (midpoints(0) != -1) + (midpoints(1) != -1) + (midpoints(2) != -1);
     switch (splits) {
     case 0:
@@ -1443,7 +1774,7 @@ std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> TriangleSelector:
     // or how it is split. Each triangle is encoded by 4 bits (xxyy) or 8 bits (zzzzxxyy):
     // leaf triangle: xx = EnforcerBlockerType (Only values 0, 1, and 2. Value 3 is used as an indicator for additional 4 bits.), yy = 0
     // leaf triangle: xx = 0b11, yy = 0b00, zzzz = EnforcerBlockerType (subtracted by 3)
-    // non-leaf:      xx = special side, yy = number of split sides
+    // non-leaf:      xx = special side, yy = number of split sides, 3xfloat - 3x32bits
     // These are bitwise appended and formed into one 64-bit integer.
 
     // The function returns a map from original triangle indices to
@@ -1474,6 +1805,23 @@ std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> TriangleSelector:
                 assert(tr.special_side() >= 0 && tr.special_side() <= 3);
                 data.second.push_back(tr.special_side() & 0b01);
                 data.second.push_back(tr.special_side() & 0b10);
+
+                size_t dp_0 = reinterpret_cast<const size_t&>(tr.division_params[0]);
+                size_t dp_1 = reinterpret_cast<const size_t&>(tr.division_params[1]);
+                size_t dp_2 = reinterpret_cast<const size_t&>(tr.division_params[2]);
+
+                size_t float_bit_mask = 0x01;
+                for (size_t bit_idx = 0; bit_idx < 32; ++bit_idx)
+                    data.second.push_back((dp_0 & (float_bit_mask << bit_idx)) > 0);
+
+                float_bit_mask = 0x01;
+                for (size_t bit_idx = 0; bit_idx < 32; ++bit_idx)
+                    data.second.push_back((dp_1 & (float_bit_mask << bit_idx)) > 0);
+
+                float_bit_mask = 0x01;
+                for (size_t bit_idx = 0; bit_idx < 32; ++bit_idx)
+                    data.second.push_back((dp_2 & (float_bit_mask << bit_idx)) > 0);
+
                 // Now save all children.
                 // Serialized in reverse order for compatibility with PrusaSlicer 2.3.1.
                 for (int child_idx = split_sides; child_idx >= 0; -- child_idx)
@@ -1501,8 +1849,8 @@ std::pair<std::vector<std::pair<int, int>>, std::vector<bool>> TriangleSelector:
     } out { this };
 
     out.data.first.reserve(m_orig_size_indices);
-    for (int i=0; i<m_orig_size_indices; ++i)
-        if (const Triangle& tr = m_triangles[i]; tr.is_split() || tr.get_state() != EnforcerBlockerType::NONE) {
+    for (int i = 0; i < m_orig_size_indices; ++i)
+        if (const Triangle &tr = m_triangles[i]; tr.is_split() || tr.get_state() != EnforcerBlockerType::NONE) {
             // Store index of the first bit assigned to ith triangle.
             out.data.first.emplace_back(i, int(out.data.second.size()));
             // out the triangle bits.
@@ -1560,6 +1908,23 @@ void TriangleSelector::deserialize(const std::pair<std::vector<std::pair<int, in
             // Only valid if is_split.
             int special_side = code >> 2;
 
+            std::array<float, 3> division_params = {-1.0, -1.0, -1.0};
+            if (is_split) {
+                size_t dp_0 = 0;
+                size_t dp_1 = 0;
+                size_t dp_2 = 0;
+                for(size_t idx = 0; idx < 8; ++idx)
+                    dp_0 |= (next_nibble() << (idx * 4));
+                for(size_t idx = 0; idx < 8; ++idx)
+                    dp_1 |= (next_nibble() << (idx * 4));
+                for(size_t idx = 0; idx < 8; ++idx)
+                    dp_2 |= (next_nibble() << (idx * 4));
+
+                division_params[0] = reinterpret_cast<float&>(dp_0);
+                division_params[1] = reinterpret_cast<float&>(dp_1);
+                division_params[2] = reinterpret_cast<float&>(dp_2);
+            }
+
             // Take care of the first iteration separately, so handling of the others is simpler.
             if (parents.empty()) {
                 if (is_split) {
@@ -1568,6 +1933,7 @@ void TriangleSelector::deserialize(const std::pair<std::vector<std::pair<int, in
                     Vec3i neighbors = root_neighbors(*m_mesh, triangle_id);
                     parents.push_back({triangle_id, neighbors, 0, num_of_children});
                     m_triangles[triangle_id].set_division(num_of_split_sides, special_side);
+                    m_triangles[triangle_id].division_params = division_params;
                     perform_split(triangle_id, neighbors, EnforcerBlockerType::NONE);
                     continue;
                 } else {
@@ -1588,6 +1954,7 @@ void TriangleSelector::deserialize(const std::pair<std::vector<std::pair<int, in
                 Vec3i neighbors = this->child_neighbors(tr, last.neighbors, child_idx);
                 int this_idx = tr.children[child_idx];
                 m_triangles[this_idx].set_division(num_of_split_sides, special_side);
+                m_triangles[this_idx].division_params = division_params;
                 perform_split(this_idx, neighbors, EnforcerBlockerType::NONE);
                 parents.push_back({this_idx, neighbors, 0, num_of_children});
             } else {
@@ -1689,9 +2056,10 @@ void TriangleSelector::seed_fill_apply_on_triangles(EnforcerBlockerType new_stat
 }
 
 TriangleSelector::Cursor::Cursor(
-        const Vec3f& center_, const Vec3f& source_, float radius_world,
+    const Vec3f& center_0, const Vec3f& center_1, const Vec3f& source_, float radius_world,
         CursorType type_, const Transform3d& trafo_)
-    : center{center_},
+    : center0{center_0},
+    center1{center_1},
       source{source_},
       type{type_},
       trafo{trafo_.cast<float>()}
@@ -1706,7 +2074,8 @@ TriangleSelector::Cursor::Cursor(
         // something is inside the cursor should be done in world coords.
         // First transform center, source and dir in world coords and remember
         // that we did this.
-        center = trafo * center;
+        center0 = trafo * center0;
+        center1 = trafo * center1;
         source = trafo * source;
         uniform_scaling = false;
         radius_sqr = radius_world * radius_world;
@@ -1714,7 +2083,7 @@ TriangleSelector::Cursor::Cursor(
     }
 
     // Calculate dir, in whatever coords is appropriate.
-    dir = (center - source).normalized();
+    dir = (center0 - source).normalized();
 }
 
 
@@ -1724,38 +2093,34 @@ bool TriangleSelector::Cursor::is_mesh_point_inside(Vec3f point) const
     if (! uniform_scaling)
         point = trafo * point;
 
-     Vec3f diff = center - point;
-     return (type == CIRCLE ?
-                (diff - diff.dot(dir) * dir).squaredNorm() :
-                 diff.squaredNorm())
-            < radius_sqr;
+    return is_mesh_point_inside_capsule(point.cast<double>(), center0.cast<double>(), center1.cast<double>(), std::sqrt(radius_sqr));
 }
 
 
 
-// p1, p2, p3 are in mesh coords!
-bool TriangleSelector::Cursor::is_pointer_in_triangle(const Vec3f& p1_,
-                                                      const Vec3f& p2_,
-                                                      const Vec3f& p3_) const
-{
-    const Vec3f& q1 = center + dir;
-    const Vec3f& q2 = center - dir;
-
-    auto signed_volume_sign = [](const Vec3f& a, const Vec3f& b,
-                                 const Vec3f& c, const Vec3f& d) -> bool {
-        return ((b-a).cross(c-a)).dot(d-a) > 0.;
-    };
-
-    // In case the object is non-uniformly scaled, do the check in world coords.
-    const Vec3f& p1 = uniform_scaling ? p1_ : Vec3f(trafo * p1_);
-    const Vec3f& p2 = uniform_scaling ? p2_ : Vec3f(trafo * p2_);
-    const Vec3f& p3 = uniform_scaling ? p3_ : Vec3f(trafo * p3_);
-
-    if (signed_volume_sign(q1,p1,p2,p3) == signed_volume_sign(q2,p1,p2,p3))
-        return false;
-
-    bool pos = signed_volume_sign(q1,q2,p1,p2);
-    return signed_volume_sign(q1,q2,p2,p3) == pos && signed_volume_sign(q1,q2,p3,p1) == pos;
-}
+//// p1, p2, p3 are in mesh coords!
+//bool TriangleSelector::Cursor::is_pointer_in_triangle(const Vec3f& p1_,
+//                                                      const Vec3f& p2_,
+//                                                      const Vec3f& p3_) const
+//{
+//    const Vec3f& q1 = center + dir;
+//    const Vec3f& q2 = center - dir;
+//
+//    auto signed_volume_sign = [](const Vec3f& a, const Vec3f& b,
+//                                 const Vec3f& c, const Vec3f& d) -> bool {
+//        return ((b-a).cross(c-a)).dot(d-a) > 0.;
+//    };
+//
+//    // In case the object is non-uniformly scaled, do the check in world coords.
+//    const Vec3f& p1 = uniform_scaling ? p1_ : Vec3f(trafo * p1_);
+//    const Vec3f& p2 = uniform_scaling ? p2_ : Vec3f(trafo * p2_);
+//    const Vec3f& p3 = uniform_scaling ? p3_ : Vec3f(trafo * p3_);
+//
+//    if (signed_volume_sign(q1,p1,p2,p3) == signed_volume_sign(q2,p1,p2,p3))
+//        return false;
+//
+//    bool pos = signed_volume_sign(q1,q2,p1,p2);
+//    return signed_volume_sign(q1,q2,p2,p3) == pos && signed_volume_sign(q1,q2,p3,p1) == pos;
+//}
 
 } // namespace Slic3r

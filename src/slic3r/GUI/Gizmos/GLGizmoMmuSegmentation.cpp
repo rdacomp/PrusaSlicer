@@ -38,6 +38,8 @@ void GLGizmoMmuSegmentation::on_shutdown()
     m_parent.use_slope(false);
     m_parent.toggle_model_objects_visibility(true);
     m_show_triangle_edges = true;
+    for (auto &triangle_selector : m_triangle_selectors)
+        triangle_selector->lines_split.clear();
 }
 
 std::string GLGizmoMmuSegmentation::on_get_name() const
@@ -684,13 +686,35 @@ void TriangleSelectorMmGui::update_render_data()
 
 //    std::vector<Vec2i> contour_edges = this->get_seed_fill_contour();
     std::vector<Vec2i> contour_edges;
-    if(m_show_debug_edges)
+    if (m_show_debug_edges) {
         for (const Triangle &tr : m_triangles)
             if (tr.valid() && !tr.is_split()) {
                 contour_edges.emplace_back(tr.verts_idxs[0], tr.verts_idxs[1]);
                 contour_edges.emplace_back(tr.verts_idxs[1], tr.verts_idxs[2]);
                 contour_edges.emplace_back(tr.verts_idxs[2], tr.verts_idxs[0]);
             }
+
+        m_gizmo_scene.contour_vertices.reserve(contour_edges.size() * 6);
+        for (const Vec2i &edge : contour_edges) {
+            m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(0)].v.x());
+            m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(0)].v.y());
+            m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(0)].v.z());
+
+            m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(1)].v.x());
+            m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(1)].v.y());
+            m_gizmo_scene.contour_vertices.emplace_back(m_vertices[edge(1)].v.z());
+        }
+    } else {
+        for (const std::pair<stl_vertex, stl_vertex> &edge : this->lines_split) {
+            m_gizmo_scene.contour_vertices.emplace_back(edge.first.x());
+            m_gizmo_scene.contour_vertices.emplace_back(edge.first.y());
+            m_gizmo_scene.contour_vertices.emplace_back(edge.first.z());
+
+            m_gizmo_scene.contour_vertices.emplace_back(edge.second.x());
+            m_gizmo_scene.contour_vertices.emplace_back(edge.second.y());
+            m_gizmo_scene.contour_vertices.emplace_back(edge.second.z());
+        }
+    }
 
     m_gizmo_scene.contour_vertices.reserve(contour_edges.size() * 6);
     for (const Vec2i &edge : contour_edges) {

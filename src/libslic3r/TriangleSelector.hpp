@@ -16,6 +16,10 @@ enum class EnforcerBlockerType : int8_t;
 // to recursively subdivide the triangles and make the selection finer.
 class TriangleSelector {
 public:
+    mutable std::vector<std::pair<stl_vertex, stl_vertex>> lines_split;
+
+    bool is_point_inside_triangle(const Vec3f &pt, int facet_idx);
+
     enum CursorType {
         CIRCLE,
         SPHERE,
@@ -37,8 +41,12 @@ public:
     [[nodiscard]] int select_unsplit_triangle(const Vec3f &hit, int facet_idx) const;
     [[nodiscard]] int select_unsplit_triangle(const Vec3f &hit, int facet_idx, const Vec3i &neighbors) const;
 
+    void triangulate_tjoints(const int tr_idx, const Vec3i &neighbors);
+    void triangulate_tjoints_recursive(const int tr_idx, const Vec3i &neighbors);
+
     // Select all triangles fully inside the circle, subdivide where needed.
     void select_patch(const Vec3f        &hit,         // point where to start
+                      const Vec3f        &hit2,         // point where to start
                       int                 facet_start, // facet of the original mesh (unsplit) that the hit point belongs to
                       const Vec3f        &source,      // camera position (mesh coords)
                       float               radius,      // radius of the cursor
@@ -108,11 +116,22 @@ protected:
         // Indices into m_vertices.
         std::array<int, 3> verts_idxs;
 
+        // Position where the triangle is divided.
+        // It must be always in the range <0, 1> or value -1 in the case that is not used.
+        // Index 0, means edge between verts_idxs[1] and verts_idxs[0]. And value is calculated from the verts_idxs[0]
+        // Index 1, means edge between verts_idxs[2] and verts_idxs[1]. And value is calculated from the verts_idxs[1]
+        // Index 2, means edge between verts_idxs[0] and verts_idxs[2]. And value is calculated from the verts_idxs[2]
+
+        // Index 0, means edge between verts_idxs[2] and verts_idxs[1]. And value is calculated from the verts_idxs[0]
+        // Index 1, means edge between verts_idxs[0] and verts_idxs[2]. And value is calculated from the verts_idxs[1]
+        // Index 2, means edge between verts_idxs[1] and verts_idxs[0]. And value is calculated from the verts_idxs[2]
+        mutable std::array<float, 3> division_params = {-1.f, -1.f, -1.f};
+
         // Index of the source triangle at the initial (unsplit) mesh.
         int source_triangle;
 
         // Children triangles.
-        std::array<int, 4> children;
+        std::array<int, 4> children = {-1, -1, -1, -1};
 
         // Set the division type.
         void set_division(int sides_to_split, int special_side_idx);
@@ -176,12 +195,13 @@ protected:
     // Cache for cursor position, radius and direction.
     struct Cursor {
         Cursor() = default;
-        Cursor(const Vec3f& center_, const Vec3f& source_, float radius_world,
+        Cursor(const Vec3f& center_, const Vec3f& center_1, const Vec3f& source_, float radius_world,
                CursorType type_, const Transform3d& trafo_);
         bool is_mesh_point_inside(Vec3f pt) const;
         bool is_pointer_in_triangle(const Vec3f& p1, const Vec3f& p2, const Vec3f& p3) const;
 
-        Vec3f center;
+        Vec3f center0;
+        Vec3f center1;
         Vec3f source;
         Vec3f dir;
         float radius_sqr;
@@ -201,7 +221,7 @@ private:
     int  vertices_inside(int facet_idx) const;
     bool faces_camera(int facet) const;
     void undivide_triangle(int facet_idx);
-    void split_triangle(int facet_idx, const Vec3i &neighbors);
+    int split_triangle(int facet_idx, const Vec3i &neighbors);
     void remove_useless_children(int facet_idx); // No hidden meaning. Triangles are meant.
     bool is_pointer_in_triangle(int facet_idx) const;
     bool is_edge_inside_cursor(int facet_idx) const;
@@ -217,9 +237,9 @@ private:
     };
     int neighbor_child(const Triangle& tr, int vertexi, int vertexj, Partition partition) const;
     int neighbor_child(int itriangle, int vertexi, int vertexj, Partition partition) const;
-    int triangle_midpoint(const Triangle& tr, int vertexi, int vertexj) const;
-    int triangle_midpoint(int itriangle, int vertexi, int vertexj) const;
-    int triangle_midpoint_or_allocate(int itriangle, int vertexi, int vertexj);
+    std::pair<int, float> triangle_midpoint(const Triangle& tr, int vertexi, int vertexj) const;
+    std::pair<int, float> triangle_midpoint(int itriangle, int vertexi, int vertexj) const;
+    int triangle_midpoint_or_allocate(int itriangle, int vertexi, int vertexj, float split_param);
 
     static std::pair<int, int> triangle_subtriangles(const Triangle &tr, int vertexi, int vertexj);
     std::pair<int, int>        triangle_subtriangles(int itriangle, int vertexi, int vertexj) const;
