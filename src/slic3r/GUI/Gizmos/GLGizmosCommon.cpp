@@ -275,7 +275,8 @@ void HollowedMesh::on_update()
                         its_flip_triangles(interior);
                         m_hollowed_interior_transformed = std::make_unique<TriangleMesh>(std::move(interior));
                         m_hollowed_interior_transformed->transform(trafo_inv);
-                    }
+                    } else
+                        m_hollowed_interior_transformed.reset();
                 }
                 else {
                     m_hollowed_mesh_transformed.reset(nullptr);
@@ -382,7 +383,7 @@ void ObjectClipper::on_update()
         }
         m_old_meshes = meshes;
 
-        if (has_hollowed)
+        if (has_hollowed && get_pool()->hollowed_mesh()->get_hollowed_interior())
             m_clippers.front()->set_negative_mesh(*get_pool()->hollowed_mesh()->get_hollowed_interior());
 
         m_active_inst_bb_radius =
