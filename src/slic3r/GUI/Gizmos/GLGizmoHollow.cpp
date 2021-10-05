@@ -529,7 +529,7 @@ RENDER_AGAIN:
     bool has_drilled_mesh = (m_c->hollowed_mesh() && m_c->hollowed_mesh()->get_hollowed_mesh());
     bool has_holes = ! m_c->selection_info()->model_object()->sla_drain_holes.empty();
     bool holes_match = has_drilled_mesh && m_c->hollowed_mesh()->get_drainholes() == m_c->selection_info()->model_object()->sla_drain_holes;
-    m_imgui->disabled_begin((has_drilled_mesh && holes_match) || (! m_enable_hollowing && ! has_holes));
+    m_imgui->disabled_begin((has_drilled_mesh && holes_match) || (! m_enable_hollowing && ! has_holes && holes_match));
     if (m_imgui->button(m_desc["preview"]))
         hollow_mesh();
     m_imgui->disabled_end();
